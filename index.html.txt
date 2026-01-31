@@ -1,0 +1,79 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Counter App</title>
+    <style>
+        /* CSS: Making it look good */
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f0f2f5;
+            margin: 0;
+        }
+        .counter-container {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        #counter-value {
+            font-size: 4rem;
+            margin: 1rem 0;
+            color: #333;
+        }
+        button {
+            font-size: 1.5rem;
+            padding: 10px 20px;
+            margin: 0 10px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            transition: opacity 0.2s;
+        }
+        .btn-decrease { background-color: #ff4d4d; color: white; }
+        .btn-increase { background-color: #4CAF50; color: white; }
+        button:hover { opacity: 0.8; }
+    </style>
+</head>
+<body>
+
+    <div class="counter-container">
+        <h1>Counter</h1>
+        <div id="counter-value">0</div>
+        
+        <button class="btn-decrease" onclick="changeCount(-1)">- Decrease</button>
+        <button class="btn-increase" onclick="changeCount(1)">+ Increase</button>
+    </div>
+
+    <script>
+        // JavaScript: The logic
+        let count = 0; // Our starting number
+        const display = document.getElementById('counter-value');
+
+        function changeCount(amount) {
+            // 1. Update the math
+            count = count + amount;
+            
+            // 2. Update the screen
+            display.textContent = count;
+            
+            // 3. Optional: Change color if negative
+            if (count < 0) {
+                display.style.color = 'red';
+            } else {
+                display.style.color = '#333';
+            }
+        }
+    </script>
+
+</body>
+</html>
