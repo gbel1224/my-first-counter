@@ -77,7 +77,7 @@
   </div>
 </div>
 
-<script>console.warn('Scripts "build/three.js" and "build/three.min.js" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation'),
+<script>void('Scripts "build/three.js" and "build/three.min.js" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation'),
 /**
  * @license
  * Copyright 2010-2023 Three.js Authors
@@ -190,10 +190,16 @@ const shadowTex = cTex(128,128,(g,w,h)=>{
 
 //------------------------------------------------ billboard helpers
 const BILL_MATS = [];           // every sprite material, tinted for night
+const TEX_CACHE = new Map();    // one GPU texture per source image
+const MAT_CACHE = new Map();    // one shared material per source image
 function spriteTex(img){
-  const t = new THREE.Texture(img);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.needsUpdate = true;
+  let t = TEX_CACHE.get(img);
+  if(!t){
+    t = new THREE.Texture(img);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.needsUpdate = true;
+    TEX_CACHE.set(img, t);
+  }
   return t;
 }
 function billMat(tex, opts={}){
@@ -203,20 +209,38 @@ function billMat(tex, opts={}){
   BILL_MATS.push(m);
   return m;
 }
-// plane anchored at its bottom edge
+function sharedBillMat(img){
+  let m = MAT_CACHE.get(img);
+  if(!m){ m = billMat(spriteTex(img)); MAT_CACHE.set(img, m); }
+  return m;
+}
+// plane anchored at its bottom edge; material is shared per image unless opts given
 function billboard(img, height, opts){
-  const tex = spriteTex(img);
+  const mat = opts ? billMat(spriteTex(img), opts) : sharedBillMat(img);
   const w = height * img.width / img.height;
   const geo = new THREE.PlaneGeometry(w, height);
   geo.translate(0, height/2, 0);
-  return new THREE.Mesh(geo, billMat(tex, opts));
+  const mesh = new THREE.Mesh(geo, mat);
+  if (opts) mesh.userData.uniqueMat = mat;
+  return mesh;
 }
-function blobShadow(rad){
+const shadowMatShared = new THREE.MeshBasicMaterial({map:shadowTex, transparent:true, depthWrite:false});
+function blobShadow(rad, unique){
   const m = new THREE.Mesh(new THREE.PlaneGeometry(rad*2, rad*2*0.6),
-    new THREE.MeshBasicMaterial({map:shadowTex, transparent:true, depthWrite:false}));
+    unique ? new THREE.MeshBasicMaterial({map:shadowTex, transparent:true, depthWrite:false})
+           : shadowMatShared);
   m.rotation.x = -Math.PI/2;
   m.position.y = 0.02;
   return m;
+}
+// free per-spawn geometry (textures/materials are cached and stay alive)
+function disposeNode(root){
+  scene.remove(root);
+  root.traverse(o=>{
+    if(o.geometry) o.geometry.dispose();
+    const um = o.userData && o.userData.uniqueMat;
+    if(um){ um.dispose(); const i=BILL_MATS.indexOf(um); if(i>=0) BILL_MATS.splice(i,1); }
+  });
 }
 
 //------------------------------------------------ world build
@@ -338,12 +362,11 @@ function buildReina(){
   geo.translate(0, R_H/2, 0);
   rMesh = new THREE.Mesh(geo, billMat(rTex.run[0], {alphaTest:0.1}));
   reina.add(rMesh);
-  rShadow = blobShadow(1.0);
+  rShadow = blobShadow(1.0, true);   // unique material: opacity animates with jumps
   reina.add(rShadow);
 }
 function setReinaFrame(tex, hgt, img){
   rMesh.material.map = tex;
-  rMesh.material.needsUpdate = true;
   const w = hgt * img.width / img.height;
   rMesh.scale.set(w/(R_H*IMG.run[0].width/IMG.run[0].height), hgt/R_H, 1);
 }
@@ -362,13 +385,13 @@ const JUMP_LEN=0.75, JUMP_H=2.0;
 const SPEED0=17, SPEED_RAMP=v=>SPEED0+Math.min(17, v/150);
 const score = ()=> Math.floor(G.dist/10) + G.stars*50;
 
-function clearList(list){ for (const o of list) scene.remove(o.node); list.length = 0; }
+function clearList(list){ for (const o of list) disposeNode(o.node); list.length = 0; }
 function reset(){
   G.time=0; G.cycleT=0; G.dist=0; G.stars=0;
   G.lane=0; G.laneF=0; G.jumpT=-1; G.slideT=-1;
   G.runClock=0; G.sinceRow=18; G.sinceCar=10;
   clearList(G.obstacles); clearList(G.pickups); clearList(G.parts);
-  if (G.crash){ for (const p of G.crash.paps) scene.remove(p.node); }
+  if (G.crash){ for (const p of G.crash.paps) disposeNode(p.node); }
   G.shake=0; G.crash=null;
   if(G.streakMat) G.streakMat.opacity=0;
   reina.position.set(0,0,0); reina.rotation.z=0;
@@ -428,6 +451,16 @@ function bannerTex(){
   bannerTexCache = c;
   return c;
 }
+let bannerMat=null;
+const poleMat = new THREE.MeshLambertMaterial({color:0x4a3d63});
+function getBannerMat(){
+  if(!bannerMat){
+    const t=new THREE.CanvasTexture(bannerTex());
+    t.colorSpace=THREE.SRGBColorSpace;
+    bannerMat=billMat(t);
+  }
+  return bannerMat;
+}
 function makeObstacle(type, lane){
   const g = new THREE.Group();
   let img, h;
@@ -436,15 +469,13 @@ function makeObstacle(type, lane){
   else if (type==='pap'){ img=IMG.papFront; h=2.1; }
   else { img=IMG.cars[Math.random()*3|0]; h=1.5; }
   const b = type==='banner'
-    ? (()=>{ const t=new THREE.CanvasTexture(img); t.colorSpace=THREE.SRGBColorSpace;
-        const w=h*img.width/img.height;
+    ? (()=>{ const w=h*img.width/img.height;
         const geo=new THREE.PlaneGeometry(w,h); geo.translate(0,h/2,0);
-        const m=new THREE.Mesh(geo, billMat(t));
+        const m=new THREE.Mesh(geo, getBannerMat());
         m.position.y = 0.95;                       // raised: slide under it
         // support poles: ground (y=-0.95 rel) up to banner top
-        const pm=new THREE.MeshLambertMaterial({color:0x4a3d63});
         for(const s of [-1,1]){
-          const p=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,2.5,6),pm);
+          const p=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,2.5,6),poleMat);
           p.position.set(s*w*0.45,0.3,0); m.add(p);
         }
         return m; })()
@@ -495,9 +526,10 @@ function spawnGull(){
   scene.add(m);
   G.gulls.push({node:m, dir, sp:rnd(6,14), clock:Math.random()*3});
 }
+const PART_GEO = new THREE.PlaneGeometry(0.16,0.16);
 function sparkle(pos){
   for(let i=0;i<12;i++){
-    const m=new THREE.Mesh(new THREE.PlaneGeometry(0.16,0.16),
+    const m=new THREE.Mesh(PART_GEO,
       new THREE.MeshBasicMaterial({color:Math.random()<0.5?0xFFC93C:0xFFF6E9,
         transparent:true, depthWrite:false}));
     m.position.copy(pos);
@@ -640,7 +672,7 @@ function update(dt){
   }
   G.gulls = G.gulls.filter(g=>{
     const keep=Math.abs(g.node.position.x)<46;
-    if(!keep) scene.remove(g.node);
+    if(!keep) disposeNode(g.node);
     return keep;
   });
   for(const p of G.parts){
@@ -650,7 +682,11 @@ function update(dt){
     p.node.material.opacity=1-p.t/p.life;
     p.node.rotation.z+=dt*6;
   }
-  G.parts=G.parts.filter(p=>{ const k=p.t<p.life; if(!k) scene.remove(p.node); return k; });
+  G.parts=G.parts.filter(p=>{
+    const k=p.t<p.life;
+    if(!k){ scene.remove(p.node); p.node.material.dispose(); }  // geometry is shared
+    return k;
+  });
 
   if(G.state==='crash'||G.state==='over'){ updateCrash(dt); return; }
   if(G.state!=='run') return;
@@ -699,7 +735,7 @@ function update(dt){
     }
   }
   G.obstacles=G.obstacles.filter(o=>{
-    const k=o.node.position.z<8; if(!k) scene.remove(o.node); return k;
+    const k=o.node.position.z<8; if(!k) disposeNode(o.node); return k;
   });
 
   // stars
@@ -712,12 +748,12 @@ function update(dt){
        Math.abs((s.y) - (jumpY+0.9)) < 1.35){
       s.got=true; G.stars++;
       sparkle(s.node.position.clone());
-      scene.remove(s.node);
+      disposeNode(s.node);
     }
   }
   G.pickups=G.pickups.filter(s=>{
     if(s.got) return false;
-    const k=s.node.position.z<6; if(!k) scene.remove(s.node); return k;
+    const k=s.node.position.z<6; if(!k) disposeNode(s.node); return k;
   });
 
   // wind streaks
