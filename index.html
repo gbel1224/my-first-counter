@@ -1,358 +1,353 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Math Adventure for Kids</title>
-    <style>
-        :root {
-            --bg: #eef8ff;
-            --card: #ffffff;
-            --text: #233142;
-            --primary: #3b82f6;
-            --accent: #14b8a6;
-            --good: #16a34a;
-            --bad: #dc2626;
-            --muted: #6b7280;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>LASER STRIKE ARENA</title>
+<link rel="icon" href="./favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0c14; --panel:#11141f; --panel2:#1a1f2e;
+  --cyan:#00e5ff; --cyan-soft:#66f0ff; --magenta:#ff2d78; --green:#aaff00;
+  --text:#dfe7f2; --dim:#8a93a8;
+  --chamfer: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+  --uiscale: 1;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg); color:var(--text); font-family:'Rajdhani',sans-serif; overflow:hidden}
 
-        * { box-sizing: border-box; }
+/* LIVE 3D ARENA renders here */
+#arena3d{position:fixed; inset:0; z-index:0}
+#arena3d canvas{display:block}
+.vignette{position:fixed; inset:0; z-index:0; pointer-events:none;
+  background:radial-gradient(ellipse at center, transparent 40%, rgba(10,12,20,.82) 100%)}
 
-        body {
-            margin: 0;
-            min-height: 100vh;
-            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(160deg, #dbeafe 0%, var(--bg) 100%);
-            color: var(--text);
-            display: grid;
-            place-items: center;
-            padding: 1rem;
-        }
+.shell{position:relative; z-index:1; height:100%; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; padding:24px; gap:22px}
+body.ingame .shell, body.ingame .vignette, body.ingame .foot{display:none}
 
-        .app {
-            width: min(720px, 100%);
-            background: var(--card);
-            border-radius: 18px;
-            box-shadow: 0 12px 30px rgba(37, 99, 235, 0.16);
-            overflow: hidden;
-        }
+.screen{display:none; width:min(560px,100%); flex-direction:column; gap:14px; align-items:stretch}
+.screen.active{display:flex; animation:slidein .28s cubic-bezier(.2,.9,.3,1)}
+@keyframes slidein{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.screen.active{animation:none}}
 
-        .header {
-            background: linear-gradient(120deg, var(--primary), #7c3aed);
-            color: #fff;
-            padding: 1.2rem 1.5rem;
-        }
+.logo{width:min(440px,86vw); align-self:center; clip-path:var(--chamfer);
+  box-shadow:0 0 44px rgba(0,229,255,.18)}
+.screen-title{font-family:'Chakra Petch'; font-weight:700; font-size:clamp(20px,4vw,28px);
+  letter-spacing:.18em; color:var(--cyan-soft); text-transform:uppercase;
+  display:flex; align-items:center; gap:12px}
+.screen-title::after{content:''; flex:1; height:1px;
+  background:linear-gradient(90deg,var(--cyan),transparent)}
 
-        .header h1 {
-            margin: 0;
-            font-size: clamp(1.3rem, 2.4vw, 1.8rem);
-        }
+.btn{position:relative; display:flex; justify-content:space-between; align-items:center;
+  padding:15px 22px; background:rgba(17,20,31,.82); border:1px solid rgba(0,229,255,.35);
+  clip-path:var(--chamfer); cursor:pointer; text-align:left; width:100%;
+  font-family:'Chakra Petch'; font-weight:600; font-size:17px; letter-spacing:.14em;
+  color:var(--text); text-transform:uppercase; overflow:hidden;
+  transition:border-color .15s, color .15s; backdrop-filter:blur(3px)}
+.btn .sub{font-family:'Rajdhani'; font-weight:500; font-size:13px;
+  letter-spacing:.06em; color:var(--dim); text-transform:none}
+.btn::before{content:''; position:absolute; left:0; top:0; bottom:0; width:0;
+  background:linear-gradient(90deg, rgba(0,229,255,.16), rgba(0,229,255,.05));
+  transition:width .22s ease}
+.btn:hover,.btn:focus-visible{border-color:var(--cyan); color:#fff; outline:none}
+.btn:hover::before,.btn:focus-visible::before{width:100%}
+.btn:focus-visible{box-shadow:0 0 0 2px var(--bg), 0 0 0 4px var(--cyan)}
+.btn.primary{border-color:var(--cyan); background:rgba(0,229,255,.10);
+  font-size:20px; padding:18px 24px; box-shadow:0 0 24px rgba(0,229,255,.12)}
+.btn.primary:hover{box-shadow:0 0 34px rgba(0,229,255,.28)}
+.btn .key{color:var(--cyan); font-size:13px; letter-spacing:.1em}
+.btn.locked{border-color:rgba(138,147,168,.3); color:var(--dim); cursor:default}
+.btn.locked:hover::before{width:0}
+.tag{font-size:11px; letter-spacing:.18em; color:var(--magenta);
+  border:1px solid rgba(255,45,120,.5); padding:3px 8px; clip-path:var(--chamfer)}
+.btn.back{width:auto; align-self:flex-start; font-size:13px; padding:9px 18px; border-color:rgba(255,45,120,.45)}
+.btn.back:hover{border-color:var(--magenta)}
+.btn.back:hover::before{background:linear-gradient(90deg, rgba(255,45,120,.14), transparent)}
 
-        .header p {
-            margin: 0.4rem 0 0;
-            opacity: 0.92;
-            font-size: 0.95rem;
-        }
+.rankcard{display:flex; gap:16px; align-items:center; padding:16px 20px;
+  background:rgba(26,31,46,.85); clip-path:var(--chamfer); border:1px solid rgba(0,229,255,.25)}
+.badge{width:58px;height:58px; clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);
+  background:linear-gradient(160deg,#3a2a10,#8a6a1e); display:flex;align-items:center;justify-content:center;
+  font-family:'Chakra Petch';font-weight:700;color:#ffd866;font-size:20px}
+.rankmeta{flex:1}
+.rankmeta b{font-family:'Chakra Petch';letter-spacing:.12em;font-size:18px;color:#ffd866}
+.rpbar{height:8px; margin-top:8px; background:rgba(0,0,0,.45); clip-path:var(--chamfer)}
+.rpbar i{display:block;height:100%;width:35%;background:linear-gradient(90deg,var(--cyan),var(--cyan-soft));
+  box-shadow:0 0 10px var(--cyan)}
+.ladder{display:flex; gap:6px}
+.ladder span{flex:1; padding:7px 0; text-align:center; font-family:'Chakra Petch'; font-size:11px;
+  letter-spacing:.08em; color:var(--dim); background:rgba(17,20,31,.8); clip-path:var(--chamfer);
+  border:1px solid rgba(138,147,168,.18)}
+.ladder span.now{color:#ffd866; border-color:#ffd866; box-shadow:0 0 12px rgba(255,216,102,.25)}
 
-        .content {
-            padding: 1.25rem;
-            display: grid;
-            gap: 1rem;
-        }
+.chgrid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+@media (max-width:480px){.chgrid{grid-template-columns:1fr}}
+.ch{padding:12px 14px; background:rgba(17,20,31,.85); clip-path:var(--chamfer);
+  border:1px solid rgba(0,229,255,.22)}
+.ch b{font-family:'Chakra Petch'; font-size:14px; letter-spacing:.08em; color:var(--cyan-soft)}
+.ch p{font-size:13px; color:var(--dim); margin-top:2px}
+.ch .unlock{display:inline-block; margin-top:7px; font-size:11px; letter-spacing:.1em;
+  color:var(--green); border:1px solid rgba(170,255,0,.4); padding:2px 8px; clip-path:var(--chamfer)}
+.ch.done{border-color:var(--green)} .ch.done b{color:var(--green)}
 
-        .controls,
-        .stats,
-        .challenge,
-        .feedback {
-            background: #f8fbff;
-            border: 1px solid #d7e8ff;
-            border-radius: 12px;
-            padding: 1rem;
-        }
+.set{display:flex; justify-content:space-between; align-items:center; padding:13px 18px;
+  background:rgba(17,20,31,.85); clip-path:var(--chamfer); border:1px solid rgba(0,229,255,.18)}
+.set label{font-family:'Chakra Petch'; font-size:14px; letter-spacing:.1em}
+.toggle{width:52px;height:26px;background:rgba(0,0,0,.5);clip-path:var(--chamfer);
+  border:1px solid rgba(0,229,255,.35);cursor:pointer;position:relative}
+.toggle i{position:absolute;top:3px;left:4px;width:20px;height:18px;background:var(--dim);
+  clip-path:var(--chamfer);transition:left .15s, background .15s}
+.toggle.on i{left:26px;background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+input[type=range]{accent-color:var(--cyan); width:150px}
+.chips{display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; max-width:60%}
+.chips button{padding:5px 10px; font-family:'Chakra Petch'; font-size:11px; letter-spacing:.08em;
+  color:var(--dim); background:rgba(17,20,31,.8); clip-path:var(--chamfer); cursor:pointer;
+  border:1px solid rgba(138,147,168,.25); text-transform:uppercase}
+.chips button.now{color:var(--cyan); border-color:var(--cyan); box-shadow:0 0 10px rgba(0,229,255,.25)}
+.chips button.lock{opacity:.38; cursor:default}
 
-        .controls {
-            display: grid;
-            gap: 0.8rem;
-            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-            align-items: end;
-        }
+.how{background:rgba(17,20,31,.85); clip-path:var(--chamfer); border:1px solid rgba(0,229,255,.22); padding:18px 20px}
+.how h3{font-family:'Chakra Petch'; color:var(--cyan-soft); letter-spacing:.12em; font-size:14px; margin-bottom:6px; text-transform:uppercase}
+.how p{font-size:15px; color:var(--text); margin-bottom:12px}
+.how p:last-child{margin-bottom:0}
+.kbd{font-family:'Chakra Petch'; font-size:12px; color:var(--cyan); border:1px solid rgba(0,229,255,.4);
+  padding:1px 7px; clip-path:var(--chamfer)}
 
-        label {
-            display: grid;
-            gap: 0.35rem;
-            font-weight: 600;
-            color: #334155;
-            font-size: 0.95rem;
-        }
+.foot{position:fixed; bottom:14px; left:0; right:0; text-align:center; z-index:1;
+  font-size:12px; letter-spacing:.2em; color:var(--dim); text-transform:uppercase}
 
-        select,
-        input[type="number"],
-        button {
-            font: inherit;
-            border-radius: 10px;
-            border: 1px solid #cbd5e1;
-            padding: 0.6rem 0.75rem;
-            background: #fff;
-        }
+/* ============ IN-GAME HUD ============ */
+#hud{position:fixed; inset:0; z-index:2; pointer-events:none; display:none;
+  font-size:calc(16px * var(--uiscale))}
+body.ingame #hud{display:block}
+#shieldfx{position:fixed; inset:0; pointer-events:none; opacity:0; transition:opacity .12s;
+  background:radial-gradient(ellipse at center, transparent 52%, rgba(0,229,255,.55) 100%)}
+#shieldfx.hurt{background:radial-gradient(ellipse at center, transparent 42%, rgba(255,45,120,.6) 100%)}
+#crosshair{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
+  font-family:'Chakra Petch'; font-size:calc(24px * var(--uiscale)); color:var(--cyan);
+  text-shadow:0 0 8px var(--cyan); transition:transform .08s, color .08s; user-select:none}
+#crosshair.bloom{color:var(--magenta); text-shadow:0 0 12px var(--magenta);
+  transform:translate(-50%,-50%) scale(1.45)}
+#pips{position:fixed; top:18px; left:18px; display:flex; gap:7px}
+#pips i{width:calc(34px * var(--uiscale)); height:calc(12px * var(--uiscale)); background:var(--cyan);
+  clip-path:var(--chamfer); box-shadow:0 0 10px var(--cyan); transition:opacity .15s, background .15s}
+#pips i.off{background:#2a3142; box-shadow:none}
+#pips i.regen{background:var(--cyan-soft); opacity:.55}
+#scorebar{position:fixed; top:18px; left:50%; transform:translateX(-50%);
+  width:min(380px,46vw); text-align:center}
+#scorebar .nums{display:flex; justify-content:space-between; font-family:'Chakra Petch';
+  font-weight:700; font-size:calc(22px * var(--uiscale))}
+#scorebar .nums .you{color:var(--cyan); text-shadow:0 0 8px var(--cyan)}
+#scorebar .nums .foe{color:var(--magenta); text-shadow:0 0 8px var(--magenta)}
+#scorebar .race{height:7px; margin-top:4px; background:rgba(0,0,0,.55); clip-path:var(--chamfer);
+  display:flex; overflow:hidden}
+#scorebar .race .you{background:var(--cyan); height:100%; transition:width .3s}
+#scorebar .race .gap{flex:1}
+#scorebar .race .foe{background:var(--magenta); height:100%; transition:width .3s}
+#timer{font-family:'Chakra Petch'; font-weight:600; font-size:calc(15px * var(--uiscale));
+  color:var(--text); letter-spacing:.2em; margin-top:3px}
+#rankbadge{position:fixed; top:18px; right:18px; font-family:'Chakra Petch'; font-weight:700;
+  font-size:calc(13px * var(--uiscale)); color:#ffd866; border:1px solid rgba(255,216,102,.5);
+  padding:4px 10px; clip-path:var(--chamfer); display:none}
+#feed{position:fixed; top:64px; right:18px; display:flex; flex-direction:column; gap:5px;
+  align-items:flex-end; max-width:44vw}
+#feed div{font-family:'Chakra Petch'; font-size:calc(12.5px * var(--uiscale)); letter-spacing:.08em;
+  padding:4px 10px; background:rgba(10,12,20,.72); clip-path:var(--chamfer);
+  border:1px solid rgba(0,229,255,.25); animation:feedin .2s}
+#feed div.bad{border-color:rgba(255,45,120,.45)}
+#feed div.good{border-color:rgba(170,255,0,.45)}
+@keyframes feedin{from{opacity:0; transform:translateX(12px)}to{opacity:1}}
+#banner{position:fixed; left:50%; top:26%; transform:translate(-50%,-50%);
+  font-family:'Chakra Petch'; font-weight:700; font-size:calc(42px * var(--uiscale));
+  letter-spacing:.3em; color:var(--magenta); text-shadow:0 0 24px var(--magenta);
+  opacity:0; transition:opacity .2s; text-align:center; white-space:nowrap}
+#banner.cyan{color:var(--cyan); text-shadow:0 0 24px var(--cyan)}
+#banner.green{color:var(--green); text-shadow:0 0 24px var(--green)}
+#countdown{position:fixed; left:50%; top:42%; transform:translate(-50%,-50%);
+  font-family:'Chakra Petch'; font-weight:700; font-size:calc(96px * var(--uiscale));
+  color:var(--cyan); text-shadow:0 0 40px var(--cyan); opacity:0}
+#refusal{position:fixed; left:50%; top:58%; transform:translate(-50%,-50%);
+  font-family:'Chakra Petch'; font-size:calc(17px * var(--uiscale)); letter-spacing:.18em;
+  color:var(--magenta); text-shadow:0 0 10px var(--magenta); opacity:0; white-space:nowrap}
+#boost{position:fixed; left:50%; bottom:14%; transform:translateX(-50%);
+  font-family:'Chakra Petch'; font-weight:700; font-size:calc(15px * var(--uiscale)); letter-spacing:.2em;
+  color:var(--green); text-shadow:0 0 12px var(--green); opacity:0}
+#leadermark{position:fixed; width:0; height:0; display:none; z-index:3}
+#leadermark::before{content:'◆ LEADER'; position:absolute; transform:translate(-50%,-50%);
+  font-family:'Chakra Petch'; font-size:11px; letter-spacing:.12em; color:#ffd866;
+  text-shadow:0 0 8px rgba(255,216,102,.8); white-space:nowrap}
+#pauseveil{position:fixed; inset:0; z-index:4; display:none; align-items:center; justify-content:center;
+  flex-direction:column; gap:14px; background:rgba(10,12,20,.78); cursor:pointer}
+#pauseveil .big{font-family:'Chakra Petch'; font-weight:700; font-size:26px; letter-spacing:.25em; color:var(--cyan)}
+#pauseveil .small{font-size:14px; letter-spacing:.18em; color:var(--dim)}
+body.hc #feed div{background:#000; border-width:2px}
+body.hc #scorebar .race{height:10px; background:#000}
+body.hc #pips i.off{background:#000; border:1px solid var(--dim)}
+body.hc #crosshair{text-shadow:0 0 2px #000, 0 0 8px var(--cyan)}
 
-        button {
-            border: none;
-            background: var(--primary);
-            color: white;
-            cursor: pointer;
-            font-weight: 700;
-            transition: transform 0.12s ease, opacity 0.2s;
-        }
+/* ============ TOUCH UI ============ */
+#touchui{position:fixed; inset:0; z-index:3; display:none; pointer-events:none}
+body.ingame.touch #touchui{display:block}
+#stickzone{position:absolute; left:0; top:0; bottom:0; width:46%; pointer-events:auto}
+#lookzone{position:absolute; right:0; top:0; bottom:0; width:54%; pointer-events:auto}
+#stick{position:absolute; width:110px; height:110px; border:1px solid rgba(0,229,255,.4);
+  border-radius:50%; display:none; transform:translate(-50%,-50%)}
+#stickknob{position:absolute; left:50%; top:50%; width:46px; height:46px; border-radius:50%;
+  background:rgba(0,229,255,.3); border:1px solid var(--cyan); transform:translate(-50%,-50%)}
+.tbtn{position:absolute; right:26px; width:84px; height:84px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; pointer-events:auto;
+  font-family:'Chakra Petch'; font-weight:700; font-size:14px; letter-spacing:.1em;
+  color:var(--cyan); background:rgba(0,229,255,.12); border:1.5px solid rgba(0,229,255,.55);
+  user-select:none; -webkit-user-select:none; touch-action:none}
+.tbtn:active{background:rgba(0,229,255,.32)}
+#btnfire{bottom:36px; right:30px; width:104px; height:104px; color:var(--magenta);
+  background:rgba(255,45,120,.12); border-color:rgba(255,45,120,.6)}
+#btnfire:active{background:rgba(255,45,120,.3)}
+#btnjump{bottom:160px}
 
-        button:hover { opacity: 0.92; }
-        button:active { transform: scale(0.98); }
-
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 0.6rem;
-            text-align: center;
-        }
-
-        .stat {
-            background: white;
-            border-radius: 10px;
-            border: 1px solid #dbe5f1;
-            padding: 0.7rem;
-        }
-
-        .stat strong {
-            display: block;
-            font-size: 1.35rem;
-            color: #1d4ed8;
-        }
-
-        .challenge h2 {
-            margin: 0 0 0.6rem;
-            font-size: 1.1rem;
-            color: #1e3a8a;
-        }
-
-        .problem {
-            font-size: clamp(1.5rem, 4.5vw, 2.3rem);
-            font-weight: 800;
-            text-align: center;
-            margin: 0.25rem 0 1rem;
-        }
-
-        .answer-row {
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 0.6rem;
-        }
-
-        #answer {
-            text-align: center;
-            font-size: 1.2rem;
-            font-weight: 700;
-        }
-
-        .feedback {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.6rem;
-            flex-wrap: wrap;
-        }
-
-        #message {
-            margin: 0;
-            font-weight: 700;
-        }
-
-        .good { color: var(--good); }
-        .bad { color: var(--bad); }
-        .muted { color: var(--muted); }
-
-        @media (max-width: 520px) {
-            .answer-row { grid-template-columns: 1fr; }
-        }
-    </style>
+/* ============ DEV OVERLAY ============ */
+#dev{position:fixed; left:10px; bottom:10px; z-index:9; display:none; padding:10px 14px;
+  font:12px/1.5 monospace; color:var(--green); background:rgba(0,0,0,.78);
+  border:1px solid rgba(170,255,0,.4); clip-path:var(--chamfer); white-space:pre; pointer-events:none}
+</style>
 </head>
 <body>
-    <main class="app" aria-label="Math practice app for kids">
-        <header class="header">
-            <h1>🌟 Math Adventure</h1>
-            <p>Solve fun challenges, build your streak, and become a math hero!</p>
-        </header>
 
-        <section class="content">
-            <section class="controls" aria-label="game controls">
-                <label>
-                    Operation
-                    <select id="operation">
-                        <option value="add">Addition (+)</option>
-                        <option value="subtract">Subtraction (−)</option>
-                        <option value="multiply">Multiplication (×)</option>
-                    </select>
-                </label>
+<div id="arena3d" aria-hidden="true"></div>
+<div class="vignette" aria-hidden="true"></div>
 
-                <label>
-                    Difficulty
-                    <select id="difficulty">
-                        <option value="easy">Easy (1–10)</option>
-                        <option value="medium">Medium (1–20)</option>
-                        <option value="hard">Hard (1–50)</option>
-                    </select>
-                </label>
+<div class="shell">
 
-                <button id="newGameBtn" type="button">Start New Game</button>
-            </section>
+  <div class="screen active" id="title">
+    <img class="logo" alt="Laser Strike Arena" src="./logo.png">
+    <button class="btn primary" data-go="single">Play <span class="key">Enter</span></button>
+    <button class="btn" data-go="multi">Multiplayer <span class="tag">Coming soon</span></button>
+    <button class="btn" data-go="settings">Settings</button>
+    <button class="btn" data-go="how">How to play</button>
+  </div>
 
-            <section class="stats" aria-label="scoreboard">
-                <div class="stat">Score <strong id="score">0</strong></div>
-                <div class="stat">Streak <strong id="streak">0</strong></div>
-                <div class="stat">Question <strong id="questionCount">1</strong></div>
-            </section>
+  <div class="screen" id="single">
+    <div class="screen-title">Single player</div>
+    <button class="btn primary" data-action="quick">Quick match <span class="sub">Instant — you vs 3 bots</span></button>
+    <button class="btn" data-go="ranked">Ranked <span class="sub">Climb Bronze → Champion</span></button>
+    <button class="btn" data-go="challenges">Challenges <span class="sub">Earn beam colors &amp; crosshairs</span></button>
+    <button class="btn back" data-go="title">◂ Back</button>
+  </div>
 
-            <section class="challenge" aria-live="polite">
-                <h2>Your Challenge</h2>
-                <p id="problem" class="problem">3 + 4 = ?</p>
-                <div class="answer-row">
-                    <input id="answer" type="number" placeholder="Type your answer" autocomplete="off" />
-                    <button id="checkBtn" type="button">Check Answer</button>
-                </div>
-            </section>
+  <div class="screen" id="ranked">
+    <div class="screen-title">Ranked</div>
+    <div class="rankcard">
+      <div class="badge" id="rk-badge">B III</div>
+      <div class="rankmeta">
+        <b id="rk-name">BRONZE III</b>
+        <div style="font-size:13px;color:var(--dim)" id="rk-info">0 / 100 RP · Win +20 (+margin) · Loss −15</div>
+        <div class="rpbar"><i id="rk-bar" style="width:0%"></i></div>
+      </div>
+    </div>
+    <div class="ladder" id="rk-ladder">
+      <span data-tier="BRONZE">BRZ</span><span data-tier="SILVER">SLV</span><span data-tier="GOLD">GLD</span><span data-tier="PLATINUM">PLT</span><span data-tier="DIAMOND">DIA</span><span data-tier="CHAMPION">CHP</span>
+    </div>
+    <button class="btn primary" data-action="ranked">Start ranked match <span class="sub">Bots scale with your rank</span></button>
+    <button class="btn back" data-go="single">◂ Back</button>
+  </div>
 
-            <section class="feedback">
-                <p id="message" class="muted">Pick settings and solve your first problem!</p>
-                <button id="nextBtn" type="button">Next Question</button>
-            </section>
-        </section>
-    </main>
+  <div class="screen" id="challenges">
+    <div class="screen-title">Challenges</div>
+    <div class="chgrid">
+      <div class="ch" data-ch="firstBlood"><b>First Blood</b><p>Get the first tag of a match</p><span class="unlock">Crosshair: Dot</span></div>
+      <div class="ch" data-ch="hatTrick"><b>Hat Trick</b><p>3 tags within 30 seconds</p><span class="unlock">Beam: Gold</span></div>
+      <div class="ch" data-ch="flawless"><b>Flawless</b><p>Win without being tagged</p><span class="unlock">Beam: White</span></div>
+      <div class="ch" data-ch="padLord"><b>Pad Lord</b><p>Take the power pad 3× in one match</p><span class="unlock">Crosshair: Hex</span></div>
+      <div class="ch" data-ch="airborne"><b>Airborne</b><p>Tag a bot while you're mid-air</p><span class="unlock">Beam: Green</span></div>
+      <div class="ch" data-ch="comebackKid"><b>Comeback Kid</b><p>Win after trailing by 5</p><span class="unlock">Crosshair: Chevron</span></div>
+      <div class="ch" data-ch="sharpshooter"><b>Sharpshooter</b><p>Win with 80%+ accuracy</p><span class="unlock">Beam: Violet</span></div>
+      <div class="ch" data-ch="speedrun"><b>Speedrun</b><p>15 tags in under 2:00</p><span class="unlock">Beam: Rainbow</span></div>
+    </div>
+    <button class="btn back" data-go="single">◂ Back</button>
+  </div>
 
-    <script>
-        const operationEl = document.getElementById('operation');
-        const difficultyEl = document.getElementById('difficulty');
-        const newGameBtn = document.getElementById('newGameBtn');
-        const checkBtn = document.getElementById('checkBtn');
-        const nextBtn = document.getElementById('nextBtn');
-        const problemEl = document.getElementById('problem');
-        const answerEl = document.getElementById('answer');
-        const messageEl = document.getElementById('message');
-        const scoreEl = document.getElementById('score');
-        const streakEl = document.getElementById('streak');
-        const questionCountEl = document.getElementById('questionCount');
+  <div class="screen" id="multi">
+    <div class="screen-title">Multiplayer</div>
+    <button class="btn locked">Quick match <span class="tag">Coming soon</span></button>
+    <button class="btn locked">Private room — create code <span class="tag">Coming soon</span></button>
+    <button class="btn locked">Private room — join code <span class="tag">Coming soon</span></button>
+    <button class="btn back" data-go="title">◂ Back</button>
+  </div>
 
-        const ranges = {
-            easy: 10,
-            medium: 20,
-            hard: 50
-        };
+  <div class="screen" id="settings">
+    <div class="screen-title">Settings</div>
+    <div class="set"><label>Look sensitivity</label><input type="range" min="1" max="10" value="5" id="set-sens"></div>
+    <div class="set"><label>Music volume</label><input type="range" min="0" max="10" value="6" id="set-music"></div>
+    <div class="set"><label>SFX volume</label><input type="range" min="0" max="10" value="8" id="set-sfx"></div>
+    <div class="set"><label>Camera shake</label><div class="toggle on" id="set-shake" role="switch" aria-checked="true" tabindex="0"><i></i></div></div>
+    <div class="set"><label>Flash effects</label><div class="toggle on" id="set-flash" role="switch" aria-checked="true" tabindex="0"><i></i></div></div>
+    <div class="set"><label>High-contrast HUD</label><div class="toggle" id="set-hc" role="switch" aria-checked="false" tabindex="0"><i></i></div></div>
+    <div class="set"><label>Text scale</label><input type="range" min="8" max="14" value="10" id="set-tscale"></div>
+    <div class="screen-title" style="font-size:16px;margin-top:8px">Loadout</div>
+    <div class="set"><label>Beam color</label><div class="chips" id="lo-beam"></div></div>
+    <div class="set"><label>Crosshair</label><div class="chips" id="lo-cross"></div></div>
+    <button class="btn back" data-go="title">◂ Back</button>
+  </div>
 
-        let game = {
-            score: 0,
-            streak: 0,
-            questionCount: 1,
-            currentAnswer: 0,
-            answeredCurrent: false
-        };
+  <div class="screen" id="how">
+    <div class="screen-title">How to play</div>
+    <div class="how">
+      <h3>Goal</h3>
+      <p>Tag opponents with your laser. First to 15 tags — or top score at 3:00 — wins.</p>
+      <h3>Shields</h3>
+      <p>Three hits tags you out. Break contact for 2 seconds and your shield fully recharges — firing keeps you in combat, so disengaging is a weapon.</p>
+      <h3>Pads</h3>
+      <p><span style="color:var(--green)">Green pad</span> = double points for 10s (everyone is told you took it). Cyan pads launch you to the high lanes.</p>
+      <h3>Controls</h3>
+      <p><span class="kbd">W A S D</span> move · <span class="kbd">Mouse</span> aim · <span class="kbd">Click</span> fire · <span class="kbd">Space</span> jump · Touch &amp; gamepad supported.</p>
+    </div>
+    <button class="btn back" data-go="title">◂ Back</button>
+  </div>
 
-        function randomNumber(max) {
-            return Math.floor(Math.random() * max) + 1;
-        }
+  <div class="screen" id="results">
+    <div class="screen-title" id="res-title">Match complete</div>
+    <div class="how" id="res-body"></div>
+    <div id="res-toasts" style="display:flex;flex-direction:column;gap:8px"></div>
+    <button class="btn primary" data-action="rematch">Rematch</button>
+    <button class="btn back" data-go="single">◂ Menu</button>
+  </div>
 
-        function generateQuestion() {
-            const max = ranges[difficultyEl.value];
-            const a = randomNumber(max);
-            const b = randomNumber(max);
-            const op = operationEl.value;
-            let text = '';
+</div>
 
-            if (op === 'add') {
-                game.currentAnswer = a + b;
-                text = `${a} + ${b} = ?`;
-            } else if (op === 'subtract') {
-                const larger = Math.max(a, b);
-                const smaller = Math.min(a, b);
-                game.currentAnswer = larger - smaller;
-                text = `${larger} − ${smaller} = ?`;
-            } else {
-                game.currentAnswer = a * b;
-                text = `${a} × ${b} = ?`;
-            }
+<div class="foot">Laser Strike Arena · first to 15 tags · live arena behind</div>
 
-            game.answeredCurrent = false;
-            problemEl.textContent = text;
-            answerEl.value = '';
-            answerEl.focus();
-            setMessage('Solve this one!', 'muted');
-            refreshStats();
-        }
+<div id="hud" aria-hidden="true">
+  <div id="shieldfx"></div>
+  <div id="crosshair">+</div>
+  <div id="pips"><i></i><i></i><i></i></div>
+  <div id="scorebar">
+    <div class="nums"><span class="you" id="sc-you">0</span><span id="timer">3:00</span><span class="foe" id="sc-foe">0</span></div>
+    <div class="race"><div class="you" id="race-you" style="width:0%"></div><div class="gap"></div><div class="foe" id="race-foe" style="width:0%"></div></div>
+  </div>
+  <div id="rankbadge">B III</div>
+  <div id="feed"></div>
+  <div id="banner"></div>
+  <div id="countdown"></div>
+  <div id="refusal"></div>
+  <div id="boost"></div>
+  <div id="leadermark"></div>
+</div>
 
-        function setMessage(text, tone) {
-            messageEl.textContent = text;
-            messageEl.className = tone;
-        }
+<div id="touchui">
+  <div id="stickzone"><div id="stick"><div id="stickknob"></div></div></div>
+  <div id="lookzone"></div>
+  <div class="tbtn" id="btnjump">JUMP</div>
+  <div class="tbtn" id="btnfire">FIRE</div>
+</div>
 
-        function refreshStats() {
-            scoreEl.textContent = game.score;
-            streakEl.textContent = game.streak;
-            questionCountEl.textContent = game.questionCount;
-        }
+<div id="pauseveil"><div class="big" id="pause-big">PAUSED — CLICK TO RESUME</div><div class="small" id="pause-small">PRESS Q TO QUIT TO MENU</div></div>
 
-        function checkAnswer() {
-            if (game.answeredCurrent) {
-                setMessage('You already answered. Press Next Question!', 'muted');
-                return;
-            }
+<div id="dev"></div>
 
-            const userAnswer = Number(answerEl.value);
-            if (answerEl.value.trim() === '' || Number.isNaN(userAnswer)) {
-                setMessage('Please enter a number first 😊', 'bad');
-                return;
-            }
-
-            game.answeredCurrent = true;
-
-            if (userAnswer === game.currentAnswer) {
-                game.score += 10;
-                game.streak += 1;
-                setMessage('✅ Awesome! That is correct!', 'good');
-            } else {
-                game.streak = 0;
-                setMessage(`❌ Nice try! Correct answer: ${game.currentAnswer}`, 'bad');
-            }
-
-            refreshStats();
-        }
-
-        function nextQuestion() {
-            game.questionCount += 1;
-            generateQuestion();
-        }
-
-        function startNewGame() {
-            game = {
-                score: 0,
-                streak: 0,
-                questionCount: 1,
-                currentAnswer: 0,
-                answeredCurrent: false
-            };
-            generateQuestion();
-            setMessage('New game started. You can do it! 💪', 'good');
-        }
-
-        checkBtn.addEventListener('click', checkAnswer);
-        nextBtn.addEventListener('click', nextQuestion);
-        newGameBtn.addEventListener('click', startNewGame);
-
-        answerEl.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter') {
-                checkAnswer();
-            }
-        });
-
-        operationEl.addEventListener('change', startNewGame);
-        difficultyEl.addEventListener('change', startNewGame);
-
-        startNewGame();
-    </script>
+<script type="module" src="./src/main.js"></script>
 </body>
 </html>

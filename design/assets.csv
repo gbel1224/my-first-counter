@@ -1,0 +1,22 @@
+file,type,size,role,source,notes
+floor_tile.png,texture tile,256px seamless,arena floor (repeat 15x),generated (Higgsfield),seam-fixed 50% roll+blend: 1.44->0.21
+wall_tile.png,texture tile,256px seamless,perimeter walls,generated (Higgsfield),seam-fixed 50% roll+blend: 5.46->0.10
+drone.glb,3D model,~12MB 30k verts,enemy bot (cloned x3 shared geo),image-to-3D,+ magenta emissive accents (eye/core)
+rifle.glb,3D model,~13MB 28k verts,player viewmodel,image-to-3D,+ cyan emissive strip
+cover_block.glb,3D model,~7MB 19k verts,cover blocks — ONE InstancedMesh x14,image-to-3D,+ instanced cyan trim glow
+power_pad.glb,3D model,~14MB 32k verts,center 2x pad base,image-to-3D,+ green animated ring
+jump_pad.glb,3D model,~13MB 31k verts,jump pad bases x2 (cloned),image-to-3D,+ cyan animated ring
+thumbnail.png,key art,16:9 webp,publishing thumbnail,generated,style reference
+favicon.png,icon,1024px,favicon,generated,
+logo.png,wordmark,jpeg,title logo,generated,
+backdrop.png,panorama,1584x672,reference (live 3D used instead),generated,unused at runtime by design
+concept_drone.png,reference,1024,visual spec for procedural fallback,generated,not shipped at runtime
+concept_rifle.png,reference,1024,visual spec for procedural fallback,generated,not shipped at runtime
+concept_props.png,reference,1024,visual spec for procedural fallback,generated,not shipped at runtime
+music_loop.m4a,audio,30s loop,combat music (~-18dBFS),generated,loop on playback
+sfx_fire.mp3,audio,short,laser shot (+2st player / -2st bots),generated,pitch via playbackRate
+sfx_shield_hit.mp3,audio,short,shield impact tick,generated,
+sfx_tag_out.mp3,audio,short,shield shatter / elimination,generated,
+sfx_pickup.mp3,audio,short,power pad chime,generated,
+sfx_respawn.mp3,audio,short,respawn warp (also jump pad re-pitched),generated,
+(synth) stings,audio,runtime WebAudio,match point / victory / defeat / rank-up / countdown,synthesized,oscillator envelopes
