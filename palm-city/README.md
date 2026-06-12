@@ -1,4 +1,4 @@
-# Sunset City 🌇
+# Palm City 🌇
 
 A 3D open-world story game for mobile browsers — GTA-style cruising with a sunny
 life-sim heart (inspired by Sunday City and GTA San Andreas).
@@ -6,7 +6,7 @@ life-sim heart (inspired by Sunday City and GTA San Andreas).
 **Play it live:** https://soft-nest-342.higgsfield.gg/
 
 ## The game
-You arrive in Sunset City broke. Your cousin Marco gets you hustling: pizza runs,
+You arrive in Palm City broke. Your cousin Marco gets you hustling: pizza runs,
 taxi rides, courier chains — then you start **buying the city**: a hot dog cart,
 a car wash, a burger joint, and the Neon Palms nightclub. Owned businesses earn
 income every minute. Eight story chapters, then endless freeplay with repeatable
@@ -20,7 +20,7 @@ depot delivery jobs. Progress auto-saves in your browser.
 
 ## Run it locally
 ```bash
-cd sunset-city
+cd palm-city
 python3 -m http.server 8000
 # open http://localhost:8000  (phone: use your computer's LAN IP)
 ```

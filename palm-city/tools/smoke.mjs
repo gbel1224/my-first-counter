@@ -58,7 +58,7 @@ writeFileSync(join(dir, "game.js"),
   readFileSync(join(root, "game.js"), "utf8").replace("new THREE.WebGLRenderer", "new globalThis.FakeRenderer"));
 await import(pathToFileURL(join(dir, "game.js")).href);
 
-const h = globalThis.__sunsetCity;
+const h = globalThis.__palmCity;
 const assert = (c, msg) => { if (!c) { console.error("FAIL:", msg, h.debug(), "money", h.state.money); process.exit(1); } };
 
 const run = n => { for (let i = 0; i < n; i++) h.update(1 / 60); };

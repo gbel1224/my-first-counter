@@ -1,4 +1,4 @@
-// Sunset City — mobile open-world story game. Three.js r160, procedural assets.
+// Palm City — mobile open-world story game. Three.js r160, procedural assets.
 import * as THREE from "./vendor/three.module.js";
 import { STR } from "./strings.js";
 
@@ -484,7 +484,7 @@ for (const b of BIZ) {
 }
 
 // ---------- game state / save ----------
-const SAVE_KEY = "sunset_city_save_v1";
+const SAVE_KEY = "sunset_city_save_v1"; // legacy key kept so pre-rename progress survives
 const state = {
   money: 25,
   owned: {},
@@ -1066,7 +1066,7 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // dev instrumentation: programmatic state/input access for automated smoke runs (?dev=1 tooling)
-globalThis.__sunsetCity = {
+globalThis.__palmCity = {
   state, player, cars, update, beginPlay, advanceDialogue,
   debug: () => ({ mState, mStep, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z }),
 };

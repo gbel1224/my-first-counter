@@ -1,4 +1,4 @@
-# Sunset City — design plan
+# Palm City — design plan
 
 **Experience formula:** The player feels like a rising hometown hustler because the game
 constantly turns small street jobs into visible ownership of the city.

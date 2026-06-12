@@ -1,6 +1,6 @@
-// All player-visible text for Sunset City. Switching language = swapping this file.
+// All player-visible text for Palm City. Switching language = swapping this file.
 export const STR = {
-  title: "SUNSET CITY",
+  title: "PALM CITY",
   tagline: "Roll into town broke. Leave your name on the skyline.",
   introBlurb: "An open-world story: run jobs, drive the streets, and buy up the city one business at a time.",
   controlsHint: "Touch: left side = move stick, buttons = act.  Keyboard: WASD/arrows, E = car, B = buy, Enter = talk.  Gamepad supported.",
@@ -42,13 +42,13 @@ export const STR = {
   depotName: "DEPOT",
   pizzaName: "PRONTO PIZZA",
 
-  who: { marco: "Marco", rosa: "Rosa", narrator: "Sunset City", you: "You" },
+  who: { marco: "Marco", rosa: "Rosa", narrator: "Palm City", you: "You" },
 
   missions: [
     {
       title: "Fresh Off the Bus",
       intro: [
-        ["narrator", "Sunset City. Population: one more, as of right now."],
+        ["narrator", "Palm City. Population: one more, as of right now."],
         ["marco", "Cuz! You made it! I'm at the plaza fountain — come find me."],
       ],
       steps: ["Walk to Marco at the plaza fountain"],
@@ -100,7 +100,7 @@ export const STR = {
         "Deliver package 3 of 3 — north side",
       ],
       outro: [
-        ["marco", "Three for three! Officially the fastest wheels in Sunset City."],
+        ["marco", "Three for three! Officially the fastest wheels in Palm City."],
       ],
     },
     {
@@ -133,7 +133,7 @@ export const STR = {
       ],
       steps: ["Buy Big Bun Burgers — east side", "Buy the Neon Palms club — northeast corner"],
       outro: [
-        ["marco", "From the bus stop to the skyline. Sunset City is YOURS, cuz!"],
+        ["marco", "From the bus stop to the skyline. Palm City is YOURS, cuz!"],
         ["narrator", "You built it all. The city keeps earning — and the streets are yours to roam."],
       ],
     },
