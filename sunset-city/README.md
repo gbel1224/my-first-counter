@@ -1,0 +1,41 @@
+# Sunset City 🌇
+
+A 3D open-world story game for mobile browsers — GTA-style cruising with a sunny
+life-sim heart (inspired by Sunday City and GTA San Andreas).
+
+**Play it live:** https://soft-nest-342.higgsfield.gg/
+
+## The game
+You arrive in Sunset City broke. Your cousin Marco gets you hustling: pizza runs,
+taxi rides, courier chains — then you start **buying the city**: a hot dog cart,
+a car wash, a burger joint, and the Neon Palms nightclub. Owned businesses earn
+income every minute. Eight story chapters, then endless freeplay with repeatable
+depot delivery jobs. Progress auto-saves in your browser.
+
+## Controls
+- **Phone:** left side of the screen = floating joystick; yellow button = enter/exit
+  cars; green button = buy a business. Tap dialogue to advance.
+- **Keyboard:** WASD / arrows to move, `E` car, `B` buy, `Enter` to advance dialogue.
+- **Gamepad:** left stick to move, `A` act/talk, `X` buy.
+
+## Run it locally
+```bash
+cd sunset-city
+python3 -m http.server 8000
+# open http://localhost:8000  (phone: use your computer's LAN IP)
+```
+Add `?dev=1` to the URL for the FPS / draw-call overlay.
+
+## Tech
+- Three.js r160 (vendored in `vendor/`), no build step — plain ES modules
+- Fully procedural city, characters, cars and textures (seeded RNG — same city every time)
+- Performance-tuned for phones: instanced buildings/trees/shadows, merged
+  vertex-colored meshes, fixed 60 Hz simulation, DPR cap 1.5
+- All player-visible text lives in `strings.js` (easy to translate)
+- `design/` holds the design plan, asset manifest and performance budgets
+- `tools/smoke.mjs` runs the whole story route headlessly: `node tools/smoke.mjs`
+
+## Updating the deployed game
+The live deployment's game id is `de757767-8cc3-46e3-aa58-a96c40db2278`
+(zip `index.html` + `logic.js` + modules at the archive root and redeploy with
+that id to keep the same URL).

@@ -1,0 +1,115 @@
+// Headless smoke run: drives the full 8-chapter story route against real Three.js.
+// Usage: node tools/smoke.mjs   (run from sunset-city/)
+import { mkdtempSync, readFileSync, writeFileSync, cpSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, dirname } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+// ---- DOM/browser stubs ----
+const listeners = {};
+const on = (t, fn) => { (listeners[t] = listeners[t] || []).push(fn); };
+const fire = (t, ev) => { for (const fn of listeners[t] || []) fn(ev); };
+
+function fakeCtx() {
+  const noop = () => {};
+  return new Proxy({ measureText: () => ({ width: 10 }) }, {
+    get: (o, k) => (k in o ? o[k] : (typeof k === "string" ? noop : undefined)),
+    set: () => true,
+  });
+}
+function fakeEl() {
+  return {
+    style: {}, textContent: "", innerHTML: "", className: "",
+    width: 300, height: 150,
+    getContext: () => fakeCtx(),
+    addEventListener: () => {}, append: () => {}, appendChild: () => {},
+    insertBefore: () => {}, closest: () => null, cloneNode() { return this; },
+  };
+}
+const els = {};
+globalThis.document = {
+  getElementById: id => (els[id] = els[id] || fakeEl()),
+  createElement: () => fakeEl(),
+  body: { insertBefore: () => {}, innerHTML: "" },
+  documentElement: {},
+  addEventListener: on,
+  hidden: false,
+};
+globalThis.addEventListener = on;
+globalThis.innerWidth = 390; globalThis.innerHeight = 844;
+globalThis.devicePixelRatio = 2;
+globalThis.requestAnimationFrame = () => 0;
+Object.defineProperty(globalThis, "localStorage", { value: { getItem: () => null, setItem: () => {}, removeItem: () => {} }, configurable: true });
+Object.defineProperty(globalThis, "navigator", { value: { getGamepads: () => [] }, configurable: true });
+Object.defineProperty(globalThis, "location", { value: { search: "" }, configurable: true });
+globalThis.FakeRenderer = class {
+  constructor() { this.domElement = fakeEl(); this.info = { render: { calls: 0, triangles: 0 } }; }
+  setPixelRatio() {} setSize() {} render() {}
+};
+
+// ---- load a copy of the game with the renderer stubbed ----
+const dir = mkdtempSync(join(tmpdir(), "sc-"));
+mkdirSync(join(dir, "vendor"), { recursive: true });
+cpSync(join(root, "vendor/three.module.js"), join(dir, "vendor/three.module.js"));
+cpSync(join(root, "strings.js"), join(dir, "strings.js"));
+writeFileSync(join(dir, "game.js"),
+  readFileSync(join(root, "game.js"), "utf8").replace("new THREE.WebGLRenderer", "new globalThis.FakeRenderer"));
+await import(pathToFileURL(join(dir, "game.js")).href);
+
+const h = globalThis.__sunsetCity;
+const assert = (c, msg) => { if (!c) { console.error("FAIL:", msg, h.debug(), "money", h.state.money); process.exit(1); } };
+
+const run = n => { for (let i = 0; i < n; i++) h.update(1 / 60); };
+const talk = () => { let g = 0; while (h.debug().dlg && g++ < 50) h.advanceDialogue(); };
+const goto_ = (x, z) => { h.player.x = x; h.player.z = z; };
+const gotoCar = (x, z) => { h.cars[0].x = x; h.cars[0].z = z; };
+const key = code => { fire("keydown", { code, preventDefault: () => {} }); run(2); fire("keyup", { code }); };
+
+h.beginPlay();
+run(80); assert(h.debug().dlg, "chapter 1 intro should open");
+talk(); assert(h.debug().mState === "active", "chapter 1 active");
+
+goto_(-44, -33); run(5); talk(); run(120); talk();          // M1 done -> M2 active
+assert(h.state.mi === 1 && h.debug().mState === "active", "chapter 2 active");
+
+goto_(-114, -40); run(5); goto_(44, -100); run(5); talk(); run(120); talk();
+assert(h.state.mi === 2 && h.debug().mState === "active", "chapter 3 active");
+
+goto_(-30, 8); run(3); key("KeyE"); run(3);
+assert(h.debug().driving, "entered the starter car");
+gotoCar(-188, 132); run(5); talk(); run(120); talk();
+assert(h.state.mi === 3, "chapter 4 active");
+
+gotoCar(99, 132); run(5); gotoCar(132, -180); run(5); talk(); run(120); talk();
+assert(h.state.mi === 4, "chapter 5 active");
+
+gotoCar(182, 132); run(5); gotoCar(-182, -132); run(5); gotoCar(44, -182); run(5); talk(); run(120); talk();
+assert(h.state.mi === 5, "chapter 6 active (side jobs unlocked)");
+
+key("KeyE"); run(3); assert(!h.debug().driving, "exited the car");
+h.state.money = 600; goto_(-16, -16); run(3); key("KeyB"); run(5);
+assert(h.state.owned.dogs, "bought the hot dog cart");
+talk(); run(120); talk(); assert(h.state.mi === 6, "chapter 7 active");
+
+h.state.money = 2500; run(5);
+goto_(-100, 44); run(3); key("KeyB"); run(5);
+assert(h.state.owned.wash, "bought the car wash");
+talk(); run(120); talk(); assert(h.state.mi === 7, "chapter 8 active");
+
+h.state.money = 99999;
+goto_(100, -44); run(3); key("KeyB"); run(5); assert(h.state.owned.burger, "bought the burger joint");
+goto_(188, -202); run(3); key("KeyB"); run(5); assert(h.state.owned.club, "bought the club");
+talk(); run(10);
+assert(h.state.mi === 8, "story complete");
+
+// freeplay side job loop
+goto_(-188, 132); run(5); assert(h.debug().side === "carry", "picked up a depot package");
+const before = h.state.money;
+goto_(h.debug().sx, h.debug().sz); run(5);
+assert(h.state.money > before, "side job paid out");
+
+run(600); // idle robustness: traffic, NPCs, income
+console.log("SMOKE PASS — story route end-to-end, money:", Math.floor(h.state.money));
+process.exit(0);
