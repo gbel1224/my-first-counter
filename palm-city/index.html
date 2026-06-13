@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Palm City</title>
+<style>
+  html, body { margin:0; height:100%; overflow:hidden; background:#f7c98e;
+    font-family:-apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-user-select:none; user-select:none; touch-action:none; overscroll-behavior:none; }
+  canvas { display:block; }
+  #ui { position:fixed; inset:0; pointer-events:none; }
+  .pe { pointer-events:auto; }
+
+  #topbar { position:absolute; top:env(safe-area-inset-top, 0); left:0; right:0;
+    display:flex; align-items:flex-start; padding:10px 12px; gap:10px; }
+  #moneybox { background:rgba(20,28,24,.72); border-radius:14px; padding:8px 14px; color:#ffe9b3; }
+  #money { font-size:22px; font-weight:800; letter-spacing:.5px; }
+  #income { font-size:12px; color:#9fe6a0; font-weight:600; min-height:14px; }
+  #palms { font-size:12px; color:#ffe24a; font-weight:700; min-height:14px; }
+  #wanted { position:absolute; top:calc(58px + env(safe-area-inset-top, 0px)); left:50%;
+    transform:translateX(-50%); color:#ff3b3b; font-size:24px; font-weight:900;
+    text-shadow:0 1px 3px rgba(0,0,0,.6); letter-spacing:3px; pointer-events:none; }
+  #missionbox { flex:1; background:rgba(20,28,24,.72); border-radius:14px; padding:8px 12px;
+    color:#fff; min-width:0; }
+  #mtitle { font-size:11px; color:#ffc966; font-weight:700; text-transform:uppercase; letter-spacing:1px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #mstep { font-size:14px; font-weight:600; line-height:1.25; }
+  #minimap { border-radius:12px; background:rgba(20,28,24,.72); flex:none; }
+  #mute { width:36px; height:36px; border-radius:50%; border:none; flex:none;
+    background:rgba(20,28,24,.72); color:#ffe9b3; font-size:16px; }
+
+  #toast { position:absolute; top:28%; left:50%; transform:translateX(-50%);
+    background:rgba(20,28,24,.85); color:#ffe9b3; font-size:18px; font-weight:800;
+    padding:10px 22px; border-radius:24px; opacity:0; transition:opacity .25s; white-space:nowrap; }
+
+  .btn { position:absolute; right:calc(18px + env(safe-area-inset-right, 0px)); width:84px; height:84px;
+    border-radius:50%; border:none; color:#1d2a20; font-size:14px; font-weight:800; letter-spacing:.5px;
+    box-shadow:0 4px 14px rgba(60,30,0,.35); display:none; }
+  .btn:active { transform:scale(.94); }
+  #btnA { bottom:calc(26px + env(safe-area-inset-bottom, 0px)); background:#ffd166; }
+  #btnB { bottom:calc(126px + env(safe-area-inset-bottom, 0px)); background:#9fe6a0; font-size:12px;
+    width:auto; min-width:84px; height:64px; border-radius:32px; padding:0 16px; }
+
+  #joy { position:absolute; width:120px; height:120px; border-radius:50%;
+    background:rgba(255,236,200,.16); border:2px solid rgba(255,236,200,.4); display:none; }
+  #knob { position:absolute; width:54px; height:54px; border-radius:50%; left:33px; top:33px;
+    background:rgba(255,209,102,.85); box-shadow:0 2px 8px rgba(60,30,0,.3); }
+
+  #dialogue { position:absolute; left:50%; transform:translateX(-50%);
+    bottom:calc(20px + env(safe-area-inset-bottom, 0px)); width:min(560px, 92vw);
+    background:rgba(18,24,20,.92); border-radius:16px; padding:14px 18px 10px; color:#fff; display:none; }
+  #dwho { color:#ffc966; font-weight:800; font-size:13px; text-transform:uppercase; letter-spacing:1px; }
+  #dtext { font-size:16px; line-height:1.4; margin:4px 0 6px; }
+  #dhint { font-size:11px; color:#8fa; text-align:right; opacity:.8; }
+
+  #intro { position:absolute; inset:0; background:linear-gradient(180deg,#2b1a3d 0%,#b3457a 55%,#ff9d5c 100%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
+    color:#fff; padding:24px; gap:14px; }
+  #intro h1 { font-size:min(13vw, 64px); margin:0; letter-spacing:4px; color:#ffd166;
+    text-shadow:0 4px 0 rgba(90,30,60,.6); }
+  #intro .tag { font-size:16px; font-weight:600; color:#ffe9d0; max-width:480px; }
+  #intro .blurb { font-size:14px; color:#ffd9c0; max-width:440px; }
+  #intro .hint { font-size:11px; color:#e8b8a0; max-width:440px; }
+  #intro button { font-size:18px; font-weight:800; letter-spacing:2px; border:none; border-radius:30px;
+    padding:14px 44px; background:#ffd166; color:#3d2410; box-shadow:0 6px 18px rgba(40,10,30,.4); }
+  #intro button.secondary { background:transparent; border:2px solid #ffd166; color:#ffd166;
+    font-size:13px; padding:10px 28px; }
+  #dev { position:fixed; top:4px; left:4px; color:#0f0; font:12px monospace; display:none; z-index:50;
+    background:rgba(0,0,0,.5); padding:2px 6px; }
+</style>
+</head>
+<body>
+<div id="ui">
+  <div id="topbar">
+    <div id="moneybox"><div id="money"></div><div id="income"></div><div id="palms"></div></div>
+    <div id="missionbox"><div id="mtitle"></div><div id="mstep"></div></div>
+    <canvas id="minimap" width="132" height="132"></canvas>
+    <button id="mute" class="pe"></button>
+  </div>
+  <div id="toast"></div>
+  <div id="wanted"></div>
+  <div id="joy"><div id="knob"></div></div>
+  <button id="btnB" class="btn pe"></button>
+  <button id="btnA" class="btn pe"></button>
+  <div id="dialogue" class="pe"><div id="dwho"></div><div id="dtext"></div><div id="dhint"></div></div>
+  <div id="intro" class="pe"></div>
+</div>
+<div id="dev"></div>
+<script type="module" src="./game.js"></script>
+</body>
+</html>
