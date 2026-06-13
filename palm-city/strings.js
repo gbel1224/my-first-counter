@@ -44,6 +44,7 @@ export const STR = {
   wantedToast: n => "Wanted! " + "★".repeat(n),
   wantedClear: "You lost the cops",
   busted: f => "BUSTED! Fine $" + f.toLocaleString("en-US"),
+  jump: b => "SWEET JUMP! +$" + b,
 
   forSale: cost => "FOR SALE · $" + cost.toLocaleString("en-US"),
   ownedLabel: (lvl, perMin) => "Lv" + lvl + " · +$" + perMin + "/min",

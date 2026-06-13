@@ -428,6 +428,35 @@ const cars = [
   { x: -170, z: 138, h: 0, speed: 0, mesh: makeCar(0xc25cd6) },
 ];
 const starterCar = cars[0];
+for (const c of cars) { c.y = 0; c.vy = 0; c.lat = 0; c.rampCD = 0; c.airStart = 0; }
+
+// ---------- stunt ramps ----------
+function wedgeGeo(w, l, hgt) {
+  const x = w / 2, z = l / 2;
+  const v = [
+    -x,0,-z,  x,0,-z,  x,hgt,z,   -x,0,-z,  x,hgt,z, -x,hgt,z,   // slope
+    -x,0,-z, -x,0,z,    x,0,z,     -x,0,-z,  x,0,z,    x,0,-z,    // bottom
+    -x,0,z,  -x,hgt,z,  x,hgt,z,   -x,0,z,   x,hgt,z,  x,0,z,     // back
+    -x,0,-z, -x,hgt,z, -x,0,z,                                    // left side
+     x,0,-z,  x,0,z,    x,hgt,z,                                  // right side
+  ];
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(v, 3));
+  g.computeVertexNormals();
+  return g;
+}
+const RAMPS = [
+  { x: -88, z: -40, h: 0 }, { x: 88, z: 60, h: Math.PI }, { x: -40, z: -176, h: Math.PI / 2 },
+  { x: 60, z: 88, h: -Math.PI / 2 }, { x: 0, z: 120, h: 0 },
+];
+const rampIM = new THREE.InstancedMesh(wedgeGeo(6, 7, 2.0),
+  new THREE.MeshLambertMaterial({ color: 0xd9763a, side: THREE.DoubleSide }), RAMPS.length);
+{
+  const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s2 = new THREE.Vector3(1, 1, 1);
+  const up = new THREE.Vector3(0, 1, 0);
+  RAMPS.forEach((r, i) => { p.set(r.x, groundY(r.x, r.z), r.z); q.setFromAxisAngle(up, r.h); m.compose(p, q, s2); rampIM.setMatrixAt(i, m); });
+}
+scene.add(rampIM);
 
 // traffic cars on block-ring routes
 const traffic = [];
@@ -559,11 +588,12 @@ const state = {
   money: 25,
   owned: {},
   palms: [],
+  bestJump: 0,
   mi: 0,                 // mission index; 8 = story complete
   phase: "intro",        // intro | play
 };
 function save() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, palms: state.palms, mi: state.mi })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, palms: state.palms, bestJump: state.bestJump || 0, mi: state.mi })); } catch (e) {}
 }
 function load() {
   try {
@@ -571,6 +601,7 @@ function load() {
     if (d && d.v === 1) {
       state.money = d.money; state.owned = d.owned || {}; state.mi = d.mi || 0;
       state.palms = d.palms || [];
+      state.bestJump = d.bestJump || 0;
       for (const k in state.owned) if (state.owned[k] === true) state.owned[k] = 1; // pre-upgrade saves
       return true;
     }
@@ -1158,6 +1189,35 @@ function update(dt) {
     moveWithCollision(c,
       Math.sin(c.h) * c.speed * dt - Math.cos(c.h) * c.lat * dt,
       Math.cos(c.h) * c.speed * dt + Math.sin(c.h) * c.lat * dt, 2.1);
+    // stunt ramps + vertical physics
+    if (c.rampCD > 0) c.rampCD -= dt;
+    if (c.y === 0 && c.rampCD <= 0 && c.speed > 9) {
+      for (const ramp of RAMPS) {
+        const dx = c.x - ramp.x, dz = c.z - ramp.z;
+        const lx = dx * Math.cos(ramp.h) - dz * Math.sin(ramp.h);
+        const lz = dx * Math.sin(ramp.h) + dz * Math.cos(ramp.h);
+        if (Math.abs(lx) < 3.5 && Math.abs(lz) < 4.5 && Math.cos(c.h - ramp.h) > 0.4) {
+          c.vy = 6 + Math.min(c.speed, 26) * 0.4; c.y = 0.02; c.airStart = simTime; c.rampCD = 1.2;
+          c.speed *= 1.05;
+          break;
+        }
+      }
+    }
+    if (c.y > 0 || c.vy !== 0) {
+      c.vy -= 30 * dt; c.y += c.vy * dt;
+      if (c.y <= 0) {
+        c.y = 0; c.vy = 0;
+        const air = simTime - (c.airStart || 0);
+        if (air > 0.35) {
+          const bonus = Math.round(40 + air * air * 240);
+          state.money += bonus;
+          if (air > (state.bestJump || 0)) state.bestJump = air;
+          toast(STR.jump(bonus));
+          AudioSys.play("cash", 0.8);
+          save();
+        }
+      }
+    }
     camYaw = lerpAngle(camYaw, c.h, 1 - Math.exp(-3.2 * dt));
   } else {
     // camera-relative walk
@@ -1267,9 +1327,11 @@ function update(dt) {
     hero.armL.rotation.x = -sw * 0.8; hero.armR.rotation.x = sw * 0.8;
   }
   for (const c of cars) {
+    if (c !== driving && c.y > 0) { c.vy -= 30 * dt; c.y = Math.max(0, c.y + c.vy * dt); if (c.y === 0) c.vy = 0; }
     const gy = groundY(c.x, c.z);
-    c.mesh.position.set(c.x, gy, c.z);
+    c.mesh.position.set(c.x, gy + (c.y || 0), c.z);
     c.mesh.rotation.y = c.h;
+    c.mesh.rotation.x = (c.y > 0) ? clamp(-c.vy * 0.02, -0.5, 0.5) : 0;
   }
 
   // story characters idle bob
@@ -1352,5 +1414,5 @@ requestAnimationFrame(frame);
 globalThis.__palmCity = {
   state, player, cars, police, update, beginPlay, advanceDialogue,
   forceCrime: () => { if (wanted < 3) wanted++; wantedCD = 14; },
-  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot() }),
+  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0 }),
 };

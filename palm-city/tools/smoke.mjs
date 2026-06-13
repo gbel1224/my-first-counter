@@ -168,6 +168,17 @@ run(5);
 assert(h.debug().wanted === 0, "busted clears the wanted level");
 assert(h.state.money < moneyPreBust, "bust deducted a fine");
 
+// stunt ramp: launch a car off a ramp and earn air time
+h.cars[0].x = h.player.x + 1; h.cars[0].z = h.player.z; h.cars[0].y = 0; h.cars[0].vy = 0;
+key("KeyE"); run(2);
+assert(h.debug().driving, "in a car for the ramp test");
+h.cars[0].x = -88; h.cars[0].z = -44; h.cars[0].h = 0; h.cars[0].speed = 22;
+h.cars[0].rampCD = 0; h.cars[0].y = 0; h.cars[0].vy = 0;
+let jumped = false;
+for (let i = 0; i < 240; i++) { h.update(1 / 60); if (h.debug().bestJump > 0) { jumped = true; break; } }
+assert(jumped, "stunt ramp launched the car for air time");
+key("KeyE"); run(2);
+
 run(600); // idle robustness: traffic, NPCs, income, day/night, police despawn
-console.log("SMOKE PASS — 12 chapters + economy + palms + wanted, money:", Math.floor(h.state.money));
+console.log("SMOKE PASS — 12 chapters + economy + palms + wanted + stunts, money:", Math.floor(h.state.money));
 process.exit(0);

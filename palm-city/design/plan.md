@@ -52,3 +52,6 @@ Current goal + next step always on HUD; minimap shows roads, player heading, obj
 - **Wanted system**: hitting pedestrians with a fast car raises a 0-3 star wanted level; up to 3 police cars spawn and chase. Contact = busted (fine scales with stars, wanted clears). Stars decay over time if you escape. Suppressed during the timed race so it stays fair.
 - **Golden Palms**: 12 hidden glowing collectibles across the map ($150 each, $2,000 bonus for all 12). Shown on the minimap; persisted in the save.
 - HUD: palm counter in the money box, wanted stars top-center.
+
+## v4 (stunt driving)
+- **Stunt ramps**: 5 wedge ramps on long roads; hitting one fast launches the car with real vertical physics (gravity, airborne pitch, landing). Air time over 0.35s pays a bonus that scales with hang time; best jump is tracked in the save.
