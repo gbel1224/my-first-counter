@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__3b3f07b1-8554-4d34-bbb5-236f9c3a4449",
+      "mcp__3b3f07b1-8554-4d34-bbb5-236f9c3a4449__media_upload",
+      "mcp__3b3f07b1-8554-4d34-bbb5-236f9c3a4449__media_confirm",
+      "mcp__3b3f07b1-8554-4d34-bbb5-236f9c3a4449__deploy_game",
+      "mcp__3b3f07b1-8554-4d34-bbb5-236f9c3a4449__publish_game",
+      "mcp__3b3f07b1-8554-4d34-bbb5-236f9c3a4449__generate_image",
+      "mcp__3b3f07b1-8554-4d34-bbb5-236f9c3a4449__generate_audio"
+    ]
+  }
+}
