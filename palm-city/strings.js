@@ -29,20 +29,30 @@ export const STR = {
   btnDrive: "DRIVE",
   btnExit: "EXIT",
   btnBuy: (name, cost) => "BUY · $" + cost.toLocaleString("en-US"),
+  btnUpgrade: (lvl, cost) => "UPGRADE Lv" + lvl + " · $" + cost.toLocaleString("en-US"),
+  btnSprint: "SPRINT",
+  btnHorn: "HORN",
+
+  upgraded: (name, lvl) => name + " is now Lv" + lvl + "!",
+  tips: a => "+$" + a + " tips collected",
+  raceTimer: s => "⏱ " + s + "s",
+  raceFail: "Too slow! Back to the start line…",
 
   forSale: cost => "FOR SALE · $" + cost.toLocaleString("en-US"),
-  ownedLabel: rate => "OWNED · +$" + rate + "/min",
+  ownedLabel: (lvl, perMin) => "Lv" + lvl + " · +$" + perMin + "/min",
 
   biz: {
     dogs:   { name: "Sunny Dogs cart" },
     wash:   { name: "Marina Car Wash" },
     burger: { name: "Big Bun Burgers" },
     club:   { name: "Neon Palms Club" },
+    taxi:   { name: "Palm Taxi Co." },
+    marina: { name: "Bayside Marina" },
   },
   depotName: "DEPOT",
   pizzaName: "PRONTO PIZZA",
 
-  who: { marco: "Marco", rosa: "Rosa", narrator: "Palm City", you: "You" },
+  who: { marco: "Marco", rosa: "Rosa", vince: "Vince Sterling", narrator: "Palm City", you: "You" },
 
   missions: [
     {
@@ -135,6 +145,75 @@ export const STR = {
       outro: [
         ["marco", "From the bus stop to the skyline. Palm City is YOURS, cuz!"],
         ["narrator", "You built it all. The city keeps earning — and the streets are yours to roam."],
+      ],
+    },
+    {
+      title: "An Offer You Can Refuse",
+      intro: [
+        ["narrator", "Word travels fast when somebody buys half a city."],
+        ["vince", "(phone) You don't know me, but I know your little empire. Plaza fountain. Now."],
+      ],
+      steps: ["Meet Vince Sterling at the plaza"],
+      outro: [
+        ["vince", "Vince Sterling. I owned this town's money — until you showed up."],
+        ["vince", "Sell me everything. Triple what you paid. Last offer, hotshot."],
+        ["you", "Palm City isn't for sale."],
+        ["vince", "Cute. Then I'll just take your customers instead."],
+      ],
+    },
+    {
+      title: "Hostile Takeover",
+      intro: [
+        ["marco", "Cuz, it's bad — Sterling parked his trucks outside everything you own. Income's bleeding!"],
+        ["marco", "Get out there and rally your crews. Show your face at every business you've got."],
+      ],
+      steps: [
+        "Rally the crew at Sunny Dogs",
+        "Rally the crew at the Marina Car Wash",
+        "Rally the crew at Big Bun Burgers",
+        "Rally the crew at the Neon Palms club",
+      ],
+      outro: [
+        ["marco", "THAT'S how you hold a city. Your crews would walk through fire for you now."],
+        ["narrator", "Loyalty earned: your businesses permanently earn 10% more."],
+      ],
+    },
+    {
+      title: "Rosa's Big Break",
+      intro: [
+        ["rosa", "(phone) Hey, superstar. My art show opens tonight and my van just died. Be my driver?"],
+        ["marco", "Take care of her, cuz. And ask her about running the Neon Palms — she's got the eye."],
+      ],
+      steps: [
+        "Pick up Rosa at her studio uptown",
+        "Drive Rosa to the gallery downtown",
+        "Rush her prints from the print shop — west side",
+        "Back to the gallery before the doors open!",
+      ],
+      outro: [
+        ["rosa", "You're a lifesaver! And tell Marco… yes. I'll run the club. Partners?"],
+        ["narrator", "Rosa now manages the Neon Palms. Club income +25%."],
+      ],
+    },
+    {
+      title: "The Palm City Grand Race",
+      intro: [
+        ["vince", "(phone) One last play, hotshot. A race — my circuit, right now, pride on the line."],
+        ["vince", "Beat the clock around the city and Palm City never hears from me again."],
+        ["marco", "His record around that circuit is a minute forty. Smoke him, cuz."],
+      ],
+      steps: [
+        "Get to the start line — northwest crossing",
+        "Checkpoint 1 of 4 — northeast corner",
+        "Checkpoint 2 of 4 — southeast corner",
+        "Checkpoint 3 of 4 — park crossing, west",
+        "Checkpoint 4 of 4 — old plaza corner",
+        "Finish line — city center crossing!",
+      ],
+      outro: [
+        ["vince", "…Nobody beats that time. Nobody. The city's yours, kid. I'm out."],
+        ["marco", "From the bus stop to KING of Palm City! Pop would be proud."],
+        ["narrator", "You've won it all. The city keeps earning — and the streets are forever yours."],
       ],
     },
   ],

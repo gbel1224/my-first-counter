@@ -25,6 +25,8 @@
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #mstep { font-size:14px; font-weight:600; line-height:1.25; }
   #minimap { border-radius:12px; background:rgba(20,28,24,.72); flex:none; }
+  #mute { width:36px; height:36px; border-radius:50%; border:none; flex:none;
+    background:rgba(20,28,24,.72); color:#ffe9b3; font-size:16px; }
 
   #toast { position:absolute; top:28%; left:50%; transform:translateX(-50%);
     background:rgba(20,28,24,.85); color:#ffe9b3; font-size:18px; font-weight:800;
@@ -72,6 +74,7 @@
     <div id="moneybox"><div id="money"></div><div id="income"></div></div>
     <div id="missionbox"><div id="mtitle"></div><div id="mstep"></div></div>
     <canvas id="minimap" width="132" height="132"></canvas>
+    <button id="mute" class="pe"></button>
   </div>
   <div id="toast"></div>
   <div id="joy"><div id="knob"></div></div>

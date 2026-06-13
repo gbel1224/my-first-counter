@@ -8,14 +8,20 @@ life-sim heart (inspired by Sunday City and GTA San Andreas).
 ## The game
 You arrive in Palm City broke. Your cousin Marco gets you hustling: pizza runs,
 taxi rides, courier chains — then you start **buying the city**: a hot dog cart,
-a car wash, a burger joint, and the Neon Palms nightclub. Owned businesses earn
-income every minute. Eight story chapters, then endless freeplay with repeatable
-depot delivery jobs. Progress auto-saves in your browser.
+a car wash, a burger joint, the Neon Palms nightclub, a taxi company and the
+marina. Businesses earn income every minute, can be upgraded to Lv3, and fill
+tip jars you collect in person. **Twelve story chapters**: act 2 brings rival
+Vince Sterling, a hostile takeover, Rosa's mission line, and a timed grand race
+finale — then endless freeplay with repeatable depot delivery jobs. Music and
+SFX included (mute button on the HUD), a 4-minute day/night cycle, arcade drift,
+and pedestrians who dive away from your horn. Progress auto-saves in your browser.
 
 ## Controls
 - **Phone:** left side of the screen = floating joystick; yellow button = enter/exit
-  cars; green button = buy a business. Tap dialogue to advance.
-- **Keyboard:** WASD / arrows to move, `E` car, `B` buy, `Enter` to advance dialogue.
+  cars; green button = buy/upgrade, sprint (hold) on foot, horn while driving.
+  Tap dialogue to advance.
+- **Keyboard:** WASD / arrows to move, `Shift` sprint, `E` car, `B` buy/horn,
+  `Enter` to advance dialogue.
 - **Gamepad:** left stick to move, `A` act/talk, `X` buy.
 
 ## Run it locally

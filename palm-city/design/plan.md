@@ -34,3 +34,16 @@ Current goal + next step always on HUD; minimap shows roads, player heading, obj
 - Characters/props are stylized primitives (no mesh-generation pass) — the approved bright low-poly formula is chosen to make that a feature, not a compromise.
 - No audio in v1. Binding remap UI not shipped; WASD + arrows + gamepad all bound by default.
 - Perceived feel (camera, handling) tuned by reasoning + budgets; needs human hands on a phone for final polish.
+
+## Act 2 (added in v2)
+9. **An Offer You Can Refuse** — rival Vince Sterling demands a buyout; you refuse
+10. **Hostile Takeover** — income halved until you rally all four crews; permanent +10% loyalty bonus after
+11. **Rosa's Big Break** — 4-stop drive; Rosa becomes club manager (+25% club income)
+12. **The Palm City Grand Race** — timed 6-point checkpoint race (100s, reset on timeout); finale
+
+## v2 economy
+- Business levels 1-3: upgrade costs base×level, income = rate×level
+- Tip jars: owned businesses accrue 10% of their rate; collect in person (capped)
+- New properties: Palm Taxi Co. $3,500/$150·min, Bayside Marina $15,000/$700·min
+- Audio mix: music 0.16, SFX 0.6, engine 0.22 gain (quiet music under effects, no clipping)
+- World: 4-minute day/night cycle; NPCs flee close fast cars and horns; arcade drift via lateral momentum

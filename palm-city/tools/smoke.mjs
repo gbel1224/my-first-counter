@@ -54,6 +54,7 @@ const dir = mkdtempSync(join(tmpdir(), "sc-"));
 mkdirSync(join(dir, "vendor"), { recursive: true });
 cpSync(join(root, "vendor/three.module.js"), join(dir, "vendor/three.module.js"));
 cpSync(join(root, "strings.js"), join(dir, "strings.js"));
+cpSync(join(root, "audio.js"), join(dir, "audio.js"));
 writeFileSync(join(dir, "game.js"),
   readFileSync(join(root, "game.js"), "utf8").replace("new THREE.WebGLRenderer", "new globalThis.FakeRenderer"));
 await import(pathToFileURL(join(dir, "game.js")).href);
@@ -104,12 +105,53 @@ goto_(188, -202); run(3); key("KeyB"); run(5); assert(h.state.owned.club, "bough
 talk(); run(10);
 assert(h.state.mi === 8, "story complete");
 
+// ---- act 2: chapters 9-12 ----
+run(120); talk(); assert(h.state.mi === 8 && h.debug().mState === "active", "chapter 9 active");
+goto_(-44, -52); run(5); talk(); run(120); talk();           // meet Vince
+assert(h.state.mi === 9 && h.debug().mState === "active", "chapter 10 active");
+
+goto_(-16, -16); run(5); goto_(-100, 44); run(5);            // rally all four crews
+goto_(100, -44); run(5); goto_(188, -202); run(5);
+talk(); run(120); talk();
+assert(h.state.mi === 10, "chapter 11 active (loyalty boost won)");
+
+h.cars[0].x = h.player.x + 2; h.cars[0].z = h.player.z;      // grab a car for Rosa's ride
+key("KeyE"); run(3); assert(h.debug().driving, "driving for chapter 11");
+gotoCar(128, -188); run(5); gotoCar(-44, -88); run(5);
+gotoCar(-176, 0); run(5); gotoCar(-44, -88); run(5);
+talk(); run(120); talk();
+assert(h.state.mi === 11, "chapter 12 active (the race)");
+
+gotoCar(-176, -176); run(5);                                  // reach the start line
+assert(h.debug().mStep === 1, "race armed at the start line");
+gotoCar(0, -176); run(101 * 60);                              // drive off, let the clock run out
+assert(h.debug().mStep === 0, "race timeout resets to the start line");
+gotoCar(-176, -176); run(5);
+gotoCar(176, -176); run(5); gotoCar(176, 176); run(5);
+gotoCar(-88, 176); run(5); gotoCar(-88, -88); run(5); gotoCar(88, 0); run(5);
+talk(); run(10);
+assert(h.state.mi === 12, "full 12-chapter story complete");
+
+// ---- economy: upgrades, new businesses, tips ----
+key("KeyE"); run(3); assert(!h.debug().driving, "back on foot");
+h.state.money = 99999;
+goto_(-16, -16); run(3); key("KeyB"); run(3);
+assert(h.state.owned.dogs === 2, "hot dog cart upgraded to Lv2");
+key("KeyB"); run(3); assert(h.state.owned.dogs === 3, "hot dog cart maxed at Lv3");
+goto_(-44, 110); run(3); key("KeyB"); run(3); assert(h.state.owned.taxi === 1, "bought the taxi company");
+goto_(220, 196); run(3); key("KeyB"); run(3); assert(h.state.owned.marina === 1, "bought the marina");
+
+goto_(0, 0); run(2700);                                       // let tip jars fill (45s)
+assert(h.debug().tips0 >= 5, "tip jar filled at the cart");
+goto_(-16, -16); run(5);
+assert(h.debug().tips0 < 1, "tips collected at the cart");
+
 // freeplay side job loop
 goto_(-188, 132); run(5); assert(h.debug().side === "carry", "picked up a depot package");
 const before = h.state.money;
 goto_(h.debug().sx, h.debug().sz); run(5);
 assert(h.state.money > before, "side job paid out");
 
-run(600); // idle robustness: traffic, NPCs, income
-console.log("SMOKE PASS — story route end-to-end, money:", Math.floor(h.state.money));
+run(600); // idle robustness: traffic, NPCs, income, day/night
+console.log("SMOKE PASS — 12-chapter story + economy end-to-end, money:", Math.floor(h.state.money));
 process.exit(0);

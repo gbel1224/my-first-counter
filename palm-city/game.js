@@ -1,6 +1,7 @@
 // Palm City — mobile open-world story game. Three.js r160, procedural assets.
 import * as THREE from "./vendor/three.module.js";
 import { STR } from "./strings.js";
+import { AudioSys } from "./audio.js";
 
 // ---------- seeded RNG (world gen is deterministic) ----------
 function mulberry32(a) {
@@ -52,10 +53,37 @@ scene.fog = new THREE.Fog(0xf7c98e, 170, 420);
 const camera = new THREE.PerspectiveCamera(64, innerWidth / innerHeight, 0.5, 900);
 camera.position.set(0, 8, -14);
 
-scene.add(new THREE.HemisphereLight(0xffe8c4, 0x8a7355, 1.05));
+const hemi = new THREE.HemisphereLight(0xffe8c4, 0x8a7355, 1.05);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffd9a0, 1.7);
 sun.position.set(120, 160, 80);
 scene.add(sun);
+
+// day/night cycle (4 min): warm day -> dusk -> night -> dawn
+const ENV_KEYS = [
+  { t: 0.00, sky: new THREE.Color(0xf7c98e), sun: 1.7, hemi: 1.05, far: 420 },
+  { t: 0.42, sky: new THREE.Color(0xf7c98e), sun: 1.7, hemi: 1.05, far: 420 },
+  { t: 0.52, sky: new THREE.Color(0xee9d7a), sun: 1.1, hemi: 0.85, far: 400 },
+  { t: 0.60, sky: new THREE.Color(0x2c3354), sun: 0.18, hemi: 0.42, far: 340 },
+  { t: 0.86, sky: new THREE.Color(0x2c3354), sun: 0.18, hemi: 0.42, far: 340 },
+  { t: 0.95, sky: new THREE.Color(0xf2b890), sun: 1.2, hemi: 0.90, far: 400 },
+  { t: 1.00, sky: new THREE.Color(0xf7c98e), sun: 1.7, hemi: 1.05, far: 420 },
+];
+const _sky = new THREE.Color();
+function envUpdate() {
+  const t = (simTime / 240) % 1;
+  let a = ENV_KEYS[0], b = ENV_KEYS[ENV_KEYS.length - 1];
+  for (let i = 1; i < ENV_KEYS.length; i++) {
+    if (ENV_KEYS[i].t >= t) { a = ENV_KEYS[i - 1]; b = ENV_KEYS[i]; break; }
+  }
+  const k = b.t === a.t ? 0 : (t - a.t) / (b.t - a.t);
+  _sky.lerpColors(a.sky, b.sky, k);
+  scene.background.copy(_sky);
+  scene.fog.color.copy(_sky);
+  scene.fog.far = a.far + (b.far - a.far) * k;
+  sun.intensity = a.sun + (b.sun - a.sun) * k;
+  hemi.intensity = a.hemi + (b.hemi - a.hemi) * k;
+}
 
 addEventListener("resize", onResize);
 addEventListener("orientationchange", onResize);
@@ -200,7 +228,7 @@ scene.add(ground);
 
 // block layout
 const PARKS = new Set(["2,2", "1,1", "4,4"]);
-const SPECIAL = { "1,3": "wash", "4,2": "burger", "5,0": "club", "0,4": "depot", "1,2": "pizza" };
+const SPECIAL = { "1,3": "wash", "4,2": "burger", "5,0": "club", "0,4": "depot", "1,2": "pizza", "2,4": "taxi", "5,5": "marina" };
 const PLAZA = { x: bc(2), z: bc(2) };
 
 // curb slabs: paved + grass, instanced
@@ -267,6 +295,8 @@ specialBuilding(bc(4), bc(2), 26, 11, 26, 0xd95f4b, STR.biz.burger.name, "rgba(1
 specialBuilding(bc(5), bc(0), 32, 17, 28, 0x8e5fc9, STR.biz.club.name, "rgba(80,40,130,.9)");
 specialBuilding(bc(0), bc(4), 48, 10, 40, 0x9aa0a8, STR.depotName, "rgba(60,65,75,.9)");
 specialBuilding(bc(1) + 18, bc(2) + 14, 18, 8, 18, 0xe0b04e, STR.pizzaName, "rgba(140,90,20,.9)");
+specialBuilding(bc(2), bc(4), 30, 6, 24, 0xe8c35a, STR.biz.taxi.name, "rgba(160,120,20,.9)");
+specialBuilding(bc(5), bc(5), 40, 7, 30, 0x5fa8c9, STR.biz.marina.name, "rgba(30,100,140,.9)");
 
 // plaza: fountain + hot dog cart
 {
@@ -438,6 +468,9 @@ const marco = storyNPC({ shirt: 0x2a9d8f, pants: 0x4a4f59, skin: 0xc98f6b, hair:
 const ROSA_POS = { x: blockMin(4) + 2, z: 132 };
 const rosa = storyNPC({ shirt: 0xe76f8a, pants: 0xf5f0e6, skin: 0xe8b08a, hair: 0x3a2010 },
   ROSA_POS.x, ROSA_POS.z, STR.who.rosa);
+const vince = storyNPC({ shirt: 0x4a4f59, pants: 0x23262b, skin: 0xd9a37a, hair: 0x55524e },
+  PLAZA.x, PLAZA.z - 8, STR.who.vince);
+vince.visible = false;
 
 // ---------- player ----------
 const hero = articulatedPerson(HERO_PAL);
@@ -446,7 +479,7 @@ const player = { x: PLAZA.x, z: roadC(3) - 12, y: CURB, h: Math.PI, walkPhase: 0
 let driving = null;   // car object while driving
 
 // ---------- blob shadows (one instanced draw) ----------
-const SHADOW_N = 1 + cars.length + traffic.length + npcs.length + 2;
+const SHADOW_N = 1 + cars.length + traffic.length + npcs.length + 3;
 const shadowGeo = new THREE.CircleGeometry(1, 14);
 shadowGeo.rotateX(-Math.PI / 2);
 const shadowIM = new THREE.InstancedMesh(shadowGeo,
@@ -472,10 +505,12 @@ const sideMarker = makeMarker(0xff8c42);
 
 // ---------- businesses ----------
 const BIZ = [
-  { id: "dogs", cost: 500, rate: 30, x: bc(2) + 28, z: bc(2) + 28, ly: 4.6 },
-  { id: "wash", cost: 2000, rate: 90, x: bc(1) + 32, z: bc(3), ly: 4.6 },
-  { id: "burger", cost: 5000, rate: 220, x: bc(4) - 32, z: bc(2), ly: 4.6 },
-  { id: "club", cost: 10000, rate: 500, x: bc(5) - 32, z: bc(0) + 18, ly: 4.6 },
+  { id: "dogs", cost: 500, rate: 30, x: bc(2) + 28, z: bc(2) + 28, ly: 4.6, tips: 0 },
+  { id: "wash", cost: 2000, rate: 90, x: bc(1) + 32, z: bc(3), ly: 4.6, tips: 0 },
+  { id: "burger", cost: 5000, rate: 220, x: bc(4) - 32, z: bc(2), ly: 4.6, tips: 0 },
+  { id: "club", cost: 10000, rate: 500, x: bc(5) - 32, z: bc(0) + 18, ly: 4.6, tips: 0 },
+  { id: "taxi", cost: 3500, rate: 150, x: bc(2), z: 110, ly: 4.6, tips: 0 },
+  { id: "marina", cost: 15000, rate: 700, x: bc(5), z: 196, ly: 4.6, tips: 0 },
 ];
 for (const b of BIZ) {
   b.sale = textSprite(STR.forSale(b.cost), "#fff", "rgba(200,90,30,.92)", 11, 2.75, 0);
@@ -497,7 +532,11 @@ function save() {
 function load() {
   try {
     const d = JSON.parse(localStorage.getItem(SAVE_KEY));
-    if (d && d.v === 1) { state.money = d.money; state.owned = d.owned || {}; state.mi = d.mi || 0; return true; }
+    if (d && d.v === 1) {
+      state.money = d.money; state.owned = d.owned || {}; state.mi = d.mi || 0;
+      for (const k in state.owned) if (state.owned[k] === true) state.owned[k] = 1; // pre-upgrade saves
+      return true;
+    }
   } catch (e) {}
   return false;
 }
@@ -506,12 +545,25 @@ function applyOwnership() {
   for (const b of BIZ) if (state.owned[b.id]) markOwned(b);
 }
 function markOwned(b) {
+  const lvl = state.owned[b.id] || 1;
   b.sale.material.map.dispose();
-  const sp = textSprite(STR.ownedLabel(b.rate), "#1d2a20", "rgba(159,230,160,.95)", 11, 2.75, 0);
+  const sp = textSprite(STR.ownedLabel(lvl, b.rate * lvl), "#1d2a20", "rgba(159,230,160,.95)", 11, 2.75, 0);
   b.sale.material.map = sp.material.map;
   sp.material.dispose();
 }
-const incomeRate = () => BIZ.reduce((s, b) => s + (state.owned[b.id] ? b.rate : 0), 0);
+function incomeRate() {
+  let s = 0;
+  for (const b of BIZ) {
+    const lvl = state.owned[b.id] || 0;
+    if (!lvl) continue;
+    let r = b.rate * lvl;
+    if (b.id === "club" && state.mi > 10) r *= 1.25;   // Rosa manages the club (ch 11)
+    s += r;
+  }
+  if (state.mi === 9) s *= 0.5;                        // Sterling's takeover bites (ch 10)
+  if (state.mi > 9) s *= 1.1;                          // loyalty bonus won in ch 10
+  return Math.round(s);
+}
 
 // ---------- missions ----------
 const M = STR.missions;
@@ -541,8 +593,35 @@ const MISSIONS = [
       { x: BIZ[2].x, z: BIZ[2].z, r: 5, cond: () => !!state.owned.burger },
       { x: BIZ[3].x, z: BIZ[3].z, r: 5, cond: () => !!state.owned.club }]
   },
+  { reward: 300, steps: [{ x: PLAZA.x, z: PLAZA.z - 8, r: 4 }] },
+  {
+    reward: 1500, steps: [
+      { x: BIZ[0].x, z: BIZ[0].z, r: 6 },
+      { x: BIZ[1].x, z: BIZ[1].z, r: 6 },
+      { x: BIZ[2].x, z: BIZ[2].z, r: 6 },
+      { x: BIZ[3].x, z: BIZ[3].z, r: 6 }]
+  },
+  {
+    reward: 1000,
+    onStart: () => { rosa.position.set(128, CURB, -188); rosa.visible = true; },
+    steps: [
+      { x: 128, z: -188, r: 7, needCar: true, onDone: () => { rosa.visible = false; } },
+      { x: -44, z: -88, r: 8, needCar: true },
+      { x: -176, z: 0, r: 8, needCar: true },
+      { x: -44, z: -88, r: 8, needCar: true }]
+  },
+  {
+    reward: 5000, race: { from: 1, limit: 100 },
+    steps: [
+      { x: -176, z: -176, r: 9, needCar: true },
+      { x: 176, z: -176, r: 9, needCar: true },
+      { x: 176, z: 176, r: 9, needCar: true },
+      { x: -88, z: 176, r: 9, needCar: true },
+      { x: -88, z: -88, r: 9, needCar: true },
+      { x: 88, z: 0, r: 9, needCar: true }]
+  },
 ];
-let mState = "idle", mStep = 0, mTimer = 0;
+let mState = "idle", mStep = 0, mTimer = 0, raceT = null;
 
 // side jobs (unlock after chapter 5)
 const SIDE_TARGETS = [[182, 132], [-182, -132], [44, -182], [132, -180], [-182, 220], [220, 44]];
@@ -584,13 +663,16 @@ function toast(msg) { elToast.textContent = msg; elToast.style.opacity = 1; toas
 
 // ---------- mission flow ----------
 function startMission(i) {
-  mState = "intro"; mStep = 0;
+  mState = "intro"; mStep = 0; raceT = null;
+  if (MISSIONS[i].onStart) MISSIONS[i].onStart();
   showDialogue(M[i].intro, () => { mState = "active"; });
 }
 function completeMission() {
   const i = state.mi;
   state.money += MISSIONS[i].reward;
   toast(STR.reward(MISSIONS[i].reward));
+  AudioSys.play("jingle", 0.9);
+  raceT = null;
   mState = "outro";
   showDialogue(M[i].outro, () => {
     state.mi++;
@@ -605,6 +687,13 @@ function updateMissions(dt) {
   if (mState === "wait") { mTimer -= dt; if (mTimer <= 0) startMission(state.mi); return; }
   if (mState !== "active") return;
   const mis = MISSIONS[state.mi], step = mis.steps[mStep];
+  if (mis.race) {
+    if (mStep >= mis.race.from) {
+      if (raceT === null) raceT = mis.race.limit;
+      raceT -= dt;
+      if (raceT <= 0) { raceT = null; mStep = 0; toast(STR.raceFail); return; }
+    } else raceT = null;
+  }
   const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
   let ok;
   if (step.cond) ok = step.cond();
@@ -628,6 +717,7 @@ function updateSideJob() {
     if (dist2(px, pz, side.x, side.z) < 49) {
       state.money += sideReward();
       toast(STR.sideJobDone + "  " + STR.reward(sideReward()));
+      AudioSys.play("cash");
       side = { stage: "pickup" };
       save();
     }
@@ -636,7 +726,7 @@ function updateSideJob() {
 
 // ---------- input ----------
 const keys = new Set();
-let actA = false, actB = false;   // edge-triggered
+let actA = false, actB = false, bHeld = false;   // actA/actB edge-triggered, bHeld = sprint hold
 addEventListener("keydown", e => {
   if (e.code === "Enter" || (e.code === "Space" && dlgLines)) { advanceDialogue(); e.preventDefault(); return; }
   if (e.code === "KeyE") actA = true;
@@ -678,7 +768,9 @@ document.addEventListener("touchmove", e => e.preventDefault(), { passive: false
 
 const btnA = dom("btnA"), btnB = dom("btnB");
 btnA.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actA = true; });
-btnB.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actB = true; });
+btnB.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actB = true; bHeld = true; });
+addEventListener("pointerup", () => { bHeld = false; });
+addEventListener("pointercancel", () => { bHeld = false; });
 
 function readInput() {
   let mx = joyX, mz = joyY;
@@ -742,10 +834,13 @@ function nearestCar() {
   }
   return best;
 }
-function nearestBiz() {
+function nearestBizAction() {
   if (driving) return null;
   for (const b of BIZ) {
-    if (!state.owned[b.id] && dist2(player.x, player.z, b.x, b.z) < 20) return b;
+    if (dist2(player.x, player.z, b.x, b.z) >= 20) continue;
+    const lvl = state.owned[b.id] || 0;
+    if (!lvl) return { b, mode: "buy", cost: b.cost, lvl: 1 };
+    if (lvl < 3) return { b, mode: "up", cost: b.cost * lvl, lvl: lvl + 1 };
   }
   return null;
 }
@@ -771,7 +866,7 @@ function updateHUD() {
 
   const obj = currentObjective();
   elTitle.textContent = obj.title;
-  let txt = obj.text || "";
+  let txt = (raceT !== null ? STR.raceTimer(Math.ceil(raceT)) + "  " : "") + (obj.text || "");
   const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
   if (obj.x !== undefined) {
     txt += "  ·  " + STR.distance(Math.sqrt(dist2(px, pz, obj.x, obj.z)));
@@ -797,8 +892,14 @@ function updateHUD() {
   }
   if (a !== lastBtnA) { btnA.style.display = a ? "block" : "none"; btnA.textContent = a; lastBtnA = a; }
   let b = "";
-  const biz = dlgLines ? null : nearestBiz();
-  if (biz) b = STR.btnBuy(STR.biz[biz.id].name, biz.cost);
+  if (!dlgLines) {
+    if (driving) b = STR.btnHorn;
+    else {
+      const act = nearestBizAction();
+      b = act ? (act.mode === "buy" ? STR.btnBuy(STR.biz[act.b.id].name, act.cost)
+                                    : STR.btnUpgrade(act.lvl, act.cost)) : STR.btnSprint;
+    }
+  }
   if (b !== lastBtnB) { btnB.style.display = b ? "block" : "none"; btnB.textContent = b; lastBtnB = b; }
 }
 
@@ -861,11 +962,23 @@ function beginPlay() {
   if (hasSave) { load(); applyOwnership(); }
   elIntro.style.display = "none";
   state.phase = "play";
+  AudioSys.init();
   if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
   if (state.mi < M.length) { mState = "wait"; mTimer = 0.7; }
   else mState = "done";
 }
 buildIntro();
+
+// mute toggle (persisted separately from the save)
+const muteBtn = dom("mute");
+const MUTE_KEY = "palm_city_mute";
+function setMute(m) {
+  AudioSys.setMuted(m);
+  muteBtn.textContent = m ? "\u{1F507}" : "\u{1F50A}";
+  try { localStorage.setItem(MUTE_KEY, m ? "1" : "0"); } catch (e) {}
+}
+muteBtn.addEventListener("click", () => setMute(!AudioSys.muted));
+setMute((() => { try { return localStorage.getItem(MUTE_KEY) === "1"; } catch (e) { return false; } })());
 
 // ---------- actions ----------
 function doActionA() {
@@ -876,25 +989,38 @@ function doActionA() {
     if (hitsCollider(ex, ez, 0.5)) { ex = c.x - rx * 2.6; ez = c.z - rz * 2.6; }
     player.x = clamp(ex, -HALF + 3, HALF - 3); player.z = clamp(ez, -HALF + 3, HALF - 3);
     player.h = c.h;
-    c.speed = 0;
+    c.speed = 0; c.lat = 0;
     driving = null;
     hero.group.visible = true;
+    AudioSys.play("door", 0.8);
   } else {
     const c = nearestCar();
-    if (c) { driving = c; hero.group.visible = false; }
+    if (c) { driving = c; hero.group.visible = false; AudioSys.play("door", 0.8); }
   }
 }
 function doActionB() {
-  const b = nearestBiz();
-  if (!b) return;
-  if (state.money >= b.cost) {
-    state.money -= b.cost;
-    state.owned[b.id] = true;
-    markOwned(b);
-    toast(STR.purchased(STR.biz[b.id].name));
+  if (driving) {
+    AudioSys.horn();
+    for (const n of npcs) {
+      if (dist2(n.x, n.z, driving.x, driving.z) < 144) {
+        n.flee = 1.3;
+        n.h = Math.atan2(n.x - driving.x, n.z - driving.z);
+      }
+    }
+    return;
+  }
+  const act = nearestBizAction();
+  if (!act) return;
+  if (state.money >= act.cost) {
+    state.money -= act.cost;
+    state.owned[act.b.id] = act.lvl;
+    markOwned(act.b);
+    toast(act.mode === "buy" ? STR.purchased(STR.biz[act.b.id].name)
+                             : STR.upgraded(STR.biz[act.b.id].name, act.lvl));
+    AudioSys.play("cash");
     save();
   } else {
-    toast(STR.needMore(b.cost - Math.floor(state.money)));
+    toast(STR.needMore(act.cost - Math.floor(state.money)));
   }
 }
 
@@ -920,8 +1046,13 @@ function update(dt) {
     c.speed -= c.speed * 0.6 * dt;                                  // drag
     c.speed = clamp(c.speed, -8, 26);
     const dir = c.speed >= 0 ? 1 : -1;
+    const prevH = c.h;
     c.h -= inp.mx * 1.9 * dt * dir * clamp(Math.abs(c.speed) / 10, 0, 1);
-    moveWithCollision(c, Math.sin(c.h) * c.speed * dt, Math.cos(c.h) * c.speed * dt, 2.1);
+    // momentum thrown to the outside of the turn => arcade drift at speed
+    c.lat = clamp((c.lat || 0) * Math.exp(-4.2 * dt) + (c.h - prevH) * c.speed * 0.55, -12, 12);
+    moveWithCollision(c,
+      Math.sin(c.h) * c.speed * dt - Math.cos(c.h) * c.lat * dt,
+      Math.cos(c.h) * c.speed * dt + Math.sin(c.h) * c.lat * dt, 2.1);
     camYaw = lerpAngle(camYaw, c.h, 1 - Math.exp(-3.2 * dt));
   } else {
     // camera-relative walk
@@ -929,7 +1060,8 @@ function update(dt) {
     const r = { x: -Math.cos(camYaw), z: Math.sin(camYaw) };
     const wx = f.x * inp.mz + r.x * inp.mx, wz = f.z * inp.mz + r.z * inp.mx;
     const mag = inp.mag;
-    const speed = mag > 0.72 ? 6.4 : mag * 4.6;
+    const sprint = bHeld || keys.has("ShiftLeft") || keys.has("ShiftRight");
+    const speed = (mag > 0.72 ? 6.4 : mag * 4.6) * (sprint ? 1.32 : 1);
     player.speed = speed;
     if (mag > 0.01) {
       const len = Math.hypot(wx, wz) || 1;
@@ -959,11 +1091,18 @@ function update(dt) {
 
   // pedestrians
   for (const n of npcs) {
+    n.flee = (n.flee || 0) - dt;
+    if (driving && Math.abs(driving.speed) > 5 && n.flee <= 0 &&
+        dist2(n.x, n.z, driving.x, driving.z) < 49) {
+      n.flee = 1.3;
+      n.h = Math.atan2(n.x - driving.x, n.z - driving.z);
+    }
     n.timer -= dt;
-    if (n.timer <= 0) { n.timer = rr(2, 6); n.h += rr(-1.4, 1.4); }
+    if (n.timer <= 0 && n.flee <= 0) { n.timer = rr(2, 6); n.h += rr(-1.4, 1.4); }
     const ox = n.x, oz = n.z;
-    moveWithCollision(n, Math.sin(n.h) * n.speed * dt, Math.cos(n.h) * n.speed * dt, 0.4);
-    if (Math.abs(n.x - ox) + Math.abs(n.z - oz) < n.speed * dt * 0.3) n.h += Math.PI + rr(-0.5, 0.5);
+    const sp = n.flee > 0 ? 3.8 : n.speed;
+    moveWithCollision(n, Math.sin(n.h) * sp * dt, Math.cos(n.h) * sp * dt, 0.4);
+    if (Math.abs(n.x - ox) + Math.abs(n.z - oz) < sp * dt * 0.3) n.h += Math.PI + rr(-0.5, 0.5);
     const gy = groundY(n.x, n.z);
     n.mesh.position.set(n.x, gy + Math.abs(Math.sin(simTime * 9 + n.phase)) * 0.05, n.z);
     n.mesh.rotation.y = n.h;
@@ -972,6 +1111,21 @@ function update(dt) {
 
   // income + missions
   state.money += incomeRate() / 60 * dt;
+  envUpdate();
+  // tip jars: owned businesses fill up; collect by stopping by on foot
+  for (const b of BIZ) {
+    const lvl = state.owned[b.id] || 0;
+    if (!lvl) continue;
+    b.tips = Math.min(b.tips + b.rate * lvl * 0.1 / 60 * dt, b.rate * lvl);
+    if (!driving && b.tips >= 5 && dist2(player.x, player.z, b.x, b.z) < 25) {
+      const amt = Math.floor(b.tips);
+      b.tips = 0;
+      state.money += amt;
+      toast(STR.tips(amt));
+      AudioSys.play("cash", 0.9);
+    }
+  }
+  AudioSys.engine(driving ? Math.abs(driving.speed) : 0);
   updateMissions(dt);
   updateSideJob();
 
@@ -996,6 +1150,8 @@ function update(dt) {
   // story characters idle bob
   marco.position.y = CURB + Math.abs(Math.sin(simTime * 2.2)) * 0.04;
   if (rosa.visible) rosa.position.y = CURB + Math.abs(Math.sin(simTime * 2.5 + 1)) * 0.04;
+  vince.visible = state.mi === 8;
+  if (vince.visible) vince.position.y = CURB + Math.abs(Math.sin(simTime * 2.0 + 2)) * 0.03;
 
   // markers pulse
   const pulse = 1 + Math.sin(simTime * 4) * 0.13;
@@ -1014,7 +1170,8 @@ function update(dt) {
   for (const t of traffic) put(t.x, t.mesh.position.y, t.z, 2.2);
   for (const n of npcs) put(n.x, groundY(n.x, n.z), n.z, 0.5);
   put(marco.position.x, CURB, marco.position.z, 0.5);
-  if (rosa.visible) put(ROSA_POS.x, CURB, ROSA_POS.z, 0.5); else put(0, -10, 0, 0.01);
+  if (rosa.visible) put(rosa.position.x, CURB, rosa.position.z, 0.5); else put(0, -10, 0, 0.01);
+  if (vince.visible) put(vince.position.x, CURB, vince.position.z, 0.5); else put(0, -10, 0, 0.01);
   shadowIM.instanceMatrix.needsUpdate = true;
 
   // camera
@@ -1068,5 +1225,5 @@ requestAnimationFrame(frame);
 // dev instrumentation: programmatic state/input access for automated smoke runs (?dev=1 tooling)
 globalThis.__palmCity = {
   state, player, cars, update, beginPlay, advanceDialogue,
-  debug: () => ({ mState, mStep, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z }),
+  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips }),
 };
