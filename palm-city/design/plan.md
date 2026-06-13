@@ -55,3 +55,8 @@ Current goal + next step always on HUD; minimap shows roads, player heading, obj
 
 ## v4 (stunt driving)
 - **Stunt ramps**: 5 wedge ramps on long roads; hitting one fast launches the car with real vertical physics (gravity, airborne pitch, landing). Air time over 0.35s pays a bonus that scales with hang time; best jump is tracked in the save.
+
+## v5 (City Garage)
+- **Personal cars**: a Garage building (cell 3,2, east of the plaza) sells 3 cars on a rising price curve — Coral Cruiser $1,500, Azure Sport $4,000, Sterling GT $12,000 — each with distinct accel / top speed / turn. Reuses the business "for sale" → owned sprite pattern; locked cars can't be driven (excluded from `nearestCar`). A money sink and progression that complements the business income loop.
+- **Repaint**: standing by an owned personal car opens a 10-colour palette overlay (input gated like dialogue); the chosen paint applies live and persists.
+- **Save**: `state.cars` maps each owned car's id to its chosen paint colour. Minimap shows the garage (cyan square) and owned cars (cyan dots).

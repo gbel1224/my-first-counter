@@ -228,8 +228,9 @@ scene.add(ground);
 
 // block layout
 const PARKS = new Set(["2,2", "1,1", "4,4"]);
-const SPECIAL = { "1,3": "wash", "4,2": "burger", "5,0": "club", "0,4": "depot", "1,2": "pizza", "2,4": "taxi", "5,5": "marina" };
+const SPECIAL = { "1,3": "wash", "4,2": "burger", "5,0": "club", "0,4": "depot", "1,2": "pizza", "2,4": "taxi", "5,5": "marina", "3,2": "garage" };
 const PLAZA = { x: bc(2), z: bc(2) };
+const GARAGE = { x: bc(3), z: bc(2) };
 
 // curb slabs: paved + grass, instanced
 {
@@ -297,6 +298,7 @@ specialBuilding(bc(0), bc(4), 48, 10, 40, 0x9aa0a8, STR.depotName, "rgba(60,65,7
 specialBuilding(bc(1) + 18, bc(2) + 14, 18, 8, 18, 0xe0b04e, STR.pizzaName, "rgba(140,90,20,.9)");
 specialBuilding(bc(2), bc(4), 30, 6, 24, 0xe8c35a, STR.biz.taxi.name, "rgba(160,120,20,.9)");
 specialBuilding(bc(5), bc(5), 40, 7, 30, 0x5fa8c9, STR.biz.marina.name, "rgba(30,100,140,.9)");
+specialBuilding(GARAGE.x, GARAGE.z, 34, 8, 26, 0x5b6470, STR.garageName, "rgba(40,46,55,.9)");
 
 // plaza: fountain + hot dog cart
 {
@@ -428,6 +430,29 @@ const cars = [
   { x: -170, z: 138, h: 0, speed: 0, mesh: makeCar(0xc25cd6) },
 ];
 const starterCar = cars[0];
+
+// personal cars for sale at the City Garage — buy to drive & repaint (persisted in save).
+// Per-car accel / top speed / turn give a money sink and a real progression past businesses.
+const PCARS = [
+  { id: "coral",    color: 0xff6b5c, price: 1500,  accel: 15, top: 30, turn: 2.0  },
+  { id: "azure",    color: 0x3fa9f5, price: 4000,  accel: 18, top: 34, turn: 2.25 },
+  { id: "sterling", color: 0x2b2f36, price: 12000, accel: 22, top: 40, turn: 2.4  },
+];
+PCARS.forEach((pc, i) => {
+  const px = GARAGE.x - 13 + i * 13, pz = GARAGE.z + 18;
+  const car = {
+    x: px, z: pz, h: 0, speed: 0, mesh: makeCar(pc.color),
+    personal: true, locked: true, pid: pc.id, price: pc.price,
+    accel: pc.accel, top: pc.top, turn: pc.turn,
+  };
+  const sp = textSprite(STR.carForSale(STR.pcars[pc.id].name, pc.price), "#fff", "rgba(40,46,55,.92)", 12, 2.4, 0);
+  sp.position.set(px, 3.4, pz);
+  scene.add(sp);
+  car.sale = sp;
+  pc.car = car;
+  cars.push(car);
+});
+
 for (const c of cars) { c.y = 0; c.vy = 0; c.lat = 0; c.rampCD = 0; c.airStart = 0; }
 
 // ---------- stunt ramps ----------
@@ -587,19 +612,21 @@ const SAVE_KEY = "sunset_city_save_v1"; // legacy key kept so pre-rename progres
 const state = {
   money: 25,
   owned: {},
+  cars: {},              // owned personal cars: pid -> chosen paint color (hex)
   palms: [],
   bestJump: 0,
   mi: 0,                 // mission index; 8 = story complete
   phase: "intro",        // intro | play
 };
 function save() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, palms: state.palms, bestJump: state.bestJump || 0, mi: state.mi })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, palms: state.palms, bestJump: state.bestJump || 0, mi: state.mi })); } catch (e) {}
 }
 function load() {
   try {
     const d = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (d && d.v === 1) {
       state.money = d.money; state.owned = d.owned || {}; state.mi = d.mi || 0;
+      state.cars = d.cars || {};
       state.palms = d.palms || [];
       state.bestJump = d.bestJump || 0;
       for (const k in state.owned) if (state.owned[k] === true) state.owned[k] = 1; // pre-upgrade saves
@@ -612,6 +639,12 @@ const hasSave = !!localStorage.getItem(SAVE_KEY);
 function applyOwnership() {
   for (const b of BIZ) if (state.owned[b.id]) markOwned(b);
   for (const i of state.palms) if (i >= 0 && i < palmCollected.length) palmCollected[i] = true;
+  for (const c of cars) if (c.personal && state.cars[c.pid] != null) unlockCar(c, state.cars[c.pid]);
+}
+function unlockCar(c, color) {
+  c.locked = false;
+  c.mesh.material.color.setHex(color);
+  if (c.sale) c.sale.visible = false;
 }
 function markOwned(b) {
   const lvl = state.owned[b.id] || 1;
@@ -863,8 +896,8 @@ addEventListener("keyup", e => keys.delete(e.code));
 const elJoy = dom("joy"), elKnob = dom("knob");
 let joyId = null, joyOx = 0, joyOy = 0, joyX = 0, joyY = 0;
 addEventListener("pointerdown", e => {
-  if (state.phase !== "play" || dlgLines) return;
-  if (e.target.closest && (e.target.closest(".btn") || e.target.closest("#dialogue"))) return;
+  if (state.phase !== "play" || dlgLines || garageOpen) return;
+  if (e.target.closest && (e.target.closest(".btn") || e.target.closest("#dialogue") || e.target.closest("#garage"))) return;
   if (e.clientX > innerWidth * 0.55 || joyId !== null) return;
   joyId = e.pointerId; joyOx = e.clientX; joyOy = e.clientY;
   elJoy.style.display = "block";
@@ -953,6 +986,17 @@ let lastMoneyShown = -1, lastBtnA = "", lastBtnB = "";
 function nearestCar() {
   let best = null, bd = 25;
   for (const c of cars) {
+    if (c.locked) continue;                      // can't drive a car you haven't bought
+    const d = dist2(player.x, player.z, c.x, c.z);
+    if (d < bd) { bd = d; best = c; }
+  }
+  return best;
+}
+function nearestPersonalCar() {
+  if (driving) return null;
+  let best = null, bd = 20;
+  for (const c of cars) {
+    if (!c.personal) continue;
     const d = dist2(player.x, player.z, c.x, c.z);
     if (d < bd) { bd = d; best = c; }
   }
@@ -1023,8 +1067,13 @@ function updateHUD() {
     if (driving) b = STR.btnHorn;
     else {
       const act = nearestBizAction();
-      b = act ? (act.mode === "buy" ? STR.btnBuy(STR.biz[act.b.id].name, act.cost)
-                                    : STR.btnUpgrade(act.lvl, act.cost)) : STR.btnSprint;
+      if (act) b = act.mode === "buy" ? STR.btnBuy(STR.biz[act.b.id].name, act.cost)
+                                      : STR.btnUpgrade(act.lvl, act.cost);
+      else {
+        const pc = nearestPersonalCar();
+        if (pc) b = pc.locked ? STR.btnBuyCar(STR.pcars[pc.pid].name, pc.price) : STR.btnRepaint;
+        else b = STR.btnSprint;
+      }
     }
   }
   if (b !== lastBtnB) { btnB.style.display = b ? "block" : "none"; btnB.textContent = b; lastBtnB = b; }
@@ -1048,6 +1097,12 @@ function drawMinimap(t) {
   for (const b of BIZ) {
     mapCtx.fillStyle = state.owned[b.id] ? "#9fe6a0" : "#ffd166";
     mapCtx.beginPath(); mapCtx.arc((b.x + HALF) * sc, (b.z + HALF) * sc, 3, 0, 7); mapCtx.fill();
+  }
+  // garage (square) + owned personal cars (cyan dots)
+  mapCtx.fillStyle = "#7fd6ff";
+  mapCtx.fillRect((GARAGE.x + HALF) * sc - 3, (GARAGE.z + HALF) * sc - 3, 6, 6);
+  for (const c of cars) if (c.personal && !c.locked) {
+    mapCtx.beginPath(); mapCtx.arc((c.x + HALF) * sc, (c.z + HALF) * sc, 2.5, 0, 7); mapCtx.fill();
   }
   mapCtx.fillStyle = "#ffe24a";
   for (let i = 0; i < PALMS.length; i++) {
@@ -1105,6 +1160,49 @@ function beginPlay() {
 }
 buildIntro();
 
+// ---------- garage: buy & repaint personal cars ----------
+let garageOpen = false, garageCar = null;
+const elGarage = dom("garage");
+const PAINTS = [0xff6b5c, 0xff8c42, 0xf5c542, 0x58c97a, 0x20b2aa, 0x3fa9f5, 0x6a5acd, 0xc25cd6, 0xe8e4da, 0x2b2f36];
+function applyPaint(hex) {
+  if (!garageCar) return;
+  garageCar.mesh.material.color.setHex(hex);
+  state.cars[garageCar.pid] = hex;
+  save();
+}
+{
+  const sw = dom("gswatches");
+  for (const hex of PAINTS) {
+    const dot = document.createElement("div");
+    dot.className = "gsw";
+    dot.style.background = "#" + hex.toString(16).padStart(6, "0");
+    dot.addEventListener("click", () => applyPaint(hex));
+    sw.appendChild(dot);
+  }
+  const done = dom("gdone");
+  done.textContent = STR.garageDone;
+  done.addEventListener("click", closeGarage);
+}
+function openGarage(c) {
+  garageCar = c; garageOpen = true;
+  dom("gtitle").textContent = STR.repaintTitle(STR.pcars[c.pid].name);
+  elGarage.style.display = "flex";
+}
+function closeGarage() {
+  garageOpen = false; garageCar = null;
+  elGarage.style.display = "none";
+  toast(STR.repaintDone);
+}
+function buyCar(c) {
+  if (state.money < c.price) { toast(STR.needMore(c.price - Math.floor(state.money))); return; }
+  state.money -= c.price;
+  unlockCar(c, c.mesh.material.color.getHex());
+  state.cars[c.pid] = c.mesh.material.color.getHex();
+  toast(STR.carBought(STR.pcars[c.pid].name));
+  AudioSys.play("cash");
+  save();
+}
+
 // mute toggle (persisted separately from the save)
 const muteBtn = dom("mute");
 const MUTE_KEY = "palm_city_mute";
@@ -1146,18 +1244,22 @@ function doActionB() {
     return;
   }
   const act = nearestBizAction();
-  if (!act) return;
-  if (state.money >= act.cost) {
-    state.money -= act.cost;
-    state.owned[act.b.id] = act.lvl;
-    markOwned(act.b);
-    toast(act.mode === "buy" ? STR.purchased(STR.biz[act.b.id].name)
-                             : STR.upgraded(STR.biz[act.b.id].name, act.lvl));
-    AudioSys.play("cash");
-    save();
-  } else {
-    toast(STR.needMore(act.cost - Math.floor(state.money)));
+  if (act) {
+    if (state.money >= act.cost) {
+      state.money -= act.cost;
+      state.owned[act.b.id] = act.lvl;
+      markOwned(act.b);
+      toast(act.mode === "buy" ? STR.purchased(STR.biz[act.b.id].name)
+                               : STR.upgraded(STR.biz[act.b.id].name, act.lvl));
+      AudioSys.play("cash");
+      save();
+    } else {
+      toast(STR.needMore(act.cost - Math.floor(state.money)));
+    }
+    return;
   }
+  const pc = nearestPersonalCar();
+  if (pc) { if (pc.locked) buyCar(pc); else openGarage(pc); }
 }
 
 // ---------- simulation ----------
@@ -1166,24 +1268,24 @@ let simTime = 0;
 
 function update(dt) {
   simTime += dt;
-  const inp = dlgLines ? { mx: 0, mz: 0, mag: 0 } : readInput();
+  const inp = (dlgLines || garageOpen) ? { mx: 0, mz: 0, mag: 0 } : readInput();
   const a = actA, b = actB; actA = false; actB = false;
-  if (a && !dlgLines) doActionA();
-  if (b && !dlgLines) doActionB();
+  if (a && !dlgLines && !garageOpen) doActionA();
+  if (b && !dlgLines && !garageOpen) doActionB();
 
   if (driving) {
     const c = driving;
     // throttle / brake
-    const accel = inp.mz > 0 ? 13 * inp.mz : 0;
+    const accel = inp.mz > 0 ? (c.accel || 13) * inp.mz : 0;
     const brake = inp.mz < 0 ? 22 * -inp.mz : 0;
     c.speed += accel * dt;
     if (brake) c.speed = c.speed > 0 ? Math.max(0, c.speed - brake * dt) : Math.max(-8, c.speed - 6 * dt);
     if (inp.mz < 0 && c.speed <= 0) c.speed = Math.max(-8, c.speed - 8 * dt);
     c.speed -= c.speed * 0.6 * dt;                                  // drag
-    c.speed = clamp(c.speed, -8, 26);
+    c.speed = clamp(c.speed, -8, c.top || 26);
     const dir = c.speed >= 0 ? 1 : -1;
     const prevH = c.h;
-    c.h -= inp.mx * 1.9 * dt * dir * clamp(Math.abs(c.speed) / 10, 0, 1);
+    c.h -= inp.mx * (c.turn || 1.9) * dt * dir * clamp(Math.abs(c.speed) / 10, 0, 1);
     // momentum thrown to the outside of the turn => arcade drift at speed
     c.lat = clamp((c.lat || 0) * Math.exp(-4.2 * dt) + (c.h - prevH) * c.speed * 0.55, -12, 12);
     moveWithCollision(c,
@@ -1414,5 +1516,6 @@ requestAnimationFrame(frame);
 globalThis.__palmCity = {
   state, player, cars, police, update, beginPlay, advanceDialogue,
   forceCrime: () => { if (wanted < 3) wanted++; wantedCD = 14; },
-  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0 }),
+  paint: hex => applyPaint(hex),
+  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen }),
 };

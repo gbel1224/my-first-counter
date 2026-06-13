@@ -32,6 +32,8 @@ export const STR = {
   btnUpgrade: (lvl, cost) => "UPGRADE Lv" + lvl + " · $" + cost.toLocaleString("en-US"),
   btnSprint: "SPRINT",
   btnHorn: "HORN",
+  btnBuyCar: (name, cost) => "BUY " + name + " · $" + cost.toLocaleString("en-US"),
+  btnRepaint: "REPAINT",
 
   upgraded: (name, lvl) => name + " is now Lv" + lvl + "!",
   tips: a => "+$" + a + " tips collected",
@@ -48,6 +50,18 @@ export const STR = {
 
   forSale: cost => "FOR SALE · $" + cost.toLocaleString("en-US"),
   ownedLabel: (lvl, perMin) => "Lv" + lvl + " · +$" + perMin + "/min",
+
+  garageName: "CITY GARAGE",
+  carForSale: (name, cost) => name + " · $" + cost.toLocaleString("en-US"),
+  carBought: name => "New ride! " + name + " is yours",
+  repaintTitle: name => "Repaint your " + name,
+  repaintDone: "Fresh coat of paint!",
+  garageDone: "DONE",
+  pcars: {
+    coral:    { name: "Coral Cruiser" },
+    azure:    { name: "Azure Sport" },
+    sterling: { name: "Sterling GT" },
+  },
 
   biz: {
     dogs:   { name: "Sunny Dogs cart" },
