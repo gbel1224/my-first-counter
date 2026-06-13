@@ -20,3 +20,5 @@ aud_horn,player horn button,audio,friendly double car honk,1s,motion cue,generat
 aud_engine,driving loop pitched by speed,audio,steady small-engine hum loop,5s loop,motion cue,generate (mirelo)
 mdl_taxi,taxi company building,3d procedural,low yellow office with sign,6 hero-units tall,blocks 1+3,generate (procedural primitives)
 mdl_marina,marina building,3d procedural,wide teal waterfront hall with sign,7 hero-units tall,blocks 1+3,generate (procedural primitives)
+mdl_palm_token,golden palm collectible,3d procedural,spinning glowing gold octahedron token,0.85 hero-units,block 3 signal hue,generate (procedural primitives)
+mdl_police,police chase car,3d procedural,dark-blue car with flashing roof light bar,2.6 hero-units long,blocks 2+3,generate (procedural primitives)

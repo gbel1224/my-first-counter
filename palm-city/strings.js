@@ -38,6 +38,13 @@ export const STR = {
   raceTimer: s => "⏱ " + s + "s",
   raceFail: "Too slow! Back to the start line…",
 
+  palmCount: (n, t) => "🌴 " + n + "/" + t,
+  palmGot: r => "Golden Palm! +$" + r,
+  palmsAll: r => "All 12 Golden Palms! Bonus +$" + r.toLocaleString("en-US"),
+  wantedToast: n => "Wanted! " + "★".repeat(n),
+  wantedClear: "You lost the cops",
+  busted: f => "BUSTED! Fine $" + f.toLocaleString("en-US"),
+
   forSale: cost => "FOR SALE · $" + cost.toLocaleString("en-US"),
   ownedLabel: (lvl, perMin) => "Lv" + lvl + " · +$" + perMin + "/min",
 

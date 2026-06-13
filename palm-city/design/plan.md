@@ -47,3 +47,8 @@ Current goal + next step always on HUD; minimap shows roads, player heading, obj
 - New properties: Palm Taxi Co. $3,500/$150·min, Bayside Marina $15,000/$700·min
 - Audio mix: music 0.16, SFX 0.6, engine 0.22 gain (quiet music under effects, no clipping)
 - World: 4-minute day/night cycle; NPCs flee close fast cars and horns; arcade drift via lateral momentum
+
+## v3 (open-world systems)
+- **Wanted system**: hitting pedestrians with a fast car raises a 0-3 star wanted level; up to 3 police cars spawn and chase. Contact = busted (fine scales with stars, wanted clears). Stars decay over time if you escape. Suppressed during the timed race so it stays fair.
+- **Golden Palms**: 12 hidden glowing collectibles across the map ($150 each, $2,000 bonus for all 12). Shown on the minimap; persisted in the save.
+- HUD: palm counter in the money box, wanted stars top-center.

@@ -19,6 +19,10 @@
   #moneybox { background:rgba(20,28,24,.72); border-radius:14px; padding:8px 14px; color:#ffe9b3; }
   #money { font-size:22px; font-weight:800; letter-spacing:.5px; }
   #income { font-size:12px; color:#9fe6a0; font-weight:600; min-height:14px; }
+  #palms { font-size:12px; color:#ffe24a; font-weight:700; min-height:14px; }
+  #wanted { position:absolute; top:calc(58px + env(safe-area-inset-top, 0px)); left:50%;
+    transform:translateX(-50%); color:#ff3b3b; font-size:24px; font-weight:900;
+    text-shadow:0 1px 3px rgba(0,0,0,.6); letter-spacing:3px; pointer-events:none; }
   #missionbox { flex:1; background:rgba(20,28,24,.72); border-radius:14px; padding:8px 12px;
     color:#fff; min-width:0; }
   #mtitle { font-size:11px; color:#ffc966; font-weight:700; text-transform:uppercase; letter-spacing:1px;
@@ -71,12 +75,13 @@
 <body>
 <div id="ui">
   <div id="topbar">
-    <div id="moneybox"><div id="money"></div><div id="income"></div></div>
+    <div id="moneybox"><div id="money"></div><div id="income"></div><div id="palms"></div></div>
     <div id="missionbox"><div id="mtitle"></div><div id="mstep"></div></div>
     <canvas id="minimap" width="132" height="132"></canvas>
     <button id="mute" class="pe"></button>
   </div>
   <div id="toast"></div>
+  <div id="wanted"></div>
   <div id="joy"><div id="knob"></div></div>
   <button id="btnB" class="btn pe"></button>
   <button id="btnA" class="btn pe"></button>

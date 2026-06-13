@@ -152,6 +152,22 @@ const before = h.state.money;
 goto_(h.debug().sx, h.debug().sz); run(5);
 assert(h.state.money > before, "side job paid out");
 
-run(600); // idle robustness: traffic, NPCs, income, day/night
-console.log("SMOKE PASS — 12-chapter story + economy end-to-end, money:", Math.floor(h.state.money));
+// collectibles: Golden Palms
+const palmsBefore = h.debug().palms;
+goto_(-176, 88); run(8);
+assert(h.debug().palms > palmsBefore, "collected a golden palm");
+
+// wanted system: rack up stars, a cop spawns, then get busted
+h.forceCrime(); h.forceCrime(); h.forceCrime();
+assert(h.debug().wanted === 3, "three wanted stars");
+run(30);
+assert(h.police.some(p => p.active), "police activated by wanted level");
+const moneyPreBust = h.state.money;
+h.police[0].active = true; h.police[0].x = h.player.x; h.police[0].z = h.player.z;
+run(5);
+assert(h.debug().wanted === 0, "busted clears the wanted level");
+assert(h.state.money < moneyPreBust, "bust deducted a fine");
+
+run(600); // idle robustness: traffic, NPCs, income, day/night, police despawn
+console.log("SMOKE PASS — 12 chapters + economy + palms + wanted, money:", Math.floor(h.state.money));
 process.exit(0);

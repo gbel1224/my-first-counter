@@ -442,6 +442,19 @@ for (let t = 0; t < 10; t++) {
   });
 }
 
+// police cars (spawned by wanted level)
+const POLICE_N = 3;
+const police = [];
+for (let i = 0; i < POLICE_N; i++) {
+  const mesh = makeCar(0x20407a);
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.26, 0.5),
+    new THREE.MeshLambertMaterial({ color: 0xf0f0f0 }));
+  bar.position.set(0, 1.78, -0.2);
+  mesh.add(bar);
+  mesh.position.set(0, -9999, 0);
+  police.push({ x: 0, z: -9999, h: 0, speed: 0, active: false, mesh, bar });
+}
+
 // pedestrians
 const npcs = [];
 for (let t = 0; t < 14; t++) {
@@ -479,7 +492,7 @@ const player = { x: PLAZA.x, z: roadC(3) - 12, y: CURB, h: Math.PI, walkPhase: 0
 let driving = null;   // car object while driving
 
 // ---------- blob shadows (one instanced draw) ----------
-const SHADOW_N = 1 + cars.length + traffic.length + npcs.length + 3;
+const SHADOW_N = 1 + cars.length + traffic.length + police.length + npcs.length + 3;
 const shadowGeo = new THREE.CircleGeometry(1, 14);
 shadowGeo.rotateX(-Math.PI / 2);
 const shadowIM = new THREE.InstancedMesh(shadowGeo,
@@ -518,22 +531,46 @@ for (const b of BIZ) {
   scene.add(b.sale);
 }
 
+// ---------- collectibles: Golden Palms ----------
+const PALMS = [[-176,-88],[-176,0],[-176,88],[-88,0],[0,-176],[0,0],[0,176],[88,-176],[88,176],[176,-88],[176,0],[176,88]];
+const PALM_REWARD = 150, PALM_ALL_BONUS = 2000;
+const palmCollected = PALMS.map(() => false);
+const palmGeo = new THREE.OctahedronGeometry(0.85, 0);
+const palmIM = new THREE.InstancedMesh(palmGeo,
+  new THREE.MeshLambertMaterial({ color: 0xffd24a, emissive: 0x7a5600 }), PALMS.length);
+palmIM.frustumCulled = false;
+scene.add(palmIM);
+const palmQ = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0);
+const palmsGot = () => { let n = 0; for (const c of palmCollected) if (c) n++; return n; };
+function collectPalm(i) {
+  if (palmCollected[i]) return;
+  palmCollected[i] = true;
+  state.palms.push(i);
+  state.money += PALM_REWARD;
+  if (palmsGot() === PALMS.length) { state.money += PALM_ALL_BONUS; toast(STR.palmsAll(PALM_ALL_BONUS)); }
+  else toast(STR.palmGot(PALM_REWARD));
+  AudioSys.play("cash", 0.9);
+  save();
+}
+
 // ---------- game state / save ----------
 const SAVE_KEY = "sunset_city_save_v1"; // legacy key kept so pre-rename progress survives
 const state = {
   money: 25,
   owned: {},
+  palms: [],
   mi: 0,                 // mission index; 8 = story complete
   phase: "intro",        // intro | play
 };
 function save() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, mi: state.mi })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, palms: state.palms, mi: state.mi })); } catch (e) {}
 }
 function load() {
   try {
     const d = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (d && d.v === 1) {
       state.money = d.money; state.owned = d.owned || {}; state.mi = d.mi || 0;
+      state.palms = d.palms || [];
       for (const k in state.owned) if (state.owned[k] === true) state.owned[k] = 1; // pre-upgrade saves
       return true;
     }
@@ -543,6 +580,7 @@ function load() {
 const hasSave = !!localStorage.getItem(SAVE_KEY);
 function applyOwnership() {
   for (const b of BIZ) if (state.owned[b.id]) markOwned(b);
+  for (const i of state.palms) if (i >= 0 && i < palmCollected.length) palmCollected[i] = true;
 }
 function markOwned(b) {
   const lvl = state.owned[b.id] || 1;
@@ -724,6 +762,60 @@ function updateSideJob() {
   }
 }
 
+// ---------- wanted level & police ----------
+let wanted = 0, wantedCD = 0, crimeCD = 0;
+function heatActive() {
+  const mis = MISSIONS[state.mi];
+  return (mis && mis.race && mState === "active") ? 0 : wanted;   // no heat during the timed race
+}
+function registerCrime() {
+  const mis = MISSIONS[state.mi];
+  if (mis && mis.race && mState === "active") return;
+  if (crimeCD > 0) { wantedCD = 14; return; }
+  crimeCD = 1.5; wantedCD = 14;
+  if (wanted < 3) { wanted++; toast(STR.wantedToast(wanted)); }
+}
+function bust() {
+  const fine = 100 + 80 * wanted;
+  state.money = Math.max(0, state.money - fine);
+  toast(STR.busted(fine));
+  AudioSys.play("door", 1);
+  wanted = 0; wantedCD = 0; crimeCD = 0;
+  for (const p of police) { p.active = false; p.mesh.position.set(0, -9999, 0); }
+  save();
+}
+function updatePolice(dt) {
+  if (crimeCD > 0) crimeCD -= dt;
+  if (wanted > 0) {
+    wantedCD -= dt;
+    if (wantedCD <= 0) { wanted = Math.max(0, wanted - 1); wantedCD = 8; if (wanted === 0) toast(STR.wantedClear); }
+  }
+  const heat = heatActive();
+  const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
+  for (let i = 0; i < police.length; i++) {
+    const p = police[i];
+    const want = i < heat;
+    if (want && !p.active) {
+      const ang = Math.random() * Math.PI * 2;
+      p.x = clamp(px + Math.cos(ang) * 72, -HALF + 3, HALF - 3);
+      p.z = clamp(pz + Math.sin(ang) * 72, -HALF + 3, HALF - 3);
+      p.h = Math.atan2(px - p.x, pz - p.z); p.speed = 0; p.active = true;
+    } else if (!want && p.active) {
+      p.active = false; p.mesh.position.set(0, -9999, 0);
+    }
+    if (!p.active) continue;
+    const dx = px - p.x, dz = pz - p.z, d = Math.hypot(dx, dz) || 1;
+    p.h = lerpAngle(p.h, Math.atan2(dx, dz), 1 - Math.exp(-4 * dt));
+    const tgt = dlgLines ? 0 : 19;
+    p.speed += (tgt - p.speed) * Math.min(1, 3 * dt);
+    moveWithCollision(p, Math.sin(p.h) * p.speed * dt, Math.cos(p.h) * p.speed * dt, 2.1);
+    p.mesh.position.set(p.x, groundY(p.x, p.z), p.z);
+    p.mesh.rotation.y = p.h;
+    p.bar.material.emissive.setHex((Math.floor(simTime * 6) % 2) ? 0x2244ff : 0xff2222);
+    if (!dlgLines && d < 3.6) bust();
+  }
+}
+
 // ---------- input ----------
 const keys = new Set();
 let actA = false, actB = false, bHeld = false;   // actA/actB edge-triggered, bHeld = sprint hold
@@ -823,6 +915,7 @@ const _look = new THREE.Vector3();
 
 // ---------- HUD ----------
 const elMoney = dom("money"), elIncome = dom("income"), elTitle = dom("mtitle"), elStep = dom("mstep");
+const elPalms = dom("palms"), elWanted = dom("wanted");
 const mapCtx = dom("minimap").getContext("2d");
 let lastMoneyShown = -1, lastBtnA = "", lastBtnB = "";
 
@@ -863,6 +956,9 @@ function updateHUD() {
   if (m !== lastMoneyShown) { elMoney.textContent = STR.money(m); lastMoneyShown = m; }
   const rate = incomeRate();
   elIncome.textContent = rate ? STR.incomeRate(rate) : "";
+  elPalms.textContent = STR.palmCount(palmsGot(), PALMS.length);
+  const heat = heatActive();
+  elWanted.textContent = heat > 0 ? "\u2605".repeat(heat) : "";
 
   const obj = currentObjective();
   elTitle.textContent = obj.title;
@@ -921,6 +1017,15 @@ function drawMinimap(t) {
   for (const b of BIZ) {
     mapCtx.fillStyle = state.owned[b.id] ? "#9fe6a0" : "#ffd166";
     mapCtx.beginPath(); mapCtx.arc((b.x + HALF) * sc, (b.z + HALF) * sc, 3, 0, 7); mapCtx.fill();
+  }
+  mapCtx.fillStyle = "#ffe24a";
+  for (let i = 0; i < PALMS.length; i++) {
+    if (palmCollected[i]) continue;
+    mapCtx.fillRect((PALMS[i][0] + HALF) * sc - 1, (PALMS[i][1] + HALF) * sc - 1, 2.4, 2.4);
+  }
+  for (const p of police) if (p.active) {
+    mapCtx.fillStyle = "#ff3b3b";
+    mapCtx.beginPath(); mapCtx.arc((p.x + HALF) * sc, (p.z + HALF) * sc, 3, 0, 7); mapCtx.fill();
   }
   const obj = currentObjective();
   if (obj.x !== undefined && (t * 2 | 0) % 2 === 0) {
@@ -1097,6 +1202,12 @@ function update(dt) {
       n.flee = 1.3;
       n.h = Math.atan2(n.x - driving.x, n.z - driving.z);
     }
+    if (driving && Math.abs(driving.speed) > 8 && dist2(n.x, n.z, driving.x, driving.z) < 9) {
+      n.flee = 1.6;
+      n.h = Math.atan2(n.x - driving.x, n.z - driving.z);
+      n.x += Math.sin(n.h) * 1.1; n.z += Math.cos(n.h) * 1.1;
+      registerCrime();
+    }
     n.timer -= dt;
     if (n.timer <= 0 && n.flee <= 0) { n.timer = rr(2, 6); n.h += rr(-1.4, 1.4); }
     const ox = n.x, oz = n.z;
@@ -1128,6 +1239,20 @@ function update(dt) {
   AudioSys.engine(driving ? Math.abs(driving.speed) : 0);
   updateMissions(dt);
   updateSideJob();
+  updatePolice(dt);
+  {
+    const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
+    for (let i = 0; i < PALMS.length; i++) {
+      const x = PALMS[i][0], z = PALMS[i][1];
+      if (!palmCollected[i] && dist2(px, pz, x, z) < 12) collectPalm(i);
+      if (palmCollected[i]) { tmpP.set(0, -50, 0); tmpS.set(0.001, 0.001, 0.001); }
+      else { tmpP.set(x, CURB + 1.5 + Math.sin(simTime * 2 + i) * 0.25, z); tmpS.set(1, 1, 1); }
+      palmQ.setFromAxisAngle(UP, simTime * 1.6 + i);
+      tmpM.compose(tmpP, palmQ, tmpS);
+      palmIM.setMatrixAt(i, tmpM);
+    }
+    palmIM.instanceMatrix.needsUpdate = true;
+  }
 
   if (toastTimer > 0) { toastTimer -= dt; if (toastTimer <= 0) elToast.style.opacity = 0; }
 
@@ -1168,6 +1293,7 @@ function update(dt) {
   if (!driving) put(player.x, player.y, player.z, 0.55); else put(0, -10, 0, 0.01);
   for (const c of cars) put(c.x, c.mesh.position.y, c.z, 2.2);
   for (const t of traffic) put(t.x, t.mesh.position.y, t.z, 2.2);
+  for (const p of police) { if (p.active) put(p.x, p.mesh.position.y, p.z, 2.2); else put(0, -10, 0, 0.01); }
   for (const n of npcs) put(n.x, groundY(n.x, n.z), n.z, 0.5);
   put(marco.position.x, CURB, marco.position.z, 0.5);
   if (rosa.visible) put(rosa.position.x, CURB, rosa.position.z, 0.5); else put(0, -10, 0, 0.01);
@@ -1224,6 +1350,7 @@ requestAnimationFrame(frame);
 
 // dev instrumentation: programmatic state/input access for automated smoke runs (?dev=1 tooling)
 globalThis.__palmCity = {
-  state, player, cars, update, beginPlay, advanceDialogue,
-  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips }),
+  state, player, cars, police, update, beginPlay, advanceDialogue,
+  forceCrime: () => { if (wanted < 3) wanted++; wantedCD = 14; },
+  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot() }),
 };

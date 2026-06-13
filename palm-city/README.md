@@ -14,7 +14,7 @@ tip jars you collect in person. **Twelve story chapters**: act 2 brings rival
 Vince Sterling, a hostile takeover, Rosa's mission line, and a timed grand race
 finale — then endless freeplay with repeatable depot delivery jobs. Music and
 SFX included (mute button on the HUD), a 4-minute day/night cycle, arcade drift,
-and pedestrians who dive away from your horn. Progress auto-saves in your browser.
+and pedestrians who dive away from your horn. A **wanted system** brings police chases when you drive recklessly, and **12 hidden Golden Palms** are scattered across the city to hunt down. Progress auto-saves in your browser.
 
 ## Controls
 - **Phone:** left side of the screen = floating joystick; yellow button = enter/exit
