@@ -40,6 +40,13 @@ export const STR = {
   raceTimer: s => "⏱ " + s + "s",
   raceFail: "Too slow! Back to the start line…",
 
+  raceTitle: "STREET RACE",
+  raceStart: "Street race! Hit the checkpoints!",
+  raceProgress: (n, t) => "Checkpoint " + n + "/" + t,
+  raceWin: (reward, time) => "Race won! +$" + reward + " · " + time.toFixed(1) + "s",
+  raceBest: (reward, time) => "New best lap " + time.toFixed(1) + "s! +$" + reward,
+  raceTimeout: "Out of time! Roll through the gate to retry.",
+
   palmCount: (n, t) => "🌴 " + n + "/" + t,
   palmGot: r => "Golden Palm! +$" + r,
   palmsAll: r => "All 12 Golden Palms! Bonus +$" + r.toLocaleString("en-US"),

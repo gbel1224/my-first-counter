@@ -616,11 +616,12 @@ const state = {
   cars: {},              // owned personal cars: pid -> chosen paint color (hex)
   palms: [],
   bestJump: 0,
+  bestRace: 0,           // best street-race lap time in seconds (0 = none yet)
   mi: 0,                 // mission index; 8 = story complete
   phase: "intro",        // intro | play
 };
 function save() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, palms: state.palms, bestJump: state.bestJump || 0, mi: state.mi })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, palms: state.palms, bestJump: state.bestJump || 0, bestRace: state.bestRace || 0, mi: state.mi })); } catch (e) {}
 }
 function load() {
   try {
@@ -630,6 +631,7 @@ function load() {
       state.cars = d.cars || {};
       state.palms = d.palms || [];
       state.bestJump = d.bestJump || 0;
+      state.bestRace = d.bestRace || 0;
       for (const k in state.owned) if (state.owned[k] === true) state.owned[k] = 1; // pre-upgrade saves
       return true;
     }
@@ -827,6 +829,60 @@ function updateSideJob() {
   }
 }
 
+// ---------- street races (freeplay) ----------
+const RACE_START = { x: roadC(2), z: roadC(4) };   // (-88, 88) road intersection
+const RACE_CPS = [
+  [roadC(4), roadC(4)],   // ( 88,  88)
+  [roadC(4), roadC(2)],   // ( 88, -88)
+  [roadC(2), roadC(2)],   // (-88, -88)
+  [roadC(2), roadC(4)],   // (-88,  88) — finish, back at the gate
+];
+const RACE_LIMIT = 52, RACE_BASE = 500, RACE_BEST_BONUS = 300, RACE_CP_R = 9;
+let race = { stage: "idle", cp: 0, t: 0, armed: false };  // idle | active
+{
+  const g = new THREE.Group();
+  const post = new THREE.BoxGeometry(0.6, 4, 0.6);
+  const matW = new THREE.MeshLambertMaterial({ color: 0xf2f2f2 });
+  const p1 = new THREE.Mesh(post, matW); p1.position.set(-3.4, 2, 0);
+  const p2 = new THREE.Mesh(post, matW); p2.position.set(3.4, 2, 0);
+  const banner = new THREE.Mesh(new THREE.BoxGeometry(7.4, 0.9, 0.3),
+    new THREE.MeshLambertMaterial({ color: 0x1c1c1c }));
+  banner.position.set(0, 4.1, 0);
+  g.add(p1, p2, banner);
+  g.position.set(RACE_START.x, CURB, RACE_START.z);
+  scene.add(g);
+}
+function updateRace(dt) {
+  if (state.mi < M.length || dlgLines) return;     // freeplay only
+  const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
+  if (race.stage === "idle") {
+    const atGate = dist2(px, pz, RACE_START.x, RACE_START.z) < RACE_CP_R * RACE_CP_R;
+    if (!atGate) race.armed = true;                // leave the gate to re-arm
+    else if (race.armed && driving) {
+      race.stage = "active"; race.cp = 0; race.t = RACE_LIMIT; race.armed = false;
+      toast(STR.raceStart); AudioSys.play("horn", 0.6);
+    }
+    return;
+  }
+  race.t -= dt;
+  if (race.t <= 0) { race.stage = "idle"; toast(STR.raceTimeout); return; }
+  const cp = RACE_CPS[race.cp];
+  if (driving && dist2(px, pz, cp[0], cp[1]) < RACE_CP_R * RACE_CP_R) {
+    race.cp++;
+    if (race.cp >= RACE_CPS.length) {
+      const time = RACE_LIMIT - race.t;
+      let reward = RACE_BASE;
+      const isBest = !state.bestRace || time < state.bestRace;
+      if (isBest) { reward += RACE_BEST_BONUS; state.bestRace = time; }
+      state.money += reward;
+      toast(isBest ? STR.raceBest(reward, time) : STR.raceWin(reward, time));
+      AudioSys.play("jingle", 0.9);
+      race.stage = "idle"; race.armed = false;
+      save();
+    } else AudioSys.play("cash", 0.5);
+  }
+}
+
 // ---------- wanted level & police ----------
 let wanted = 0, wantedCD = 0, crimeCD = 0;
 function heatActive() {
@@ -1020,6 +1076,10 @@ function currentObjective() {
     return { title: STR.missionTag(state.mi + 1) + " · " + M[state.mi].title, text: M[state.mi].steps[mStep], x: step.x, z: step.z };
   }
   if (state.mi >= M.length) {
+    if (race.stage === "active") {
+      const cp = RACE_CPS[race.cp];
+      return { title: STR.raceTitle, text: STR.raceProgress(race.cp + 1, RACE_CPS.length) + " · " + STR.raceTimer(Math.ceil(race.t)), x: cp[0], z: cp[1] };
+    }
     if (side.stage === "carry") return { title: STR.freeplay, text: STR.sideJobGo, x: side.x, z: side.z };
     if (sideUnlocked()) return { title: STR.freeplay, text: STR.sideJobAt, x: DEPOT.x, z: DEPOT.z };
     return { title: STR.freeplay, text: "", x: undefined };
@@ -1047,9 +1107,9 @@ function updateHUD() {
   } else missionMarker.group.visible = false;
   elStep.textContent = txt;
 
-  // side-job marker (orange)
+  // side-job marker (orange) — hidden while a street race is on
   let svis = false, sx = DEPOT.x, sz = DEPOT.z;
-  if (sideUnlocked()) {
+  if (sideUnlocked() && race.stage !== "active") {
     if (side.stage === "pickup") svis = true;
     else if (side.stage === "carry") { svis = true; sx = side.x; sz = side.z; }
   }
@@ -1104,6 +1164,11 @@ function drawMinimap(t) {
   mapCtx.fillRect((GARAGE.x + HALF) * sc - 3, (GARAGE.z + HALF) * sc - 3, 6, 6);
   for (const c of cars) if (c.personal && !c.locked) {
     mapCtx.beginPath(); mapCtx.arc((c.x + HALF) * sc, (c.z + HALF) * sc, 2.5, 0, 7); mapCtx.fill();
+  }
+  // street-race start gate (white, freeplay only)
+  if (state.mi >= M.length) {
+    mapCtx.fillStyle = "#ffffff";
+    mapCtx.fillRect((RACE_START.x + HALF) * sc - 2.5, (RACE_START.z + HALF) * sc - 2.5, 5, 5);
   }
   mapCtx.fillStyle = "#ffe24a";
   for (let i = 0; i < PALMS.length; i++) {
@@ -1417,6 +1482,7 @@ function update(dt) {
   AudioSys.engine(driving ? Math.abs(driving.speed) : 0);
   updateMissions(dt);
   updateSideJob();
+  updateRace(dt);
   updatePolice(dt);
   {
     const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
@@ -1535,5 +1601,5 @@ globalThis.__palmCity = {
   paint: hex => applyPaint(hex),
   buyCurrent: () => buyCurrent(),
   closeGarage: () => closeGarage(),
-  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen }),
+  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen, race: race.stage, rcp: race.cp }),
 };

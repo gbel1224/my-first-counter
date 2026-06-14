@@ -197,6 +197,25 @@ h.paint(0x123456);
 assert(h.state.cars[pcar.pid] === 0x123456, "repaint persists the chosen color");
 h.closeGarage();
 
+// ---- street races (freeplay): start at the gate, hit checkpoints, win, then time out ----
+goto_(0, -3);                                   // away from the garage so we drive cars[0], not a personal car
+h.cars[0].x = 0; h.cars[0].z = 0; h.cars[0].y = 0; h.cars[0].vy = 0;
+key("KeyE"); run(3); assert(h.debug().driving, "in a car for the street race");
+gotoCar(0, 0); run(3);                         // leave the gate so the race arms
+gotoCar(-88, 88); run(3);                      // roll into the start gate
+assert(h.debug().race === "active", "street race started at the gate");
+const moneyPreRace = h.state.money;
+gotoCar(88, 88); run(3); gotoCar(88, -88); run(3); gotoCar(-88, -88); run(3); gotoCar(-88, 88); run(3);
+assert(h.debug().race === "idle", "street race finished");
+assert(h.state.money > moneyPreRace, "street race paid a reward");
+assert(h.state.bestRace > 0, "best lap time was recorded");
+
+gotoCar(0, 0); run(3); gotoCar(-88, 88); run(3);
+assert(h.debug().race === "active", "street race re-armed and restarted");
+run(53 * 60);                                  // let the 52s clock run out
+assert(h.debug().race === "idle", "street race times out");
+key("KeyE"); run(2);
+
 run(600); // idle robustness: traffic, NPCs, income, day/night, police despawn
-console.log("SMOKE PASS — 12 chapters + economy + palms + wanted + stunts + garage, money:", Math.floor(h.state.money));
+console.log("SMOKE PASS — 12 chapters + economy + palms + wanted + stunts + garage + races, money:", Math.floor(h.state.money));
 process.exit(0);

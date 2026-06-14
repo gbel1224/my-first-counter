@@ -61,3 +61,8 @@ Current goal + next step always on HUD; minimap shows roads, player heading, obj
 - **Showroom panel**: pressing the action button by a personal car opens a panel (input gated like dialogue) showing stat bars (top speed / accel / handling) and the car's perk. Locked → BUY button; owned → 10-colour repaint palette. Paint applies live and persists.
 - **Per-car perks** (each car plays differently, not just faster): Coral Cruiser *Showtime* — +50% stunt-jump cash (`jumpMult`); Azure Sport *Slippery* — wanted stars cool ~2× faster while driving it (`heatMult`); Sterling GT *Connected* — bust fines halved (`fineMult`).
 - **Save**: `state.cars` maps each owned car's id to its chosen paint colour. Minimap shows the garage (cyan square) and owned cars (cyan dots).
+
+## v6 (Street Races)
+- **Freeplay street race**: a checkered start gate at the (-88, 88) intersection. Roll through it in a car (freeplay only) to start a timed 4-checkpoint circuit around the central ring roads (52s limit). Built as a standalone system (`updateRace`) separate from the story mission/race logic so the two never interfere.
+- **Rewards & replay**: $500 per win, +$300 bonus for a new best lap. Best lap time persists (`state.bestRace`) as an endless personal challenge — and a showcase for the garage's faster cars/perks.
+- **Re-arm**: after a win or timeout you must leave the gate and roll back through to start again (no instant re-trigger). The active checkpoint drives the existing mission marker + minimap blip; the side-job marker is suppressed while racing. Start gate shown on the minimap (white square) in freeplay.
