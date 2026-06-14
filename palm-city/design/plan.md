@@ -58,5 +58,6 @@ Current goal + next step always on HUD; minimap shows roads, player heading, obj
 
 ## v5 (City Garage)
 - **Personal cars**: a Garage building (cell 3,2, east of the plaza) sells 3 cars on a rising price curve — Coral Cruiser $1,500, Azure Sport $4,000, Sterling GT $12,000 — each with distinct accel / top speed / turn. Reuses the business "for sale" → owned sprite pattern; locked cars can't be driven (excluded from `nearestCar`). A money sink and progression that complements the business income loop.
-- **Repaint**: standing by an owned personal car opens a 10-colour palette overlay (input gated like dialogue); the chosen paint applies live and persists.
+- **Showroom panel**: pressing the action button by a personal car opens a panel (input gated like dialogue) showing stat bars (top speed / accel / handling) and the car's perk. Locked → BUY button; owned → 10-colour repaint palette. Paint applies live and persists.
+- **Per-car perks** (each car plays differently, not just faster): Coral Cruiser *Showtime* — +50% stunt-jump cash (`jumpMult`); Azure Sport *Slippery* — wanted stars cool ~2× faster while driving it (`heatMult`); Sterling GT *Connected* — bust fines halved (`fineMult`).
 - **Save**: `state.cars` maps each owned car's id to its chosen paint colour. Minimap shows the garage (cyan square) and owned cars (cyan dots).

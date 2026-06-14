@@ -57,10 +57,14 @@ export const STR = {
   repaintTitle: name => "Repaint your " + name,
   repaintDone: "Fresh coat of paint!",
   garageDone: "DONE",
+  garageBuy: cost => "BUY · $" + cost.toLocaleString("en-US"),
+  garageSpeed: "Top speed",
+  garageAccel: "Accel",
+  garageHandling: "Handling",
   pcars: {
-    coral:    { name: "Coral Cruiser" },
-    azure:    { name: "Azure Sport" },
-    sterling: { name: "Sterling GT" },
+    coral:    { name: "Coral Cruiser", perk: "Showtime — +50% stunt jump cash" },
+    azure:    { name: "Azure Sport",   perk: "Slippery — shakes police heat fast" },
+    sterling: { name: "Sterling GT",   perk: "Connected — bust fines cut in half" },
   },
 
   biz: {

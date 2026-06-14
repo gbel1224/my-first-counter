@@ -179,19 +179,23 @@ for (let i = 0; i < 240; i++) { h.update(1 / 60); if (h.debug().bestJump > 0) { 
 assert(jumped, "stunt ramp launched the car for air time");
 key("KeyE"); run(2);
 
-// ---- garage: buy, drive, and repaint a personal car ----
+// ---- garage: showroom -> buy, drive, and repaint a personal car ----
 const pcar = h.cars.find(c => c.personal);
 assert(pcar && pcar.locked, "a personal car starts locked at the garage");
 h.state.money = 99999;
 goto_(pcar.x, pcar.z); run(3); key("KeyB"); run(3);
-assert(!pcar.locked && h.state.cars[pcar.pid] != null, "bought a personal car at the garage");
+assert(h.debug().garage, "showroom panel opens at a personal car");
+h.buyCurrent();
+assert(!pcar.locked && h.state.cars[pcar.pid] != null, "bought a personal car from the showroom");
+h.closeGarage();
 goto_(pcar.x, pcar.z); run(3); key("KeyE"); run(3);
 assert(h.debug().driving, "can drive the bought personal car");
 key("KeyE"); run(3); assert(!h.debug().driving, "exited the personal car");
 goto_(pcar.x, pcar.z); run(3); key("KeyB"); run(3);
-assert(h.debug().garage, "repaint panel opens for an owned car");
+assert(h.debug().garage, "showroom reopens for the owned car");
 h.paint(0x123456);
 assert(h.state.cars[pcar.pid] === 0x123456, "repaint persists the chosen color");
+h.closeGarage();
 
 run(600); // idle robustness: traffic, NPCs, income, day/night, police despawn
 console.log("SMOKE PASS — 12 chapters + economy + palms + wanted + stunts + garage, money:", Math.floor(h.state.money));

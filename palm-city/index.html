@@ -76,7 +76,17 @@
   #garage .gcard { background:rgba(18,24,20,.96); border-radius:18px; padding:18px 20px 16px;
     width:min(420px, 90vw); text-align:center; box-shadow:0 10px 30px rgba(0,0,0,.45); }
   #gtitle { color:#ffc966; font-weight:800; font-size:15px; text-transform:uppercase;
-    letter-spacing:1px; margin-bottom:14px; }
+    letter-spacing:1px; margin-bottom:12px; }
+  #gstats { margin-bottom:14px; }
+  #gstats .grow { display:flex; align-items:center; gap:10px; margin:5px 0; }
+  #gstats .grow span { color:#cfe; font-size:11px; font-weight:700; width:74px; text-align:right;
+    text-transform:uppercase; letter-spacing:.5px; }
+  #gstats .gbar { flex:1; height:9px; border-radius:5px; background:rgba(255,255,255,.14); overflow:hidden; }
+  #gstats .gbar i { display:block; height:100%; border-radius:5px;
+    background:linear-gradient(90deg,#9fe6a0,#ffd166); }
+  #gstats .gperk { margin-top:9px; color:#ffd9a0; font-size:12px; font-weight:700; }
+  #gbuy { font-size:15px; font-weight:800; letter-spacing:1px; border:none; border-radius:24px;
+    padding:11px 34px; background:#9fe6a0; color:#15321b; margin-bottom:14px; }
   #gswatches { display:flex; flex-wrap:wrap; gap:12px; justify-content:center; margin-bottom:16px; }
   #garage .gsw { width:46px; height:46px; border-radius:50%; border:3px solid rgba(255,255,255,.25);
     box-shadow:0 2px 8px rgba(0,0,0,.35); cursor:pointer; }
@@ -100,7 +110,7 @@
   <button id="btnA" class="btn pe"></button>
   <div id="dialogue" class="pe"><div id="dwho"></div><div id="dtext"></div><div id="dhint"></div></div>
   <div id="intro" class="pe"></div>
-  <div id="garage" class="pe"><div class="gcard"><div id="gtitle"></div><div id="gswatches"></div><button id="gdone"></button></div></div>
+  <div id="garage" class="pe"><div class="gcard"><div id="gtitle"></div><div id="gstats"></div><button id="gbuy"></button><div id="gswatches"></div><button id="gdone"></button></div></div>
 </div>
 <div id="dev"></div>
 <script type="module" src="./game.js"></script>
