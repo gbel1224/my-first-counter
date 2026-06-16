@@ -13,6 +13,8 @@
   canvas { display:block; }
   #ui { position:fixed; inset:0; pointer-events:none; }
   .pe { pointer-events:auto; }
+  #flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none;
+    transition:opacity .45s ease-out; mix-blend-mode:screen; }
 
   #topbar { position:absolute; top:env(safe-area-inset-top, 0); left:0; right:0;
     display:flex; align-items:flex-start; padding:10px 12px; gap:10px; }
@@ -124,6 +126,7 @@
 </head>
 <body>
 <div id="ui">
+  <div id="flash"></div>
   <div id="topbar">
     <div id="moneybox"><div id="money"></div><div id="income"></div><div id="palms"></div></div>
     <div id="missionbox"><div id="mtitle"></div><div id="mstep"></div></div>

@@ -554,6 +554,62 @@ const shadowIM = new THREE.InstancedMesh(shadowGeo,
   new THREE.MeshBasicMaterial({ color: 0x33291c, transparent: true, opacity: 0.3, depthWrite: false }), SHADOW_N);
 scene.add(shadowIM);
 
+// ---------- juice: particles (1 draw call), screen shake, haptics, flash ----------
+const PMAXN = 160;
+const pPos = new Float32Array(PMAXN * 3).fill(-9999);
+const pVel = new Float32Array(PMAXN * 3);
+const pCol = new Float32Array(PMAXN * 3);
+const pBase = new Float32Array(PMAXN * 3);
+const pLife = new Float32Array(PMAXN);
+const pTtl = new Float32Array(PMAXN);
+let pHead = 0;
+const partTex = canvasTex(64, (ctx, s) => {           // soft round sprite, built from stacked arcs (no gradients)
+  const c = s / 2;
+  for (let r = c; r > 0; r--) { ctx.globalAlpha = (1 - r / c) * 0.09; ctx.beginPath(); ctx.arc(c, c, r, 0, 7); ctx.fillStyle = "#fff"; ctx.fill(); }
+});
+const pGeo = new THREE.BufferGeometry();
+pGeo.setAttribute("position", new THREE.BufferAttribute(pPos, 3));
+pGeo.setAttribute("color", new THREE.BufferAttribute(pCol, 3));
+const pPoints = new THREE.Points(pGeo, new THREE.PointsMaterial({
+  size: 2.6, map: partTex, vertexColors: true, transparent: true,
+  depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true,
+}));
+pPoints.frustumCulled = false;
+scene.add(pPoints);
+function emit(x, y, z, vx, vy, vz, ttl, r, g, b) {
+  const i = pHead; pHead = (pHead + 1) % PMAXN;
+  pPos[i * 3] = x; pPos[i * 3 + 1] = y; pPos[i * 3 + 2] = z;
+  pVel[i * 3] = vx; pVel[i * 3 + 1] = vy; pVel[i * 3 + 2] = vz;
+  pBase[i * 3] = r; pBase[i * 3 + 1] = g; pBase[i * 3 + 2] = b;
+  pLife[i] = ttl; pTtl[i] = ttl;
+}
+function burst(x, y, z, n, spread, up, ttl, r, g, b) {
+  for (let k = 0; k < n; k++)
+    emit(x, y, z, rr(-spread, spread), rr(up * 0.2, up), rr(-spread, spread), ttl * rr(0.6, 1), r, g, b);
+}
+function updateParticles(dt) {
+  for (let i = 0; i < PMAXN; i++) {
+    if (pLife[i] <= 0) continue;
+    pLife[i] -= dt;
+    if (pLife[i] <= 0) { pPos[i * 3 + 1] = -9999; pCol[i * 3] = pCol[i * 3 + 1] = pCol[i * 3 + 2] = 0; continue; }
+    const t = pLife[i] / pTtl[i];
+    pPos[i * 3] += pVel[i * 3] * dt;
+    pPos[i * 3 + 1] += pVel[i * 3 + 1] * dt;
+    pPos[i * 3 + 2] += pVel[i * 3 + 2] * dt;
+    pVel[i * 3 + 1] -= 3 * dt;                          // gentle gravity
+    pCol[i * 3] = pBase[i * 3] * t;
+    pCol[i * 3 + 1] = pBase[i * 3 + 1] * t;
+    pCol[i * 3 + 2] = pBase[i * 3 + 2] * t;
+  }
+  pGeo.attributes.position.needsUpdate = true;
+  pGeo.attributes.color.needsUpdate = true;
+}
+let shake = 0, colCD = 0, driftCD = 0;
+function addShake(v) { shake = Math.min(1.4, shake + v); }
+function buzz(p) { if (navigator.vibrate) { try { navigator.vibrate(p); } catch (e) {} } }
+const elFlash = dom("flash");
+function flash(color, a) { elFlash.style.background = color; elFlash.style.opacity = a; setTimeout(() => { elFlash.style.opacity = 0; }, 60); }
+
 // ---------- markers ----------
 function makeMarker(color) {
   const g = new THREE.Group();
@@ -602,7 +658,9 @@ function collectPalm(i) {
   palmCollected[i] = true;
   state.palms.push(i);
   state.money += PALM_REWARD;
-  if (palmsGot() === PALMS.length) { state.money += PALM_ALL_BONUS; toast(STR.palmsAll(PALM_ALL_BONUS)); }
+  burst(PALMS[i][0], CURB + 1.5, PALMS[i][1], 16, 1.3, 2.6, 0.6, 0.95, 0.78, 0.22);   // gold sparkle
+  buzz(15);
+  if (palmsGot() === PALMS.length) { state.money += PALM_ALL_BONUS; toast(STR.palmsAll(PALM_ALL_BONUS)); flash("#ffe24a", 0.5); buzz([0, 40, 30, 40, 30, 90]); }
   else toast(STR.palmGot(PALM_REWARD));
   AudioSys.play("cash", 0.9);
   save();
@@ -874,6 +932,7 @@ function updateRace(dt) {
     else if (race.armed && driving) {
       race.stage = "active"; race.ci = at; race.cp = 0; race.t = CIRCUITS[at].limit; race.armed = false;
       toast(STR.raceStart(STR.circuits[CIRCUITS[at].id].name)); AudioSys.play("horn", 0.6);
+      addShake(0.18); buzz(20);
     }
     return;
   }
@@ -892,9 +951,11 @@ function updateRace(dt) {
       state.money += reward;
       toast(isBest ? STR.raceBest(reward, time) : STR.raceWin(reward, time));
       AudioSys.play("jingle", 0.9);
+      addShake(0.4); buzz([0, 30, 30, 30, 30, 90]); flash("#ffe9a0", 0.4);
+      burst(px, 0.4, pz, 18, 2.0, 2.6, 0.7, 0.9, 0.78, 0.3);
       race.stage = "idle"; race.armed = false;
       save();
-    } else AudioSys.play("cash", 0.5);
+    } else { AudioSys.play("cash", 0.5); burst(cp[0], 0.4, cp[1], 8, 1.4, 2.2, 0.5, 0.4, 0.7, 0.9); buzz(12); }
   }
 }
 
@@ -916,6 +977,7 @@ function bust() {
   state.money = Math.max(0, state.money - fine);
   toast(STR.busted(fine));
   AudioSys.play("door", 1);
+  addShake(0.7); buzz([0, 60, 40, 120]); flash("#ff3b3b", 0.42);
   wanted = 0; wantedCD = 0; crimeCD = 0;
   for (const p of police) { p.active = false; p.mesh.position.set(0, -9999, 0); }
   save();
@@ -1034,9 +1096,15 @@ function hitsCollider(x, z, r) {
 function moveWithCollision(o, dx, dz, r) {
   const lim = HALF - 3;
   let nx = clamp(o.x + dx, -lim, lim);
-  if (!hitsCollider(nx, o.z, r)) o.x = nx; else if (driving === o) o.speed *= -0.25;
+  if (!hitsCollider(nx, o.z, r)) o.x = nx; else if (driving === o) { o.speed *= -0.25; carHit(o); }
   let nz = clamp(o.z + dz, -lim, lim);
-  if (!hitsCollider(o.x, nz, r)) o.z = nz; else if (driving === o) o.speed *= -0.25;
+  if (!hitsCollider(o.x, nz, r)) o.z = nz; else if (driving === o) { o.speed *= -0.25; carHit(o); }
+}
+function carHit(o) {
+  if (colCD > 0) return;
+  if (Math.abs(o.speed) < 3) return;                   // ignore gentle nudges
+  colCD = 0.2; addShake(0.22); buzz(12);
+  burst(o.x + Math.sin(o.h) * 2.2, 0.8, o.z + Math.cos(o.h) * 2.2, 5, 1.2, 1.4, 0.4, 0.6, 0.55, 0.4);
 }
 function groundY(x, z) {
   const u = x + HALF, v = z + HALF;
@@ -1450,6 +1518,13 @@ function update(dt) {
     moveWithCollision(c,
       Math.sin(c.h) * c.speed * dt - Math.cos(c.h) * c.lat * dt,
       Math.cos(c.h) * c.speed * dt + Math.sin(c.h) * c.lat * dt, 2.1);
+    // tyre-smoke puffs off the back when the car is sliding
+    driftCD -= dt;
+    if (c.y === 0 && Math.abs(c.lat) > 4.6 && Math.abs(c.speed) > 7 && driftCD <= 0) {
+      driftCD = 0.04;
+      emit(c.x - Math.sin(c.h) * 2.2, 0.3, c.z - Math.cos(c.h) * 2.2,
+        rr(-0.5, 0.5), rr(0.4, 1.0), rr(-0.5, 0.5), 0.55, 0.4, 0.4, 0.44);
+    }
     // stunt ramps + vertical physics
     if (c.rampCD > 0) c.rampCD -= dt;
     if (c.y === 0 && c.rampCD <= 0 && c.speed > 9) {
@@ -1460,6 +1535,8 @@ function update(dt) {
         if (Math.abs(lx) < 3.5 && Math.abs(lz) < 4.5 && Math.cos(c.h - ramp.h) > 0.4) {
           c.vy = 6 + Math.min(c.speed, 26) * 0.4; c.y = 0.02; c.airStart = simTime; c.rampCD = 1.2;
           c.speed *= 1.05;
+          burst(c.x, 0.3, c.z, 8, 1.4, 2.4, 0.5, 0.5, 0.45, 0.34);
+          addShake(0.3); buzz(18);
           break;
         }
       }
@@ -1469,6 +1546,10 @@ function update(dt) {
       if (c.y <= 0) {
         c.y = 0; c.vy = 0;
         const air = simTime - (c.airStart || 0);
+        if (air > 0.2) {
+          burst(c.x, 0.25, c.z, 10, 1.9, 1.5, 0.55, 0.55, 0.48, 0.36);   // landing dust
+          addShake(0.2 + Math.min(0.6, air * 0.5)); buzz(Math.min(60, 18 + (air * 40 | 0)));
+        }
         if (air > 0.35) {
           const bonus = Math.round((40 + air * air * 240) * (c.jumpMult || 1));
           state.money += bonus;
@@ -1625,6 +1706,9 @@ function update(dt) {
   if (vince.visible) put(vince.position.x, CURB, vince.position.z, 0.5); else put(0, -10, 0, 0.01);
   shadowIM.instanceMatrix.needsUpdate = true;
 
+  if (colCD > 0) colCD -= dt;
+  updateParticles(dt);
+
   // camera
   const tx = driving ? driving.x : player.x, tz = driving ? driving.z : player.z;
   const ty = driving ? driving.mesh.position.y : player.y;
@@ -1632,6 +1716,15 @@ function update(dt) {
   tmpP.set(tx - Math.sin(camYaw) * dist, ty + h, tz - Math.cos(camYaw) * dist);
   camPos.lerp(tmpP, 1 - Math.exp(-5 * dt));
   camera.position.copy(camPos);
+  // screen shake (impacts, landings, busts, wins)
+  if (shake > 0) {
+    shake = Math.max(0, shake - dt * 2.4);
+    const s = shake * shake * 0.7;
+    camera.position.x += rr(-s, s); camera.position.y += rr(-s, s) * 0.5; camera.position.z += rr(-s, s);
+  }
+  // speed-based FOV for a sense of velocity while driving
+  const tgtFov = 64 + (driving ? clamp(Math.abs(driving.speed) / 26, 0, 1) * 13 : 0);
+  if (Math.abs(camera.fov - tgtFov) > 0.04) { camera.fov += (tgtFov - camera.fov) * Math.min(1, 8 * dt); camera.updateProjectionMatrix(); }
   _look.set(tx, ty + 1.7, tz);
   camera.lookAt(_look);
 }

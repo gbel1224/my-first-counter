@@ -76,3 +76,11 @@ Current goal + next step always on HUD; minimap shows roads, player heading, obj
 - **Three circuits** (`CIRCUITS`), each with its own checkered start gate, checkpoint loop, time limit and reward: Downtown Loop (central, 52s, $500), Outer Ring (full-city loop, 72s, $800), Harbor Dash (east side, 42s, $400). `updateRace` checks all gates; rolling through any one in freeplay starts that circuit.
 - **Per-circuit best laps**: `state.races` maps circuit id → best lap (single-circuit `bestRace` saves migrate to `{downtown: …}` on load). The progress panel lists each circuit's best lap and a Circuits-won count; all gates show on the minimap.
 - **New achievement**: Triple Crown — set a best lap on all three circuits. Speed Demon now keys off `state.races` (won any circuit).
+
+## v9 (AAA mobile, phase 1 — game feel & juice)
+Goal: make Palm City *feel* premium on a phone without breaking the budget (still 1 extra draw call, zero frame allocations).
+- **Particles**: one `THREE.Points` pool (160, additive, soft arc-built sprite) recycled for tyre smoke while drifting, landing dust off ramps, gold sparkles on Golden Palms, collision debris, and checkpoint/finish bursts.
+- **Camera**: speed-based FOV (64→77 with car speed) for a sense of velocity; positional screen shake on ramp launches, landings (scales with air time), wall hits, busts, and race wins.
+- **Haptics**: `navigator.vibrate` (guarded) on collisions, jumps, busts, palm pickups, race start/checkpoints/wins — distinct patterns per event.
+- **Screen flash**: `#flash` overlay (screen blend) pulses gold on a finish / all-12 palms and red on a bust.
+- All hooks default to no-op off-car / unsupported, so the headless smoke and non-haptic devices are unaffected.
