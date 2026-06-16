@@ -92,3 +92,10 @@ Goal: a premium *look* with no post-processing pipeline (keeps mobile perf). +2 
 - **Sun / moon disc**: an additive sprite aligned with the key light, shifting warm-sun → pale-moon and shrinking at night.
 - **Night neon**: Golden Palm `emissiveIntensity` ramps up with the night factor so collectibles glow after dark.
 - **Vignette**: a CSS `#vignette` overlay (multiply blend) darkens the corners for cinematic framing — zero GPU cost, HUD stays crisp above it.
+
+## v11 (AAA mobile, phase 3 — mobile controls & HUD)
+- **Speedometer / gear dial**: a canvas `#speedo` (arc gauge + needle + KM/H readout + R/N/1/2/3 gear) drawn only while driving, top-right under the minimap.
+- **Dedicated brake**: a `#brake` button (and Space on keyboard) that decelerates then reverses, so you can brake *while* steering with the stick. Throttle stays on the joystick; brake button only shows while driving.
+- **Onboarding legend**: the intro now lists the core controls (move/steer, accelerate, enter car, brake) and the START button gently pulses.
+- **UI motion**: garage/stats cards `pop` in (scale+fade) when opened; pure CSS, no JS or perf cost.
+- Drawing/handlers are render-loop only and no-op under the headless smoke (which never drives the rAF frame).

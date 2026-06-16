@@ -1092,11 +1092,15 @@ addEventListener("pointerup", joyEnd);
 addEventListener("pointercancel", joyEnd);
 document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
 
-const btnA = dom("btnA"), btnB = dom("btnB");
+const btnA = dom("btnA"), btnB = dom("btnB"), brakeBtn = dom("brake");
+let brakeHeld = false;
 btnA.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actA = true; });
 btnB.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actB = true; bHeld = true; });
-addEventListener("pointerup", () => { bHeld = false; });
-addEventListener("pointercancel", () => { bHeld = false; });
+brakeBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); brakeHeld = true; });
+addEventListener("pointerup", () => { bHeld = false; brakeHeld = false; });
+addEventListener("pointercancel", () => { bHeld = false; brakeHeld = false; });
+// keyboard handbrake (Space) while driving
+const braking = () => brakeHeld || (!!driving && keys.has("Space") && !dlgLines);
 
 function readInput() {
   let mx = joyX, mz = joyY;
@@ -1157,7 +1161,29 @@ const _look = new THREE.Vector3();
 const elMoney = dom("money"), elIncome = dom("income"), elTitle = dom("mtitle"), elStep = dom("mstep");
 const elPalms = dom("palms"), elWanted = dom("wanted");
 const mapCtx = dom("minimap").getContext("2d");
+const elSpeedo = dom("speedo"), spCtx = elSpeedo.getContext("2d");
 let lastMoneyShown = -1, lastBtnA = "", lastBtnB = "";
+
+// speedometer / gear dial (drawn while driving)
+function drawSpeedo(spd) {
+  const S = 92, cx = 46, cy = 46, R = 35, a0 = Math.PI * 0.75, a1 = Math.PI * 2.25;
+  spCtx.clearRect(0, 0, S, S);
+  spCtx.fillStyle = "rgba(20,28,24,.82)"; spCtx.beginPath(); spCtx.arc(cx, cy, 44, 0, 7); spCtx.fill();
+  spCtx.lineCap = "round";
+  spCtx.lineWidth = 5; spCtx.strokeStyle = "rgba(255,255,255,.15)";
+  spCtx.beginPath(); spCtx.arc(cx, cy, R, a0, a1); spCtx.stroke();
+  const kmh = Math.min(220, Math.abs(spd) * 5.5), f = kmh / 220;
+  spCtx.strokeStyle = f > 0.8 ? "#ff5b5b" : "#9fe6a0";
+  spCtx.beginPath(); spCtx.arc(cx, cy, R, a0, a0 + (a1 - a0) * f); spCtx.stroke();
+  const na = a0 + (a1 - a0) * f;
+  spCtx.strokeStyle = "#ffd166"; spCtx.lineWidth = 2.5;
+  spCtx.beginPath(); spCtx.moveTo(cx, cy); spCtx.lineTo(cx + Math.cos(na) * R * 0.86, cy + Math.sin(na) * R * 0.86); spCtx.stroke();
+  spCtx.textAlign = "center";
+  spCtx.fillStyle = "#fff"; spCtx.font = "bold 17px sans-serif"; spCtx.fillText(Math.round(kmh), cx, cy + 4);
+  spCtx.fillStyle = "#9fe6a0"; spCtx.font = "bold 8px sans-serif"; spCtx.fillText("KM/H", cx, cy + 14);
+  const gear = spd < -0.5 ? "R" : Math.abs(spd) < 0.5 ? "N" : Math.abs(spd) < 9 ? "1" : Math.abs(spd) < 18 ? "2" : "3";
+  spCtx.fillStyle = "#ffd166"; spCtx.font = "bold 12px sans-serif"; spCtx.fillText(gear, cx, cy - 13);
+}
 
 function nearestCar() {
   let best = null, bd = 25;
@@ -1257,6 +1283,12 @@ function updateHUD() {
     }
   }
   if (b !== lastBtnB) { btnB.style.display = b ? "block" : "none"; btnB.textContent = b; lastBtnB = b; }
+
+  // brake button + speedometer: only while driving
+  const drive = driving && !dlgLines && !garageOpen && !statsOpen;
+  brakeBtn.style.display = drive ? "block" : "none";
+  if (drive) { elSpeedo.style.display = "block"; drawSpeedo(driving.speed); }
+  else if (elSpeedo.style.display !== "none") elSpeedo.style.display = "none";
 }
 
 function drawMinimap(t) {
@@ -1322,10 +1354,12 @@ function buildIntro() {
   const tag = document.createElement("div"); tag.className = "tag"; tag.textContent = STR.tagline;
   const blurb = document.createElement("div"); blurb.className = "blurb"; blurb.textContent = STR.introBlurb;
   const hint = document.createElement("div"); hint.className = "hint"; hint.textContent = STR.controlsHint;
+  const legend = document.createElement("div"); legend.className = "legend";
+  legend.innerHTML = STR.legend.map(s => "<span>" + s + "</span>").join("");
   const start = document.createElement("button");
   start.textContent = hasSave ? STR.continueGame : STR.start;
   start.addEventListener("click", () => beginPlay());
-  elIntro.append(h1, tag, blurb, start, hint);
+  elIntro.append(h1, tag, blurb, legend, start, hint);
   if (hasSave) {
     const reset = document.createElement("button");
     reset.className = "secondary"; reset.textContent = STR.newGame;
@@ -1538,12 +1572,13 @@ function update(dt) {
 
   if (driving) {
     const c = driving;
-    // throttle / brake
-    const accel = inp.mz > 0 ? (c.accel || 13) * inp.mz : 0;
-    const brake = inp.mz < 0 ? 22 * -inp.mz : 0;
+    // throttle / brake — dedicated brake button (or Space) decelerates then reverses
+    const brakeAmt = braking() ? 1 : (inp.mz < 0 ? -inp.mz : 0);
+    const accel = (inp.mz > 0 && !braking()) ? (c.accel || 13) * inp.mz : 0;
+    const brake = brakeAmt > 0 ? 22 * brakeAmt : 0;
     c.speed += accel * dt;
     if (brake) c.speed = c.speed > 0 ? Math.max(0, c.speed - brake * dt) : Math.max(-8, c.speed - 6 * dt);
-    if (inp.mz < 0 && c.speed <= 0) c.speed = Math.max(-8, c.speed - 8 * dt);
+    if (brakeAmt > 0 && c.speed <= 0) c.speed = Math.max(-8, c.speed - 8 * dt);
     c.speed -= c.speed * 0.6 * dt;                                  // drag
     c.speed = clamp(c.speed, -8, c.top || 26);
     const dir = c.speed >= 0 ? 1 : -1;
