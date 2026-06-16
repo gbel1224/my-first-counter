@@ -1620,7 +1620,8 @@ function doActionB() {
 
 // ---------- simulation ----------
 const tmpM = new THREE.Matrix4(), tmpP = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpS = new THREE.Vector3(1, 1, 1);
-let simTime = 0, achTimer = 1;
+let simTime = 0, achTimer = 1, sprintT = 0;
+const SPRINT_RAMP = 2.5;   // seconds of holding sprint to reach top running speed
 
 function update(dt) {
   simTime += dt;
@@ -1697,8 +1698,11 @@ function update(dt) {
     const r = { x: -Math.cos(camYaw), z: Math.sin(camYaw) };
     const wx = f.x * inp.mz + r.x * inp.mx, wz = f.z * inp.mz + r.z * inp.mx;
     const mag = inp.mag;
-    const sprint = bHeld || keys.has("ShiftLeft") || keys.has("ShiftRight");
-    const speed = (mag > 0.72 ? 6.4 : mag * 4.6) * (sprint ? 1.32 : 1);
+    const sprint = (bHeld || keys.has("ShiftLeft") || keys.has("ShiftRight")) && mag > 0.01;
+    // hold sprint longer to build up speed: charge ramps 0->1 over SPRINT_RAMP s, decays faster when released
+    sprintT = clamp(sprint ? sprintT + dt : sprintT - dt * 2.5, 0, SPRINT_RAMP);
+    const sprintMul = 1 + (sprint ? 0.32 + (sprintT / SPRINT_RAMP) * 0.63 : 0);   // 1.0 walk -> 1.32 -> ~1.95 at full charge
+    const speed = (mag > 0.72 ? 6.4 : mag * 4.6) * sprintMul;
     player.speed = speed;
     if (mag > 0.01) {
       const len = Math.hypot(wx, wz) || 1;
