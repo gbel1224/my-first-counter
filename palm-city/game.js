@@ -1446,6 +1446,7 @@ function applyPaint(hex) {
     sw.appendChild(dot);
   }
   const done = dom("gdone"); done.textContent = STR.garageDone; done.addEventListener("click", closeGarage);
+  dom("gx").addEventListener("click", closeGarage);
   dom("gbuy").addEventListener("click", buyCurrent);
 }
 function renderShowroom() {
@@ -1539,6 +1540,7 @@ function openStats() { statsOpen = true; renderStats(); elStats.style.display = 
 function closeStats() { statsOpen = false; elStats.style.display = "none"; }
 dom("statsbtn").addEventListener("click", () => { if (state.phase === "play" && !dlgLines) openStats(); });
 dom("stclose").addEventListener("click", closeStats);
+dom("stx").addEventListener("click", closeStats);
 dom("stclose").textContent = STR.statsClose;
 {
   const bb = dom("stbloom");
