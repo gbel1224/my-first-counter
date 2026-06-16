@@ -91,6 +91,15 @@ sunSprite.scale.set(70, 70, 1);
 scene.add(sunSprite);
 const SUN_DAY = new THREE.Color(0xfff2c0), SUN_NIGHT = new THREE.Color(0xcdd8f2);
 
+// neon glow cloud (fake bloom) — additive sprites at landmarks/signs, lit by the night factor
+let glowGeo = null, glowBase = null, glowCol = null;
+function setGlow(night) {
+  if (!glowGeo) return;
+  const g = Math.max(0, (night - 0.15) / 0.85);   // off by day, full at night
+  for (let i = 0; i < glowCol.length; i++) glowCol[i] = glowBase[i] * g;
+  glowGeo.attributes.color.needsUpdate = true;
+}
+
 // day/night cycle (4 min): warm day -> dusk -> night -> dawn
 const ENV_KEYS = [
   { t: 0.00, sky: new THREE.Color(0xf7c98e), top: new THREE.Color(0x4a90d9), sun: 1.7, hemi: 1.05, far: 420, night: 0.0 },
@@ -119,6 +128,7 @@ function envUpdate() {
   skyUniforms.topColor.value.copy(_top.lerpColors(a.top, b.top, k));
   const night = a.night + (b.night - a.night) * k;
   palmIM.material.emissiveIntensity = 1 + night * 1.7;          // Golden Palms glow at night
+  setGlow(night);
   sunSprite.material.color.copy(_sunCol.lerpColors(SUN_DAY, SUN_NIGHT, night));
   const sc = 70 - night * 24;
   sunSprite.scale.set(sc, sc, 1);
@@ -456,7 +466,7 @@ const carGeo = mergeGeos([
 ]);
 const CAR_COLORS = [0xe8543f, 0x3f7fe8, 0xf0c040, 0x58b368, 0xc25cd6, 0xe8e4da, 0xff8c42];
 function makeCar(color) {
-  const mesh = new THREE.Mesh(carGeo, new THREE.MeshLambertMaterial({ vertexColors: true, color }));
+  const mesh = new THREE.Mesh(carGeo, new THREE.MeshPhongMaterial({ vertexColors: true, color, shininess: 55, specular: 0x444444 }));   // glossy paint highlights
   scene.add(mesh);
   return mesh;
 }
@@ -957,6 +967,32 @@ let race = { stage: "idle", ci: -1, cp: 0, t: 0, armed: true };  // idle | activ
     g.position.set(C.start.x, CURB, C.start.z);
     scene.add(g);
   }
+}
+// build the neon glow cloud at landmark/sign positions (declared near the sky setup)
+{
+  const NEON = { club: [0.95, 0.35, 0.9], dogs: [0.95, 0.7, 0.3], wash: [0.4, 0.7, 0.95],
+    burger: [0.95, 0.45, 0.3], taxi: [0.95, 0.82, 0.3], marina: [0.4, 0.8, 0.85] };
+  const pts = [];   // [x, y, z, r, g, b]
+  for (const b of BIZ) { const c = NEON[b.id] || [0.9, 0.8, 0.5]; pts.push([b.x, b.ly + 1, b.z, c[0], c[1], c[2]]); }
+  pts.push([PLAZA.x, 3.4, PLAZA.z, 0.7, 0.85, 0.95]);                 // fountain
+  pts.push([GARAGE.x, 5, GARAGE.z, 0.4, 0.85, 0.95]);                 // garage sign
+  for (const C of CIRCUITS) pts.push([C.start.x, 4.4, C.start.z, 0.95, 0.95, 0.95]);  // race gates
+  const gpos = new Float32Array(pts.length * 3);
+  glowBase = new Float32Array(pts.length * 3);
+  glowCol = new Float32Array(pts.length * 3);
+  pts.forEach((p, i) => {
+    gpos[i * 3] = p[0]; gpos[i * 3 + 1] = p[1]; gpos[i * 3 + 2] = p[2];
+    glowBase[i * 3] = p[3]; glowBase[i * 3 + 1] = p[4]; glowBase[i * 3 + 2] = p[5];
+  });
+  glowGeo = new THREE.BufferGeometry();
+  glowGeo.setAttribute("position", new THREE.BufferAttribute(gpos, 3));
+  glowGeo.setAttribute("color", new THREE.BufferAttribute(glowCol, 3));
+  const glow = new THREE.Points(glowGeo, new THREE.PointsMaterial({
+    size: 13, map: partTex, vertexColors: true, transparent: true,
+    depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true,
+  }));
+  glow.frustumCulled = false;
+  scene.add(glow);
 }
 function updateRace(dt) {
   if (state.mi < M.length || dlgLines) return;     // freeplay only

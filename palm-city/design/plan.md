@@ -114,3 +114,9 @@ Goal: a premium *look* with no post-processing pipeline (keeps mobile perf). +2 
 - **Dev HUD**: `?dev=1` now also shows the live pixel-ratio multiplier next to fps / draw calls / triangles.
 
 This completes the 5-phase "AAA for mobile" pass (juice → visuals → controls/HUD → audio → performance).
+
+## v14 (visual pass 2 — glow & gloss)
+- **Vignette fix**: the v10 vignette used `mix-blend-mode:multiply`, but the canvas sits outside the `#ui` stacking context so iOS Safari painted its white center as an opaque wash over the game. Replaced with a normal transparent-centre / dark-edge radial gradient (no blend mode); same fix applied to `#flash`.
+- **Neon glow cloud (fake bloom)**: one additive `THREE.Points` cloud at landmark/sign positions (each business sign with a themed colour, the club magenta, plaza, garage, race gates) whose brightness is driven by the night factor — signs bloom after dark, fully off by day. 1 draw call, smoke-safe (no post-processing composer, which would risk a black screen on a blind deploy).
+- **Glossy cars**: car paint switched from Lambert to `MeshPhongMaterial` (shininess 55) so highlights track the sun/moon — a premium daytime read. Repaint still drives `material.color`.
+- Deliberately avoided a real UnrealBloom composer here to stay robust/60fps and un-black-screenable; it remains an opt-in follow-up.
