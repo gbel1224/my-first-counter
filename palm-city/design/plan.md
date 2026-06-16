@@ -99,3 +99,11 @@ Goal: a premium *look* with no post-processing pipeline (keeps mobile perf). +2 
 - **Onboarding legend**: the intro now lists the core controls (move/steer, accelerate, enter car, brake) and the START button gently pulses.
 - **UI motion**: garage/stats cards `pop` in (scale+fade) when opened; pure CSS, no JS or perf cost.
 - Drawing/handlers are render-loop only and no-op under the headless smoke (which never drives the rAF frame).
+
+## v12 (AAA mobile, phase 4 — audio depth)
+- **Master compressor**: all buses (music/sfx/engine/skid) route through a `DynamicsCompressor` for glue and no clipping.
+- **RPM engine**: a lowpass filter that opens with speed plus gain that rises with revs, on top of the existing pitch-by-speed — a fuller, more responsive engine.
+- **Dynamic music**: `AudioSys.intensity(x)` lifts music volume, brightness (lowpass cutoff) and tempo as on-screen intensity rises; the game feeds it `wanted/3` + a race bump, so the track swells during chases and races.
+- **Tyre skid**: a synthesized white-noise→bandpass layer (`AudioSys.skid`) whose gain tracks drift `lat`, so hard cornering screeches.
+- **SFX variety**: cash pickups get a small random pitch so repeats don't feel robotic.
+- All additions fail silent without WebAudio, so the headless smoke (no `AudioContext`) is unaffected.

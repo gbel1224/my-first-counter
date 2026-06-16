@@ -1710,6 +1710,9 @@ function update(dt) {
     }
   }
   AudioSys.engine(driving ? Math.abs(driving.speed) : 0);
+  // dynamic music swells during a chase or a race; tyre-skid noise tracks drift
+  AudioSys.intensity(Math.min(1, heatActive() / 3 * 0.8 + (race.stage === "active" ? 0.5 : 0)));
+  AudioSys.skid(driving && driving.y === 0 ? Math.max(0, (Math.abs(driving.lat) - 3) / 9) : 0);
   updateMissions(dt);
   updateSideJob();
   updateRace(dt);
