@@ -730,6 +730,7 @@ const state = {
   palms: [],
   bestJump: 0,
   races: {},             // best lap per circuit id (seconds)
+  medals: {},            // best medal tier per circuit id (1 bronze / 2 silver / 3 gold)
   maxMoney: 0,           // high-water cash mark (for the Tycoon achievement)
   ach: [],               // unlocked achievement ids
   mi: 0,                 // mission index; 8 = story complete
@@ -737,7 +738,7 @@ const state = {
 };
 function save() {
   state.maxMoney = Math.max(state.maxMoney || 0, Math.floor(state.money));
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, maxMoney: state.maxMoney || 0, ach: state.ach, mi: state.mi })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, ach: state.ach, mi: state.mi })); } catch (e) {}
 }
 function load() {
   try {
@@ -748,6 +749,7 @@ function load() {
       state.palms = d.palms || [];
       state.bestJump = d.bestJump || 0;
       state.races = d.races || (d.bestRace ? { downtown: d.bestRace } : {});   // migrate single-circuit saves
+      state.medals = d.medals || {};
       state.maxMoney = d.maxMoney || 0;
       state.ach = d.ach || [];
       for (const k in state.owned) if (state.owned[k] === true) state.owned[k] = 1; // pre-upgrade saves
@@ -958,6 +960,9 @@ const CIRCUITS = [
     cps: [[roadC(6), roadC(3)], [roadC(6), roadC(5)], [roadC(4), roadC(5)], [roadC(4), roadC(3)]] },
 ];
 const RACE_BEST_BONUS = 300, RACE_CP_R = 9;
+const MEDAL_BONUS = [0, 200, 500, 1000];   // bronze / silver / gold cash on first reaching a tier
+const medalFor = (C, t) => t <= C.limit * 0.5 ? 3 : t <= C.limit * 0.65 ? 2 : t <= C.limit * 0.82 ? 1 : 0;
+const goldTime = C => C.limit * 0.5;
 let race = { stage: "idle", ci: -1, cp: 0, t: 0, armed: true };  // idle | active
 {
   const post = new THREE.BoxGeometry(0.6, 4, 0.6);
@@ -1029,8 +1034,12 @@ function updateRace(dt) {
       const prev = state.races[C.id] || 0;
       const isBest = !prev || time < prev;
       if (isBest) { reward += RACE_BEST_BONUS; state.races[C.id] = time; }
+      const tier = medalFor(C, time), prevTier = state.medals[C.id] || 0;
+      const newMedal = tier > prevTier;
+      if (newMedal) { state.medals[C.id] = tier; reward += MEDAL_BONUS[tier]; }
       state.money += reward;
-      toast(isBest ? STR.raceBest(reward, time) : STR.raceWin(reward, time));
+      toast(newMedal ? STR.medalGot(STR.circuits[C.id].name, tier) + STR.reward(reward)
+                     : (isBest ? STR.raceBest(reward, time) : STR.raceWin(reward, time)));
       AudioSys.play("jingle", 0.9);
       addShake(0.4); buzz([0, 30, 30, 30, 30, 90]); flash("#ffe9a0", 0.4);
       burst(px, 0.4, pz, 18, 2.0, 2.6, 0.7, 0.9, 0.78, 0.3);
@@ -1268,7 +1277,7 @@ function currentObjective() {
   if (state.mi >= M.length) {
     if (race.stage === "active") {
       const C = CIRCUITS[race.ci], cp = C.cps[race.cp];
-      return { title: STR.raceTitle + " · " + STR.circuits[C.id].name, text: STR.raceProgress(race.cp + 1, C.cps.length) + " · " + STR.raceTimer(Math.ceil(race.t)), x: cp[0], z: cp[1] };
+      return { title: STR.raceTitle + " · " + STR.circuits[C.id].name, text: STR.raceProgress(race.cp + 1, C.cps.length) + " · " + STR.raceTimer(Math.ceil(race.t)) + " · " + STR.goldTarget(goldTime(C)), x: cp[0], z: cp[1] };
     }
     if (side.stage === "carry") return { title: STR.freeplay, text: STR.sideJobGo, x: side.x, z: side.z };
     if (sideUnlocked()) return { title: STR.freeplay, text: STR.sideJobAt, x: DEPOT.x, z: DEPOT.z };
@@ -1505,6 +1514,7 @@ const ACH = [
   { id: "jump1",   done: () => (state.bestJump || 0) >= 1.0 },
   { id: "race1",   done: () => Object.keys(state.races).length > 0 },
   { id: "crown",   done: () => CIRCUITS.every(c => (state.races[c.id] || 0) > 0) },
+  { id: "goldrush", done: () => CIRCUITS.every(c => (state.medals[c.id] || 0) >= 3) },
   { id: "tycoon",  done: () => (state.maxMoney || 0) >= 50000 },
   { id: "story",   done: () => state.mi >= M.length },
 ];
@@ -1535,7 +1545,7 @@ function renderStats() {
     "</div>";
   html += '<div class="shead">' + STR.statBestLaps + "</div>";
   html += '<div class="sgrid">';
-  for (const C of CIRCUITS) html += cell(STR.circuits[C.id].name, STR.statSeconds(state.races[C.id] || 0));
+  for (const C of CIRCUITS) html += cell(STR.medalEmoji(state.medals[C.id] || 0) + " " + STR.circuits[C.id].name, STR.statSeconds(state.races[C.id] || 0));
   html += "</div>";
   html += '<div class="shead">' + STR.achHeader + " · " + state.ach.length + "/" + ACH.length + "</div>";
   for (const a of ACH) {

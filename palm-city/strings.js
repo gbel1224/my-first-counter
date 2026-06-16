@@ -54,6 +54,9 @@ export const STR = {
   raceWin: (reward, time) => "Race won! +$" + reward + " · " + time.toFixed(1) + "s",
   raceBest: (reward, time) => "New best lap " + time.toFixed(1) + "s! +$" + reward,
   raceTimeout: "Out of time! Roll through the gate to retry.",
+  medalGot: (name, tier) => ["", "🥉 Bronze", "🥈 Silver", "🥇 Gold"][tier] + " medal — " + name + "! ",
+  medalEmoji: tier => ["", "🥉", "🥈", "🥇"][tier] || "",
+  goldTarget: s => "🥇 " + Math.ceil(s) + "s",
 
   statsTitle: "PROGRESS",
   statsClose: "RESUME",
@@ -76,6 +79,7 @@ export const STR = {
     jump1:   { name: "Daredevil",       desc: "Land a 1.0s+ stunt jump" },
     race1:   { name: "Speed Demon",     desc: "Win a street race" },
     crown:   { name: "Triple Crown",    desc: "Set a best lap on all 3 circuits" },
+    goldrush: { name: "Gold Rush",      desc: "Earn a gold medal on all 3 circuits" },
     tycoon:  { name: "Palm City Tycoon", desc: "Bank $50,000" },
     story:   { name: "King of the City", desc: "Finish the 12-chapter story" },
   },
