@@ -208,7 +208,7 @@ const moneyPreRace = h.state.money;
 gotoCar(88, 88); run(3); gotoCar(88, -88); run(3); gotoCar(-88, -88); run(3); gotoCar(-88, 88); run(3);
 assert(h.debug().race === "idle", "street race finished");
 assert(h.state.money > moneyPreRace, "street race paid a reward");
-assert(h.state.bestRace > 0, "best lap time was recorded");
+assert(h.state.races.downtown > 0, "best lap time was recorded for the Downtown Loop");
 
 gotoCar(0, 0); run(3); gotoCar(-88, 88); run(3);
 assert(h.debug().race === "active", "street race re-armed and restarted");

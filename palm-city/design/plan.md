@@ -71,3 +71,8 @@ Current goal + next step always on HUD; minimap shows roads, player heading, obj
 - **Progress panel**: a 🏆 HUD button opens a pause panel (input gated like dialogue) with a stat dashboard — cash, businesses x/6, personal cars x/3, Golden Palms x/12, best stunt jump, best lap — plus a New Game reset folded in (settings/pause gap from the known-limits list, now closed).
 - **8 achievements**, all derived from existing state (`ACH` list): First Wheels, Car Collector, Property Mogul, Palm Hunter, Daredevil (1.0s+ jump), Speed Demon (win a race), Palm City Tycoon ($50k high-water via `state.maxMoney`), King of the City (finish the story). Unlocked ids persist in `state.ach`.
 - **Live unlocks**: `refreshAch` runs once a second; newly-earned achievements toast + jingle and save immediately. On load, earned achievements are seeded silently so old saves don't re-announce.
+
+## v8 (Multiple race circuits)
+- **Three circuits** (`CIRCUITS`), each with its own checkered start gate, checkpoint loop, time limit and reward: Downtown Loop (central, 52s, $500), Outer Ring (full-city loop, 72s, $800), Harbor Dash (east side, 42s, $400). `updateRace` checks all gates; rolling through any one in freeplay starts that circuit.
+- **Per-circuit best laps**: `state.races` maps circuit id → best lap (single-circuit `bestRace` saves migrate to `{downtown: …}` on load). The progress panel lists each circuit's best lap and a Circuits-won count; all gates show on the minimap.
+- **New achievement**: Triple Crown — set a best lap on all three circuits. Speed Demon now keys off `state.races` (won any circuit).

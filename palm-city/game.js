@@ -616,7 +616,7 @@ const state = {
   cars: {},              // owned personal cars: pid -> chosen paint color (hex)
   palms: [],
   bestJump: 0,
-  bestRace: 0,           // best street-race lap time in seconds (0 = none yet)
+  races: {},             // best lap per circuit id (seconds)
   maxMoney: 0,           // high-water cash mark (for the Tycoon achievement)
   ach: [],               // unlocked achievement ids
   mi: 0,                 // mission index; 8 = story complete
@@ -624,7 +624,7 @@ const state = {
 };
 function save() {
   state.maxMoney = Math.max(state.maxMoney || 0, Math.floor(state.money));
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, palms: state.palms, bestJump: state.bestJump || 0, bestRace: state.bestRace || 0, maxMoney: state.maxMoney || 0, ach: state.ach, mi: state.mi })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, maxMoney: state.maxMoney || 0, ach: state.ach, mi: state.mi })); } catch (e) {}
 }
 function load() {
   try {
@@ -634,7 +634,7 @@ function load() {
       state.cars = d.cars || {};
       state.palms = d.palms || [];
       state.bestJump = d.bestJump || 0;
-      state.bestRace = d.bestRace || 0;
+      state.races = d.races || (d.bestRace ? { downtown: d.bestRace } : {});   // migrate single-circuit saves
       state.maxMoney = d.maxMoney || 0;
       state.ach = d.ach || [];
       for (const k in state.owned) if (state.owned[k] === true) state.owned[k] = 1; // pre-upgrade saves
@@ -835,50 +835,60 @@ function updateSideJob() {
 }
 
 // ---------- street races (freeplay) ----------
-const RACE_START = { x: roadC(2), z: roadC(4) };   // (-88, 88) road intersection
-const RACE_CPS = [
-  [roadC(4), roadC(4)],   // ( 88,  88)
-  [roadC(4), roadC(2)],   // ( 88, -88)
-  [roadC(2), roadC(2)],   // (-88, -88)
-  [roadC(2), roadC(4)],   // (-88,  88) — finish, back at the gate
+// Multiple circuits, each with its own checkered start gate, time limit, reward and best lap.
+const CIRCUITS = [
+  { id: "downtown", start: { x: roadC(2), z: roadC(4) }, limit: 52, reward: 500,
+    cps: [[roadC(4), roadC(4)], [roadC(4), roadC(2)], [roadC(2), roadC(2)], [roadC(2), roadC(4)]] },
+  { id: "outer", start: { x: roadC(1), z: roadC(1) }, limit: 72, reward: 800,
+    cps: [[roadC(5), roadC(1)], [roadC(5), roadC(5)], [roadC(1), roadC(5)], [roadC(1), roadC(1)]] },
+  { id: "harbor", start: { x: roadC(4), z: roadC(3) }, limit: 42, reward: 400,
+    cps: [[roadC(6), roadC(3)], [roadC(6), roadC(5)], [roadC(4), roadC(5)], [roadC(4), roadC(3)]] },
 ];
-const RACE_LIMIT = 52, RACE_BASE = 500, RACE_BEST_BONUS = 300, RACE_CP_R = 9;
-let race = { stage: "idle", cp: 0, t: 0, armed: false };  // idle | active
+const RACE_BEST_BONUS = 300, RACE_CP_R = 9;
+let race = { stage: "idle", ci: -1, cp: 0, t: 0, armed: true };  // idle | active
 {
-  const g = new THREE.Group();
   const post = new THREE.BoxGeometry(0.6, 4, 0.6);
   const matW = new THREE.MeshLambertMaterial({ color: 0xf2f2f2 });
-  const p1 = new THREE.Mesh(post, matW); p1.position.set(-3.4, 2, 0);
-  const p2 = new THREE.Mesh(post, matW); p2.position.set(3.4, 2, 0);
-  const banner = new THREE.Mesh(new THREE.BoxGeometry(7.4, 0.9, 0.3),
-    new THREE.MeshLambertMaterial({ color: 0x1c1c1c }));
-  banner.position.set(0, 4.1, 0);
-  g.add(p1, p2, banner);
-  g.position.set(RACE_START.x, CURB, RACE_START.z);
-  scene.add(g);
+  const matB = new THREE.MeshLambertMaterial({ color: 0x1c1c1c });
+  for (const C of CIRCUITS) {
+    const g = new THREE.Group();
+    const p1 = new THREE.Mesh(post, matW); p1.position.set(-3.4, 2, 0);
+    const p2 = new THREE.Mesh(post, matW); p2.position.set(3.4, 2, 0);
+    const banner = new THREE.Mesh(new THREE.BoxGeometry(7.4, 0.9, 0.3), matB);
+    banner.position.set(0, 4.1, 0);
+    g.add(p1, p2, banner);
+    g.position.set(C.start.x, CURB, C.start.z);
+    scene.add(g);
+  }
 }
 function updateRace(dt) {
   if (state.mi < M.length || dlgLines) return;     // freeplay only
   const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
   if (race.stage === "idle") {
-    const atGate = dist2(px, pz, RACE_START.x, RACE_START.z) < RACE_CP_R * RACE_CP_R;
-    if (!atGate) race.armed = true;                // leave the gate to re-arm
+    let at = -1;
+    for (let i = 0; i < CIRCUITS.length; i++) {
+      const s = CIRCUITS[i].start;
+      if (dist2(px, pz, s.x, s.z) < RACE_CP_R * RACE_CP_R) { at = i; break; }
+    }
+    if (at < 0) race.armed = true;                 // leave every gate to re-arm
     else if (race.armed && driving) {
-      race.stage = "active"; race.cp = 0; race.t = RACE_LIMIT; race.armed = false;
-      toast(STR.raceStart); AudioSys.play("horn", 0.6);
+      race.stage = "active"; race.ci = at; race.cp = 0; race.t = CIRCUITS[at].limit; race.armed = false;
+      toast(STR.raceStart(STR.circuits[CIRCUITS[at].id].name)); AudioSys.play("horn", 0.6);
     }
     return;
   }
+  const C = CIRCUITS[race.ci];
   race.t -= dt;
   if (race.t <= 0) { race.stage = "idle"; toast(STR.raceTimeout); return; }
-  const cp = RACE_CPS[race.cp];
+  const cp = C.cps[race.cp];
   if (driving && dist2(px, pz, cp[0], cp[1]) < RACE_CP_R * RACE_CP_R) {
     race.cp++;
-    if (race.cp >= RACE_CPS.length) {
-      const time = RACE_LIMIT - race.t;
-      let reward = RACE_BASE;
-      const isBest = !state.bestRace || time < state.bestRace;
-      if (isBest) { reward += RACE_BEST_BONUS; state.bestRace = time; }
+    if (race.cp >= C.cps.length) {
+      const time = C.limit - race.t;
+      let reward = C.reward;
+      const prev = state.races[C.id] || 0;
+      const isBest = !prev || time < prev;
+      if (isBest) { reward += RACE_BEST_BONUS; state.races[C.id] = time; }
       state.money += reward;
       toast(isBest ? STR.raceBest(reward, time) : STR.raceWin(reward, time));
       AudioSys.play("jingle", 0.9);
@@ -1082,8 +1092,8 @@ function currentObjective() {
   }
   if (state.mi >= M.length) {
     if (race.stage === "active") {
-      const cp = RACE_CPS[race.cp];
-      return { title: STR.raceTitle, text: STR.raceProgress(race.cp + 1, RACE_CPS.length) + " · " + STR.raceTimer(Math.ceil(race.t)), x: cp[0], z: cp[1] };
+      const C = CIRCUITS[race.ci], cp = C.cps[race.cp];
+      return { title: STR.raceTitle + " · " + STR.circuits[C.id].name, text: STR.raceProgress(race.cp + 1, C.cps.length) + " · " + STR.raceTimer(Math.ceil(race.t)), x: cp[0], z: cp[1] };
     }
     if (side.stage === "carry") return { title: STR.freeplay, text: STR.sideJobGo, x: side.x, z: side.z };
     if (sideUnlocked()) return { title: STR.freeplay, text: STR.sideJobAt, x: DEPOT.x, z: DEPOT.z };
@@ -1170,10 +1180,11 @@ function drawMinimap(t) {
   for (const c of cars) if (c.personal && !c.locked) {
     mapCtx.beginPath(); mapCtx.arc((c.x + HALF) * sc, (c.z + HALF) * sc, 2.5, 0, 7); mapCtx.fill();
   }
-  // street-race start gate (white, freeplay only)
+  // street-race start gates (white, freeplay only)
   if (state.mi >= M.length) {
     mapCtx.fillStyle = "#ffffff";
-    mapCtx.fillRect((RACE_START.x + HALF) * sc - 2.5, (RACE_START.z + HALF) * sc - 2.5, 5, 5);
+    for (const C of CIRCUITS)
+      mapCtx.fillRect((C.start.x + HALF) * sc - 2.5, (C.start.z + HALF) * sc - 2.5, 5, 5);
   }
   mapCtx.fillStyle = "#ffe24a";
   for (let i = 0; i < PALMS.length; i++) {
@@ -1299,10 +1310,12 @@ const ACH = [
   { id: "biz6",    done: () => ownedBizCount() >= BIZ.length },
   { id: "palms12", done: () => palmsGot() >= PALMS.length },
   { id: "jump1",   done: () => (state.bestJump || 0) >= 1.0 },
-  { id: "race1",   done: () => (state.bestRace || 0) > 0 },
+  { id: "race1",   done: () => Object.keys(state.races).length > 0 },
+  { id: "crown",   done: () => CIRCUITS.every(c => (state.races[c.id] || 0) > 0) },
   { id: "tycoon",  done: () => (state.maxMoney || 0) >= 50000 },
   { id: "story",   done: () => state.mi >= M.length },
 ];
+const bestLap = () => { let b = 0; for (const k in state.races) { const v = state.races[k]; if (v > 0 && (!b || v < b)) b = v; } return b; };
 function refreshAch(announce) {
   let changed = false;
   for (const a of ACH) {
@@ -1325,8 +1338,12 @@ function renderStats() {
     cell(STR.statCars, ownedCarCount() + "/" + PCARS.length) +
     cell(STR.statPalms, palmsGot() + "/" + PALMS.length) +
     cell(STR.statJump, STR.statJumpVal(state.bestJump || 0)) +
-    cell(STR.statLap, STR.statSeconds(state.bestRace || 0)) +
+    cell(STR.statRacesWon, Object.keys(state.races).length + "/" + CIRCUITS.length) +
     "</div>";
+  html += '<div class="shead">' + STR.statBestLaps + "</div>";
+  html += '<div class="sgrid">';
+  for (const C of CIRCUITS) html += cell(STR.circuits[C.id].name, STR.statSeconds(state.races[C.id] || 0));
+  html += "</div>";
   html += '<div class="shead">' + STR.achHeader + " · " + state.ach.length + "/" + ACH.length + "</div>";
   for (const a of ACH) {
     const on = state.ach.includes(a.id);

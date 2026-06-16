@@ -41,8 +41,13 @@ export const STR = {
   raceFail: "Too slow! Back to the start line…",
 
   raceTitle: "STREET RACE",
-  raceStart: "Street race! Hit the checkpoints!",
+  raceStart: name => name + " — hit the checkpoints!",
   raceProgress: (n, t) => "Checkpoint " + n + "/" + t,
+  circuits: {
+    downtown: { name: "Downtown Loop" },
+    outer:    { name: "Outer Ring" },
+    harbor:   { name: "Harbor Dash" },
+  },
   raceWin: (reward, time) => "Race won! +$" + reward + " · " + time.toFixed(1) + "s",
   raceBest: (reward, time) => "New best lap " + time.toFixed(1) + "s! +$" + reward,
   raceTimeout: "Out of time! Roll through the gate to retry.",
@@ -56,7 +61,8 @@ export const STR = {
   statCars: "Personal cars",
   statPalms: "Golden Palms",
   statJump: "Best jump",
-  statLap: "Best lap",
+  statRacesWon: "Circuits won",
+  statBestLaps: "Best laps",
   statSeconds: s => s > 0 ? s.toFixed(1) + "s" : "—",
   statJumpVal: s => s > 0 ? s.toFixed(2) + "s" : "—",
   ach: {
@@ -66,6 +72,7 @@ export const STR = {
     palms12: { name: "Palm Hunter",     desc: "Collect all 12 Golden Palms" },
     jump1:   { name: "Daredevil",       desc: "Land a 1.0s+ stunt jump" },
     race1:   { name: "Speed Demon",     desc: "Win a street race" },
+    crown:   { name: "Triple Crown",    desc: "Set a best lap on all 3 circuits" },
     tycoon:  { name: "Palm City Tycoon", desc: "Bank $50,000" },
     story:   { name: "King of the City", desc: "Finish the 12-chapter story" },
   },
