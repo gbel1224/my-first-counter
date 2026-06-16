@@ -8,7 +8,9 @@ export const STR = {
   start: "START",
   continueGame: "CONTINUE",
   newGame: "NEW GAME",
-  confirmReset: "Start over and erase your saved city?",
+  confirmReset: "Start a new game? Your saved city will be erased — this can't be undone.",
+  confirmYes: "YES, START OVER",
+  confirmNo: "CANCEL",
   noWebgl: "This device can't run 3D (WebGL unavailable). Try another browser.",
   loading: "Building the city…",
 

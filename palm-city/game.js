@@ -1391,6 +1391,17 @@ function drawMinimap(t) {
   mapCtx.restore();
 }
 
+// ---------- confirm dialog (in-game Yes/No; native confirm() is blocked in sandboxed iframes) ----------
+const elConfirm = dom("confirm");
+let confirmCb = null;
+function askConfirm(msg, cb) { dom("cmsg").textContent = msg; confirmCb = cb; elConfirm.style.display = "flex"; }
+function closeConfirm() { elConfirm.style.display = "none"; confirmCb = null; }
+dom("cyes").textContent = STR.confirmYes;
+dom("cno").textContent = STR.confirmNo;
+dom("cyes").addEventListener("click", () => { const cb = confirmCb; closeConfirm(); if (cb) cb(); });
+dom("cno").addEventListener("click", closeConfirm);
+function resetGame() { askConfirm(STR.confirmReset, () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} location.reload(); }); }
+
 // ---------- intro overlay ----------
 const elIntro = dom("intro");
 function buildIntro() {
@@ -1408,9 +1419,7 @@ function buildIntro() {
   if (hasSave) {
     const reset = document.createElement("button");
     reset.className = "secondary"; reset.textContent = STR.newGame;
-    reset.addEventListener("click", () => {
-      if (confirm(STR.confirmReset)) { localStorage.removeItem(SAVE_KEY); location.reload(); }
-    });
+    reset.addEventListener("click", resetGame);
     elIntro.append(reset);
   }
 }
@@ -1547,9 +1556,7 @@ dom("stclose").textContent = STR.statsClose;
   bb.textContent = STR.bloomToggle(bloomOn);
   bb.addEventListener("click", () => { bloomOn = !bloomOn; bloomFailed = false; try { localStorage.setItem(BLOOM_KEY, bloomOn ? "1" : "0"); } catch (e) {} bb.textContent = STR.bloomToggle(bloomOn); });
 }
-dom("streset").addEventListener("click", () => {
-  if (confirm(STR.confirmReset)) { localStorage.removeItem(SAVE_KEY); location.reload(); }
-});
+dom("streset").addEventListener("click", resetGame);
 dom("streset").textContent = STR.newGame;
 
 // mute toggle (persisted separately from the save)
