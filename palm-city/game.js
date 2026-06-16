@@ -617,11 +617,14 @@ const state = {
   palms: [],
   bestJump: 0,
   bestRace: 0,           // best street-race lap time in seconds (0 = none yet)
+  maxMoney: 0,           // high-water cash mark (for the Tycoon achievement)
+  ach: [],               // unlocked achievement ids
   mi: 0,                 // mission index; 8 = story complete
   phase: "intro",        // intro | play
 };
 function save() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, palms: state.palms, bestJump: state.bestJump || 0, bestRace: state.bestRace || 0, mi: state.mi })); } catch (e) {}
+  state.maxMoney = Math.max(state.maxMoney || 0, Math.floor(state.money));
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, palms: state.palms, bestJump: state.bestJump || 0, bestRace: state.bestRace || 0, maxMoney: state.maxMoney || 0, ach: state.ach, mi: state.mi })); } catch (e) {}
 }
 function load() {
   try {
@@ -632,6 +635,8 @@ function load() {
       state.palms = d.palms || [];
       state.bestJump = d.bestJump || 0;
       state.bestRace = d.bestRace || 0;
+      state.maxMoney = d.maxMoney || 0;
+      state.ach = d.ach || [];
       for (const k in state.owned) if (state.owned[k] === true) state.owned[k] = 1; // pre-upgrade saves
       return true;
     }
@@ -953,8 +958,8 @@ addEventListener("keyup", e => keys.delete(e.code));
 const elJoy = dom("joy"), elKnob = dom("knob");
 let joyId = null, joyOx = 0, joyOy = 0, joyX = 0, joyY = 0;
 addEventListener("pointerdown", e => {
-  if (state.phase !== "play" || dlgLines || garageOpen) return;
-  if (e.target.closest && (e.target.closest(".btn") || e.target.closest("#dialogue") || e.target.closest("#garage"))) return;
+  if (state.phase !== "play" || dlgLines || garageOpen || statsOpen) return;
+  if (e.target.closest && (e.target.closest(".btn") || e.target.closest("#dialogue") || e.target.closest("#garage") || e.target.closest("#stats"))) return;
   if (e.clientX > innerWidth * 0.55 || joyId !== null) return;
   joyId = e.pointerId; joyOx = e.clientX; joyOy = e.clientY;
   elJoy.style.display = "block";
@@ -1217,6 +1222,7 @@ function buildIntro() {
 }
 function beginPlay() {
   if (hasSave) { load(); applyOwnership(); }
+  refreshAch(false);           // seed already-earned achievements without re-announcing them
   elIntro.style.display = "none";
   state.phase = "play";
   AudioSys.init();
@@ -1284,6 +1290,61 @@ function buyCurrent() {
   renderShowroom();   // flip the panel to repaint mode so you can recolour your new ride
 }
 
+// ---------- achievements + progress panel ----------
+const ownedBizCount = () => { let n = 0; for (const b of BIZ) if (state.owned[b.id]) n++; return n; };
+const ownedCarCount = () => Object.keys(state.cars).length;
+const ACH = [
+  { id: "car1",    done: () => ownedCarCount() >= 1 },
+  { id: "car3",    done: () => ownedCarCount() >= PCARS.length },
+  { id: "biz6",    done: () => ownedBizCount() >= BIZ.length },
+  { id: "palms12", done: () => palmsGot() >= PALMS.length },
+  { id: "jump1",   done: () => (state.bestJump || 0) >= 1.0 },
+  { id: "race1",   done: () => (state.bestRace || 0) > 0 },
+  { id: "tycoon",  done: () => (state.maxMoney || 0) >= 50000 },
+  { id: "story",   done: () => state.mi >= M.length },
+];
+function refreshAch(announce) {
+  let changed = false;
+  for (const a of ACH) {
+    if (state.ach.includes(a.id) || !a.done()) continue;
+    state.ach.push(a.id);
+    changed = true;
+    if (announce) { toast(STR.achUnlocked(STR.ach[a.id].name)); AudioSys.play("jingle", 0.8); }
+  }
+  if (changed && announce) save();
+}
+
+let statsOpen = false;
+const elStats = dom("stats");
+function renderStats() {
+  dom("sttitle").textContent = STR.title + " · " + STR.statsTitle;
+  const cell = (label, val) => '<div class="scell"><span>' + label + "</span><b>" + val + "</b></div>";
+  let html = '<div class="sgrid">' +
+    cell(STR.statCash, STR.money(Math.floor(state.money))) +
+    cell(STR.statBiz, ownedBizCount() + "/" + BIZ.length) +
+    cell(STR.statCars, ownedCarCount() + "/" + PCARS.length) +
+    cell(STR.statPalms, palmsGot() + "/" + PALMS.length) +
+    cell(STR.statJump, STR.statJumpVal(state.bestJump || 0)) +
+    cell(STR.statLap, STR.statSeconds(state.bestRace || 0)) +
+    "</div>";
+  html += '<div class="shead">' + STR.achHeader + " · " + state.ach.length + "/" + ACH.length + "</div>";
+  for (const a of ACH) {
+    const on = state.ach.includes(a.id);
+    html += '<div class="ach' + (on ? " on" : "") + '"><div class="amark">' + (on ? "★" : "·") +
+      '</div><div class="atext"><b>' + STR.ach[a.id].name + "</b><span>" + STR.ach[a.id].desc + "</span></div></div>";
+  }
+  dom("stbody").innerHTML = html;
+}
+function openStats() { statsOpen = true; renderStats(); elStats.style.display = "flex"; }
+function closeStats() { statsOpen = false; elStats.style.display = "none"; }
+dom("statsbtn").addEventListener("click", () => { if (state.phase === "play" && !dlgLines) openStats(); });
+dom("stclose").addEventListener("click", closeStats);
+dom("stclose").textContent = STR.statsClose;
+dom("streset").addEventListener("click", () => {
+  if (confirm(STR.confirmReset)) { localStorage.removeItem(SAVE_KEY); location.reload(); }
+});
+dom("streset").textContent = STR.newGame;
+
 // mute toggle (persisted separately from the save)
 const muteBtn = dom("mute");
 const MUTE_KEY = "palm_city_mute";
@@ -1345,14 +1406,14 @@ function doActionB() {
 
 // ---------- simulation ----------
 const tmpM = new THREE.Matrix4(), tmpP = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpS = new THREE.Vector3(1, 1, 1);
-let simTime = 0;
+let simTime = 0, achTimer = 1;
 
 function update(dt) {
   simTime += dt;
-  const inp = (dlgLines || garageOpen) ? { mx: 0, mz: 0, mag: 0 } : readInput();
+  const inp = (dlgLines || garageOpen || statsOpen) ? { mx: 0, mz: 0, mag: 0 } : readInput();
   const a = actA, b = actB; actA = false; actB = false;
-  if (a && !dlgLines && !garageOpen) doActionA();
-  if (b && !dlgLines && !garageOpen) doActionB();
+  if (a && !dlgLines && !garageOpen && !statsOpen) doActionA();
+  if (b && !dlgLines && !garageOpen && !statsOpen) doActionB();
 
   if (driving) {
     const c = driving;
@@ -1484,6 +1545,7 @@ function update(dt) {
   updateSideJob();
   updateRace(dt);
   updatePolice(dt);
+  achTimer -= dt; if (achTimer <= 0) { achTimer = 1; refreshAch(true); }
   {
     const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
     for (let i = 0; i < PALMS.length; i++) {
@@ -1601,5 +1663,8 @@ globalThis.__palmCity = {
   paint: hex => applyPaint(hex),
   buyCurrent: () => buyCurrent(),
   closeGarage: () => closeGarage(),
-  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen, race: race.stage, rcp: race.cp }),
+  openStats: () => openStats(),
+  closeStats: () => closeStats(),
+  refreshAch: () => refreshAch(true),
+  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen, race: race.stage, rcp: race.cp, stats: statsOpen }),
 };

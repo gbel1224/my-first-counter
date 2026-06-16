@@ -66,3 +66,8 @@ Current goal + next step always on HUD; minimap shows roads, player heading, obj
 - **Freeplay street race**: a checkered start gate at the (-88, 88) intersection. Roll through it in a car (freeplay only) to start a timed 4-checkpoint circuit around the central ring roads (52s limit). Built as a standalone system (`updateRace`) separate from the story mission/race logic so the two never interfere.
 - **Rewards & replay**: $500 per win, +$300 bonus for a new best lap. Best lap time persists (`state.bestRace`) as an endless personal challenge — and a showcase for the garage's faster cars/perks.
 - **Re-arm**: after a win or timeout you must leave the gate and roll back through to start again (no instant re-trigger). The active checkpoint drives the existing mission marker + minimap blip; the side-job marker is suppressed while racing. Start gate shown on the minimap (white square) in freeplay.
+
+## v7 (Progress & Achievements)
+- **Progress panel**: a 🏆 HUD button opens a pause panel (input gated like dialogue) with a stat dashboard — cash, businesses x/6, personal cars x/3, Golden Palms x/12, best stunt jump, best lap — plus a New Game reset folded in (settings/pause gap from the known-limits list, now closed).
+- **8 achievements**, all derived from existing state (`ACH` list): First Wheels, Car Collector, Property Mogul, Palm Hunter, Daredevil (1.0s+ jump), Speed Demon (win a race), Palm City Tycoon ($50k high-water via `state.maxMoney`), King of the City (finish the story). Unlocked ids persist in `state.ach`.
+- **Live unlocks**: `refreshAch` runs once a second; newly-earned achievements toast + jingle and save immediately. On load, earned achievements are seeded silently so old saves don't re-announce.

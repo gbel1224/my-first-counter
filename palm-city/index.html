@@ -31,6 +31,8 @@
   #minimap { border-radius:12px; background:rgba(20,28,24,.72); flex:none; }
   #mute { width:36px; height:36px; border-radius:50%; border:none; flex:none;
     background:rgba(20,28,24,.72); color:#ffe9b3; font-size:16px; }
+  #statsbtn { width:36px; height:36px; border-radius:50%; border:none; flex:none;
+    background:rgba(20,28,24,.72); color:#ffe9b3; font-size:16px; }
 
   #toast { position:absolute; top:28%; left:50%; transform:translateX(-50%);
     background:rgba(20,28,24,.85); color:#ffe9b3; font-size:18px; font-weight:800;
@@ -93,6 +95,31 @@
   #garage .gsw:active { transform:scale(.92); }
   #gdone { font-size:15px; font-weight:800; letter-spacing:1px; border:none; border-radius:24px;
     padding:11px 34px; background:#ffd166; color:#3d2410; }
+
+  #stats { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    background:rgba(12,16,20,.6); }
+  #stats .scard { background:rgba(18,24,20,.97); border-radius:18px; padding:18px 20px 16px;
+    width:min(440px, 92vw); max-height:86vh; overflow-y:auto; box-shadow:0 10px 30px rgba(0,0,0,.5); }
+  #sttitle { color:#ffd166; font-weight:800; font-size:18px; letter-spacing:2px; text-align:center;
+    margin-bottom:12px; }
+  #stbody .sgrid { display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; margin-bottom:14px; }
+  #stbody .scell { display:flex; justify-content:space-between; font-size:13px; color:#e8efe6;
+    border-bottom:1px solid rgba(255,255,255,.08); padding:4px 0; }
+  #stbody .scell b { color:#9fe6a0; font-weight:700; }
+  #stbody .shead { color:#ffc966; font-size:12px; font-weight:800; text-transform:uppercase;
+    letter-spacing:1px; margin:4px 0 8px; }
+  #stbody .ach { display:flex; align-items:center; gap:10px; margin:7px 0; opacity:.45; }
+  #stbody .ach.on { opacity:1; }
+  #stbody .ach .amark { width:26px; height:26px; border-radius:50%; flex:none; text-align:center;
+    line-height:26px; font-size:14px; background:rgba(255,255,255,.1); }
+  #stbody .ach.on .amark { background:#ffd166; }
+  #stbody .ach .atext b { display:block; color:#fff; font-size:13px; }
+  #stbody .ach .atext span { color:#bcd; font-size:11px; }
+  #stats .srow2 { display:flex; gap:10px; justify-content:center; margin-top:6px; }
+  #stclose { font-size:15px; font-weight:800; letter-spacing:1px; border:none; border-radius:24px;
+    padding:11px 34px; background:#ffd166; color:#3d2410; }
+  #streset { font-size:12px; font-weight:700; border:2px solid #e8745f; border-radius:24px;
+    padding:9px 20px; background:transparent; color:#e8745f; }
 </style>
 </head>
 <body>
@@ -101,6 +128,7 @@
     <div id="moneybox"><div id="money"></div><div id="income"></div><div id="palms"></div></div>
     <div id="missionbox"><div id="mtitle"></div><div id="mstep"></div></div>
     <canvas id="minimap" width="132" height="132"></canvas>
+    <button id="statsbtn" class="pe">🏆</button>
     <button id="mute" class="pe"></button>
   </div>
   <div id="toast"></div>
@@ -111,6 +139,7 @@
   <div id="dialogue" class="pe"><div id="dwho"></div><div id="dtext"></div><div id="dhint"></div></div>
   <div id="intro" class="pe"></div>
   <div id="garage" class="pe"><div class="gcard"><div id="gtitle"></div><div id="gstats"></div><button id="gbuy"></button><div id="gswatches"></div><button id="gdone"></button></div></div>
+  <div id="stats" class="pe"><div class="scard"><div id="sttitle"></div><div id="stbody"></div><div class="srow2"><button id="streset"></button><button id="stclose"></button></div></div></div>
 </div>
 <div id="dev"></div>
 <script type="module" src="./game.js"></script>

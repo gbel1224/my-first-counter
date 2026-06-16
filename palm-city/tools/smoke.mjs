@@ -216,6 +216,13 @@ run(53 * 60);                                  // let the 52s clock run out
 assert(h.debug().race === "idle", "street race times out");
 key("KeyE"); run(2);
 
+// ---- achievements + progress panel ----
+h.refreshAch();
+for (const id of ["story", "race1", "car1", "biz6", "tycoon"])
+  assert(h.state.ach.includes(id), "achievement unlocked: " + id);
+h.openStats(); assert(h.debug().stats, "progress panel opens");
+h.closeStats(); assert(!h.debug().stats, "progress panel closes");
+
 run(600); // idle robustness: traffic, NPCs, income, day/night, police despawn
-console.log("SMOKE PASS — 12 chapters + economy + palms + wanted + stunts + garage + races, money:", Math.floor(h.state.money));
+console.log("SMOKE PASS — 12 chapters + economy + palms + wanted + stunts + garage + races + achievements, money:", Math.floor(h.state.money));
 process.exit(0);
