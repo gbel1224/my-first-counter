@@ -172,7 +172,7 @@ assert(h.state.money < moneyPreBust, "bust deducted a fine");
 h.cars[0].x = h.player.x + 1; h.cars[0].z = h.player.z; h.cars[0].y = 0; h.cars[0].vy = 0;
 key("KeyE"); run(2);
 assert(h.debug().driving, "in a car for the ramp test");
-h.cars[0].x = -88; h.cars[0].z = -44; h.cars[0].h = 0; h.cars[0].speed = 22;
+h.cars[0].x = -82.5; h.cars[0].z = -50; h.cars[0].h = 0; h.cars[0].speed = 22;   // roadside ramp 1
 h.cars[0].rampCD = 0; h.cars[0].y = 0; h.cars[0].vy = 0;
 let jumped = false;
 for (let i = 0; i < 240; i++) { h.update(1 / 60); if (h.debug().bestJump > 0) { jumped = true; break; } }

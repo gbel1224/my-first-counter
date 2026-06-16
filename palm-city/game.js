@@ -526,9 +526,10 @@ function wedgeGeo(w, l, hgt) {
   g.computeVertexNormals();
   return g;
 }
+// ramps sit toward the curb side of their road (offset perpendicular to travel), not dead-centre
 const RAMPS = [
-  { x: -88, z: -40, h: 0 }, { x: 88, z: 60, h: Math.PI }, { x: -40, z: -176, h: Math.PI / 2 },
-  { x: 60, z: 88, h: -Math.PI / 2 }, { x: 0, z: 120, h: 0 },
+  { x: -82.5, z: -40, h: 0 }, { x: 82.5, z: 60, h: Math.PI }, { x: -40, z: -181.5, h: Math.PI / 2 },
+  { x: 60, z: 93.5, h: -Math.PI / 2 }, { x: -5.5, z: 120, h: 0 },
 ];
 const rampIM = new THREE.InstancedMesh(wedgeGeo(6, 7, 2.0),
   new THREE.MeshLambertMaterial({ color: 0xd9763a, side: THREE.DoubleSide }), RAMPS.length);
