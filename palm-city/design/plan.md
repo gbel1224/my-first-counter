@@ -84,3 +84,11 @@ Goal: make Palm City *feel* premium on a phone without breaking the budget (stil
 - **Haptics**: `navigator.vibrate` (guarded) on collisions, jumps, busts, palm pickups, race start/checkpoints/wins — distinct patterns per event.
 - **Screen flash**: `#flash` overlay (screen blend) pulses gold on a finish / all-12 palms and red on a bust.
 - All hooks default to no-op off-car / unsupported, so the headless smoke and non-haptic devices are unaffected.
+
+## v10 (AAA mobile, phase 2 — visual polish)
+Goal: a premium *look* with no post-processing pipeline (keeps mobile perf). +2 draw calls (sky dome + sun sprite), no shaders compiled in the headless smoke (FakeRenderer never renders).
+- **Filmic tone mapping**: `ACESFilmicToneMapping`, exposure 1.2 — cinematic highlight roll-off and contrast over the old flat output.
+- **Gradient sky dome**: a `ShaderMaterial` BackSide sphere (zenith→horizon) recoloured every frame by the day/night cycle; `ENV_KEYS` gains a `top` zenith colour and a `night` factor.
+- **Sun / moon disc**: an additive sprite aligned with the key light, shifting warm-sun → pale-moon and shrinking at night.
+- **Night neon**: Golden Palm `emissiveIntensity` ramps up with the night factor so collectibles glow after dark.
+- **Vignette**: a CSS `#vignette` overlay (multiply blend) darkens the corners for cinematic framing — zero GPU cost, HUD stays crisp above it.

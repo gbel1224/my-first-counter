@@ -44,6 +44,8 @@ try {
 }
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
 renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic highlight roll-off for a premium look
+renderer.toneMappingExposure = 1.2;
 document.body.insertBefore(renderer.domElement, document.getElementById("ui"));
 
 const scene = new THREE.Scene();
@@ -59,17 +61,44 @@ const sun = new THREE.DirectionalLight(0xffd9a0, 1.7);
 sun.position.set(120, 160, 80);
 scene.add(sun);
 
+// gradient sky dome (1 draw call) — zenith→horizon, recoloured by the day/night cycle
+const skyUniforms = {
+  topColor: { value: new THREE.Color(0x4a90d9) },
+  horizonColor: { value: new THREE.Color(0xf7c98e) },
+  exponent: { value: 0.65 },
+};
+const skyDome = new THREE.Mesh(
+  new THREE.SphereGeometry(700, 24, 12),
+  new THREE.ShaderMaterial({
+    uniforms: skyUniforms, side: THREE.BackSide, depthWrite: false, fog: false,
+    vertexShader: "varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+    fragmentShader: "uniform vec3 topColor; uniform vec3 horizonColor; uniform float exponent; varying vec3 vDir; void main(){ float f = pow(max(vDir.y,0.0), exponent); gl_FragColor = vec4(mix(horizonColor, topColor, f), 1.0); }",
+  }));
+skyDome.frustumCulled = false;
+scene.add(skyDome);
+
+// sun / moon disc aligned with the key light
+const sunTex = canvasTex(64, (ctx, s) => {
+  const c = s / 2;
+  for (let r = c; r > 0; r--) { ctx.globalAlpha = Math.pow(1 - r / c, 1.6) * 0.85; ctx.beginPath(); ctx.arc(c, c, r, 0, 7); ctx.fillStyle = "#fff"; ctx.fill(); }
+});
+const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, color: 0xfff2c0, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+sunSprite.scale.set(70, 70, 1);
+{ const d = new THREE.Vector3(120, 160, 80).normalize().multiplyScalar(620); sunSprite.position.copy(d); }
+scene.add(sunSprite);
+const SUN_DAY = new THREE.Color(0xfff2c0), SUN_NIGHT = new THREE.Color(0xcdd8f2);
+
 // day/night cycle (4 min): warm day -> dusk -> night -> dawn
 const ENV_KEYS = [
-  { t: 0.00, sky: new THREE.Color(0xf7c98e), sun: 1.7, hemi: 1.05, far: 420 },
-  { t: 0.42, sky: new THREE.Color(0xf7c98e), sun: 1.7, hemi: 1.05, far: 420 },
-  { t: 0.52, sky: new THREE.Color(0xee9d7a), sun: 1.1, hemi: 0.85, far: 400 },
-  { t: 0.60, sky: new THREE.Color(0x2c3354), sun: 0.18, hemi: 0.42, far: 340 },
-  { t: 0.86, sky: new THREE.Color(0x2c3354), sun: 0.18, hemi: 0.42, far: 340 },
-  { t: 0.95, sky: new THREE.Color(0xf2b890), sun: 1.2, hemi: 0.90, far: 400 },
-  { t: 1.00, sky: new THREE.Color(0xf7c98e), sun: 1.7, hemi: 1.05, far: 420 },
+  { t: 0.00, sky: new THREE.Color(0xf7c98e), top: new THREE.Color(0x4a90d9), sun: 1.7, hemi: 1.05, far: 420, night: 0.0 },
+  { t: 0.42, sky: new THREE.Color(0xf7c98e), top: new THREE.Color(0x4a90d9), sun: 1.7, hemi: 1.05, far: 420, night: 0.0 },
+  { t: 0.52, sky: new THREE.Color(0xee9d7a), top: new THREE.Color(0x9a6a8a), sun: 1.1, hemi: 0.85, far: 400, night: 0.35 },
+  { t: 0.60, sky: new THREE.Color(0x2c3354), top: new THREE.Color(0x10142c), sun: 0.18, hemi: 0.42, far: 340, night: 1.0 },
+  { t: 0.86, sky: new THREE.Color(0x2c3354), top: new THREE.Color(0x10142c), sun: 0.18, hemi: 0.42, far: 340, night: 1.0 },
+  { t: 0.95, sky: new THREE.Color(0xf2b890), top: new THREE.Color(0x7a6a9a), sun: 1.2, hemi: 0.90, far: 400, night: 0.3 },
+  { t: 1.00, sky: new THREE.Color(0xf7c98e), top: new THREE.Color(0x4a90d9), sun: 1.7, hemi: 1.05, far: 420, night: 0.0 },
 ];
-const _sky = new THREE.Color();
+const _sky = new THREE.Color(), _top = new THREE.Color(), _sunCol = new THREE.Color();
 function envUpdate() {
   const t = (simTime / 240) % 1;
   let a = ENV_KEYS[0], b = ENV_KEYS[ENV_KEYS.length - 1];
@@ -83,6 +112,13 @@ function envUpdate() {
   scene.fog.far = a.far + (b.far - a.far) * k;
   sun.intensity = a.sun + (b.sun - a.sun) * k;
   hemi.intensity = a.hemi + (b.hemi - a.hemi) * k;
+  skyUniforms.horizonColor.value.copy(_sky);
+  skyUniforms.topColor.value.copy(_top.lerpColors(a.top, b.top, k));
+  const night = a.night + (b.night - a.night) * k;
+  palmIM.material.emissiveIntensity = 1 + night * 1.7;          // Golden Palms glow at night
+  sunSprite.material.color.copy(_sunCol.lerpColors(SUN_DAY, SUN_NIGHT, night));
+  const sc = 70 - night * 24;
+  sunSprite.scale.set(sc, sc, 1);
 }
 
 addEventListener("resize", onResize);

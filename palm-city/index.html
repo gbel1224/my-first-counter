@@ -15,6 +15,8 @@
   .pe { pointer-events:auto; }
   #flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none;
     transition:opacity .45s ease-out; mix-blend-mode:screen; }
+  #vignette { position:absolute; inset:0; pointer-events:none; mix-blend-mode:multiply;
+    background:radial-gradient(ellipse 75% 75% at center, rgba(255,255,255,1) 52%, rgba(120,110,95,.78) 100%); }
 
   #topbar { position:absolute; top:env(safe-area-inset-top, 0); left:0; right:0;
     display:flex; align-items:flex-start; padding:10px 12px; gap:10px; }
@@ -127,6 +129,7 @@
 <body>
 <div id="ui">
   <div id="flash"></div>
+  <div id="vignette"></div>
   <div id="topbar">
     <div id="moneybox"><div id="money"></div><div id="income"></div><div id="palms"></div></div>
     <div id="missionbox"><div id="mtitle"></div><div id="mstep"></div></div>
