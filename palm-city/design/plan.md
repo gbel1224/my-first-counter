@@ -131,5 +131,5 @@ This completes the 5-phase "AAA for mobile" pass (juice → visuals → controls
 - **Hold-to-build sprint**: on foot, a sprint charge ramps 0→1 over ~2.5s while held+moving, lifting the run multiplier from 1.32× to ~1.95×, decaying faster on release.
 
 ## v17 (sky detail + roadside ramps)
-- **Sky detail**: drifting cloud puffs (a 12-point cloud, soft sprite, slowly panning, visible by day) and a 150-point starfield on the upper dome that fades in at night — both opacity-driven by the night factor via `setSky`. +2 draw calls.
+- **Sky detail**: drifting cloud puffs (26-point cloud, soft sprite, slow pan, day) and a 440-point starfield (night) on the upper dome, opacity-driven by the night factor via `setSky`. Separate **sun** (warm additive disc, bright by day) and **moon** (pale cratered sprite, night) that **arc across the sky on opposite sides** with the cycle, cross-fading at dawn/dusk. +4 draw calls.
 - **Roadside ramps**: the five stunt ramps are offset ~5.5u perpendicular to their travel so they hug the curb instead of the road centre, for realism (still on the asphalt).

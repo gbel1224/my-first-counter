@@ -86,20 +86,35 @@ const skyDome = new THREE.Mesh(
 skyDome.frustumCulled = false;
 scene.add(skyDome);
 
-// sun / moon disc aligned with the key light
+// sun (warm glowing disc) — bright by day, arcs across the sky
 const sunTex = canvasTex(64, (ctx, s) => {
   const c = s / 2;
   for (let r = c; r > 0; r--) { ctx.globalAlpha = Math.pow(1 - r / c, 1.6) * 0.85; ctx.beginPath(); ctx.arc(c, c, r, 0, 7); ctx.fillStyle = "#fff"; ctx.fill(); }
 });
-const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, color: 0xfff2c0, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
-sunSprite.scale.set(70, 70, 1);
-{ const d = new THREE.Vector3(120, 160, 80).normalize().multiplyScalar(620); sunSprite.position.copy(d); }
+const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, color: 0xfff0bd, transparent: true, opacity: 1, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+sunSprite.scale.set(78, 78, 1);
 scene.add(sunSprite);
-const SUN_DAY = new THREE.Color(0xfff2c0), SUN_NIGHT = new THREE.Color(0xcdd8f2);
+// moon (pale cratered disc) — rises at night, opposite the sun
+const moonTex = canvasTex(96, (ctx, s) => {
+  const c = s / 2;
+  ctx.globalAlpha = 1; ctx.fillStyle = "#e9edf6"; ctx.beginPath(); ctx.arc(c, c, c * 0.8, 0, 7); ctx.fill();
+  ctx.fillStyle = "#c2cad9";
+  for (const cr of [[0.40, 0.40, 0.13], [0.62, 0.54, 0.09], [0.50, 0.66, 0.07], [0.34, 0.60, 0.055], [0.58, 0.34, 0.05]]) {
+    ctx.globalAlpha = 0.55; ctx.beginPath(); ctx.arc(s * cr[0], s * cr[1], s * cr[2], 0, 7); ctx.fill();
+  }
+});
+const moonSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, fog: false }));
+moonSprite.scale.set(46, 46, 1);
+scene.add(moonSprite);
 
-// sky detail: drifting clouds (day) + stars (night), faded by the night factor
+// sky detail: drifting clouds (day) + stars (night) + sun/moon arc, faded by the night factor
 let starPts = null, cloudPts = null, cloudPos = null, cloudBase = null, cloudN = 0;
 function setSky(night) {
+  const t = (simTime / 240) % 1, sa = t * Math.PI * 2, sy = Math.sin(sa), cx = Math.cos(sa);
+  sunSprite.position.set(cx * 340, sy * 210 + 90, -240);
+  sunSprite.material.opacity = clamp(1 - night * 1.4, 0, 1);
+  moonSprite.position.set(-cx * 340, -sy * 210 + 90, -240);
+  moonSprite.material.opacity = clamp(night * 1.3, 0, 1);
   if (starPts) starPts.material.opacity = Math.min(1, night) * 0.95;
   if (cloudPts) {
     cloudPts.material.opacity = (1 - night) * 0.5;
@@ -147,9 +162,6 @@ function envUpdate() {
   palmIM.material.emissiveIntensity = 1 + night * 1.7;          // Golden Palms glow at night
   setGlow(night);
   setSky(night);
-  sunSprite.material.color.copy(_sunCol.lerpColors(SUN_DAY, SUN_NIGHT, night));
-  const sc = 70 - night * 24;
-  sunSprite.scale.set(sc, sc, 1);
 }
 
 addEventListener("resize", onResize);
@@ -1020,7 +1032,7 @@ let race = { stage: "idle", ci: -1, cp: 0, t: 0, armed: true };  // idle | activ
 }
 // sky detail clouds + stars (reuse the soft particle sprite; updated by setSky/the day-night cycle)
 {
-  const SN = 150, sp = new Float32Array(SN * 3);
+  const SN = 440, sp = new Float32Array(SN * 3);
   for (let i = 0; i < SN; i++) {
     const a = rng() * Math.PI * 2, e = 0.18 + rng() * 0.75, r = 660;
     sp[i * 3] = Math.cos(a) * Math.cos(e) * r; sp[i * 3 + 1] = Math.sin(e) * r; sp[i * 3 + 2] = Math.sin(a) * Math.cos(e) * r;
@@ -1029,10 +1041,10 @@ let race = { stage: "idle", ci: -1, cp: 0, t: 0, armed: true };  // idle | activ
   starPts = new THREE.Points(sg, new THREE.PointsMaterial({ size: 2.6, map: partTex, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, sizeAttenuation: true }));
   starPts.frustumCulled = false; scene.add(starPts);
 
-  cloudN = 12; cloudPos = new Float32Array(cloudN * 3); cloudBase = new Float32Array(cloudN);
-  for (let i = 0; i < cloudN; i++) { const x = rr(-600, 600); cloudBase[i] = x; cloudPos[i * 3] = x; cloudPos[i * 3 + 1] = rr(150, 240); cloudPos[i * 3 + 2] = rr(-520, 520); }
+  cloudN = 26; cloudPos = new Float32Array(cloudN * 3); cloudBase = new Float32Array(cloudN);
+  for (let i = 0; i < cloudN; i++) { const x = rr(-650, 650); cloudBase[i] = x; cloudPos[i * 3] = x; cloudPos[i * 3 + 1] = rr(140, 250); cloudPos[i * 3 + 2] = rr(-560, 560); }
   const cg = new THREE.BufferGeometry(); cg.setAttribute("position", new THREE.BufferAttribute(cloudPos, 3));
-  cloudPts = new THREE.Points(cg, new THREE.PointsMaterial({ size: 130, map: partTex, color: 0xffffff, transparent: true, opacity: 0.4, depthWrite: false, fog: false, sizeAttenuation: true }));
+  cloudPts = new THREE.Points(cg, new THREE.PointsMaterial({ size: 120, map: partTex, color: 0xffffff, transparent: true, opacity: 0.4, depthWrite: false, fog: false, sizeAttenuation: true }));
   cloudPts.frustumCulled = false; scene.add(cloudPts);
 }
 function updateRace(dt) {
