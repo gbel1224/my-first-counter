@@ -120,3 +120,8 @@ This completes the 5-phase "AAA for mobile" pass (juice → visuals → controls
 - **Neon glow cloud (fake bloom)**: one additive `THREE.Points` cloud at landmark/sign positions (each business sign with a themed colour, the club magenta, plaza, garage, race gates) whose brightness is driven by the night factor — signs bloom after dark, fully off by day. 1 draw call, smoke-safe (no post-processing composer, which would risk a black screen on a blind deploy).
 - **Glossy cars**: car paint switched from Lambert to `MeshPhongMaterial` (shininess 55) so highlights track the sun/moon — a premium daytime read. Repaint still drives `material.color`.
 - Deliberately avoided a real UnrealBloom composer here to stay robust/60fps and un-black-screenable; it remains an opt-in follow-up.
+
+## v15 (real bloom — beta toggle, default OFF)
+- **Self-contained post-processing bloom** (no vendored addons): render scene → linear `rtScene`, bright-pass (luma threshold), two separable Gaussian blur iterations at half-res (ping-pong `rtB1`/`rtB2`), then a composite quad that adds the blurred bloom to the scene and manually sRGB-encodes for the canvas (color-managed in linear space to match the ACES look).
+- **Safety**: OFF by default; toggled in the progress panel ("✨ Bloom") and persisted (`palm_city_bloom`). The whole path is wrapped in try/catch — any failure sets `bloomFailed` and falls back to the plain `renderer.render`, so it can never black-screen the default experience. Built lazily on first enable, so the headless smoke (FakeRenderer) never touches it.
+- **Perf**: bloom render targets follow the adaptive pixel ratio (resized from the drawing-buffer size each frame), so it scales down with the existing 60fps guardrail.

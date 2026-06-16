@@ -47,6 +47,12 @@ const PR_FLOOR = 0.75;                                  // never blurrier than t
 let pr = PR_CAP;
 renderer.setPixelRatio(pr);
 renderer.setSize(innerWidth, innerHeight);
+
+// post-processing bloom (beta, default OFF; any failure silently falls back to the plain renderer)
+const BLOOM_KEY = "palm_city_bloom";
+let bloomOn = (() => { try { return localStorage.getItem(BLOOM_KEY) === "1"; } catch (e) { return false; } })();
+let bloomReady = false, bloomFailed = false, bloomW = 0, bloomH = 0;
+let rtScene, rtB1, rtB2, fsScene, fsCam, fsQuad, brightMat, blurMat, compMat;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic highlight roll-off for a premium look
 renderer.toneMappingExposure = 1.2;
 document.body.insertBefore(renderer.domElement, document.getElementById("ui"));
@@ -1534,6 +1540,11 @@ function closeStats() { statsOpen = false; elStats.style.display = "none"; }
 dom("statsbtn").addEventListener("click", () => { if (state.phase === "play" && !dlgLines) openStats(); });
 dom("stclose").addEventListener("click", closeStats);
 dom("stclose").textContent = STR.statsClose;
+{
+  const bb = dom("stbloom");
+  bb.textContent = STR.bloomToggle(bloomOn);
+  bb.addEventListener("click", () => { bloomOn = !bloomOn; bloomFailed = false; try { localStorage.setItem(BLOOM_KEY, bloomOn ? "1" : "0"); } catch (e) {} bb.textContent = STR.bloomToggle(bloomOn); });
+}
 dom("streset").addEventListener("click", () => {
   if (confirm(STR.confirmReset)) { localStorage.removeItem(SAVE_KEY); location.reload(); }
 });
@@ -1842,6 +1853,51 @@ function update(dt) {
   camera.lookAt(_look);
 }
 
+// ---------- post-processing bloom (beta) ----------
+const BLOOM_VERT = "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }";
+function buildBloom() {
+  const sz = renderer.getDrawingBufferSize(new THREE.Vector2());
+  bloomW = Math.max(2, sz.x); bloomH = Math.max(2, sz.y);
+  const hw = Math.max(1, bloomW >> 1), hh = Math.max(1, bloomH >> 1);
+  rtScene = new THREE.WebGLRenderTarget(bloomW, bloomH); rtScene.texture.colorSpace = THREE.LinearSRGBColorSpace;
+  rtB1 = new THREE.WebGLRenderTarget(hw, hh); rtB1.texture.colorSpace = THREE.LinearSRGBColorSpace;
+  rtB2 = new THREE.WebGLRenderTarget(hw, hh); rtB2.texture.colorSpace = THREE.LinearSRGBColorSpace;
+  fsScene = new THREE.Scene(); fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  fsQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)); fsScene.add(fsQuad);
+  brightMat = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, threshold: { value: 0.78 } }, vertexShader: BLOOM_VERT,
+    fragmentShader: "uniform sampler2D tDiffuse; uniform float threshold; varying vec2 vUv; void main(){ vec3 c=texture2D(tDiffuse,vUv).rgb; float l=dot(c,vec3(0.299,0.587,0.114)); gl_FragColor=vec4(c*smoothstep(threshold,threshold+0.18,l),1.0); }" });
+  blurMat = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, dir: { value: new THREE.Vector2() } }, vertexShader: BLOOM_VERT,
+    fragmentShader: "uniform sampler2D tDiffuse; uniform vec2 dir; varying vec2 vUv; void main(){ vec3 s=texture2D(tDiffuse,vUv).rgb*0.227027; s+=texture2D(tDiffuse,vUv+dir*1.3846).rgb*0.316216; s+=texture2D(tDiffuse,vUv-dir*1.3846).rgb*0.316216; s+=texture2D(tDiffuse,vUv+dir*3.2308).rgb*0.07027; s+=texture2D(tDiffuse,vUv-dir*3.2308).rgb*0.07027; gl_FragColor=vec4(s,1.0); }" });
+  compMat = new THREE.ShaderMaterial({ uniforms: { tScene: { value: null }, tBloom: { value: null }, strength: { value: 0.8 } }, vertexShader: BLOOM_VERT,
+    fragmentShader: "uniform sampler2D tScene; uniform sampler2D tBloom; uniform float strength; varying vec2 vUv; vec3 toSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,vec3(0.0)),vec3(0.41666))-0.055, step(0.0031308,c)); } void main(){ vec3 sc=texture2D(tScene,vUv).rgb; vec3 bl=texture2D(tBloom,vUv).rgb; gl_FragColor=vec4(clamp(toSRGB(sc+bl*strength),0.0,1.0),1.0); }" });
+  bloomReady = true;
+}
+function blit(mat, target) { fsQuad.material = mat; renderer.setRenderTarget(target || null); renderer.render(fsScene, fsCam); }
+function renderBloom() {
+  const sz = renderer.getDrawingBufferSize(new THREE.Vector2());
+  if (sz.x !== bloomW || sz.y !== bloomH) {
+    bloomW = Math.max(2, sz.x); bloomH = Math.max(2, sz.y);
+    const hw = Math.max(1, bloomW >> 1), hh = Math.max(1, bloomH >> 1);
+    rtScene.setSize(bloomW, bloomH); rtB1.setSize(hw, hh); rtB2.setSize(hw, hh);
+  }
+  renderer.setRenderTarget(rtScene); renderer.render(scene, camera);
+  brightMat.uniforms.tDiffuse.value = rtScene.texture; blit(brightMat, rtB1);
+  const tw = 1 / Math.max(1, bloomW >> 1), th = 1 / Math.max(1, bloomH >> 1);
+  blurMat.uniforms.tDiffuse.value = rtB1.texture; blurMat.uniforms.dir.value.set(tw, 0); blit(blurMat, rtB2);
+  blurMat.uniforms.tDiffuse.value = rtB2.texture; blurMat.uniforms.dir.value.set(0, th); blit(blurMat, rtB1);
+  blurMat.uniforms.tDiffuse.value = rtB1.texture; blurMat.uniforms.dir.value.set(tw * 2.2, 0); blit(blurMat, rtB2);
+  blurMat.uniforms.tDiffuse.value = rtB2.texture; blurMat.uniforms.dir.value.set(0, th * 2.2); blit(blurMat, rtB1);
+  compMat.uniforms.tScene.value = rtScene.texture; compMat.uniforms.tBloom.value = rtB1.texture; blit(compMat, null);
+  renderer.setRenderTarget(null);
+}
+function renderFrame() {
+  if (bloomOn && !bloomFailed) {
+    try { if (!bloomReady) buildBloom(); renderBloom(); return; }
+    catch (e) { bloomFailed = true; bloomReady = false; renderer.setRenderTarget(null); }
+  }
+  renderer.render(scene, camera);
+}
+
 // ---------- autosave ----------
 setInterval(() => { if (state.phase === "play") save(); }, 8000);
 
@@ -1871,7 +1927,7 @@ function frame(now) {
     updateHUD();
     drawMinimap(now / 1000);
   } else acc = 0;
-  renderer.render(scene, camera);
+  renderFrame();
   // adaptive resolution: hold ~60fps by nudging pixel ratio between PR_FLOOR and PR_CAP
   perfFrames++;
   if (now - perfAt >= 1000) {

@@ -95,6 +95,7 @@ export const STR = {
   repaintTitle: name => "Repaint your " + name,
   repaintDone: "Fresh coat of paint!",
   garageDone: "DONE",
+  bloomToggle: on => "✨ Bloom: " + (on ? "ON" : "OFF"),
   garageBuy: cost => "BUY · $" + cost.toLocaleString("en-US"),
   garageSpeed: "Top speed",
   garageAccel: "Accel",
