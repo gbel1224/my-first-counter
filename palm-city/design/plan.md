@@ -129,3 +129,7 @@ This completes the 5-phase "AAA for mobile" pass (juice → visuals → controls
 ## v16 (race medals + hold-to-build sprint)
 - **Medal targets**: each circuit has bronze/silver/gold thresholds (`medalFor` at 0.82/0.65/0.5 × the time limit). Finishing under a tier the first time pays a cash bonus (`MEDAL_BONUS` 200/500/1000) and stores the best tier in `state.medals`. The race HUD shows the gold target time; the progress panel shows the earned medal (🥉🥈🥇) by each circuit's best lap. New achievement **Gold Rush** = gold on all three.
 - **Hold-to-build sprint**: on foot, a sprint charge ramps 0→1 over ~2.5s while held+moving, lifting the run multiplier from 1.32× to ~1.95×, decaying faster on release.
+
+## v17 (sky detail + roadside ramps)
+- **Sky detail**: drifting cloud puffs (a 12-point cloud, soft sprite, slowly panning, visible by day) and a 150-point starfield on the upper dome that fades in at night — both opacity-driven by the night factor via `setSky`. +2 draw calls.
+- **Roadside ramps**: the five stunt ramps are offset ~5.5u perpendicular to their travel so they hug the curb instead of the road centre, for realism (still on the asphalt).

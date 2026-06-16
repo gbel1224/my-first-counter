@@ -97,6 +97,17 @@ sunSprite.scale.set(70, 70, 1);
 scene.add(sunSprite);
 const SUN_DAY = new THREE.Color(0xfff2c0), SUN_NIGHT = new THREE.Color(0xcdd8f2);
 
+// sky detail: drifting clouds (day) + stars (night), faded by the night factor
+let starPts = null, cloudPts = null, cloudPos = null, cloudBase = null, cloudN = 0;
+function setSky(night) {
+  if (starPts) starPts.material.opacity = Math.min(1, night) * 0.95;
+  if (cloudPts) {
+    cloudPts.material.opacity = (1 - night) * 0.5;
+    for (let i = 0; i < cloudN; i++) { let x = cloudBase[i] + simTime * 3; cloudPos[i * 3] = ((x + 700) % 1400 + 1400) % 1400 - 700; }
+    cloudPts.geometry.attributes.position.needsUpdate = true;
+  }
+}
+
 // neon glow cloud (fake bloom) — additive sprites at landmarks/signs, lit by the night factor
 let glowGeo = null, glowBase = null, glowCol = null;
 function setGlow(night) {
@@ -135,6 +146,7 @@ function envUpdate() {
   const night = a.night + (b.night - a.night) * k;
   palmIM.material.emissiveIntensity = 1 + night * 1.7;          // Golden Palms glow at night
   setGlow(night);
+  setSky(night);
   sunSprite.material.color.copy(_sunCol.lerpColors(SUN_DAY, SUN_NIGHT, night));
   const sc = 70 - night * 24;
   sunSprite.scale.set(sc, sc, 1);
@@ -1005,6 +1017,23 @@ let race = { stage: "idle", ci: -1, cp: 0, t: 0, armed: true };  // idle | activ
   }));
   glow.frustumCulled = false;
   scene.add(glow);
+}
+// sky detail clouds + stars (reuse the soft particle sprite; updated by setSky/the day-night cycle)
+{
+  const SN = 150, sp = new Float32Array(SN * 3);
+  for (let i = 0; i < SN; i++) {
+    const a = rng() * Math.PI * 2, e = 0.18 + rng() * 0.75, r = 660;
+    sp[i * 3] = Math.cos(a) * Math.cos(e) * r; sp[i * 3 + 1] = Math.sin(e) * r; sp[i * 3 + 2] = Math.sin(a) * Math.cos(e) * r;
+  }
+  const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.BufferAttribute(sp, 3));
+  starPts = new THREE.Points(sg, new THREE.PointsMaterial({ size: 2.6, map: partTex, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, sizeAttenuation: true }));
+  starPts.frustumCulled = false; scene.add(starPts);
+
+  cloudN = 12; cloudPos = new Float32Array(cloudN * 3); cloudBase = new Float32Array(cloudN);
+  for (let i = 0; i < cloudN; i++) { const x = rr(-600, 600); cloudBase[i] = x; cloudPos[i * 3] = x; cloudPos[i * 3 + 1] = rr(150, 240); cloudPos[i * 3 + 2] = rr(-520, 520); }
+  const cg = new THREE.BufferGeometry(); cg.setAttribute("position", new THREE.BufferAttribute(cloudPos, 3));
+  cloudPts = new THREE.Points(cg, new THREE.PointsMaterial({ size: 130, map: partTex, color: 0xffffff, transparent: true, opacity: 0.4, depthWrite: false, fog: false, sizeAttenuation: true }));
+  cloudPts.frustumCulled = false; scene.add(cloudPts);
 }
 function updateRace(dt) {
   if (state.mi < M.length || dlgLines) return;     // freeplay only
