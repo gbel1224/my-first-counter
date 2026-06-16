@@ -107,3 +107,10 @@ Goal: a premium *look* with no post-processing pipeline (keeps mobile perf). +2 
 - **Tyre skid**: a synthesized white-noise→bandpass layer (`AudioSys.skid`) whose gain tracks drift `lat`, so hard cornering screeches.
 - **SFX variety**: cash pickups get a small random pitch so repeats don't feel robotic.
 - All additions fail silent without WebAudio, so the headless smoke (no `AudioContext`) is unaffected.
+
+## v13 (AAA mobile, phase 5 — performance guardrails)
+- **Adaptive resolution**: the render loop measures fps over 1s windows and nudges the renderer pixel ratio between `PR_FLOOR` (0.75) and `PR_CAP` (`min(devicePixelRatio, 1.5)`) — drop 0.15 when fps < 50, recover 0.1 when fps > 58 — so all the v9–v12 effects hold ~60fps on mid-range phones without ever getting blurrier than the floor.
+- **Hysteresis + warmup**: separate up/down thresholds avoid oscillation, and the first few windows are skipped so load jank doesn't trigger a downscale. `onResize` only calls `setSize`, so the adaptive ratio persists across rotations.
+- **Dev HUD**: `?dev=1` now also shows the live pixel-ratio multiplier next to fps / draw calls / triangles.
+
+This completes the 5-phase "AAA for mobile" pass (juice → visuals → controls/HUD → audio → performance).

@@ -42,7 +42,10 @@ try {
   document.body.innerHTML = "<p style='color:#333;padding:40px;font-size:18px'>" + STR.noWebgl + "</p>";
   throw e;
 }
-renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
+const PR_CAP = Math.min(devicePixelRatio || 1, 1.5);   // adaptive-resolution ceiling
+const PR_FLOOR = 0.75;                                  // never blurrier than this
+let pr = PR_CAP;
+renderer.setPixelRatio(pr);
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic highlight roll-off for a premium look
 renderer.toneMappingExposure = 1.2;
@@ -1820,6 +1823,7 @@ const devEl = dom("dev");
 const devOn = new URLSearchParams(location.search).has("dev");
 if (devOn) devEl.style.display = "block";
 let frames = 0, fpsAt = performance.now();
+let perfFrames = 0, perfAt = performance.now(), perfWarmup = 3;   // adaptive-resolution monitor
 
 function frame(now) {
   requestAnimationFrame(frame);
@@ -1832,8 +1836,21 @@ function frame(now) {
     drawMinimap(now / 1000);
   } else acc = 0;
   renderer.render(scene, camera);
+  // adaptive resolution: hold ~60fps by nudging pixel ratio between PR_FLOOR and PR_CAP
+  perfFrames++;
+  if (now - perfAt >= 1000) {
+    const fps = perfFrames * 1000 / (now - perfAt);
+    perfFrames = 0; perfAt = now;
+    if (perfWarmup > 0) perfWarmup--;
+    else if (state.phase === "play") {
+      let np = pr;
+      if (fps < 50 && pr > PR_FLOOR) np = Math.max(PR_FLOOR, pr - 0.15);
+      else if (fps > 58 && pr < PR_CAP) np = Math.min(PR_CAP, pr + 0.1);
+      if (np !== pr) { pr = np; renderer.setPixelRatio(pr); renderer.setSize(innerWidth, innerHeight); }
+    }
+  }
   if (devOn && (frames++, now - fpsAt >= 500)) {
-    devEl.textContent = Math.round(frames * 1000 / (now - fpsAt)) + " fps · " +
+    devEl.textContent = Math.round(frames * 1000 / (now - fpsAt)) + " fps · " + pr.toFixed(2) + "x · " +
       renderer.info.render.calls + " calls · " + renderer.info.render.triangles + " tris";
     frames = 0; fpsAt = now;
   }
