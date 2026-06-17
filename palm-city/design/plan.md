@@ -138,4 +138,7 @@ This completes the 5-phase "AAA for mobile" pass (juice → visuals → controls
 - **Denser sky**: starfield 440→950, clouds rebuilt as **clustered puffs** (26 clouds × 6 overlapping soft puffs) for fluffier shapes; bigger moon.
 - **Sun-driven lighting**: the directional key light now **follows the sun/moon arc** (direction swings east→overhead→west) and **tints with time of day** — warm white midday, orange near the horizon (`C_HORIZON`), cool blue moonlight at night (`C_MOON`) — so shading shifts realistically through the cycle.
 - **Lit windows**: buildings get an emissive window map (`texWindows`, built with `Math.random` so the seeded world layout is untouched) that ramps up with the night factor, so windows glow after dark.
+
+## v19 (street lamps)
+- **Street lamps** at every block corner (`N×N`, two InstancedMeshes — poles + heads, +2 draw calls). The lamp heads use an emissive material that ramps up with the night factor, and each head is added to the neon glow cloud so it casts a warm bloom halo after dark.
 - **Roadside ramps**: the five stunt ramps are offset ~5.5u perpendicular to their travel so they hug the curb instead of the road centre, for realism (still on the asphalt).

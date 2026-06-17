@@ -168,6 +168,7 @@ function envUpdate() {
   const night = a.night + (b.night - a.night) * k;
   palmIM.material.emissiveIntensity = 1 + night * 1.7;          // Golden Palms glow at night
   if (buildingMat) buildingMat.emissiveIntensity = night * 0.95;   // windows light up after dark
+  if (lampMat) lampMat.emissiveIntensity = night * 1.5;            // street lamps glow after dark
   setGlow(night);
   setSky(night);
 }
@@ -460,6 +461,22 @@ specialBuilding(GARAGE.x, GARAGE.z, 34, 8, 26, 0x5b6470, STR.garageName, "rgba(4
     addCollider(x, z, 0.5, 0.5);
   });
   scene.add(imT, imC);
+}
+
+// ---------- street lamps (instanced poles + heads that glow at night) ----------
+const lampHeads = [];
+let lampMat = null;
+{
+  const pole = new THREE.CylinderGeometry(0.16, 0.22, 7, 6); pole.translate(0, 3.5, 0);
+  const head = new THREE.BoxGeometry(0.8, 0.42, 0.8); head.translate(0, 7.05, 0);
+  const spots = [];
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) spots.push([blockMin(i) + 2.5, blockMin(j) + 2.5]);
+  const poleIM = new THREE.InstancedMesh(pole, new THREE.MeshLambertMaterial({ color: 0x3a3f47 }), spots.length);
+  lampMat = new THREE.MeshLambertMaterial({ color: 0x2a2a2a, emissive: 0xffd98a, emissiveIntensity: 0 });
+  const headIM = new THREE.InstancedMesh(head, lampMat, spots.length);
+  const m = new THREE.Matrix4();
+  spots.forEach(([x, z], idx) => { m.makeTranslation(x, CURB, z); poleIM.setMatrixAt(idx, m); headIM.setMatrixAt(idx, m); lampHeads.push([x, 7.05 + CURB, z]); });
+  scene.add(poleIM, headIM);
 }
 
 // ---------- characters ----------
@@ -1033,6 +1050,7 @@ let race = { stage: "idle", ci: -1, cp: 0, t: 0, armed: true };  // idle | activ
   pts.push([PLAZA.x, 3.4, PLAZA.z, 0.7, 0.85, 0.95]);                 // fountain
   pts.push([GARAGE.x, 5, GARAGE.z, 0.4, 0.85, 0.95]);                 // garage sign
   for (const C of CIRCUITS) pts.push([C.start.x, 4.4, C.start.z, 0.95, 0.95, 0.95]);  // race gates
+  for (const lh of lampHeads) pts.push([lh[0], lh[1], lh[2], 0.5, 0.4, 0.18]);         // street-lamp halos
   const gpos = new Float32Array(pts.length * 3);
   glowBase = new Float32Array(pts.length * 3);
   glowCol = new Float32Array(pts.length * 3);
