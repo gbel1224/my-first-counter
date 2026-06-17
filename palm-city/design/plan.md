@@ -146,3 +146,7 @@ This completes the 5-phase "AAA for mobile" pass (juice → visuals → controls
 ## v20 (batch 1 of GTA-style expansion — nitro + weather)
 - **Nitro boost**: a BOOST button (and Shift while driving) gives a surge of acceleration and ~1.5× top speed while a meter lasts, with exhaust-flame particles and rumble; the meter depletes while boosting and recharges otherwise, shown as a bar on the speedometer.
 - **Weather**: a player-following rain system (`LineSegments` streaks) on a slow auto-cycle (~40% chance of rain every 45–95s); rain greys the fog and dims the sun/hemi lights for a moodier look. Radio stations intentionally deferred per request.
+
+## v21 (batch 2a — motorbike + weather toggle)
+- **Motorbike**: a new drivable vehicle (`bikeGeo` + `makeBike`) added to the `cars` array, so it reuses the entire driving/headlight/shadow system. Nimble stats (accel 21, top 30, turn 2.7), leans into turns (`rotation.z` from lateral momentum). Two parked around town, free to ride.
+- **Manual weather toggle**: a settings-panel button cycling AUTO / RAIN / CLEAR (`weatherMode`) so rain can be forced for testing instead of waiting on the auto-cycle.

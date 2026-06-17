@@ -555,6 +555,22 @@ function makeCar(color) {
   scene.add(mesh);
   return mesh;
 }
+// motorbike — a nimble vehicle that reuses the whole car driving system
+const bikeGeo = mergeGeos([
+  boxGeoC(0.7, 0.5, 1.9, 0, 0.95, 0, 0xffffff),       // tank/body (tintable)
+  boxGeoC(0.5, 0.22, 0.6, 0, 1.16, -0.6, 0x23262b),   // seat
+  boxGeoC(0.28, 0.82, 0.82, 0, 0.5, 1.0, 0x161616),   // front wheel
+  boxGeoC(0.28, 0.82, 0.82, 0, 0.5, -1.0, 0x161616),  // rear wheel
+  boxGeoC(0.82, 0.12, 0.12, 0, 1.5, 0.86, 0x3a3f47),  // handlebars
+  boxGeoC(0.24, 0.18, 0.1, 0, 1.26, 1.26, 0xfff4c4),  // headlight
+  boxGeoC(0.55, 0.7, 0.5, 0, 1.72, -0.32, 0xff7a33),  // rider torso
+  boxGeoC(0.34, 0.34, 0.32, 0, 2.2, -0.42, 0xe8b08a), // rider head
+]);
+function makeBike(color) {
+  const mesh = new THREE.Mesh(bikeGeo, new THREE.MeshPhongMaterial({ vertexColors: true, color, shininess: 60, specular: 0x555555 }));
+  scene.add(mesh);
+  return mesh;
+}
 
 // drivable cars
 const cars = [
@@ -587,6 +603,11 @@ PCARS.forEach((pc, i) => {
   pc.car = car;
   cars.push(car);
 });
+
+// free-to-ride motorbikes parked around town — high accel & turn, modest top speed
+for (const b of [{ x: 0, z: -30, h: 0, c: 0xe8543f }, { x: 120, z: 4, h: Math.PI / 2, c: 0x2b2f36 }]) {
+  cars.push({ x: b.x, z: b.z, h: b.h, speed: 0, mesh: makeBike(b.c), bike: true, accel: 21, top: 30, turn: 2.7 });
+}
 
 for (const c of cars) { c.y = 0; c.vy = 0; c.lat = 0; c.rampCD = 0; c.airStart = 0; }
 
@@ -1154,10 +1175,11 @@ rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
 const rainSeg = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0xbcd0ee, transparent: true, opacity: 0, fog: false }));
 rainSeg.frustumCulled = false; scene.add(rainSeg);
 const _fogGray = new THREE.Color(0x6b7079);
-let weather = 0, weatherTarget = 0, weatherTimer = 30;
+let weather = 0, weatherTarget = 0, weatherTimer = 30, weatherMode = 0;   // mode: 0 auto, 1 rain, 2 clear
 function updateWeather(dt) {
-  weatherTimer -= dt;
-  if (weatherTimer <= 0) { weatherTarget = Math.random() < 0.4 ? 1 : 0; weatherTimer = rr(45, 95); }
+  if (weatherMode === 1) weatherTarget = 1;
+  else if (weatherMode === 2) weatherTarget = 0;
+  else { weatherTimer -= dt; if (weatherTimer <= 0) { weatherTarget = Math.random() < 0.4 ? 1 : 0; weatherTimer = rr(45, 95); } }
   weather += (weatherTarget - weather) * Math.min(1, dt * 0.4);
   rainSeg.material.opacity = weather * 0.5;
   if (weather > 0.02) {
@@ -1745,6 +1767,9 @@ dom("stclose").textContent = STR.statsClose;
   const bb = dom("stbloom");
   bb.textContent = STR.bloomToggle(bloomOn);
   bb.addEventListener("click", () => { bloomOn = !bloomOn; bloomFailed = false; try { localStorage.setItem(BLOOM_KEY, bloomOn ? "1" : "0"); } catch (e) {} bb.textContent = STR.bloomToggle(bloomOn); });
+  const wb = dom("stweather");
+  wb.textContent = STR.weatherToggle(weatherMode);
+  wb.addEventListener("click", () => { weatherMode = (weatherMode + 1) % 3; wb.textContent = STR.weatherToggle(weatherMode); });
 }
 dom("streset").addEventListener("click", resetGame);
 dom("streset").textContent = STR.newGame;
@@ -2012,6 +2037,7 @@ function update(dt) {
     c.mesh.position.set(c.x, gy + (c.y || 0), c.z);
     c.mesh.rotation.y = c.h;
     c.mesh.rotation.x = (c.y > 0) ? clamp(-c.vy * 0.02, -0.5, 0.5) : 0;
+    if (c.bike) c.mesh.rotation.z = clamp((c.lat || 0) * 0.05, -0.45, 0.45);   // lean into turns
   }
 
   // story characters idle bob

@@ -102,6 +102,7 @@ export const STR = {
   repaintDone: "Fresh coat of paint!",
   garageDone: "DONE",
   bloomToggle: on => "✨ Bloom: " + (on ? "ON" : "OFF"),
+  weatherToggle: mode => "🌧 " + ["Weather: AUTO", "Weather: RAIN", "Weather: CLEAR"][mode],
   garageBuy: cost => "BUY · $" + cost.toLocaleString("en-US"),
   garageSpeed: "Top speed",
   garageAccel: "Accel",
