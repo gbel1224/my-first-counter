@@ -142,3 +142,7 @@ This completes the 5-phase "AAA for mobile" pass (juice → visuals → controls
 ## v19 (street lamps)
 - **Street lamps** at every block corner (`N×N`, two InstancedMeshes — poles + heads, +2 draw calls). The lamp heads use an emissive material that ramps up with the night factor, and each head is added to the neon glow cloud so it casts a warm bloom halo after dark.
 - **Roadside ramps**: the five stunt ramps are offset ~5.5u perpendicular to their travel so they hug the curb instead of the road centre, for realism (still on the asphalt).
+
+## v20 (batch 1 of GTA-style expansion — nitro + weather)
+- **Nitro boost**: a BOOST button (and Shift while driving) gives a surge of acceleration and ~1.5× top speed while a meter lasts, with exhaust-flame particles and rumble; the meter depletes while boosting and recharges otherwise, shown as a bar on the speedometer.
+- **Weather**: a player-following rain system (`LineSegments` streaks) on a slow auto-cycle (~40% chance of rain every 45–95s); rain greys the fog and dims the sun/hemi lights for a moodier look. Radio stations intentionally deferred per request.

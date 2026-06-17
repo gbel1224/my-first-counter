@@ -1143,6 +1143,40 @@ let race = { stage: "idle", ci: -1, cp: 0, t: 0, armed: true };  // idle | activ
   cloudPts = new THREE.Points(cg, new THREE.PointsMaterial({ size: 150, map: partTex, color: 0xffffff, transparent: true, opacity: 0.4, depthWrite: false, fog: false, sizeAttenuation: true }));
   cloudPts.frustumCulled = false; scene.add(cloudPts);
 }
+
+// ---------- weather: rain that follows the player, with a slow auto-cycle ----------
+const RAIN_N = 360;
+const rainPos = new Float32Array(RAIN_N * 2 * 3);   // pairs of verts (streaks)
+const rainLocal = new Float32Array(RAIN_N * 3);     // local x,y,z of each streak top, around the player
+for (let i = 0; i < RAIN_N; i++) { rainLocal[i * 3] = rr(-45, 45); rainLocal[i * 3 + 1] = rr(0, 46); rainLocal[i * 3 + 2] = rr(-45, 45); }
+const rainGeo = new THREE.BufferGeometry();
+rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
+const rainSeg = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0xbcd0ee, transparent: true, opacity: 0, fog: false }));
+rainSeg.frustumCulled = false; scene.add(rainSeg);
+const _fogGray = new THREE.Color(0x6b7079);
+let weather = 0, weatherTarget = 0, weatherTimer = 30;
+function updateWeather(dt) {
+  weatherTimer -= dt;
+  if (weatherTimer <= 0) { weatherTarget = Math.random() < 0.4 ? 1 : 0; weatherTimer = rr(45, 95); }
+  weather += (weatherTarget - weather) * Math.min(1, dt * 0.4);
+  rainSeg.material.opacity = weather * 0.5;
+  if (weather > 0.02) {
+    const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
+    for (let i = 0; i < RAIN_N; i++) {
+      let y = rainLocal[i * 3 + 1] - dt * 65;
+      if (y < -2) { y += 48; rainLocal[i * 3] = rr(-45, 45); rainLocal[i * 3 + 2] = rr(-45, 45); }
+      rainLocal[i * 3 + 1] = y;
+      const x = px + rainLocal[i * 3], z = pz + rainLocal[i * 3 + 2];
+      rainPos[i * 6] = x; rainPos[i * 6 + 1] = y + 2.4; rainPos[i * 6 + 2] = z;       // streak top
+      rainPos[i * 6 + 3] = x + 0.3; rainPos[i * 6 + 4] = y; rainPos[i * 6 + 5] = z;   // streak bottom
+    }
+    rainGeo.attributes.position.needsUpdate = true;
+    scene.fog.color.lerp(_fogGray, weather * 0.45);                                   // grey, hazier mood
+    sun.intensity *= (1 - weather * 0.35);
+    hemi.intensity *= (1 - weather * 0.2);
+  }
+}
+
 function updateRace(dt) {
   if (state.mi < M.length || dlgLines) return;     // freeplay only
   const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
@@ -1284,13 +1318,16 @@ addEventListener("pointerup", joyEnd);
 addEventListener("pointercancel", joyEnd);
 document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
 
-const btnA = dom("btnA"), btnB = dom("btnB"), brakeBtn = dom("brake");
-let brakeHeld = false;
+const btnA = dom("btnA"), btnB = dom("btnB"), brakeBtn = dom("brake"), boostBtn = dom("boost");
+let brakeHeld = false, boostHeld = false, boostMeter = 1;
 btnA.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actA = true; });
 btnB.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actB = true; bHeld = true; });
 brakeBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); brakeHeld = true; });
-addEventListener("pointerup", () => { bHeld = false; brakeHeld = false; });
-addEventListener("pointercancel", () => { bHeld = false; brakeHeld = false; });
+boostBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); boostHeld = true; });
+addEventListener("pointerup", () => { bHeld = false; brakeHeld = false; boostHeld = false; });
+addEventListener("pointercancel", () => { bHeld = false; brakeHeld = false; boostHeld = false; });
+// keyboard nitro (Shift) while driving
+const boosting = () => (boostHeld || (!!driving && (keys.has("ShiftLeft") || keys.has("ShiftRight")))) && boostMeter > 0.04;
 // keyboard handbrake (Space) while driving
 const braking = () => brakeHeld || (!!driving && keys.has("Space") && !dlgLines);
 
@@ -1357,7 +1394,7 @@ const elSpeedo = dom("speedo"), spCtx = elSpeedo.getContext("2d");
 let lastMoneyShown = -1, lastBtnA = "", lastBtnB = "";
 
 // speedometer / gear dial (drawn while driving)
-function drawSpeedo(spd) {
+function drawSpeedo(spd, boost) {
   const S = 92, cx = 46, cy = 46, R = 35, a0 = Math.PI * 0.75, a1 = Math.PI * 2.25;
   spCtx.clearRect(0, 0, S, S);
   spCtx.fillStyle = "rgba(20,28,24,.82)"; spCtx.beginPath(); spCtx.arc(cx, cy, 44, 0, 7); spCtx.fill();
@@ -1375,6 +1412,10 @@ function drawSpeedo(spd) {
   spCtx.fillStyle = "#9fe6a0"; spCtx.font = "bold 8px sans-serif"; spCtx.fillText("KM/H", cx, cy + 14);
   const gear = spd < -0.5 ? "R" : Math.abs(spd) < 0.5 ? "N" : Math.abs(spd) < 9 ? "1" : Math.abs(spd) < 18 ? "2" : "3";
   spCtx.fillStyle = "#ffd166"; spCtx.font = "bold 12px sans-serif"; spCtx.fillText(gear, cx, cy - 13);
+  // nitro meter (bottom bar)
+  const bw = 52, bx = cx - bw / 2, by = 82;
+  spCtx.fillStyle = "rgba(255,255,255,.16)"; spCtx.fillRect(bx, by, bw, 4);
+  spCtx.fillStyle = (boost || 0) > 0.25 ? "#ff9d2e" : "#ff5b5b"; spCtx.fillRect(bx, by, bw * (boost || 0), 4);
 }
 
 function nearestCar() {
@@ -1476,10 +1517,11 @@ function updateHUD() {
   }
   if (b !== lastBtnB) { btnB.style.display = b ? "block" : "none"; btnB.textContent = b; lastBtnB = b; }
 
-  // brake button + speedometer: only while driving
+  // brake/boost buttons + speedometer: only while driving
   const drive = driving && !dlgLines && !garageOpen && !statsOpen;
   brakeBtn.style.display = drive ? "block" : "none";
-  if (drive) { elSpeedo.style.display = "block"; drawSpeedo(driving.speed); }
+  boostBtn.style.display = drive ? "block" : "none";
+  if (drive) { elSpeedo.style.display = "block"; drawSpeedo(driving.speed, boostMeter); }
   else if (elSpeedo.style.display !== "none") elSpeedo.style.display = "none";
 }
 
@@ -1784,11 +1826,19 @@ function update(dt) {
     const brakeAmt = braking() ? 1 : (inp.mz < 0 ? -inp.mz : 0);
     const accel = (inp.mz > 0 && !braking()) ? (c.accel || 13) * inp.mz : 0;
     const brake = brakeAmt > 0 ? 22 * brakeAmt : 0;
-    c.speed += accel * dt;
+    // nitro: surge of accel + higher top speed while the meter lasts; recharges when off
+    const nitro = boosting();
+    boostMeter = clamp(boostMeter + (nitro ? -dt * 0.5 : dt * 0.32), 0, 1);
+    c.speed += accel * (nitro ? 2 : 1) * dt;
+    if (nitro) c.speed += 14 * dt;                                  // extra shove
     if (brake) c.speed = c.speed > 0 ? Math.max(0, c.speed - brake * dt) : Math.max(-8, c.speed - 6 * dt);
     if (brakeAmt > 0 && c.speed <= 0) c.speed = Math.max(-8, c.speed - 8 * dt);
     c.speed -= c.speed * 0.6 * dt;                                  // drag
-    c.speed = clamp(c.speed, -8, c.top || 26);
+    c.speed = clamp(c.speed, -8, (c.top || 26) * (nitro ? 1.5 : 1));
+    if (nitro && c.y === 0) {                                        // exhaust flames + rumble
+      emit(c.x - Math.sin(c.h) * 2.4, 0.6, c.z - Math.cos(c.h) * 2.4, rr(-0.4, 0.4), rr(0.2, 0.7), rr(-0.4, 0.4), 0.4, 0.95, 0.5, 0.15);
+      addShake(0.05);
+    }
     const dir = c.speed >= 0 ? 1 : -1;
     const prevH = c.h;
     c.h -= inp.mx * (c.turn || 1.9) * dt * dir * clamp(Math.abs(c.speed) / 10, 0, 1);
@@ -1907,6 +1957,7 @@ function update(dt) {
   // income + missions
   state.money += incomeRate() / 60 * dt;
   envUpdate();
+  updateWeather(dt);
   // tip jars: owned businesses fill up; collect by stopping by on foot
   for (const b of BIZ) {
     const lvl = state.owned[b.id] || 0;
