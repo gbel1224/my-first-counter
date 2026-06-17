@@ -157,3 +157,7 @@ This completes the 5-phase "AAA for mobile" pass (juice → visuals → controls
 ## v23 (batch 3 — vigilante + 6-star wanted)
 - **Vigilante crook chase**: in freeplay, while driving, a fleeing crook car periodically spawns (`updateVigilante`) with a flashing red marker (3D + minimap). It flees from the player; ram it to bust for escalating cash (400 + 50×busts). Times out / escapes if not caught. Busts persist in `state.busts`; new **Street Justice** achievement at 5 busts.
 - **6-star wanted**: max wanted raised 3→5 with `POLICE_N` 3→5; police chase faster at higher stars (`tgt = 19 + heat·1.2`).
+
+## v24 (batch 4 — apartment + photo mode)
+- **Apartment**: a buyable Home building (cell 2,3, north of the plaza, $6,000). On foot near it: BUY HOME when unowned, REST when owned. Resting advances `simTime` by half a cycle (flips day↔night) — a cozy life-sim touch. Ownership persists (`state.home`); new **Homeowner** achievement. Sign flips FOR SALE → HOME on purchase.
+- **Photo Mode**: a 📷 HUD button hides all UI via a `body.photo` class (and suppresses 3D markers) for a clean screenshot; you can still drive/walk to frame the shot, and a ✕ Photo button exits. Guarded so the headless smoke (no `document.body.classList`) is unaffected.

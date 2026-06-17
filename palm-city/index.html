@@ -37,6 +37,14 @@
     background:rgba(20,28,24,.72); color:#ffe9b3; font-size:16px; }
   #statsbtn { width:36px; height:36px; border-radius:50%; border:none; flex:none;
     background:rgba(20,28,24,.72); color:#ffe9b3; font-size:16px; }
+  #photobtn { width:36px; height:36px; border-radius:50%; border:none; flex:none;
+    background:rgba(20,28,24,.72); color:#ffe9b3; font-size:15px; }
+  #photoclose { position:absolute; top:calc(14px + env(safe-area-inset-top,0px));
+    right:calc(14px + env(safe-area-inset-right,0px)); display:none; padding:11px 18px; border:none;
+    border-radius:22px; background:rgba(20,28,24,.82); color:#fff; font-weight:800; font-size:14px; }
+  body.photo #topbar, body.photo #joy, body.photo .btn, body.photo #speedo,
+  body.photo #wanted, body.photo #toast { display:none !important; }
+  body.photo #photoclose { display:block; }
 
   #toast { position:absolute; top:28%; left:50%; transform:translateX(-50%);
     background:rgba(20,28,24,.85); color:#ffe9b3; font-size:18px; font-weight:800;
@@ -176,6 +184,7 @@
     <div id="missionbox"><div id="mtitle"></div><div id="mstep"></div></div>
     <canvas id="minimap" width="132" height="132"></canvas>
     <button id="statsbtn" class="pe">🏆</button>
+    <button id="photobtn" class="pe">📷</button>
     <button id="mute" class="pe"></button>
   </div>
   <div id="toast"></div>
@@ -191,6 +200,7 @@
   <div id="garage" class="pe"><div class="gcard"><button id="gx" class="xclose">✕</button><div id="gtitle"></div><div id="gstats"></div><button id="gbuy"></button><div id="gmods"><button id="gmEngine"></button><button id="gmTurbo"></button><button id="gmTyres"></button></div><div id="gswatches"></div><button id="gdone"></button></div></div>
   <div id="stats" class="pe"><div class="scard"><button id="stx" class="xclose">✕</button><div id="sttitle"></div><div id="stbody"></div><div class="srow2"><button id="stbloom"></button><button id="stweather"></button><button id="streset"></button><button id="stclose"></button></div></div></div>
   <div id="confirm" class="pe"><div class="ccard"><div id="cmsg"></div><div class="crow"><button id="cno"></button><button id="cyes"></button></div></div></div>
+  <button id="photoclose" class="pe">✕ Photo</button>
 </div>
 <div id="dev"></div>
 <script type="module" src="./game.js"></script>

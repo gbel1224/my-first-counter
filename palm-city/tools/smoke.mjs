@@ -199,6 +199,10 @@ h.buyMod(0);   // engine upgrade
 assert(h.state.mods[pcar.pid] && h.state.mods[pcar.pid][0] >= 1, "bought an engine upgrade");
 assert(pcar.top > topBefore, "engine upgrade raised top speed");
 h.closeGarage();
+
+// apartment: buy the home (on foot at the home building)
+h.state.money = 9999; goto_(-44, 44); run(3); key("KeyB"); run(3);
+assert(h.state.home, "bought the apartment");
 goto_(pcar.x, pcar.z); run(3); key("KeyE"); run(3);
 assert(h.debug().driving, "can drive the bought personal car");
 key("KeyE"); run(3); assert(!h.debug().driving, "exited the personal car");

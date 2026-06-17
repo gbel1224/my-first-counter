@@ -328,9 +328,10 @@ scene.add(ground);
 
 // block layout
 const PARKS = new Set(["2,2", "1,1", "4,4"]);
-const SPECIAL = { "1,3": "wash", "4,2": "burger", "5,0": "club", "0,4": "depot", "1,2": "pizza", "2,4": "taxi", "5,5": "marina", "3,2": "garage" };
+const SPECIAL = { "1,3": "wash", "4,2": "burger", "5,0": "club", "0,4": "depot", "1,2": "pizza", "2,4": "taxi", "5,5": "marina", "3,2": "garage", "2,3": "home" };
 const PLAZA = { x: bc(2), z: bc(2) };
 const GARAGE = { x: bc(3), z: bc(2) };
+const HOME = { x: bc(2), z: bc(3) };
 
 // curb slabs: paved + grass, instanced
 {
@@ -400,6 +401,7 @@ specialBuilding(bc(1) + 18, bc(2) + 14, 18, 8, 18, 0xe0b04e, STR.pizzaName, "rgb
 specialBuilding(bc(2), bc(4), 30, 6, 24, 0xe8c35a, STR.biz.taxi.name, "rgba(160,120,20,.9)");
 specialBuilding(bc(5), bc(5), 40, 7, 30, 0x5fa8c9, STR.biz.marina.name, "rgba(30,100,140,.9)");
 specialBuilding(GARAGE.x, GARAGE.z, 34, 8, 26, 0x5b6470, STR.garageName, "rgba(40,46,55,.9)");
+const homeSign = specialBuilding(HOME.x, HOME.z, 24, 11, 22, 0xc98a6b, STR.homeForSale, "rgba(150,90,50,.92)");
 
 // plaza: fountain + hot dog cart
 {
@@ -866,13 +868,14 @@ const state = {
   medals: {},            // best medal tier per circuit id (1 bronze / 2 silver / 3 gold)
   maxMoney: 0,           // high-water cash mark (for the Tycoon achievement)
   busts: 0,              // crooks busted (vigilante)
+  home: false,           // owns the apartment
   ach: [],               // unlocked achievement ids
   mi: 0,                 // mission index; 8 = story complete
   phase: "intro",        // intro | play
 };
 function save() {
   state.maxMoney = Math.max(state.maxMoney || 0, Math.floor(state.money));
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, ach: state.ach, mi: state.mi })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, home: !!state.home, ach: state.ach, mi: state.mi })); } catch (e) {}
 }
 function load() {
   try {
@@ -887,6 +890,7 @@ function load() {
       state.medals = d.medals || {};
       state.maxMoney = d.maxMoney || 0;
       state.busts = d.busts || 0;
+      state.home = !!d.home;
       state.ach = d.ach || [];
       for (const k in state.owned) if (state.owned[k] === true) state.owned[k] = 1; // pre-upgrade saves
       return true;
@@ -900,6 +904,7 @@ function applyOwnership() {
   for (const i of state.palms) if (i >= 0 && i < palmCollected.length) palmCollected[i] = true;
   for (const c of cars) if (c.personal && state.cars[c.pid] != null) unlockCar(c, state.cars[c.pid]);
   for (const c of cars) if (c.personal) applyMods(c);
+  if (state.home) markHomeOwned();
 }
 function unlockCar(c, color) {
   c.locked = false;
@@ -927,6 +932,22 @@ function buyMod(c, track) {
   save();
   renderShowroom();
 }
+
+// ---------- apartment (buyable home + rest to pass time) ----------
+const HOME_COST = 6000;
+const nearHome = () => !driving && dist2(player.x, player.z, HOME.x, HOME.z) < 25;
+function markHomeOwned() {
+  homeSign.material.map.dispose();
+  const sp = textSprite(STR.homeOwned, "#fff", "rgba(90,150,90,.92)", 16, 4, 0);
+  homeSign.material.map = sp.material.map; sp.material.dispose();
+}
+function buyHome() {
+  if (state.money < HOME_COST) { toast(STR.needMore(HOME_COST - Math.floor(state.money))); return; }
+  state.money -= HOME_COST; state.home = true; markHomeOwned();
+  toast(STR.homeBought); AudioSys.play("jingle", 0.9); flash("#9fe6a0", 0.3); buzz(20); save();
+}
+function restAtHome() { simTime += 120; toast(STR.rested); AudioSys.play("door", 0.6); save(); }
+
 function markOwned(b) {
   const lvl = state.owned[b.id] || 1;
   b.sale.material.map.dispose();
@@ -1597,6 +1618,7 @@ function updateHUD() {
       const act = nearestBizAction();
       if (act) b = act.mode === "buy" ? STR.btnBuy(STR.biz[act.b.id].name, act.cost)
                                       : STR.btnUpgrade(act.lvl, act.cost);
+      else if (nearHome()) b = state.home ? STR.btnRest : STR.btnBuyHome(HOME_COST);
       else {
         const pc = nearestPersonalCar();
         if (pc) b = pc.locked ? STR.btnBuyCar(STR.pcars[pc.pid].name, pc.price) : STR.btnRepaint;
@@ -1612,6 +1634,8 @@ function updateHUD() {
   boostBtn.style.display = drive ? "block" : "none";
   if (drive) { elSpeedo.style.display = "block"; drawSpeedo(driving.speed, boostMeter); }
   else if (elSpeedo.style.display !== "none") elSpeedo.style.display = "none";
+
+  if (photoMode) { missionMarker.group.visible = false; sideMarker.group.visible = false; crookMarker.group.visible = false; }
 }
 
 function drawMinimap(t) {
@@ -1797,6 +1821,7 @@ const ACH = [
   { id: "crown",   done: () => CIRCUITS.every(c => (state.races[c.id] || 0) > 0) },
   { id: "goldrush", done: () => CIRCUITS.every(c => (state.medals[c.id] || 0) >= 3) },
   { id: "vigil",   done: () => (state.busts || 0) >= 5 },
+  { id: "homeowner", done: () => !!state.home },
   { id: "tycoon",  done: () => (state.maxMoney || 0) >= 50000 },
   { id: "story",   done: () => state.mi >= M.length },
 ];
@@ -1865,6 +1890,12 @@ function setMute(m) {
 muteBtn.addEventListener("click", () => setMute(!AudioSys.muted));
 setMute((() => { try { return localStorage.getItem(MUTE_KEY) === "1"; } catch (e) { return false; } })());
 
+// photo mode: hide all HUD for a clean shot; you can still drive/walk to frame it
+let photoMode = false;
+function setPhoto(on) { photoMode = on; if (document.body.classList) document.body.classList.toggle("photo", on); }
+dom("photobtn").addEventListener("click", () => { if (state.phase === "play" && !dlgLines && !garageOpen && !statsOpen) setPhoto(true); });
+dom("photoclose").addEventListener("click", () => setPhoto(false));
+
 // ---------- actions ----------
 function doActionA() {
   if (driving) {                                   // exit car
@@ -1909,6 +1940,7 @@ function doActionB() {
     }
     return;
   }
+  if (nearHome()) { if (state.home) restAtHome(); else buyHome(); return; }
   const pc = nearestPersonalCar();
   if (pc) openShowroom(pc);
 }
