@@ -655,7 +655,7 @@ for (let t = 0; t < 10; t++) {
 }
 
 // police cars (spawned by wanted level)
-const POLICE_N = 3;
+const POLICE_N = 5;   // up to 5-star wanted
 const police = [];
 for (let i = 0; i < POLICE_N; i++) {
   const mesh = makeCar(0x20407a);
@@ -865,13 +865,14 @@ const state = {
   races: {},             // best lap per circuit id (seconds)
   medals: {},            // best medal tier per circuit id (1 bronze / 2 silver / 3 gold)
   maxMoney: 0,           // high-water cash mark (for the Tycoon achievement)
+  busts: 0,              // crooks busted (vigilante)
   ach: [],               // unlocked achievement ids
   mi: 0,                 // mission index; 8 = story complete
   phase: "intro",        // intro | play
 };
 function save() {
   state.maxMoney = Math.max(state.maxMoney || 0, Math.floor(state.money));
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, ach: state.ach, mi: state.mi })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, ach: state.ach, mi: state.mi })); } catch (e) {}
 }
 function load() {
   try {
@@ -885,6 +886,7 @@ function load() {
       state.races = d.races || (d.bestRace ? { downtown: d.bestRace } : {});   // migrate single-circuit saves
       state.medals = d.medals || {};
       state.maxMoney = d.maxMoney || 0;
+      state.busts = d.busts || 0;
       state.ach = d.ach || [];
       for (const k in state.owned) if (state.owned[k] === true) state.owned[k] = 1; // pre-upgrade saves
       return true;
@@ -1268,6 +1270,46 @@ function updateRace(dt) {
   }
 }
 
+// ---------- vigilante: chase down a fleeing crook (freeplay) ----------
+const crook = { mesh: makeCar(0x5a2e2e), active: false, t: 0, cd: 25, x: 0, z: 0, h: 0 };
+crook.mesh.position.set(0, -9999, 0);
+const crookMarker = makeMarker(0xff3b3b);
+crookMarker.group.visible = false;
+function updateVigilante(dt) {
+  if (state.mi < M.length || dlgLines) { crookMarker.group.visible = false; return; }   // freeplay only
+  const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
+  if (!crook.active) {
+    crookMarker.group.visible = false; crook.mesh.position.set(0, -9999, 0);
+    crook.cd -= dt;
+    if (crook.cd <= 0 && driving && race.stage !== "active") {
+      const ang = Math.random() * Math.PI * 2;
+      crook.x = clamp(px + Math.cos(ang) * 44, -HALF + 5, HALF - 5);
+      crook.z = clamp(pz + Math.sin(ang) * 44, -HALF + 5, HALF - 5);
+      crook.h = Math.atan2(crook.x - px, crook.z - pz); crook.active = true; crook.t = 42;
+      toast(STR.crookSpotted); AudioSys.play("horn", 0.5);
+    }
+    return;
+  }
+  crook.t -= dt;
+  const dx = crook.x - px, dz = crook.z - pz, d = Math.hypot(dx, dz) || 1;
+  crook.h = lerpAngle(crook.h, Math.atan2(dx, dz), 1 - Math.exp(-3 * dt));   // flee from the player
+  moveWithCollision(crook, Math.sin(crook.h) * 14 * dt, Math.cos(crook.h) * 14 * dt, 2.1);
+  crook.mesh.position.set(crook.x, groundY(crook.x, crook.z), crook.z);
+  crook.mesh.rotation.y = crook.h;
+  crookMarker.group.visible = true;
+  crookMarker.group.position.set(crook.x, groundY(crook.x, crook.z), crook.z);
+  crookMarker.ring.scale.setScalar(1 + Math.sin(simTime * 4) * 0.13);
+  if (driving && d < 5.5) {                                                  // rammed = busted
+    const reward = 400 + (state.busts || 0) * 50;
+    state.money += reward; state.busts = (state.busts || 0) + 1;
+    toast(STR.crookBusted(reward)); AudioSys.play("cash"); buzz([0, 40, 40, 80]);
+    burst(crook.x, 0.6, crook.z, 16, 2, 2.2, 0.6, 0.95, 0.5, 0.2); addShake(0.4);
+    crook.active = false; crook.cd = rr(35, 60); save();
+    return;
+  }
+  if (crook.t <= 0 || d > 150) { crook.active = false; crook.cd = rr(35, 60); toast(STR.crookEscaped); }
+}
+
 // ---------- wanted level & police ----------
 let wanted = 0, wantedCD = 0, crimeCD = 0;
 function heatActive() {
@@ -1279,7 +1321,7 @@ function registerCrime() {
   if (mis && mis.race && mState === "active") return;
   if (crimeCD > 0) { wantedCD = 14; return; }
   crimeCD = 1.5; wantedCD = 14;
-  if (wanted < 3) { wanted++; toast(STR.wantedToast(wanted)); }
+  if (wanted < 5) { wanted++; toast(STR.wantedToast(wanted)); }
 }
 function bust() {
   const fine = Math.round((100 + 80 * wanted) * (driving && driving.fineMult ? driving.fineMult : 1));
@@ -1313,7 +1355,7 @@ function updatePolice(dt) {
     if (!p.active) continue;
     const dx = px - p.x, dz = pz - p.z, d = Math.hypot(dx, dz) || 1;
     p.h = lerpAngle(p.h, Math.atan2(dx, dz), 1 - Math.exp(-4 * dt));
-    const tgt = dlgLines ? 0 : 19;
+    const tgt = dlgLines ? 0 : 19 + heat * 1.2;   // higher stars = faster, scarier police
     p.speed += (tgt - p.speed) * Math.min(1, 3 * dt);
     moveWithCollision(p, Math.sin(p.h) * p.speed * dt, Math.cos(p.h) * p.speed * dt, 2.1);
     p.mesh.position.set(p.x, groundY(p.x, p.z), p.z);
@@ -1612,6 +1654,10 @@ function drawMinimap(t) {
     mapCtx.fillStyle = "#ff3b3b";
     mapCtx.beginPath(); mapCtx.arc((p.x + HALF) * sc, (p.z + HALF) * sc, 3, 0, 7); mapCtx.fill();
   }
+  if (crook.active) {   // fleeing crook (flashing)
+    mapCtx.fillStyle = (t * 3 | 0) % 2 ? "#ff5b5b" : "#ffffff";
+    mapCtx.beginPath(); mapCtx.arc((crook.x + HALF) * sc, (crook.z + HALF) * sc, 3.5, 0, 7); mapCtx.fill();
+  }
   const obj = currentObjective();
   if (obj.x !== undefined && (t * 2 | 0) % 2 === 0) {
     mapCtx.fillStyle = "#ffd166";
@@ -1750,6 +1796,7 @@ const ACH = [
   { id: "race1",   done: () => Object.keys(state.races).length > 0 },
   { id: "crown",   done: () => CIRCUITS.every(c => (state.races[c.id] || 0) > 0) },
   { id: "goldrush", done: () => CIRCUITS.every(c => (state.medals[c.id] || 0) >= 3) },
+  { id: "vigil",   done: () => (state.busts || 0) >= 5 },
   { id: "tycoon",  done: () => (state.maxMoney || 0) >= 50000 },
   { id: "story",   done: () => state.mi >= M.length },
 ];
@@ -2036,6 +2083,7 @@ function update(dt) {
   updateMissions(dt);
   updateSideJob();
   updateRace(dt);
+  updateVigilante(dt);
   updatePolice(dt);
   achTimer -= dt; if (achTimer <= 0) { achTimer = 1; refreshAch(true); }
   {
@@ -2223,7 +2271,8 @@ requestAnimationFrame(frame);
 // dev instrumentation: programmatic state/input access for automated smoke runs (?dev=1 tooling)
 globalThis.__palmCity = {
   state, player, cars, police, update, beginPlay, advanceDialogue,
-  forceCrime: () => { if (wanted < 3) wanted++; wantedCD = 14; },
+  forceCrime: () => { if (wanted < 5) wanted++; wantedCD = 14; },
+  crook,
   paint: hex => applyPaint(hex),
   buyCurrent: () => buyCurrent(),
   buyMod: t => buyMod(garageCar, t),

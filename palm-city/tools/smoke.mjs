@@ -177,6 +177,13 @@ h.cars[0].rampCD = 0; h.cars[0].y = 0; h.cars[0].vy = 0;
 let jumped = false;
 for (let i = 0; i < 240; i++) { h.update(1 / 60); if (h.debug().bestJump > 0) { jumped = true; break; } }
 assert(jumped, "stunt ramp launched the car for air time");
+
+// vigilante: a fleeing crook can be rammed and busted (while driving, freeplay)
+h.crook.active = true; h.crook.t = 42; h.crook.x = h.cars[0].x + 30; h.crook.z = h.cars[0].z;
+run(5);                                                   // exercise the flee/marker path
+const bustsBefore = h.state.busts || 0;
+h.crook.x = h.cars[0].x; h.crook.z = h.cars[0].z; run(3); // ram the crook
+assert((h.state.busts || 0) > bustsBefore, "busted a fleeing crook");
 key("KeyE"); run(2);
 
 // ---- garage: showroom -> buy, drive, and repaint a personal car ----
