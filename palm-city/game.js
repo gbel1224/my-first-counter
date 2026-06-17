@@ -479,6 +479,23 @@ let lampMat = null;
   scene.add(poleIM, headIM);
 }
 
+// ---------- road centre-line markings (one instanced draw) ----------
+{
+  const dash = new THREE.BoxGeometry(0.5, 0.06, 3);
+  const mat = new THREE.MeshLambertMaterial({ color: 0xe7d98a, emissive: 0x3a3320 });
+  const items = [];
+  const lim = HALF - 8, step = 14;
+  for (let i = 0; i <= N; i++) {
+    const c = roadC(i);
+    for (let p = -lim; p <= lim; p += step) { items.push([c, p, 0]); items.push([p, c, Math.PI / 2]); }
+  }
+  const im = new THREE.InstancedMesh(dash, mat, items.length);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), s = new THREE.Vector3(1, 1, 1), pv = new THREE.Vector3();
+  items.forEach(([x, z, rot], idx) => { pv.set(x, 0.04, z); q.setFromAxisAngle(up, rot); m.compose(pv, q, s); im.setMatrixAt(idx, m); });
+  im.frustumCulled = false;
+  scene.add(im);
+}
+
 // ---------- characters ----------
 function personGeo(p) {
   return mergeGeos([
