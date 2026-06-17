@@ -119,6 +119,10 @@
   #gstats .gperk { margin-top:9px; color:#ffd9a0; font-size:12px; font-weight:700; }
   #gbuy { font-size:15px; font-weight:800; letter-spacing:1px; border:none; border-radius:24px;
     padding:11px 34px; background:#9fe6a0; color:#15321b; margin-bottom:14px; }
+  #gmods { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-bottom:13px; }
+  #gmods button { font-size:11px; font-weight:700; border:2px solid #9fe6a0; border-radius:18px;
+    padding:8px 12px; background:transparent; color:#9fe6a0; }
+  #gmods button:active { transform:scale(.94); }
   #gswatches { display:flex; flex-wrap:wrap; gap:12px; justify-content:center; margin-bottom:16px; }
   #garage .gsw { width:46px; height:46px; border-radius:50%; border:3px solid rgba(255,255,255,.25);
     box-shadow:0 2px 8px rgba(0,0,0,.35); cursor:pointer; }
@@ -184,7 +188,7 @@
   <canvas id="speedo" width="92" height="92"></canvas>
   <div id="dialogue" class="pe"><div id="dwho"></div><div id="dtext"></div><div id="dhint"></div></div>
   <div id="intro" class="pe"></div>
-  <div id="garage" class="pe"><div class="gcard"><button id="gx" class="xclose">✕</button><div id="gtitle"></div><div id="gstats"></div><button id="gbuy"></button><div id="gswatches"></div><button id="gdone"></button></div></div>
+  <div id="garage" class="pe"><div class="gcard"><button id="gx" class="xclose">✕</button><div id="gtitle"></div><div id="gstats"></div><button id="gbuy"></button><div id="gmods"><button id="gmEngine"></button><button id="gmTurbo"></button><button id="gmTyres"></button></div><div id="gswatches"></div><button id="gdone"></button></div></div>
   <div id="stats" class="pe"><div class="scard"><button id="stx" class="xclose">✕</button><div id="sttitle"></div><div id="stbody"></div><div class="srow2"><button id="stbloom"></button><button id="stweather"></button><button id="streset"></button><button id="stclose"></button></div></div></div>
   <div id="confirm" class="pe"><div class="ccard"><div id="cmsg"></div><div class="crow"><button id="cno"></button><button id="cyes"></button></div></div></div>
 </div>

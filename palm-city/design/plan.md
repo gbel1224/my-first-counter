@@ -150,3 +150,6 @@ This completes the 5-phase "AAA for mobile" pass (juice → visuals → controls
 ## v21 (batch 2a — motorbike + weather toggle)
 - **Motorbike**: a new drivable vehicle (`bikeGeo` + `makeBike`) added to the `cars` array, so it reuses the entire driving/headlight/shadow system. Nimble stats (accel 21, top 30, turn 2.7), leans into turns (`rotation.z` from lateral momentum). Two parked around town, free to ride.
 - **Manual weather toggle**: a settings-panel button cycling AUTO / RAIN / CLEAR (`weatherMode`) so rain can be forced for testing instead of waiting on the auto-cycle.
+
+## v22 (batch 2b — car mods)
+- **Garage upgrades**: each owned personal car can buy Engine / Turbo / Tyres upgrades (3 levels each) in the showroom. Engine raises top speed (+12%/lvl), Turbo raises accel (+12%/lvl), Tyres raise handling (+7%/lvl). Base stats stored on the car; `applyMods` recomputes effective stats on buy and on load. Levels persist in `state.mods` (pid -> [eng,turbo,tyres]); cost = $800×(level+1). Stat bars in the showroom reflect the upgraded values.

@@ -187,6 +187,10 @@ goto_(pcar.x, pcar.z); run(3); key("KeyB"); run(3);
 assert(h.debug().garage, "showroom panel opens at a personal car");
 h.buyCurrent();
 assert(!pcar.locked && h.state.cars[pcar.pid] != null, "bought a personal car from the showroom");
+const topBefore = pcar.top;
+h.buyMod(0);   // engine upgrade
+assert(h.state.mods[pcar.pid] && h.state.mods[pcar.pid][0] >= 1, "bought an engine upgrade");
+assert(pcar.top > topBefore, "engine upgrade raised top speed");
 h.closeGarage();
 goto_(pcar.x, pcar.z); run(3); key("KeyE"); run(3);
 assert(h.debug().driving, "can drive the bought personal car");

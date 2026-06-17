@@ -594,6 +594,7 @@ PCARS.forEach((pc, i) => {
     x: px, z: pz, h: 0, speed: 0, mesh: makeCar(pc.color),
     personal: true, locked: true, pid: pc.id, price: pc.price,
     accel: pc.accel, top: pc.top, turn: pc.turn,
+    baseAccel: pc.accel, baseTop: pc.top, baseTurn: pc.turn,
     jumpMult: pc.jumpMult, heatMult: pc.heatMult, fineMult: pc.fineMult,
   };
   const sp = textSprite(STR.carForSale(STR.pcars[pc.id].name, pc.price), "#fff", "rgba(40,46,55,.92)", 12, 2.4, 0);
@@ -858,6 +859,7 @@ const state = {
   money: 25,
   owned: {},
   cars: {},              // owned personal cars: pid -> chosen paint color (hex)
+  mods: {},              // pid -> [engine, turbo, tyres] upgrade levels
   palms: [],
   bestJump: 0,
   races: {},             // best lap per circuit id (seconds)
@@ -869,7 +871,7 @@ const state = {
 };
 function save() {
   state.maxMoney = Math.max(state.maxMoney || 0, Math.floor(state.money));
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, ach: state.ach, mi: state.mi })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, ach: state.ach, mi: state.mi })); } catch (e) {}
 }
 function load() {
   try {
@@ -877,6 +879,7 @@ function load() {
     if (d && d.v === 1) {
       state.money = d.money; state.owned = d.owned || {}; state.mi = d.mi || 0;
       state.cars = d.cars || {};
+      state.mods = d.mods || {};
       state.palms = d.palms || [];
       state.bestJump = d.bestJump || 0;
       state.races = d.races || (d.bestRace ? { downtown: d.bestRace } : {});   // migrate single-circuit saves
@@ -894,11 +897,33 @@ function applyOwnership() {
   for (const b of BIZ) if (state.owned[b.id]) markOwned(b);
   for (const i of state.palms) if (i >= 0 && i < palmCollected.length) palmCollected[i] = true;
   for (const c of cars) if (c.personal && state.cars[c.pid] != null) unlockCar(c, state.cars[c.pid]);
+  for (const c of cars) if (c.personal) applyMods(c);
 }
 function unlockCar(c, color) {
   c.locked = false;
   c.mesh.material.color.setHex(color);
   if (c.sale) c.sale.visible = false;
+}
+const MOD_MAX = 3;
+const modCost = lvl => 800 * (lvl + 1);   // cost to buy the next level from the current one
+function applyMods(c) {
+  const m = state.mods[c.pid] || [0, 0, 0];
+  c.top = c.baseTop * (1 + m[0] * 0.12);
+  c.accel = c.baseAccel * (1 + m[1] * 0.12);
+  c.turn = c.baseTurn * (1 + m[2] * 0.07);
+}
+function buyMod(c, track) {
+  if (!c || c.locked) return;
+  const m = state.mods[c.pid] || (state.mods[c.pid] = [0, 0, 0]);
+  if (m[track] >= MOD_MAX) return;
+  const cost = modCost(m[track]);
+  if (state.money < cost) { toast(STR.needMore(cost - Math.floor(state.money))); return; }
+  state.money -= cost; m[track]++;
+  applyMods(c);
+  AudioSys.play("cash"); buzz(12);
+  toast(STR.modBought(STR.mods[["engine", "turbo", "grip"][track]], m[track]));
+  save();
+  renderShowroom();
 }
 function markOwned(b) {
   const lvl = state.owned[b.id] || 1;
@@ -1668,6 +1693,7 @@ function applyPaint(hex) {
   const done = dom("gdone"); done.textContent = STR.garageDone; done.addEventListener("click", closeGarage);
   dom("gx").addEventListener("click", closeGarage);
   dom("gbuy").addEventListener("click", buyCurrent);
+  ["gmEngine", "gmTurbo", "gmTyres"].forEach((id, t) => dom(id).addEventListener("click", () => buyMod(garageCar, t)));
 }
 function renderShowroom() {
   const c = garageCar; if (!c) return;
@@ -1683,6 +1709,13 @@ function renderShowroom() {
   buy.style.display = c.locked ? "block" : "none";
   buy.textContent = STR.garageBuy(c.price);
   dom("gswatches").style.display = c.locked ? "none" : "flex";
+  // upgrade buttons (owned cars only)
+  dom("gmods").style.display = c.locked ? "none" : "flex";
+  if (!c.locked) {
+    const m = state.mods[c.pid] || [0, 0, 0];
+    const set = (id, key, t) => { const lv = m[t]; dom(id).textContent = lv >= MOD_MAX ? STR.modMax(STR.mods[key]) : STR.modLabel(STR.mods[key], lv, modCost(lv)); };
+    set("gmEngine", "engine", 0); set("gmTurbo", "turbo", 1); set("gmTyres", "grip", 2);
+  }
 }
 function openShowroom(c) {
   garageCar = c; garageOpen = true;
@@ -2193,6 +2226,7 @@ globalThis.__palmCity = {
   forceCrime: () => { if (wanted < 3) wanted++; wantedCD = 14; },
   paint: hex => applyPaint(hex),
   buyCurrent: () => buyCurrent(),
+  buyMod: t => buyMod(garageCar, t),
   closeGarage: () => closeGarage(),
   openStats: () => openStats(),
   closeStats: () => closeStats(),
