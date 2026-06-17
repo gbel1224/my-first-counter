@@ -171,6 +171,7 @@ function envUpdate() {
   if (lampMat) lampMat.emissiveIntensity = night * 1.5;            // street lamps glow after dark
   setGlow(night);
   setSky(night);
+  updateCarLights(night);
 }
 
 addEventListener("resize", onResize);
@@ -743,6 +744,36 @@ function addShake(v) { shake = Math.min(1.4, shake + v); }
 function buzz(p) { if (navigator.vibrate) { try { navigator.vibrate(p); } catch (e) {} } }
 const elFlash = dom("flash");
 function flash(color, a) { elFlash.style.background = color; elFlash.style.opacity = a; setTimeout(() => { elFlash.style.opacity = 0; }, 60); }
+
+// car headlights + taillights (one additive point cloud, lit only at night)
+const LIGHT_CARS = [...cars, ...traffic, ...police];
+const HLN = LIGHT_CARS.length * 4;
+const hlPos = new Float32Array(HLN * 3).fill(-9999), hlCol = new Float32Array(HLN * 3);
+const hlGeo = new THREE.BufferGeometry();
+hlGeo.setAttribute("position", new THREE.BufferAttribute(hlPos, 3));
+hlGeo.setAttribute("color", new THREE.BufferAttribute(hlCol, 3));
+const hlPoints = new THREE.Points(hlGeo, new THREE.PointsMaterial({
+  size: 3.2, map: partTex, vertexColors: true, transparent: true,
+  depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true,
+}));
+hlPoints.frustumCulled = false; scene.add(hlPoints);
+function updateCarLights(g) {
+  let k = 0;
+  for (const c of LIGHT_CARS) {
+    const on = (c.active === undefined || c.active) && g > 0.01;
+    const fx = Math.sin(c.h), fz = Math.cos(c.h), rx = Math.cos(c.h), rz = -Math.sin(c.h);
+    const cy = (c.mesh ? c.mesh.position.y : 0) + 0.85;
+    for (let s = -1; s <= 1; s += 2) {   // headlights (front, warm)
+      hlPos[k * 3] = on ? c.x + fx * 2.4 + rx * 0.6 * s : -9999; hlPos[k * 3 + 1] = cy; hlPos[k * 3 + 2] = c.z + fz * 2.4 + rz * 0.6 * s;
+      hlCol[k * 3] = 0.95 * g; hlCol[k * 3 + 1] = 0.88 * g; hlCol[k * 3 + 2] = 0.6 * g; k++;
+    }
+    for (let s = -1; s <= 1; s += 2) {   // taillights (rear, red)
+      hlPos[k * 3] = on ? c.x - fx * 2.4 + rx * 0.6 * s : -9999; hlPos[k * 3 + 1] = cy; hlPos[k * 3 + 2] = c.z - fz * 2.4 + rz * 0.6 * s;
+      hlCol[k * 3] = 0.75 * g; hlCol[k * 3 + 1] = 0.08 * g; hlCol[k * 3 + 2] = 0.05 * g; k++;
+    }
+  }
+  hlGeo.attributes.position.needsUpdate = true; hlGeo.attributes.color.needsUpdate = true;
+}
 
 // ---------- markers ----------
 function makeMarker(color) {
