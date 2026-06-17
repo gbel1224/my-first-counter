@@ -328,10 +328,11 @@ scene.add(ground);
 
 // block layout
 const PARKS = new Set(["2,2", "1,1", "4,4"]);
-const SPECIAL = { "1,3": "wash", "4,2": "burger", "5,0": "club", "0,4": "depot", "1,2": "pizza", "2,4": "taxi", "5,5": "marina", "3,2": "garage", "2,3": "home" };
+const SPECIAL = { "1,3": "wash", "4,2": "burger", "5,0": "club", "0,4": "depot", "1,2": "pizza", "2,4": "taxi", "5,5": "marina", "3,2": "garage", "2,3": "home", "3,4": "hospital" };
 const PLAZA = { x: bc(2), z: bc(2) };
 const GARAGE = { x: bc(3), z: bc(2) };
 const HOME = { x: bc(2), z: bc(3) };
+const HOSPITAL = { x: bc(3), z: bc(4) };
 
 // curb slabs: paved + grass, instanced
 {
@@ -402,6 +403,7 @@ specialBuilding(bc(2), bc(4), 30, 6, 24, 0xe8c35a, STR.biz.taxi.name, "rgba(160,
 specialBuilding(bc(5), bc(5), 40, 7, 30, 0x5fa8c9, STR.biz.marina.name, "rgba(30,100,140,.9)");
 specialBuilding(GARAGE.x, GARAGE.z, 34, 8, 26, 0x5b6470, STR.garageName, "rgba(40,46,55,.9)");
 const homeSign = specialBuilding(HOME.x, HOME.z, 24, 11, 22, 0xc98a6b, STR.homeForSale, "rgba(150,90,50,.92)");
+specialBuilding(HOSPITAL.x, HOSPITAL.z, 30, 12, 26, 0xeef2f5, STR.hospitalName, "rgba(40,120,120,.92)");
 
 // plaza: fountain + hot dog cart
 {
@@ -868,6 +870,7 @@ const state = {
   medals: {},            // best medal tier per circuit id (1 bronze / 2 silver / 3 gold)
   maxMoney: 0,           // high-water cash mark (for the Tycoon achievement)
   busts: 0,              // crooks busted (vigilante)
+  rescues: 0,            // patients delivered (paramedic)
   home: false,           // owns the apartment
   ach: [],               // unlocked achievement ids
   mi: 0,                 // mission index; 8 = story complete
@@ -875,7 +878,7 @@ const state = {
 };
 function save() {
   state.maxMoney = Math.max(state.maxMoney || 0, Math.floor(state.money));
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, home: !!state.home, ach: state.ach, mi: state.mi })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, ach: state.ach, mi: state.mi })); } catch (e) {}
 }
 function load() {
   try {
@@ -890,6 +893,7 @@ function load() {
       state.medals = d.medals || {};
       state.maxMoney = d.maxMoney || 0;
       state.busts = d.busts || 0;
+      state.rescues = d.rescues || 0;
       state.home = !!d.home;
       state.ach = d.ach || [];
       for (const k in state.owned) if (state.owned[k] === true) state.owned[k] = 1; // pre-upgrade saves
@@ -1331,6 +1335,41 @@ function updateVigilante(dt) {
   if (crook.t <= 0 || d > 150) { crook.active = false; crook.cd = rr(35, 60); toast(STR.crookEscaped); }
 }
 
+// ---------- paramedic: rush a patient to the hospital (freeplay) ----------
+const medic = { stage: "idle", cd: 35, t: 0, x: 0, z: 0 };
+const medicMarker = makeMarker(0x44d0ff);
+medicMarker.group.visible = false;
+function updateParamedic(dt) {
+  if (state.mi < M.length || dlgLines) { medicMarker.group.visible = false; return; }   // freeplay only
+  const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
+  if (medic.stage === "idle") {
+    medicMarker.group.visible = false; medic.cd -= dt;
+    if (medic.cd <= 0 && driving && race.stage !== "active" && !crook.active) {
+      const ang = Math.random() * Math.PI * 2;
+      medic.x = clamp(px + Math.cos(ang) * 55, -HALF + 6, HALF - 6);
+      medic.z = clamp(pz + Math.sin(ang) * 55, -HALF + 6, HALF - 6);
+      medic.stage = "pickup"; toast(STR.medicCall); AudioSys.play("horn", 0.4);
+    }
+    return;
+  }
+  const tgt = medic.stage === "pickup" ? medic : HOSPITAL;
+  medicMarker.group.visible = true;
+  medicMarker.group.position.set(tgt.x, groundY(tgt.x, tgt.z), tgt.z);
+  medicMarker.ring.scale.setScalar(1 + Math.sin(simTime * 4) * 0.13);
+  if (medic.stage === "pickup") {
+    if (driving && dist2(px, pz, medic.x, medic.z) < 30) { medic.stage = "deliver"; medic.t = 38; toast(STR.medicAboard); AudioSys.play("door", 0.6); }
+    return;
+  }
+  medic.t -= dt;
+  if (medic.t <= 0) { medic.stage = "idle"; medic.cd = rr(30, 55); toast(STR.medicLost); return; }
+  if (driving && dist2(px, pz, HOSPITAL.x, HOSPITAL.z) < 40) {
+    const reward = 350 + (state.rescues || 0) * 45;
+    state.money += reward; state.rescues = (state.rescues || 0) + 1;
+    toast(STR.medicDelivered(reward)); AudioSys.play("jingle", 0.8); flash("#9fe6a0", 0.25); buzz([0, 30, 30]);
+    medic.stage = "idle"; medic.cd = rr(30, 55); save();
+  }
+}
+
 // ---------- wanted level & police ----------
 let wanted = 0, wantedCD = 0, crimeCD = 0;
 function heatActive() {
@@ -1682,6 +1721,11 @@ function drawMinimap(t) {
     mapCtx.fillStyle = (t * 3 | 0) % 2 ? "#ff5b5b" : "#ffffff";
     mapCtx.beginPath(); mapCtx.arc((crook.x + HALF) * sc, (crook.z + HALF) * sc, 3.5, 0, 7); mapCtx.fill();
   }
+  if (medic.stage !== "idle") {   // paramedic target
+    const mt = medic.stage === "pickup" ? medic : HOSPITAL;
+    mapCtx.fillStyle = "#44d0ff";
+    mapCtx.beginPath(); mapCtx.arc((mt.x + HALF) * sc, (mt.z + HALF) * sc, 3.5, 0, 7); mapCtx.fill();
+  }
   const obj = currentObjective();
   if (obj.x !== undefined && (t * 2 | 0) % 2 === 0) {
     mapCtx.fillStyle = "#ffd166";
@@ -1822,6 +1866,7 @@ const ACH = [
   { id: "goldrush", done: () => CIRCUITS.every(c => (state.medals[c.id] || 0) >= 3) },
   { id: "vigil",   done: () => (state.busts || 0) >= 5 },
   { id: "homeowner", done: () => !!state.home },
+  { id: "medic",   done: () => (state.rescues || 0) >= 5 },
   { id: "tycoon",  done: () => (state.maxMoney || 0) >= 50000 },
   { id: "story",   done: () => state.mi >= M.length },
 ];
@@ -2116,6 +2161,7 @@ function update(dt) {
   updateSideJob();
   updateRace(dt);
   updateVigilante(dt);
+  updateParamedic(dt);
   updatePolice(dt);
   achTimer -= dt; if (achTimer <= 0) { achTimer = 1; refreshAch(true); }
   {
@@ -2304,7 +2350,7 @@ requestAnimationFrame(frame);
 globalThis.__palmCity = {
   state, player, cars, police, update, beginPlay, advanceDialogue,
   forceCrime: () => { if (wanted < 5) wanted++; wantedCD = 14; },
-  crook,
+  crook, medic, HOSPITAL,
   paint: hex => applyPaint(hex),
   buyCurrent: () => buyCurrent(),
   buyMod: t => buyMod(garageCar, t),

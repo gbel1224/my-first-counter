@@ -161,3 +161,6 @@ This completes the 5-phase "AAA for mobile" pass (juice → visuals → controls
 ## v24 (batch 4 — apartment + photo mode)
 - **Apartment**: a buyable Home building (cell 2,3, north of the plaza, $6,000). On foot near it: BUY HOME when unowned, REST when owned. Resting advances `simTime` by half a cycle (flips day↔night) — a cozy life-sim touch. Ownership persists (`state.home`); new **Homeowner** achievement. Sign flips FOR SALE → HOME on purchase.
 - **Photo Mode**: a 📷 HUD button hides all UI via a `body.photo` class (and suppresses 3D markers) for a clean screenshot; you can still drive/walk to frame the shot, and a ✕ Photo button exits. Guarded so the headless smoke (no `document.body.classList`) is unaffected.
+
+## v25 (batch 5 — paramedic side hustle)
+- **Paramedic**: in freeplay while driving, an emergency patient periodically spawns (cyan marker on world + minimap). Reach them to pick up, then rush to the new Hospital building (cell 3,4) within ~38s to deliver for escalating cash (350 + 45×rescues). Times out if too slow. `state.rescues` persists; new **First Responder** achievement at 5. Built as `updateParamedic`, gated so it won't overlap a race or crook chase.

@@ -184,6 +184,13 @@ run(5);                                                   // exercise the flee/m
 const bustsBefore = h.state.busts || 0;
 h.crook.x = h.cars[0].x; h.crook.z = h.cars[0].z; run(3); // ram the crook
 assert((h.state.busts || 0) > bustsBefore, "busted a fleeing crook");
+
+// paramedic: pick up a patient and deliver to the hospital
+h.medic.stage = "pickup"; h.medic.x = h.cars[0].x; h.medic.z = h.cars[0].z; run(3);
+assert(h.medic.stage === "deliver", "picked up the patient");
+const rescuesBefore = h.state.rescues || 0;
+gotoCar(h.HOSPITAL.x, h.HOSPITAL.z); run(3);
+assert((h.state.rescues || 0) > rescuesBefore, "delivered the patient to the hospital");
 key("KeyE"); run(2);
 
 // ---- garage: showroom -> buy, drive, and repaint a personal car ----
