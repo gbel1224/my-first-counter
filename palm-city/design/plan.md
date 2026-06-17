@@ -131,5 +131,11 @@ This completes the 5-phase "AAA for mobile" pass (juice → visuals → controls
 - **Hold-to-build sprint**: on foot, a sprint charge ramps 0→1 over ~2.5s while held+moving, lifting the run multiplier from 1.32× to ~1.95×, decaying faster on release.
 
 ## v17 (sky detail + roadside ramps)
-- **Sky detail**: drifting cloud puffs (26-point cloud, soft sprite, slow pan, day) and a 440-point starfield (night) on the upper dome, opacity-driven by the night factor via `setSky`. Separate **sun** (warm additive disc, bright by day) and **moon** (pale cratered sprite, night) that **arc across the sky on opposite sides** with the cycle, cross-fading at dawn/dusk. +4 draw calls.
+- **Sky detail**: drifting cloud puffs and a starfield (night) on the upper dome, opacity-driven by the night factor via `setSky`. Separate **sun** (warm additive disc, bright by day) and **moon** (pale cratered sprite, night) that **arc across the sky on opposite sides** with the cycle, cross-fading at dawn/dusk.
+- **Roadside ramps**: stunt ramps offset to the curb side of their road.
+
+## v18 (richer sky + dynamic lighting + night windows)
+- **Denser sky**: starfield 440→950, clouds rebuilt as **clustered puffs** (26 clouds × 6 overlapping soft puffs) for fluffier shapes; bigger moon.
+- **Sun-driven lighting**: the directional key light now **follows the sun/moon arc** (direction swings east→overhead→west) and **tints with time of day** — warm white midday, orange near the horizon (`C_HORIZON`), cool blue moonlight at night (`C_MOON`) — so shading shifts realistically through the cycle.
+- **Lit windows**: buildings get an emissive window map (`texWindows`, built with `Math.random` so the seeded world layout is untouched) that ramps up with the night factor, so windows glow after dark.
 - **Roadside ramps**: the five stunt ramps are offset ~5.5u perpendicular to their travel so they hug the curb instead of the road centre, for realism (still on the asphalt).

@@ -104,17 +104,24 @@ const moonTex = canvasTex(96, (ctx, s) => {
   }
 });
 const moonSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, fog: false }));
-moonSprite.scale.set(46, 46, 1);
+moonSprite.scale.set(58, 58, 1);
 scene.add(moonSprite);
 
 // sky detail: drifting clouds (day) + stars (night) + sun/moon arc, faded by the night factor
 let starPts = null, cloudPts = null, cloudPos = null, cloudBase = null, cloudN = 0;
+const C_DAY = new THREE.Color(0xffe7c0), C_HORIZON = new THREE.Color(0xff7a2e), C_MOON = new THREE.Color(0x9fb4e0), _lc = new THREE.Color();
 function setSky(night) {
   const t = (simTime / 240) % 1, sa = t * Math.PI * 2, sy = Math.sin(sa), cx = Math.cos(sa);
   sunSprite.position.set(cx * 340, sy * 210 + 90, -240);
   sunSprite.material.opacity = clamp(1 - night * 1.4, 0, 1);
   moonSprite.position.set(-cx * 340, -sy * 210 + 90, -240);
   moonSprite.material.opacity = clamp(night * 1.3, 0, 1);
+  // key light follows whichever body is up, and warms near the horizon / cools at night
+  const lx = (night > 0.5 ? -cx : cx), ly = Math.max(0.35, Math.abs(sy));
+  sun.position.set(lx * 200, ly * 240, 90);
+  const horizon = (1 - night) * clamp(1 - Math.abs(sy) * 1.6, 0, 1);
+  _lc.copy(C_DAY).lerp(C_HORIZON, horizon).lerp(C_MOON, night);
+  sun.color.copy(_lc);
   if (starPts) starPts.material.opacity = Math.min(1, night) * 0.95;
   if (cloudPts) {
     cloudPts.material.opacity = (1 - night) * 0.5;
@@ -160,6 +167,7 @@ function envUpdate() {
   skyUniforms.topColor.value.copy(_top.lerpColors(a.top, b.top, k));
   const night = a.night + (b.night - a.night) * k;
   palmIM.material.emissiveIntensity = 1 + night * 1.7;          // Golden Palms glow at night
+  if (buildingMat) buildingMat.emissiveIntensity = night * 0.95;   // windows light up after dark
   setGlow(night);
   setSky(night);
 }
@@ -223,6 +231,17 @@ const texFacade = canvasTex(256, (ctx, s) => {
   for (let cx = 0; cx < cols; cx++) for (let cy = 0; cy < rows; cy++) {
     const x = 14 + cx * ((s - 28) / cols) + 4, y = 12 + cy * ((s - band - 24) / rows);
     ctx.fillStyle = rng() < 0.3 ? "#ffd98a" : "#5e7287";
+    ctx.fillRect(x, y, ww, wh);
+  }
+});
+// night windows: black facade with a random subset of windows lit (used as an emissive map after dark)
+const texWindows = canvasTex(256, (ctx, s) => {
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, s, s);
+  const band = 44, cols = 6, rows = 7, ww = 22, wh = 18;
+  for (let cx = 0; cx < cols; cx++) for (let cy = 0; cy < rows; cy++) {
+    if (Math.random() < 0.5) continue;
+    const x = 14 + cx * ((s - 28) / cols) + 4, y = 12 + cy * ((s - band - 24) / rows);
+    ctx.fillStyle = Math.random() < 0.5 ? "#ffd98a" : "#ffe7b3";
     ctx.fillRect(x, y, ww, wh);
   }
 });
@@ -328,11 +347,12 @@ const GARAGE = { x: bc(3), z: bc(2) };
 
 // buildings: one InstancedMesh, facade texture sides / plain roof, pastel instance tints
 const PASTELS = [0xf2d4c2, 0xd9e4f0, 0xf5e8c8, 0xd8ecd4, 0xecd3e2, 0xe7ded0, 0xc9dce6, 0xf0dcc0];
-let buildingsIM;
+let buildingsIM, buildingMat = null;
 {
   const unit = new THREE.BoxGeometry(1, 1, 1);
   unit.translate(0, 0.5, 0);
-  const matSide = new THREE.MeshLambertMaterial({ map: texFacade });
+  const matSide = new THREE.MeshLambertMaterial({ map: texFacade, emissive: 0xffffff, emissiveMap: texWindows, emissiveIntensity: 0 });
+  buildingMat = matSide;
   const matRoof = new THREE.MeshLambertMaterial({ color: 0xb8ab9a });
   const mats = [matSide, matSide, matRoof, matRoof, matSide, matSide];
   const placed = [];
@@ -1032,19 +1052,29 @@ let race = { stage: "idle", ci: -1, cp: 0, t: 0, armed: true };  // idle | activ
 }
 // sky detail clouds + stars (reuse the soft particle sprite; updated by setSky/the day-night cycle)
 {
-  const SN = 440, sp = new Float32Array(SN * 3);
+  const SN = 950, sp = new Float32Array(SN * 3);
   for (let i = 0; i < SN; i++) {
-    const a = rng() * Math.PI * 2, e = 0.18 + rng() * 0.75, r = 660;
+    const a = rng() * Math.PI * 2, e = 0.12 + rng() * 0.82, r = 660;
     sp[i * 3] = Math.cos(a) * Math.cos(e) * r; sp[i * 3 + 1] = Math.sin(e) * r; sp[i * 3 + 2] = Math.sin(a) * Math.cos(e) * r;
   }
   const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.BufferAttribute(sp, 3));
-  starPts = new THREE.Points(sg, new THREE.PointsMaterial({ size: 2.6, map: partTex, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, sizeAttenuation: true }));
+  starPts = new THREE.Points(sg, new THREE.PointsMaterial({ size: 2.3, map: partTex, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, sizeAttenuation: true }));
   starPts.frustumCulled = false; scene.add(starPts);
 
-  cloudN = 26; cloudPos = new Float32Array(cloudN * 3); cloudBase = new Float32Array(cloudN);
-  for (let i = 0; i < cloudN; i++) { const x = rr(-650, 650); cloudBase[i] = x; cloudPos[i * 3] = x; cloudPos[i * 3 + 1] = rr(140, 250); cloudPos[i * 3 + 2] = rr(-560, 560); }
+  // puffy clouds: each cloud is a cluster of overlapping soft puffs
+  const CLOUDS = 26, PUFFS = 6;
+  cloudN = CLOUDS * PUFFS; cloudPos = new Float32Array(cloudN * 3); cloudBase = new Float32Array(cloudN);
+  let ci = 0;
+  for (let c = 0; c < CLOUDS; c++) {
+    const cx0 = rr(-650, 650), cy0 = rr(150, 260), cz0 = rr(-560, 560);
+    for (let p = 0; p < PUFFS; p++) {
+      const x = cx0 + rr(-55, 55);
+      cloudBase[ci] = x; cloudPos[ci * 3] = x; cloudPos[ci * 3 + 1] = cy0 + rr(-16, 16); cloudPos[ci * 3 + 2] = cz0 + rr(-40, 40);
+      ci++;
+    }
+  }
   const cg = new THREE.BufferGeometry(); cg.setAttribute("position", new THREE.BufferAttribute(cloudPos, 3));
-  cloudPts = new THREE.Points(cg, new THREE.PointsMaterial({ size: 120, map: partTex, color: 0xffffff, transparent: true, opacity: 0.4, depthWrite: false, fog: false, sizeAttenuation: true }));
+  cloudPts = new THREE.Points(cg, new THREE.PointsMaterial({ size: 150, map: partTex, color: 0xffffff, transparent: true, opacity: 0.4, depthWrite: false, fog: false, sizeAttenuation: true }));
   cloudPts.frustumCulled = false; scene.add(cloudPts);
 }
 function updateRace(dt) {
