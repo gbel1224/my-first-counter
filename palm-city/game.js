@@ -260,6 +260,23 @@ function boxGeoC(w, h, d, x, y, z, color) {
   g.setAttribute("color", new THREE.BufferAttribute(cols, 3));
   return g;
 }
+// rounded vertex-coloured primitives (smooth normals) for nicer characters — still merged to 1 mesh
+function colorize(g, color) {
+  const n = g.attributes.position.count, cols = new Float32Array(n * 3);
+  _col.set(color);
+  for (let i = 0; i < n; i++) { cols[i * 3] = _col.r; cols[i * 3 + 1] = _col.g; cols[i * 3 + 2] = _col.b; }
+  g.setAttribute("color", new THREE.BufferAttribute(cols, 3));
+  return g;
+}
+function cylC(rT, rB, h, x, y, z, color) {
+  const g = new THREE.CylinderGeometry(rT, rB, h, 10, 1);
+  g.translate(x, y, z); return colorize(g, color);
+}
+function sphC(r, x, y, z, color, sx = 1, sy = 1, sz = 1) {
+  const g = new THREE.SphereGeometry(r, 12, 9);
+  if (sx !== 1 || sy !== 1 || sz !== 1) g.scale(sx, sy, sz);
+  g.translate(x, y, z); return colorize(g, color);
+}
 function mergeGeos(geos) {
   const pos = [], norm = [], col = [], uv = [], idx = [];
   let off = 0;
@@ -504,30 +521,42 @@ let lampMat = null;
 // ---------- characters ----------
 function personGeo(p) {
   return mergeGeos([
-    boxGeoC(0.22, 0.64, 0.26, 0.14, 0.32, 0, p.pants),
-    boxGeoC(0.22, 0.64, 0.26, -0.14, 0.32, 0, p.pants),
-    boxGeoC(0.56, 0.6, 0.32, 0, 0.95, 0, p.shirt),
-    boxGeoC(0.16, 0.52, 0.2, 0.37, 0.98, 0, p.shirt),
-    boxGeoC(0.16, 0.52, 0.2, -0.37, 0.98, 0, p.shirt),
-    boxGeoC(0.34, 0.34, 0.3, 0, 1.43, 0, p.skin),
-    boxGeoC(0.36, 0.13, 0.32, 0, 1.66, 0, p.hair),
+    sphC(0.11, 0.12, 0.05, 0.05, 0x2a2620, 1.1, 0.7, 1.6),   // shoes
+    sphC(0.11, -0.12, 0.05, 0.05, 0x2a2620, 1.1, 0.7, 1.6),
+    cylC(0.1, 0.12, 0.62, 0.12, 0.42, 0, p.pants),           // legs (tapered)
+    cylC(0.1, 0.12, 0.62, -0.12, 0.42, 0, p.pants),
+    cylC(0.2, 0.22, 0.18, 0, 0.78, 0, p.pants),              // hips
+    cylC(0.26, 0.2, 0.6, 0, 1.12, 0, p.shirt),               // torso (wider shoulders)
+    cylC(0.07, 0.08, 0.56, 0.3, 1.12, 0, p.shirt),           // arms
+    cylC(0.07, 0.08, 0.56, -0.3, 1.12, 0, p.shirt),
+    sphC(0.075, 0.3, 0.83, 0, p.skin),                       // hands
+    sphC(0.075, -0.3, 0.83, 0, p.skin),
+    cylC(0.08, 0.09, 0.12, 0, 1.46, 0, p.skin),              // neck
+    sphC(0.17, 0, 1.62, 0, p.skin, 1, 1.08, 1),              // head
+    sphC(0.185, 0, 1.71, -0.04, p.hair, 1.05, 0.82, 1.05),   // hair (cap + back)
+    sphC(0.03, 0.07, 1.62, 0.15, 0x241c18),                  // eyes
+    sphC(0.03, -0.07, 1.62, 0.15, 0x241c18),
   ]);
 }
 function articulatedPerson(p) {
   const g = new THREE.Group();
   const mat = c => new THREE.MeshLambertMaterial({ color: c });
-  const limb = (w, h, d, c) => {
-    const geo = new THREE.BoxGeometry(w, h, d); geo.translate(0, -h / 2, 0);
-    return new THREE.Mesh(geo, mat(c));
-  };
-  const legL = limb(0.22, 0.64, 0.26, p.pants); legL.position.set(0.14, 0.64, 0);
-  const legR = limb(0.22, 0.64, 0.26, p.pants); legR.position.set(-0.14, 0.64, 0);
-  const armL = limb(0.16, 0.54, 0.2, p.shirt); armL.position.set(0.37, 1.24, 0);
-  const armR = limb(0.16, 0.54, 0.2, p.shirt); armR.position.set(-0.37, 1.24, 0);
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.6, 0.32), mat(p.shirt)); torso.position.y = 0.95;
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.34, 0.3), mat(p.skin)); head.position.y = 1.43;
-  const hair = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.13, 0.32), mat(p.hair)); hair.position.y = 1.66;
-  g.add(legL, legR, armL, armR, torso, head, hair);
+  const limb = (rT, rB, h, c) => { const geo = new THREE.CylinderGeometry(rT, rB, h, 8, 1); geo.translate(0, -h / 2, 0); return new THREE.Mesh(geo, mat(c)); };
+  const legL = limb(0.1, 0.12, 0.66, p.pants); legL.position.set(0.12, 0.7, 0);
+  const legR = limb(0.1, 0.12, 0.66, p.pants); legR.position.set(-0.12, 0.7, 0);
+  const shoe = () => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 7), mat(0x2a2620)); s.scale.set(1.1, 0.7, 1.6); s.position.set(0, -0.66, 0.03); return s; };
+  legL.add(shoe()); legR.add(shoe());
+  const armL = limb(0.07, 0.08, 0.56, p.shirt); armL.position.set(0.3, 1.4, 0);
+  const armR = limb(0.07, 0.08, 0.56, p.shirt); armR.position.set(-0.3, 1.4, 0);
+  const hand = () => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), mat(p.skin)); s.position.set(0, -0.56, 0); return s; };
+  armL.add(hand()); armR.add(hand());
+  const hips = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.18, 10, 1), mat(p.pants)); hips.position.y = 0.78;
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.2, 0.6, 10, 1), mat(p.shirt)); torso.position.y = 1.12;
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.12, 8, 1), mat(p.skin)); neck.position.y = 1.46;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 9), mat(p.skin)); head.scale.set(1, 1.08, 1); head.position.y = 1.62;
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.185, 12, 9), mat(p.hair)); hair.scale.set(1.05, 0.82, 1.05); hair.position.set(0, 1.71, -0.04);
+  const eye = x => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 5), mat(0x241c18)); s.position.set(x, 1.62, 0.15); return s; };
+  g.add(legL, legR, armL, armR, hips, torso, neck, head, hair, eye(0.07), eye(-0.07));
   return { group: g, legL, legR, armL, armR };
 }
 const HERO_PAL = { shirt: 0xff7a33, pants: 0xf5f0e6, skin: 0xe8b08a, hair: 0x3a2c20 };

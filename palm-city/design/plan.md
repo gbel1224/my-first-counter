@@ -169,3 +169,6 @@ This completes the 5-phase "AAA for mobile" pass (juice → visuals → controls
 - Audited that every `dom(id)` reference exists in index.html (no load-time crash) and that `SHADOW_N` accounts for the added motorbikes (no instanced-buffer overflow).
 - Fixes: locked/unowned showroom cars no longer glow headlights at night; the vigilante crook and paramedic call can no longer trigger simultaneously (crook gated on `medic.stage === "idle"`); the paramedic patient now shows a visible person figure at the pickup instead of a bare marker.
 - Smoke test extended to exercise the nitro/boost path.
+
+## v27 (character glow-up)
+- Rebuilt all people from boxes into smooth, proportioned stylised characters using new rounded vertex-coloured helpers (`cylC`/`sphC`): tapered legs, hips, wider-shouldered torso, arms with hands, neck, a rounded head with a face (eyes), hair cap, and shoes. Applied to pedestrians, story characters and the player (player keeps articulated cylinder limbs + child shoes/hands so the walk animation still works). Pedestrians still share 5 merged geometries → still ~1 draw call each. Not rigged/photoreal (no asset pipeline) but a large perceived-quality jump from the blocky look.
