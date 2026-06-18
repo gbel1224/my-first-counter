@@ -786,7 +786,7 @@ hlPoints.frustumCulled = false; scene.add(hlPoints);
 function updateCarLights(g) {
   let k = 0;
   for (const c of LIGHT_CARS) {
-    const on = (c.active === undefined || c.active) && g > 0.01;
+    const on = (c.active === undefined || c.active) && !c.locked && g > 0.01;   // unowned showroom cars stay dark
     const fx = Math.sin(c.h), fz = Math.cos(c.h), rx = Math.cos(c.h), rz = -Math.sin(c.h);
     const cy = (c.mesh ? c.mesh.position.y : 0) + 0.85;
     for (let s = -1; s <= 1; s += 2) {   // headlights (front, warm)
@@ -1306,7 +1306,7 @@ function updateVigilante(dt) {
   if (!crook.active) {
     crookMarker.group.visible = false; crook.mesh.position.set(0, -9999, 0);
     crook.cd -= dt;
-    if (crook.cd <= 0 && driving && race.stage !== "active") {
+    if (crook.cd <= 0 && driving && race.stage !== "active" && medic.stage === "idle") {
       const ang = Math.random() * Math.PI * 2;
       crook.x = clamp(px + Math.cos(ang) * 44, -HALF + 5, HALF - 5);
       crook.z = clamp(pz + Math.sin(ang) * 44, -HALF + 5, HALF - 5);
@@ -1339,9 +1339,13 @@ function updateVigilante(dt) {
 const medic = { stage: "idle", cd: 35, t: 0, x: 0, z: 0 };
 const medicMarker = makeMarker(0x44d0ff);
 medicMarker.group.visible = false;
+const patient = new THREE.Mesh(personGeo({ shirt: 0xedeff2, pants: 0x9aa0a8, skin: 0xe8b08a, hair: 0x3a2c20 }), matVC);
+patient.visible = false; scene.add(patient);
 function updateParamedic(dt) {
-  if (state.mi < M.length || dlgLines) { medicMarker.group.visible = false; return; }   // freeplay only
+  if (state.mi < M.length || dlgLines) { medicMarker.group.visible = false; patient.visible = false; return; }   // freeplay only
   const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
+  patient.visible = medic.stage === "pickup";
+  if (medic.stage === "pickup") { patient.position.set(medic.x, CURB, medic.z); patient.rotation.y = simTime * 0.6; }
   if (medic.stage === "idle") {
     medicMarker.group.visible = false; medic.cd -= dt;
     if (medic.cd <= 0 && driving && race.stage !== "active" && !crook.active) {

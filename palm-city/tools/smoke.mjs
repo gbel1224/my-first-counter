@@ -193,6 +193,17 @@ gotoCar(h.HOSPITAL.x, h.HOSPITAL.z); run(3);
 assert((h.state.rescues || 0) > rescuesBefore, "delivered the patient to the hospital");
 key("KeyE"); run(2);
 
+// nitro: holding boost (Shift) while driving accelerates the car (on an open road)
+goto_(0, -4); h.cars[0].x = 0; h.cars[0].z = 0; h.cars[0].h = 0; h.cars[0].y = 0; h.cars[0].vy = 0;
+key("KeyE"); run(2);
+assert(h.debug().driving, "in a car for the nitro test");
+h.cars[0].speed = 0;
+fire("keydown", { code: "ShiftLeft", preventDefault: () => {} });
+for (let i = 0; i < 60; i++) h.update(1 / 60);
+fire("keyup", { code: "ShiftLeft" });
+assert(h.cars[0].speed > 5, "nitro boost accelerates the car");
+key("KeyE"); run(2);
+
 // ---- garage: showroom -> buy, drive, and repaint a personal car ----
 const pcar = h.cars.find(c => c.personal);
 assert(pcar && pcar.locked, "a personal car starts locked at the garage");

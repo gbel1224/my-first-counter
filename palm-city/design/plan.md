@@ -164,3 +164,8 @@ This completes the 5-phase "AAA for mobile" pass (juice → visuals → controls
 
 ## v25 (batch 5 — paramedic side hustle)
 - **Paramedic**: in freeplay while driving, an emergency patient periodically spawns (cyan marker on world + minimap). Reach them to pick up, then rush to the new Hospital building (cell 3,4) within ~38s to deliver for escalating cash (350 + 45×rescues). Times out if too slow. `state.rescues` persists; new **First Responder** achievement at 5. Built as `updateParamedic`, gated so it won't overlap a race or crook chase.
+
+## v26 (QA pass — bug/glitch fixes)
+- Audited that every `dom(id)` reference exists in index.html (no load-time crash) and that `SHADOW_N` accounts for the added motorbikes (no instanced-buffer overflow).
+- Fixes: locked/unowned showroom cars no longer glow headlights at night; the vigilante crook and paramedic call can no longer trigger simultaneously (crook gated on `medic.stage === "idle"`); the paramedic patient now shows a visible person figure at the pickup instead of a bare marker.
+- Smoke test extended to exercise the nitro/boost path.
