@@ -748,47 +748,6 @@ scene.add(hero.group);
 const player = { x: PLAZA.x, z: roadC(3) - 12, y: CURB, h: Math.PI, walkPhase: 0, speed: 0 };
 let driving = null;   // car object while driving
 
-// ---------- rigged 3D player (Miami) — loads async, falls back to the stylised hero on any failure ----------
-const MIAMI_SCALE = 1.0, MIAMI_FACE = 0, MIAMI_Y = 0;   // tweakables: scale, facing offset (set Math.PI if backwards), feet offset
-let miami = null;
-async function loadMiami() {
-  try {
-    const [{ MiamiCharacter }, { RoomEnvironment }] = await Promise.all([
-      import("./src/MiamiCharacter.js"),
-      import("./vendor/RoomEnvironment.js"),
-    ]);
-    const c = new MiamiCharacter();
-    await c.load();
-    c.root.scale.setScalar(MIAMI_SCALE);
-    scene.add(c.root);
-    // PBR needs an environment so metal/roughness (gold chain, denim) isn't flat or black — apply IBL to the model only
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    c.model.traverse(o => { if (o.isMesh && o.material) { for (const m of (Array.isArray(o.material) ? o.material : [o.material])) { m.envMap = envTex; m.envMapIntensity = 0.9; m.needsUpdate = true; } } });
-    // real cast shadow for the hero, focused on the player so it follows around the map
-    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
-    const sc = sun.shadow.camera; sc.near = 1; sc.far = 700; sc.left = -28; sc.right = 28; sc.top = 28; sc.bottom = -28; sc.updateProjectionMatrix();
-    sun.shadow.bias = -0.0006;
-    scene.add(sun.target);
-    ground.receiveShadow = true;
-    miami = c;
-    hero.group.visible = false;
-  } catch (e) { miami = null; }   // keep the stylised hero
-}
-loadMiami();
-function updateMiami(rdt) {
-  if (!miami) return;
-  if (driving) { miami.root.visible = false; return; }
-  miami.root.visible = true;
-  miami.root.position.set(player.x, player.y + MIAMI_Y, player.z);
-  miami.root.rotation.y = player.h + MIAMI_FACE;
-  miami.setSpeed(clamp(player.speed / 13, 0, 1));   // 0 idle · ~0.5 walk · 1 run
-  miami.update(rdt);
-  sun.target.position.set(player.x, 0, player.z);    // keep the shadow frustum on the player
-}
-
 // ---------- blob shadows (one instanced draw) ----------
 const SHADOW_N = 1 + cars.length + traffic.length + police.length + npcs.length + 3;
 const shadowGeo = new THREE.CircleGeometry(1, 14);
@@ -2303,7 +2262,7 @@ function update(dt) {
     tmpM.compose(tmpP, tmpQ, tmpS);
     shadowIM.setMatrixAt(si++, tmpM);
   };
-  if (!driving && !miami) put(player.x, player.y, player.z, 0.55); else put(0, -10, 0, 0.01);   // real shadow replaces the blob when Miami is loaded
+  if (!driving) put(player.x, player.y, player.z, 0.55); else put(0, -10, 0, 0.01);
   for (const c of cars) put(c.x, c.mesh.position.y, c.z, 2.2);
   for (const t of traffic) put(t.x, t.mesh.position.y, t.z, 2.2);
   for (const p of police) { if (p.active) put(p.x, p.mesh.position.y, p.z, 2.2); else put(0, -10, 0, 0.01); }
@@ -2403,12 +2362,10 @@ let perfFrames = 0, perfAt = performance.now(), perfWarmup = 3;   // adaptive-re
 function frame(now) {
   requestAnimationFrame(frame);
   if (paused) { last = now; return; }
-  const rdt = Math.min((now - last) / 1000, 0.05);   // real frame delta for the animation mixer
   acc = Math.min(acc + (now - last) / 1000, 0.25);
   last = now;
   if (state.phase === "play") {
     while (acc >= STEP) { update(STEP); acc -= STEP; }
-    if (miami) updateMiami(rdt);   // drive the rigged character from the player state (idle/walk/run by speed)
     updateHUD();
     drawMinimap(now / 1000);
   } else acc = 0;
