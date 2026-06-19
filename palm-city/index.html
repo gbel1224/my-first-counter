@@ -27,6 +27,10 @@
   #wanted { position:absolute; top:calc(58px + env(safe-area-inset-top, 0px)); left:50%;
     transform:translateX(-50%); color:#ff3b3b; font-size:24px; font-weight:900;
     text-shadow:0 1px 3px rgba(0,0,0,.6); letter-spacing:3px; pointer-events:none; }
+  #health { position:absolute; top:calc(92px + env(safe-area-inset-top, 0px)); left:50%;
+    transform:translateX(-50%); width:140px; height:9px; border-radius:5px; display:none;
+    background:rgba(20,28,24,.7); overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.4); }
+  #health i { display:block; height:100%; width:100%; background:#9fe6a0; border-radius:5px; }
   #missionbox { flex:1; background:rgba(20,28,24,.72); border-radius:14px; padding:8px 12px;
     color:#fff; min-width:0; }
   #mtitle { font-size:11px; color:#ffc966; font-weight:700; text-transform:uppercase; letter-spacing:1px;
@@ -61,6 +65,8 @@
     width:76px; height:76px; background:#ff6b5c; color:#fff; font-size:13px; }
   #boost { bottom:calc(122px + env(safe-area-inset-bottom, 0px)); right:calc(118px + env(safe-area-inset-right, 0px));
     width:72px; height:72px; background:#ff9d2e; color:#3d2410; font-size:13px; }
+  #punch { bottom:calc(126px + env(safe-area-inset-bottom, 0px)); right:calc(116px + env(safe-area-inset-right, 0px));
+    width:72px; height:72px; background:#e8745f; color:#fff; font-size:13px; }
   #speedo { position:absolute; right:calc(12px + env(safe-area-inset-right, 0px));
     top:calc(150px + env(safe-area-inset-top, 0px)); display:none;
     filter:drop-shadow(0 3px 8px rgba(0,0,0,.4)); }
@@ -189,10 +195,12 @@
   </div>
   <div id="toast"></div>
   <div id="wanted"></div>
+  <div id="health"><i id="healthfill"></i></div>
   <div id="joy"><div id="knob"></div></div>
   <button id="btnB" class="btn pe"></button>
   <button id="brake" class="btn pe">BRAKE</button>
   <button id="boost" class="btn pe">BOOST</button>
+  <button id="punch" class="btn pe">PUNCH</button>
   <button id="btnA" class="btn pe"></button>
   <canvas id="speedo" width="92" height="92"></canvas>
   <div id="dialogue" class="pe"><div id="dwho"></div><div id="dtext"></div><div id="dhint"></div></div>

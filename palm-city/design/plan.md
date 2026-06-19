@@ -175,3 +175,9 @@ This completes the 5-phase "AAA for mobile" pass (juice → visuals → controls
 
 ## v28 (crowd diversity)
 - Pedestrians now vary: 8 NPC palettes with mixed skin tones / shirt colours, some wearing **hats** (brim+crown), plus **bun** and **long** hair styles; each pedestrian also gets a random height/build scale. Picked randomly per spawn for a more lifelike crowd. Still merged geometry (shared across peds).
+
+## v29 (combat pillar — health, damage, fight-back, wasted/respawn)
+- **Health** (0–100, runtime): a top-centre bar shows when hurt; regenerates after a 3s out-of-combat delay. `hurt(n)` flashes/shakes/buzzes.
+- **Damage**: police now *ram and drain health* (26/hit on a cooldown) instead of an instant bust; hard car crashes can also hurt. At 0 HP → **Wasted**: respawn at your apartment (if owned) else the plaza, fine scaled by wanted, wanted cleared, health restored — a real fight-or-flight survival loop (and the checkpoint/respawn system).
+- **Melee punch** (👊 button on foot / F key): quick jab that knocks back pedestrians and **takes down a fleeing crook on foot** (ties combat into the vigilante hustle). Animated on the hero's right arm.
+- Controls hint/legend updated. Smoke covers wasted+respawn, regen, and a punch KO.

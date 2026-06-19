@@ -1417,6 +1417,26 @@ function updateParamedic(dt) {
 
 // ---------- wanted level & police ----------
 let wanted = 0, wantedCD = 0, crimeCD = 0;
+// ---------- health / damage / respawn ----------
+let health = 100, hurtCD = 0, hitCD = 0;
+function hurt(amount) {
+  if (health <= 0) return;
+  health = Math.max(0, health - amount);
+  hurtCD = 3; flash("#ff3b3b", Math.min(0.4, amount / 120)); addShake(0.22); buzz(20);
+  if (health <= 0) wasted();
+}
+function wasted() {
+  const fine = 100 + 60 * wanted;
+  state.money = Math.max(0, state.money - fine);
+  toast(STR.wasted(fine)); AudioSys.play("door", 1); flash("#ff3b3b", 0.5); buzz([0, 80, 60, 140]);
+  if (driving) { driving.speed = 0; driving.lat = 0; driving = null; hero.group.visible = true; }
+  const sp = state.home ? HOME : PLAZA;                 // respawn at home if owned, else the plaza
+  player.x = sp.x; player.z = sp.z + 12; player.y = CURB; player.speed = 0;
+  health = 100; hurtCD = 2;
+  wanted = 0; wantedCD = 0; crimeCD = 0;
+  for (const p of police) { p.active = false; p.mesh.position.set(0, -9999, 0); }
+  save();
+}
 function heatActive() {
   const mis = MISSIONS[state.mi];
   return (mis && mis.race && mState === "active") ? 0 : wanted;   // no heat during the timed race
@@ -1466,7 +1486,33 @@ function updatePolice(dt) {
     p.mesh.position.set(p.x, groundY(p.x, p.z), p.z);
     p.mesh.rotation.y = p.h;
     p.bar.material.emissive.setHex((Math.floor(simTime * 6) % 2) ? 0x2244ff : 0xff2222);
-    if (!dlgLines && d < 3.6) bust();
+    if (!dlgLines && d < 3.6 && hitCD <= 0) {   // police ram you — drains health instead of instant bust
+      hitCD = 0.8; hurt(26);
+      const a = Math.atan2(px - p.x, pz - p.z);
+      if (!driving) { player.x += Math.sin(a) * 1.2; player.z += Math.cos(a) * 1.2; }
+    }
+  }
+}
+// ---------- melee: punch to fight back / take down crooks on foot ----------
+let actP = false, punchCD = 0, punchT = 0;
+function doPunch() {
+  if (punchCD > 0 || driving) return;
+  punchCD = 0.45; punchT = 0.26; AudioSys.play("door", 0.4); buzz(15);
+  const fx = Math.sin(player.h), fz = Math.cos(player.h);
+  const hx = player.x + fx * 1.4, hz = player.z + fz * 1.4;
+  if (crook.active && dist2(player.x, player.z, crook.x, crook.z) < 10) {   // bust a crook on foot
+    const reward = 400 + (state.busts || 0) * 50;
+    state.money += reward; state.busts = (state.busts || 0) + 1;
+    toast(STR.crookBusted(reward)); AudioSys.play("cash"); buzz([0, 40, 40, 80]);
+    burst(crook.x, 0.7, crook.z, 16, 2, 2.2, 0.6, 0.95, 0.5, 0.2); addShake(0.3);
+    crook.active = false; crook.cd = rr(35, 60); save(); return;
+  }
+  let best = null, bd = 6;
+  for (const n of npcs) { const d = dist2(hx, hz, n.x, n.z); if (d < bd) { bd = d; best = n; } }
+  if (best) {
+    best.flee = 1.6; best.h = Math.atan2(best.x - player.x, best.z - player.z);
+    best.x += Math.sin(best.h) * 0.7; best.z += Math.cos(best.h) * 0.7;
+    burst(best.x, 1.0, best.z, 6, 0.8, 1.2, 0.4, 0.95, 0.85, 0.6); addShake(0.12);
   }
 }
 
@@ -1477,6 +1523,7 @@ addEventListener("keydown", e => {
   if (e.code === "Enter" || (e.code === "Space" && dlgLines)) { advanceDialogue(); e.preventDefault(); return; }
   if (e.code === "KeyE") actA = true;
   if (e.code === "KeyB") actB = true;
+  if (e.code === "KeyF") actP = true;
   keys.add(e.code);
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
 });
@@ -1512,12 +1559,13 @@ addEventListener("pointerup", joyEnd);
 addEventListener("pointercancel", joyEnd);
 document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
 
-const btnA = dom("btnA"), btnB = dom("btnB"), brakeBtn = dom("brake"), boostBtn = dom("boost");
+const btnA = dom("btnA"), btnB = dom("btnB"), brakeBtn = dom("brake"), boostBtn = dom("boost"), punchBtn = dom("punch");
 let brakeHeld = false, boostHeld = false, boostMeter = 1;
 btnA.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actA = true; });
 btnB.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actB = true; bHeld = true; });
 brakeBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); brakeHeld = true; });
 boostBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); boostHeld = true; });
+punchBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actP = true; });
 addEventListener("pointerup", () => { bHeld = false; brakeHeld = false; boostHeld = false; });
 addEventListener("pointercancel", () => { bHeld = false; brakeHeld = false; boostHeld = false; });
 // keyboard nitro (Shift) while driving
@@ -1583,6 +1631,7 @@ const _look = new THREE.Vector3();
 // ---------- HUD ----------
 const elMoney = dom("money"), elIncome = dom("income"), elTitle = dom("mtitle"), elStep = dom("mstep");
 const elPalms = dom("palms"), elWanted = dom("wanted");
+const elHealth = dom("health"), elHealthFill = dom("healthfill");
 const mapCtx = dom("minimap").getContext("2d");
 const elSpeedo = dom("speedo"), spCtx = elSpeedo.getContext("2d");
 let lastMoneyShown = -1, lastBtnA = "", lastBtnB = "";
@@ -1667,6 +1716,8 @@ function updateHUD() {
   elPalms.textContent = STR.palmCount(palmsGot(), PALMS.length);
   const heat = heatActive();
   elWanted.textContent = heat > 0 ? "\u2605".repeat(heat) : "";
+  if (health < 100) { elHealth.style.display = "block"; elHealthFill.style.width = health + "%"; elHealthFill.style.background = health > 50 ? "#9fe6a0" : health > 25 ? "#ffd166" : "#ff5b5b"; }
+  else if (elHealth.style.display !== "none") elHealth.style.display = "none";
 
   const obj = currentObjective();
   elTitle.textContent = obj.title;
@@ -1712,10 +1763,11 @@ function updateHUD() {
   }
   if (b !== lastBtnB) { btnB.style.display = b ? "block" : "none"; btnB.textContent = b; lastBtnB = b; }
 
-  // brake/boost buttons + speedometer: only while driving
+  // brake/boost buttons + speedometer: only while driving · punch: only on foot
   const drive = driving && !dlgLines && !garageOpen && !statsOpen;
   brakeBtn.style.display = drive ? "block" : "none";
   boostBtn.style.display = drive ? "block" : "none";
+  punchBtn.style.display = (!driving && !dlgLines && !garageOpen && !statsOpen) ? "block" : "none";
   if (drive) { elSpeedo.style.display = "block"; drawSpeedo(driving.speed, boostMeter); }
   else if (elSpeedo.style.display !== "none") elSpeedo.style.display = "none";
 
@@ -2043,9 +2095,15 @@ const SPRINT_RAMP = 2.5;   // seconds of holding sprint to reach top running spe
 function update(dt) {
   simTime += dt;
   const inp = (dlgLines || garageOpen || statsOpen) ? { mx: 0, mz: 0, mag: 0 } : readInput();
-  const a = actA, b = actB; actA = false; actB = false;
+  const a = actA, b = actB, pn = actP; actA = false; actB = false; actP = false;
   if (a && !dlgLines && !garageOpen && !statsOpen) doActionA();
   if (b && !dlgLines && !garageOpen && !statsOpen) doActionB();
+  if (pn && !dlgLines && !garageOpen && !statsOpen) doPunch();
+  // health regen + combat cooldowns
+  if (hitCD > 0) hitCD -= dt;
+  if (punchCD > 0) punchCD -= dt;
+  if (punchT > 0) punchT -= dt;
+  if (hurtCD > 0) hurtCD -= dt; else if (health < 100) health = Math.min(100, health + 9 * dt);
 
   if (driving) {
     const c = driving;
@@ -2234,6 +2292,7 @@ function update(dt) {
     const sw = Math.sin(player.walkPhase) * Math.min(1, player.speed / 4) * 0.75;
     hero.legL.rotation.x = sw; hero.legR.rotation.x = -sw;
     hero.armL.rotation.x = -sw * 0.8; hero.armR.rotation.x = sw * 0.8;
+    if (punchT > 0) hero.armR.rotation.x = -1.5;   // forward jab during a punch
   }
   for (const c of cars) {
     if (c !== driving && c.y > 0) { c.vy -= 30 * dt; c.y = Math.max(0, c.y + c.vy * dt); if (c.y === 0) c.vy = 0; }
@@ -2395,6 +2454,8 @@ requestAnimationFrame(frame);
 globalThis.__palmCity = {
   state, player, cars, police, update, beginPlay, advanceDialogue,
   forceCrime: () => { if (wanted < 5) wanted++; wantedCD = 14; },
+  hurt: n => hurt(n),
+  punch: () => doPunch(),
   crook, medic, HOSPITAL,
   paint: hex => applyPaint(hex),
   buyCurrent: () => buyCurrent(),
@@ -2403,5 +2464,5 @@ globalThis.__palmCity = {
   openStats: () => openStats(),
   closeStats: () => closeStats(),
   refreshAch: () => refreshAch(true),
-  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen, race: race.stage, rcp: race.cp, stats: statsOpen }),
+  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen, race: race.stage, rcp: race.cp, stats: statsOpen, health }),
 };

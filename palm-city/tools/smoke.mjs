@@ -157,16 +157,27 @@ const palmsBefore = h.debug().palms;
 goto_(-176, 88); run(8);
 assert(h.debug().palms > palmsBefore, "collected a golden palm");
 
-// wanted system: rack up stars, a cop spawns, then get busted
+// wanted system: rack up stars, a cop spawns, then get wasted (KO) → respawn
 h.forceCrime(); h.forceCrime(); h.forceCrime();
 assert(h.debug().wanted === 3, "three wanted stars");
 run(30);
 assert(h.police.some(p => p.active), "police activated by wanted level");
 const moneyPreBust = h.state.money;
-h.police[0].active = true; h.police[0].x = h.player.x; h.police[0].z = h.player.z;
-run(5);
-assert(h.debug().wanted === 0, "busted clears the wanted level");
-assert(h.state.money < moneyPreBust, "bust deducted a fine");
+h.hurt(200);   // fatal damage -> wasted -> respawn at home/plaza
+assert(h.debug().wanted === 0, "getting wasted clears the wanted level");
+assert(h.state.money < moneyPreBust, "wasted deducted a fine");
+assert(h.debug().health === 100, "respawn restores full health");
+
+// health: damage then regen back up
+h.hurt(40); assert(h.debug().health <= 60 && h.debug().health > 0, "took damage");
+run(540);   // hurtCD then regen
+assert(h.debug().health >= 95, "health regenerates over time");
+
+// melee: punch takes down a crook on foot
+h.crook.active = true; h.crook.x = h.player.x + 1; h.crook.z = h.player.z;
+const bustsPre = h.state.busts || 0;
+h.punch();
+assert((h.state.busts || 0) > bustsPre, "punched out a crook on foot");
 
 // stunt ramp: launch a car off a ramp and earn air time
 h.cars[0].x = h.player.x + 1; h.cars[0].z = h.player.z; h.cars[0].y = 0; h.cars[0].vy = 0;
