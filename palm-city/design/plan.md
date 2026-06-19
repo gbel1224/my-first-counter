@@ -172,3 +172,6 @@ This completes the 5-phase "AAA for mobile" pass (juice → visuals → controls
 
 ## v27 (character glow-up)
 - Rebuilt all people from boxes into smooth, proportioned stylised characters using new rounded vertex-coloured helpers (`cylC`/`sphC`): tapered legs, hips, wider-shouldered torso, arms with hands, neck, a rounded head with a face (eyes), hair cap, and shoes. Applied to pedestrians, story characters and the player (player keeps articulated cylinder limbs + child shoes/hands so the walk animation still works). Pedestrians still share 5 merged geometries → still ~1 draw call each. Not rigged/photoreal (no asset pipeline) but a large perceived-quality jump from the blocky look.
+
+## v28 (crowd diversity)
+- Pedestrians now vary: 8 NPC palettes with mixed skin tones / shirt colours, some wearing **hats** (brim+crown), plus **bun** and **long** hair styles; each pedestrian also gets a random height/build scale. Picked randomly per spawn for a more lifelike crowd. Still merged geometry (shared across peds).

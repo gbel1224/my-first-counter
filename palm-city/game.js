@@ -520,7 +520,7 @@ let lampMat = null;
 
 // ---------- characters ----------
 function personGeo(p) {
-  return mergeGeos([
+  const parts = [
     sphC(0.11, 0.12, 0.05, 0.05, 0x2a2620, 1.1, 0.7, 1.6),   // shoes
     sphC(0.11, -0.12, 0.05, 0.05, 0x2a2620, 1.1, 0.7, 1.6),
     cylC(0.1, 0.12, 0.62, 0.12, 0.42, 0, p.pants),           // legs (tapered)
@@ -533,10 +533,18 @@ function personGeo(p) {
     sphC(0.075, -0.3, 0.83, 0, p.skin),
     cylC(0.08, 0.09, 0.12, 0, 1.46, 0, p.skin),              // neck
     sphC(0.17, 0, 1.62, 0, p.skin, 1, 1.08, 1),              // head
-    sphC(0.185, 0, 1.71, -0.04, p.hair, 1.05, 0.82, 1.05),   // hair (cap + back)
     sphC(0.03, 0.07, 1.62, 0.15, 0x241c18),                  // eyes
     sphC(0.03, -0.07, 1.62, 0.15, 0x241c18),
-  ]);
+  ];
+  if (p.hat) {                                               // hat instead of bare hair
+    parts.push(cylC(0.205, 0.215, 0.05, 0, 1.73, 0, p.hat));   // brim
+    parts.push(cylC(0.15, 0.16, 0.18, 0, 1.83, 0, p.hat));     // crown
+  } else {
+    parts.push(sphC(0.185, 0, 1.71, -0.04, p.hair, 1.05, 0.82, 1.05));   // hair cap
+    if (p.hairStyle === "bun") parts.push(sphC(0.09, 0, 1.79, -0.14, p.hair));
+    else if (p.hairStyle === "long") parts.push(sphC(0.16, 0, 1.5, -0.12, p.hair, 1, 1.25, 0.7));
+  }
+  return mergeGeos(parts);
 }
 function articulatedPerson(p) {
   const g = new THREE.Group();
@@ -562,10 +570,13 @@ function articulatedPerson(p) {
 const HERO_PAL = { shirt: 0xff7a33, pants: 0xf5f0e6, skin: 0xe8b08a, hair: 0x3a2c20 };
 const NPC_PALS = [
   { shirt: 0x6fb7d9, pants: 0x4a4f59, skin: 0xe8b08a, hair: 0x2c2620 },
-  { shirt: 0xecd3e2, pants: 0x7a6f5c, skin: 0xc98f6b, hair: 0x1f1a16 },
-  { shirt: 0x9fe6a0, pants: 0x3f4a52, skin: 0xf0c8a0, hair: 0x6b4a2a },
-  { shirt: 0xf5e8c8, pants: 0x8e5fc9, skin: 0xd9a37a, hair: 0x3a2c20 },
+  { shirt: 0xecd3e2, pants: 0x7a6f5c, skin: 0xc98f6b, hair: 0x1f1a16, hairStyle: "bun" },
+  { shirt: 0x9fe6a0, pants: 0x3f4a52, skin: 0xf0c8a0, hair: 0x6b4a2a, hat: 0x394150 },
+  { shirt: 0xf5e8c8, pants: 0x8e5fc9, skin: 0xd9a37a, hair: 0x3a2c20, hairStyle: "long" },
   { shirt: 0xd95f4b, pants: 0xd9e4f0, skin: 0xe8b08a, hair: 0x55524e },
+  { shirt: 0x4a6fa5, pants: 0x2c2620, skin: 0x8d5a3b, hair: 0x161210, hat: 0xb23b3b },
+  { shirt: 0xf0a93f, pants: 0x3a3f47, skin: 0xf0c8a0, hair: 0x7a5a3a, hairStyle: "bun" },
+  { shirt: 0x7d6fc9, pants: 0x4a4f59, skin: 0xc98f6b, hair: 0x2c2620, hairStyle: "long" },
 ];
 const npcGeos = NPC_PALS.map(personGeo);
 
@@ -704,7 +715,8 @@ for (let i = 0; i < POLICE_N; i++) {
 const npcs = [];
 for (let t = 0; t < 14; t++) {
   const i = (rng() * N) | 0, j = (rng() * N) | 0;
-  const mesh = new THREE.Mesh(npcGeos[t % npcGeos.length], matVC);
+  const mesh = new THREE.Mesh(npcGeos[(rng() * npcGeos.length) | 0], matVC);
+  mesh.scale.set(rr(0.92, 1.06), rr(0.9, 1.14), rr(0.92, 1.06));   // varied heights & builds
   scene.add(mesh);
   npcs.push({
     mesh, x: blockMin(i) + rr(2, BLOCK - 2), z: blockMin(j) + rr(2, BLOCK - 2),
