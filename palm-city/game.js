@@ -56,6 +56,7 @@ let bloomReady = false, bloomFailed = false, bloomW = 0, bloomH = 0;
 let rtScene, rtB1, rtB2, fsScene, fsCam, fsQuad, brightMat, blurMat, compMat;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic highlight roll-off for a premium look
 renderer.toneMappingExposure = 1.2;
+renderer.domElement.id = "scene";   // CSS color-grades the 3D layer (HUD sits above, ungraded)
 document.body.insertBefore(renderer.domElement, document.getElementById("ui"));
 
 const scene = new THREE.Scene();
