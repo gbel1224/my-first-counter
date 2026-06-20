@@ -71,6 +71,7 @@ scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffd9a0, 1.7);
 sun.position.set(120, 160, 80);
 scene.add(sun);
+const specialMats = [];   // facade materials of the business buildings (ramped by the night cycle)
 
 // gradient sky dome (1 draw call) — zenith→horizon, recoloured by the day/night cycle
 const skyUniforms = {
@@ -171,6 +172,7 @@ function envUpdate() {
   const night = a.night + (b.night - a.night) * k;
   palmIM.material.emissiveIntensity = 1 + night * 1.7;          // Golden Palms glow at night
   if (buildingMat) buildingMat.emissiveIntensity = night * 0.95;   // windows light up after dark
+  for (const mm of specialMats) mm.emissiveIntensity = night * 0.95;  // business windows too
   if (lampMat) lampMat.emissiveIntensity = night * 1.5;            // street lamps glow after dark
   setGlow(night);
   setSky(night);
@@ -404,9 +406,13 @@ let buildingsIM, buildingMat = null;
   scene.add(buildingsIM);
 }
 
-// special buildings + labels
+// special buildings + labels — facade + lit-window textures (tinted by the accent colour),
+// so businesses read as real buildings instead of flat colour blocks.
 function specialBuilding(x, z, w, h, d, color, labelText, labelColor) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color }));
+  const matSide = new THREE.MeshLambertMaterial({ map: texFacade, color, emissive: 0xffffff, emissiveMap: texWindows, emissiveIntensity: 0 });
+  const matRoof = new THREE.MeshLambertMaterial({ color: _col.set(color).lerp(new THREE.Color(0xb8ab9a), 0.55).getHex() });
+  specialMats.push(matSide);
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [matSide, matSide, matRoof, matRoof, matSide, matSide]);
   mesh.position.set(x, CURB + h / 2, z);
   scene.add(mesh);
   addCollider(x, z, w / 2, d / 2);
