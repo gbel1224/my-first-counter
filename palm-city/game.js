@@ -61,7 +61,7 @@ let bloomOn = (() => { try { const v = localStorage.getItem(BLOOM_KEY); return v
 let bloomReady = false, bloomFailed = false, bloomW = 0, bloomH = 0;
 let rtScene, rtB1, rtB2, fsScene, fsCam, fsQuad, brightMat, blurMat, compMat;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic highlight roll-off for a premium look
-renderer.toneMappingExposure = 1.2;
+renderer.toneMappingExposure = 1.3;
 renderer.domElement.id = "scene";   // CSS color-grades the 3D layer (HUD sits above, ungraded)
 document.body.insertBefore(renderer.domElement, document.getElementById("ui"));
 
@@ -77,6 +77,37 @@ scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffd9a0, 1.7);
 sun.position.set(120, 160, 80);
 scene.add(sun);
+scene.add(sun.target);
+
+// real-time sun shadows (dynamic objects only, to stay mobile-friendly); follows the player
+if (renderer.shadowMap) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; }
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 10; sun.shadow.camera.far = 460;
+sun.shadow.camera.left = -78; sun.shadow.camera.right = 78;
+sun.shadow.camera.top = 78; sun.shadow.camera.bottom = -78;
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.3;
+const _sunDir = new THREE.Vector3(0.45, 0.8, 0.4).normalize();   // current key-light direction (set by the cycle)
+function updateSunShadow() {
+  const tx = driving ? driving.x : player.x, tz = driving ? driving.z : player.z;
+  sun.target.position.set(tx, 0, tz);                 // keep the shadow frustum centred on the action
+  sun.position.set(tx + _sunDir.x * 240, _sunDir.y * 240, tz + _sunDir.z * 240);
+}
+
+// image-based environment so car paint gets real reflections (built once from a sky gradient)
+try {
+  const ec = document.createElement("canvas"); ec.width = 256; ec.height = 128;
+  const ex = ec.getContext("2d"), grd = ex.createLinearGradient(0, 0, 0, 128);
+  grd.addColorStop(0.00, "#8fbfe8"); grd.addColorStop(0.45, "#d6e6f0");
+  grd.addColorStop(0.54, "#ffe8c0"); grd.addColorStop(0.74, "#caa570");
+  grd.addColorStop(1.00, "#6f5d44");
+  ex.fillStyle = grd; ex.fillRect(0, 0, 256, 128);
+  const skyEq = new THREE.CanvasTexture(ec); skyEq.colorSpace = THREE.SRGBColorSpace;
+  const pmrem = new THREE.PMREMGenerator(renderer); pmrem.compileEquirectangularShader();
+  scene.environment = pmrem.fromEquirectangular(skyEq).texture;
+  skyEq.dispose(); pmrem.dispose();
+} catch (e) { /* reflections optional — fall back to lit materials */ }
+
 const specialMats = [];   // facade materials of the business buildings (ramped by the night cycle)
 
 // gradient sky dome (1 draw call) — zenith→horizon, recoloured by the day/night cycle
@@ -128,6 +159,7 @@ function setSky(night) {
   // key light follows whichever body is up, and warms near the horizon / cools at night
   const lx = (night > 0.5 ? -cx : cx), ly = Math.max(0.35, Math.abs(sy));
   sun.position.set(lx * 200, ly * 240, 90);
+  _sunDir.copy(sun.position).normalize();   // remember the light direction for the player-following shadow
   const horizon = (1 - night) * clamp(1 - Math.abs(sy) * 1.6, 0, 1);
   _lc.copy(C_DAY).lerp(C_HORIZON, horizon).lerp(C_MOON, night);
   sun.color.copy(_lc);
@@ -355,6 +387,7 @@ const matVC = new THREE.MeshLambertMaterial({ vertexColors: true });
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(2600, 2600),
   new THREE.MeshLambertMaterial({ color: 0x9aab72 }));
 ground.geometry.rotateX(-Math.PI / 2);
+ground.receiveShadow = true;
 scene.add(ground);
 
 // roads: two merged meshes (all vertical, all horizontal)
@@ -369,14 +402,16 @@ scene.add(ground);
     g.rotateX(-Math.PI / 2); g.rotateY(Math.PI / 2); g.translate(0, 0.03, roadC(k));
     hGeos.push(g);
   }
-  scene.add(new THREE.Mesh(mergeGeos(vGeos), matRoad));
-  scene.add(new THREE.Mesh(mergeGeos(hGeos), matRoad));
+  const rv = new THREE.Mesh(mergeGeos(vGeos), matRoad), rh = new THREE.Mesh(mergeGeos(hGeos), matRoad);
+  rv.receiveShadow = rh.receiveShadow = true;
+  scene.add(rv, rh);
 }
 
 // block layout
 // district block keys, recentred by the offset O so they sit in the middle of the bigger grid
 const _pad = k => { const [a, b] = k.split(",").map(Number); return (a + O) + "," + (b + O); };
 const PARKS = new Set(["2,2", "1,1", "4,4"].map(_pad));
+const PLAZA_KEY = _pad("2,2");   // recentred plaza block key
 const SPECIAL = {}; for (const [k, v] of Object.entries({ "1,3": "wash", "4,2": "burger", "5,0": "club", "0,4": "depot", "1,2": "pizza", "2,4": "taxi", "5,5": "marina", "3,2": "garage", "2,3": "home", "3,4": "hospital" })) SPECIAL[_pad(k)] = v;
 const PLAZA = { x: Bc(2), z: Bc(2) };
 const GARAGE = { x: Bc(3), z: Bc(2) };
@@ -389,10 +424,11 @@ const GAS = { x: Rc(2) + 7, z: Rc(3) - 7 };   // roadside fuel station (west-cen
   const slab = new THREE.BoxGeometry(BLOCK, CURB * 2, BLOCK);
   const paved = [], grass = [];
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++)
-    (PARKS.has(i + "," + j) && i + "," + j !== "2,2" ? grass : paved).push([bc(i), bc(j)]);
+    (PARKS.has(i + "," + j) && i + "," + j !== PLAZA_KEY ? grass : paved).push([bc(i), bc(j)]);
   const m = new THREE.Matrix4();
   const mk = (list, tex) => {
     const im = new THREE.InstancedMesh(slab, new THREE.MeshLambertMaterial({ map: tex }), list.length);
+    im.receiveShadow = true;
     list.forEach(([x, z], i) => { m.makeTranslation(x, 0, z); im.setMatrixAt(i, m); });
     scene.add(im);
   };
@@ -630,10 +666,10 @@ specialBuilding(HOSPITAL.x, HOSPITAL.z, 30, 12, 26, 0xeef2f5, STR.hospitalName, 
   const spots = [];
   for (const key of PARKS) {
     const [i, j] = key.split(",").map(Number);
-    const n = key === "2,2" ? 6 : 11;
+    const n = key === PLAZA_KEY ? 6 : 11;
     for (let t = 0; t < n; t++) {
       const x = blockMin(i) + rr(6, BLOCK - 6), z = blockMin(j) + rr(6, BLOCK - 6);
-      if (dist2(x, z, PLAZA.x, PLAZA.z) < 144 && key === "2,2") continue;
+      if (dist2(x, z, PLAZA.x, PLAZA.z) < 144 && key === PLAZA_KEY) continue;
       spots.push([x, z, rr(0.8, 1.3)]);
     }
   }
@@ -807,7 +843,8 @@ const carGeo = mergeGeos([
 ]);
 const CAR_COLORS = [0xe8543f, 0x3f7fe8, 0xf0c040, 0x58b368, 0xc25cd6, 0xe8e4da, 0xff8c42];
 function makeCar(color) {
-  const mesh = new THREE.Mesh(carGeo, new THREE.MeshPhongMaterial({ vertexColors: true, color, shininess: 55, specular: 0x444444 }));   // glossy paint highlights
+  const mesh = new THREE.Mesh(carGeo, new THREE.MeshStandardMaterial({ vertexColors: true, color, metalness: 0.55, roughness: 0.32, envMapIntensity: 1.1 }));   // reflective PBR paint
+  mesh.castShadow = true; mesh.receiveShadow = true;
   scene.add(mesh);
   return mesh;
 }
@@ -825,7 +862,8 @@ const bikeGeo = mergeGeos([
   boxGeoC(0.34, 0.34, 0.32, 0, 2.2, -0.42, 0xe8b08a), // rider head
 ]);
 function makeBike(color) {
-  const mesh = new THREE.Mesh(bikeGeo, new THREE.MeshPhongMaterial({ vertexColors: true, color, shininess: 60, specular: 0x555555 }));
+  const mesh = new THREE.Mesh(bikeGeo, new THREE.MeshStandardMaterial({ vertexColors: true, color, metalness: 0.6, roughness: 0.3, envMapIntensity: 1.1 }));
+  mesh.castShadow = true; mesh.receiveShadow = true;
   scene.add(mesh);
   return mesh;
 }
@@ -931,6 +969,7 @@ for (let t = 0; t < 74; t++) {
   const i = (rng() * N) | 0, j = (rng() * N) | 0;
   const mesh = new THREE.Mesh(npcGeos[(rng() * npcGeos.length) | 0], matVC);
   mesh.scale.set(rr(0.92, 1.06), rr(0.9, 1.14), rr(0.92, 1.06));   // varied heights & builds
+  mesh.castShadow = true;
   scene.add(mesh);
   npcs.push({
     mesh, x: blockMin(i) + rr(2, BLOCK - 2), z: blockMin(j) + rr(2, BLOCK - 2),
@@ -955,7 +994,7 @@ for (let t = 0; t < 74; t++) {
     }
   }
   const im = new THREE.InstancedMesh(carGeo,
-    new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 50, specular: 0x444444 }), spots.length);
+    new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.5, roughness: 0.38, envMapIntensity: 1.0 }), spots.length);
   const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
   spots.forEach(([x, z, yaw], idx) => {
     p.set(x, 0, z); q.setFromAxisAngle(up, yaw); m.compose(p, q, s);
@@ -969,6 +1008,7 @@ for (let t = 0; t < 74; t++) {
 // story characters
 function storyNPC(pal, x, z, name) {
   const mesh = new THREE.Mesh(personGeo(pal), matVC);
+  mesh.castShadow = true;
   mesh.position.set(x, CURB, z);
   const tag = textSprite(name, "#1d2a20", "rgba(255,209,102,.95)", 5, 1.25, 2.3);
   mesh.add(tag);
@@ -986,6 +1026,7 @@ vince.visible = false;
 
 // ---------- player ----------
 const hero = articulatedPerson(HERO_PAL);
+hero.group.traverse(o => { if (o.isMesh) o.castShadow = true; });
 scene.add(hero.group);
 const player = { x: PLAZA.x, z: Rc(3) - 12, y: CURB, h: Math.PI, walkPhase: 0, speed: 0 };
 let driving = null;   // car object while driving
@@ -2778,6 +2819,7 @@ function frame(now) {
     updateHUD();
     drawMinimap(now / 1000);
   } else acc = 0;
+  if (state.phase === "play") updateSunShadow();
   renderFrame();
   // adaptive resolution: hold ~60fps by nudging pixel ratio between PR_FLOOR and PR_CAP
   perfFrames++;
