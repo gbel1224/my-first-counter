@@ -503,6 +503,33 @@ specialBuilding(HOSPITAL.x, HOSPITAL.z, 30, 12, 26, 0xeef2f5, STR.hospitalName, 
   scene.add(imT, imC);
 }
 
+// ---------- palm trees (the city's signature: leaning trunks + drooping frond crowns) ----------
+{
+  const spots = [];
+  const add = (x, z, k, solid) => spots.push([x, z, k, solid]);
+  for (let a = 0; a < 10; a++) { const ang = a / 10 * Math.PI * 2; add(PLAZA.x + Math.cos(ang) * 19, PLAZA.z + Math.sin(ang) * 19, rr(0.95, 1.2), false); }
+  for (const key of PARKS) { const [i, j] = key.split(",").map(Number); for (let t = 0; t < 4; t++) add(blockMin(i) + rr(5, BLOCK - 5), blockMin(j) + rr(5, BLOCK - 5), rr(0.85, 1.25), true); }
+  for (let t = 0; t < 24; t++) { const i = (rng() * N) | 0, j = (rng() * N) | 0; if (PARKS.has(i + "," + j)) continue; add(blockMin(i) + pick([3, BLOCK - 3]), blockMin(j) + pick([3, BLOCK - 3]), rr(0.8, 1.15), true); }
+
+  const trunk = new THREE.CylinderGeometry(0.18, 0.34, 6, 6); trunk.translate(0, 3, 0);
+  const fparts = [];                                   // 8 tapered blades radiating out and drooping
+  for (let f = 0; f < 8; f++) { const fr = new THREE.BoxGeometry(0.5, 0.07, 2.8); fr.translate(0, 0, 1.4); fr.rotateX(0.4); fr.rotateY(f / 8 * Math.PI * 2); fparts.push(fr); }
+  const crown = mergeGeos(fparts); crown.translate(0, 6, 0);
+
+  const imT = new THREE.InstancedMesh(trunk, new THREE.MeshLambertMaterial({ color: 0xa6824f }), spots.length);
+  const imC = new THREE.InstancedMesh(crown, new THREE.MeshLambertMaterial({ color: 0xffffff }), spots.length);
+  const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), e = new THREE.Euler();
+  const greens = [0x5d9952, 0x6da85e, 0x7fb069, 0x4f8a47];
+  spots.forEach(([x, z, k, solid], idx) => {
+    e.set(rr(-0.1, 0.1), rng() * 6.28, rr(-0.1, 0.1)); q.setFromEuler(e);
+    p.set(x, CURB, z); s.set(k, k, k); m.compose(p, q, s);
+    imT.setMatrixAt(idx, m); imC.setMatrixAt(idx, m);
+    imC.setColorAt(idx, _col.set(pick(greens)));
+    if (solid) addCollider(x, z, 0.4, 0.4);
+  });
+  scene.add(imT, imC);
+}
+
 // ---------- street lamps (instanced poles + heads that glow at night) ----------
 const lampHeads = [];
 let lampMat = null;
