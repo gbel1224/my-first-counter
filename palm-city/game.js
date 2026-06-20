@@ -60,8 +60,8 @@ renderer.domElement.id = "scene";   // CSS color-grades the 3D layer (HUD sits a
 document.body.insertBefore(renderer.domElement, document.getElementById("ui"));
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xf7c98e);          // golden-hour haze (style blocks 3-4)
-scene.fog = new THREE.Fog(0xf7c98e, 170, 420);
+scene.background = new THREE.Color(0xf9c071);          // golden-hour haze (warm, sunset-biased cycle)
+scene.fog = new THREE.Fog(0xf9c071, 175, 440);
 
 const camera = new THREE.PerspectiveCamera(64, innerWidth / innerHeight, 0.5, 900);
 camera.position.set(0, 8, -14);
@@ -143,13 +143,14 @@ function setGlow(night) {
 
 // day/night cycle (4 min): warm day -> dusk -> night -> dawn
 const ENV_KEYS = [
-  { t: 0.00, sky: new THREE.Color(0xf7c98e), top: new THREE.Color(0x4a90d9), sun: 1.7, hemi: 1.05, far: 420, night: 0.0 },
-  { t: 0.42, sky: new THREE.Color(0xf7c98e), top: new THREE.Color(0x4a90d9), sun: 1.7, hemi: 1.05, far: 420, night: 0.0 },
-  { t: 0.52, sky: new THREE.Color(0xee9d7a), top: new THREE.Color(0x9a6a8a), sun: 1.1, hemi: 0.85, far: 400, night: 0.35 },
-  { t: 0.60, sky: new THREE.Color(0x2c3354), top: new THREE.Color(0x10142c), sun: 0.18, hemi: 0.42, far: 340, night: 1.0 },
-  { t: 0.86, sky: new THREE.Color(0x2c3354), top: new THREE.Color(0x10142c), sun: 0.18, hemi: 0.42, far: 340, night: 1.0 },
-  { t: 0.95, sky: new THREE.Color(0xf2b890), top: new THREE.Color(0x7a6a9a), sun: 1.2, hemi: 0.90, far: 400, night: 0.3 },
-  { t: 1.00, sky: new THREE.Color(0xf7c98e), top: new THREE.Color(0x4a90d9), sun: 1.7, hemi: 1.05, far: 420, night: 0.0 },
+  // Golden-sunset biased cycle: warm amber daytime, a rich sunset, then a short night.
+  { t: 0.00, sky: new THREE.Color(0xf9c071), top: new THREE.Color(0xf0934a), sun: 1.55, hemi: 1.02, far: 440, night: 0.0 },
+  { t: 0.50, sky: new THREE.Color(0xf9c071), top: new THREE.Color(0xf0934a), sun: 1.55, hemi: 1.02, far: 440, night: 0.0 },
+  { t: 0.60, sky: new THREE.Color(0xf3863f), top: new THREE.Color(0xb44e72), sun: 1.2,  hemi: 0.82, far: 410, night: 0.4 },
+  { t: 0.68, sky: new THREE.Color(0x6a4368), top: new THREE.Color(0x281f40), sun: 0.5,  hemi: 0.55, far: 360, night: 0.85 },
+  { t: 0.82, sky: new THREE.Color(0x2c3354), top: new THREE.Color(0x10142c), sun: 0.2,  hemi: 0.46, far: 350, night: 1.0 },
+  { t: 0.90, sky: new THREE.Color(0xef9b63), top: new THREE.Color(0x8a5e8c), sun: 1.05, hemi: 0.86, far: 410, night: 0.32 },
+  { t: 1.00, sky: new THREE.Color(0xf9c071), top: new THREE.Color(0xf0934a), sun: 1.55, hemi: 1.02, far: 440, night: 0.0 },
 ];
 const _sky = new THREE.Color(), _top = new THREE.Color(), _sunCol = new THREE.Color();
 function envUpdate() {
