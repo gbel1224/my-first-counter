@@ -17,11 +17,17 @@ const rr = (a, b) => a + rng() * (b - a);
 const pick = arr => arr[(rng() * arr.length) | 0];
 
 // ---------- city constants ----------
-const N = 6, CELL = 88, ROAD = 18, BLOCK = 70;
-const HALF = (N * CELL + ROAD) / 2;            // 273
+const N = 10, CELL = 88, ROAD = 18, BLOCK = 70;   // 10x10 city (was 6) — bigger, Miami-scale
+const HALF = (N * CELL + ROAD) / 2;
 const roadC = k => -HALF + ROAD / 2 + k * CELL;
 const blockMin = i => roadC(i) + ROAD / 2;
 const bc = i => blockMin(i) + BLOCK / 2;
+// the original districts live in a centred 6x6 region; O recentres them so every
+// landmark/mission keeps its exact world position while the grid grows around it.
+const O = (N - 6) / 2;
+const Rc = i => roadC(i + O);
+const Bm = i => blockMin(i + O);
+const Bc = i => bc(i + O);
 const CURB = 0.22;
 
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -346,7 +352,7 @@ const colliders = [];   // {x0,x1,z0,z1}
 const addCollider = (x, z, hw, hd) => colliders.push({ x0: x - hw, x1: x + hw, z0: z - hd, z1: z + hd });
 
 const matVC = new THREE.MeshLambertMaterial({ vertexColors: true });
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400),
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(2600, 2600),
   new THREE.MeshLambertMaterial({ color: 0x9aab72 }));
 ground.geometry.rotateX(-Math.PI / 2);
 scene.add(ground);
@@ -368,13 +374,15 @@ scene.add(ground);
 }
 
 // block layout
-const PARKS = new Set(["2,2", "1,1", "4,4"]);
-const SPECIAL = { "1,3": "wash", "4,2": "burger", "5,0": "club", "0,4": "depot", "1,2": "pizza", "2,4": "taxi", "5,5": "marina", "3,2": "garage", "2,3": "home", "3,4": "hospital" };
-const PLAZA = { x: bc(2), z: bc(2) };
-const GARAGE = { x: bc(3), z: bc(2) };
-const HOME = { x: bc(2), z: bc(3) };
-const HOSPITAL = { x: bc(3), z: bc(4) };
-const GAS = { x: roadC(2) + 7, z: roadC(3) - 7 };   // roadside fuel station (west-central)
+// district block keys, recentred by the offset O so they sit in the middle of the bigger grid
+const _pad = k => { const [a, b] = k.split(",").map(Number); return (a + O) + "," + (b + O); };
+const PARKS = new Set(["2,2", "1,1", "4,4"].map(_pad));
+const SPECIAL = {}; for (const [k, v] of Object.entries({ "1,3": "wash", "4,2": "burger", "5,0": "club", "0,4": "depot", "1,2": "pizza", "2,4": "taxi", "5,5": "marina", "3,2": "garage", "2,3": "home", "3,4": "hospital" })) SPECIAL[_pad(k)] = v;
+const PLAZA = { x: Bc(2), z: Bc(2) };
+const GARAGE = { x: Bc(3), z: Bc(2) };
+const HOME = { x: Bc(2), z: Bc(3) };
+const HOSPITAL = { x: Bc(3), z: Bc(4) };
+const GAS = { x: Rc(2) + 7, z: Rc(3) - 7 };   // roadside fuel station (west-central)
 
 // curb slabs: paved + grass, instanced
 {
@@ -406,7 +414,8 @@ let buildingsIM, buildingMat = null;
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
     const key = i + "," + j;
     if (PARKS.has(key) || SPECIAL[key]) continue;
-    const dc = Math.max(Math.abs(i - 2.5), Math.abs(j - 2.5));  // 0.5 = dead centre … 2.5 = city edge
+    const cen = (N - 1) / 2;
+    const dc = Math.max(Math.abs(i - cen), Math.abs(j - cen));  // 0 = dead centre … grows to the city edge
     const downtown = dc <= 1.5;                                 // core 4x4
     const skip = downtown ? 0.08 : 0.18;                       // fill blocks more densely than before
     const towerChance = downtown ? 0.92 : 0.55;                // skyscrapers almost everywhere downtown
@@ -467,12 +476,12 @@ let buildingsIM, buildingMat = null;
 
 // outer ground gets a tiling grass texture so the outskirts aren't a flat colour
 {
-  const g = texGrass.clone(); g.needsUpdate = true; g.repeat.set(46, 46);
+  const g = texGrass.clone(); g.needsUpdate = true; g.repeat.set(86, 86);
   ground.material = new THREE.MeshLambertMaterial({ map: g });
 }
 
 // ---------- beach district (south of the city, on the open ground beyond the grid) ----------
-const SEA_Z = 348;            // shoreline; ocean fills everything past here
+const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigger) grid
 {
   const sandTex = canvasTex(128, (ctx, s) => {
     ctx.fillStyle = "#e7d3a2"; ctx.fillRect(0, 0, s, s);
@@ -493,19 +502,19 @@ const SEA_Z = 348;            // shoreline; ocean fills everything past here
   });
 
   // sand strip along the shore, with grass behind it blending to the city
-  const sandW = 600, sand = new THREE.Mesh(new THREE.PlaneGeometry(sandW, 78, 1, 1),
+  const sandW = 2 * HALF + 200, sand = new THREE.Mesh(new THREE.PlaneGeometry(sandW, 78, 1, 1),
     new THREE.MeshLambertMaterial({ map: sandTex }));
   sand.rotation.x = -Math.PI / 2; sand.position.set(10, 0.04, SEA_Z - 39);
   scene.add(sand);
   // ocean
-  const sea = new THREE.Mesh(new THREE.PlaneGeometry(1100, 340),
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 900, 600),
     new THREE.MeshLambertMaterial({ map: seaTex, transparent: true, opacity: 0.94 }));
-  sea.rotation.x = -Math.PI / 2; sea.position.set(10, 0.03, SEA_Z + 170);
+  sea.rotation.x = -Math.PI / 2; sea.position.set(10, 0.03, SEA_Z + 295);
   scene.add(sea);
 
   // beach palms (compact instanced clump: leaning trunks + frond crowns)
   const pspots = [];
-  for (let t = 0; t < 16; t++) pspots.push([rr(-260, 280), SEA_Z - rr(48, 74), rr(0.9, 1.3)]);
+  for (let t = 0; t < 34; t++) pspots.push([rr(-HALF, HALF), SEA_Z - rr(48, 74), rr(0.9, 1.3)]);
   const ptrunk = new THREE.CylinderGeometry(0.18, 0.34, 6, 6); ptrunk.translate(0, 3, 0);
   const fparts = [];
   for (let f = 0; f < 8; f++) { const fr = new THREE.BoxGeometry(0.5, 0.07, 2.8); fr.translate(0, 0, 1.4); fr.rotateX(0.4); fr.rotateY(f / 8 * Math.PI * 2); fparts.push(fr); }
@@ -525,8 +534,8 @@ const SEA_Z = 348;            // shoreline; ocean fills everything past here
   const uCanopy = new THREE.ConeGeometry(2.0, 1.1, 10); uCanopy.translate(0, 2.6, 0);
   const uPole = new THREE.CylinderGeometry(0.07, 0.07, 2.6, 6); uPole.translate(0, 1.3, 0);
   const uColors = [0xe8543f, 0x3f7fe8, 0xf0c040, 0xe85fae, 0x58b368];
-  for (let t = 0; t < 12; t++) {
-    const x = rr(-250, 270), z = SEA_Z - rr(10, 34);
+  for (let t = 0; t < 26; t++) {
+    const x = rr(-HALF, HALF), z = SEA_Z - rr(10, 34);
     const can = new THREE.Mesh(uCanopy, new THREE.MeshLambertMaterial({ color: pick(uColors) }));
     const pol = new THREE.Mesh(uPole, new THREE.MeshLambertMaterial({ color: 0xe8e0d0 }));
     const grp = new THREE.Group(); grp.add(can, pol); grp.position.set(x, 0.04, z); grp.rotation.y = rng() * 6.28;
@@ -563,13 +572,13 @@ function specialBuilding(x, z, w, h, d, color, labelText, labelColor) {
   scene.add(sp);
   return sp;
 }
-specialBuilding(bc(1), bc(3), 42, 9, 26, 0x6fb7d9, STR.biz.wash.name, "rgba(40,90,130,.9)");
-specialBuilding(bc(4), bc(2), 26, 11, 26, 0xd95f4b, STR.biz.burger.name, "rgba(150,50,30,.9)");
-specialBuilding(bc(5), bc(0), 32, 17, 28, 0x8e5fc9, STR.biz.club.name, "rgba(80,40,130,.9)");
-specialBuilding(bc(0), bc(4), 48, 10, 40, 0x9aa0a8, STR.depotName, "rgba(60,65,75,.9)");
-specialBuilding(bc(1) + 18, bc(2) + 14, 18, 8, 18, 0xe0b04e, STR.pizzaName, "rgba(140,90,20,.9)");
-specialBuilding(bc(2), bc(4), 30, 6, 24, 0xe8c35a, STR.biz.taxi.name, "rgba(160,120,20,.9)");
-specialBuilding(bc(5), bc(5), 40, 7, 30, 0x5fa8c9, STR.biz.marina.name, "rgba(30,100,140,.9)");
+specialBuilding(Bc(1), Bc(3), 42, 9, 26, 0x6fb7d9, STR.biz.wash.name, "rgba(40,90,130,.9)");
+specialBuilding(Bc(4), Bc(2), 26, 11, 26, 0xd95f4b, STR.biz.burger.name, "rgba(150,50,30,.9)");
+specialBuilding(Bc(5), Bc(0), 32, 17, 28, 0x8e5fc9, STR.biz.club.name, "rgba(80,40,130,.9)");
+specialBuilding(Bc(0), Bc(4), 48, 10, 40, 0x9aa0a8, STR.depotName, "rgba(60,65,75,.9)");
+specialBuilding(Bc(1) + 18, Bc(2) + 14, 18, 8, 18, 0xe0b04e, STR.pizzaName, "rgba(140,90,20,.9)");
+specialBuilding(Bc(2), Bc(4), 30, 6, 24, 0xe8c35a, STR.biz.taxi.name, "rgba(160,120,20,.9)");
+specialBuilding(Bc(5), Bc(5), 40, 7, 30, 0x5fa8c9, STR.biz.marina.name, "rgba(30,100,140,.9)");
 specialBuilding(GARAGE.x, GARAGE.z, 34, 8, 26, 0x5b6470, STR.garageName, "rgba(40,46,55,.9)");
 const homeSign = specialBuilding(HOME.x, HOME.z, 24, 11, 22, 0xc98a6b, STR.homeForSale, "rgba(150,90,50,.92)");
 specialBuilding(HOSPITAL.x, HOSPITAL.z, 30, 12, 26, 0xeef2f5, STR.hospitalName, "rgba(40,120,120,.92)");
@@ -611,9 +620,9 @@ specialBuilding(HOSPITAL.x, HOSPITAL.z, 30, 12, 26, 0xeef2f5, STR.hospitalName, 
     boxGeoC(2.8, 0.2, 1.8, 0, 2.6, 0, 0xe8543f),
     boxGeoC(0.12, 1.1, 0.12, 0.8, 1.9, 0, 0x6b6258),
   ]), matVC);
-  cart.position.set(bc(2) + 28, CURB, bc(2) + 28);
+  cart.position.set(Bc(2) + 28, CURB, Bc(2) + 28);
   scene.add(cart);
-  addCollider(bc(2) + 28, bc(2) + 28, 1.6, 1.2);
+  addCollider(Bc(2) + 28, Bc(2) + 28, 1.6, 1.2);
 }
 
 // trees: instanced trunks + canopies
@@ -892,7 +901,7 @@ scene.add(rampIM);
 
 // traffic cars on block-ring routes
 const traffic = [];
-for (let t = 0; t < 30; t++) {
+for (let t = 0; t < 52; t++) {
   const i = (rng() * N) | 0, j = (rng() * N) | 0;
   const x0 = roadC(i) + 4, x1 = roadC(i + 1) - 4, z0 = roadC(j) + 4, z1 = roadC(j + 1) - 4;
   const wp = [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
@@ -918,7 +927,7 @@ for (let i = 0; i < POLICE_N; i++) {
 
 // pedestrians
 const npcs = [];
-for (let t = 0; t < 46; t++) {
+for (let t = 0; t < 74; t++) {
   const i = (rng() * N) | 0, j = (rng() * N) | 0;
   const mesh = new THREE.Mesh(npcGeos[(rng() * npcGeos.length) | 0], matVC);
   mesh.scale.set(rr(0.92, 1.06), rr(0.9, 1.14), rr(0.92, 1.06));   // varied heights & builds
@@ -932,7 +941,7 @@ for (let t = 0; t < 46; t++) {
 // parked cars along the curbs — static, rendered as a single instanced draw call
 {
   const edge = ROAD / 2 - 1.3;                         // sit just inside the road edge, by the curb
-  const start = { x: PLAZA.x, z: roadC(3) - 12 };      // keep the player's spawn area clear
+  const start = { x: PLAZA.x, z: Rc(3) - 12 };      // keep the player's spawn area clear
   const ok = (x, z) => dist2(x, z, PLAZA.x, PLAZA.z) > 900 && dist2(x, z, start.x, start.z) > 576
     && RAMPS.every(r => dist2(x, z, r.x, r.z) > 169);   // never block a stunt ramp
   const spots = [];
@@ -968,7 +977,7 @@ function storyNPC(pal, x, z, name) {
 }
 const marco = storyNPC({ shirt: 0x2a9d8f, pants: 0x4a4f59, skin: 0xc98f6b, hair: 0x1f1a16 },
   PLAZA.x, PLAZA.z + 11, STR.who.marco);
-const ROSA_POS = { x: blockMin(4) + 2, z: 132 };
+const ROSA_POS = { x: Bm(4) + 2, z: 132 };
 const rosa = storyNPC({ shirt: 0xe76f8a, pants: 0xf5f0e6, skin: 0xe8b08a, hair: 0x3a2010 },
   ROSA_POS.x, ROSA_POS.z, STR.who.rosa);
 const vince = storyNPC({ shirt: 0x4a4f59, pants: 0x23262b, skin: 0xd9a37a, hair: 0x55524e },
@@ -978,7 +987,7 @@ vince.visible = false;
 // ---------- player ----------
 const hero = articulatedPerson(HERO_PAL);
 scene.add(hero.group);
-const player = { x: PLAZA.x, z: roadC(3) - 12, y: CURB, h: Math.PI, walkPhase: 0, speed: 0 };
+const player = { x: PLAZA.x, z: Rc(3) - 12, y: CURB, h: Math.PI, walkPhase: 0, speed: 0 };
 let driving = null;   // car object while driving
 
 // ---------- blob shadows (one instanced draw) ----------
@@ -1094,12 +1103,12 @@ const sideMarker = makeMarker(0xff8c42);
 
 // ---------- businesses ----------
 const BIZ = [
-  { id: "dogs", cost: 500, rate: 30, x: bc(2) + 28, z: bc(2) + 28, ly: 4.6, tips: 0 },
-  { id: "wash", cost: 2000, rate: 90, x: bc(1) + 32, z: bc(3), ly: 4.6, tips: 0 },
-  { id: "burger", cost: 5000, rate: 220, x: bc(4) - 32, z: bc(2), ly: 4.6, tips: 0 },
-  { id: "club", cost: 10000, rate: 500, x: bc(5) - 32, z: bc(0) + 18, ly: 4.6, tips: 0 },
-  { id: "taxi", cost: 3500, rate: 150, x: bc(2), z: 110, ly: 4.6, tips: 0 },
-  { id: "marina", cost: 15000, rate: 700, x: bc(5), z: 196, ly: 4.6, tips: 0 },
+  { id: "dogs", cost: 500, rate: 30, x: Bc(2) + 28, z: Bc(2) + 28, ly: 4.6, tips: 0 },
+  { id: "wash", cost: 2000, rate: 90, x: Bc(1) + 32, z: Bc(3), ly: 4.6, tips: 0 },
+  { id: "burger", cost: 5000, rate: 220, x: Bc(4) - 32, z: Bc(2), ly: 4.6, tips: 0 },
+  { id: "club", cost: 10000, rate: 500, x: Bc(5) - 32, z: Bc(0) + 18, ly: 4.6, tips: 0 },
+  { id: "taxi", cost: 3500, rate: 150, x: Bc(2), z: 110, ly: 4.6, tips: 0 },
+  { id: "marina", cost: 15000, rate: 700, x: Bc(5), z: 196, ly: 4.6, tips: 0 },
 ];
 for (const b of BIZ) {
   b.sale = textSprite(STR.forSale(b.cost), "#fff", "rgba(200,90,30,.92)", 11, 2.75, 0);
@@ -1290,7 +1299,7 @@ function incomeRate() {
 const M = STR.missions;
 const MISSIONS = [
   { reward: 100, steps: [{ x: PLAZA.x, z: PLAZA.z + 11, r: 4 }] },
-  { reward: 150, steps: [{ x: bc(1) + 18, z: bc(2) + 4, r: 4 }, { x: 44, z: -100, r: 4 }] },
+  { reward: 150, steps: [{ x: Bc(1) + 18, z: Bc(2) + 4, r: 4 }, { x: 44, z: -100, r: 4 }] },
   { reward: 200, steps: [{ x: -30, z: 6, r: 6, cond: () => !!driving }, { x: -188, z: 132, r: 8, needCar: true }] },
   {
     reward: 300, steps: [
@@ -1446,12 +1455,12 @@ function updateSideJob() {
 // ---------- street races (freeplay) ----------
 // Multiple circuits, each with its own checkered start gate, time limit, reward and best lap.
 const CIRCUITS = [
-  { id: "downtown", start: { x: roadC(2), z: roadC(4) }, limit: 52, reward: 500,
-    cps: [[roadC(4), roadC(4)], [roadC(4), roadC(2)], [roadC(2), roadC(2)], [roadC(2), roadC(4)]] },
-  { id: "outer", start: { x: roadC(1), z: roadC(1) }, limit: 72, reward: 800,
-    cps: [[roadC(5), roadC(1)], [roadC(5), roadC(5)], [roadC(1), roadC(5)], [roadC(1), roadC(1)]] },
-  { id: "harbor", start: { x: roadC(4), z: roadC(3) }, limit: 42, reward: 400,
-    cps: [[roadC(6), roadC(3)], [roadC(6), roadC(5)], [roadC(4), roadC(5)], [roadC(4), roadC(3)]] },
+  { id: "downtown", start: { x: Rc(2), z: Rc(4) }, limit: 52, reward: 500,
+    cps: [[Rc(4), Rc(4)], [Rc(4), Rc(2)], [Rc(2), Rc(2)], [Rc(2), Rc(4)]] },
+  { id: "outer", start: { x: Rc(1), z: Rc(1) }, limit: 72, reward: 800,
+    cps: [[Rc(5), Rc(1)], [Rc(5), Rc(5)], [Rc(1), Rc(5)], [Rc(1), Rc(1)]] },
+  { id: "harbor", start: { x: Rc(4), z: Rc(3) }, limit: 42, reward: 400,
+    cps: [[Rc(6), Rc(3)], [Rc(6), Rc(5)], [Rc(4), Rc(5)], [Rc(4), Rc(3)]] },
 ];
 const RACE_BEST_BONUS = 300, RACE_CP_R = 9;
 const MEDAL_BONUS = [0, 200, 500, 1000];   // bronze / silver / gold cash on first reaching a tier
