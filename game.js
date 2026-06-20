@@ -503,6 +503,33 @@ specialBuilding(HOSPITAL.x, HOSPITAL.z, 30, 12, 26, 0xeef2f5, STR.hospitalName, 
   scene.add(imT, imC);
 }
 
+// ---------- palm trees (the city's signature: leaning trunks + drooping frond crowns) ----------
+{
+  const spots = [];
+  const add = (x, z, k, solid) => spots.push([x, z, k, solid]);
+  for (let a = 0; a < 10; a++) { const ang = a / 10 * Math.PI * 2; add(PLAZA.x + Math.cos(ang) * 19, PLAZA.z + Math.sin(ang) * 19, rr(0.95, 1.2), false); }
+  for (const key of PARKS) { const [i, j] = key.split(",").map(Number); for (let t = 0; t < 4; t++) add(blockMin(i) + rr(5, BLOCK - 5), blockMin(j) + rr(5, BLOCK - 5), rr(0.85, 1.25), true); }
+  for (let t = 0; t < 24; t++) { const i = (rng() * N) | 0, j = (rng() * N) | 0; if (PARKS.has(i + "," + j)) continue; add(blockMin(i) + pick([3, BLOCK - 3]), blockMin(j) + pick([3, BLOCK - 3]), rr(0.8, 1.15), true); }
+
+  const trunk = new THREE.CylinderGeometry(0.18, 0.34, 6, 6); trunk.translate(0, 3, 0);
+  const fparts = [];                                   // 8 tapered blades radiating out and drooping
+  for (let f = 0; f < 8; f++) { const fr = new THREE.BoxGeometry(0.5, 0.07, 2.8); fr.translate(0, 0, 1.4); fr.rotateX(0.4); fr.rotateY(f / 8 * Math.PI * 2); fparts.push(fr); }
+  const crown = mergeGeos(fparts); crown.translate(0, 6, 0);
+
+  const imT = new THREE.InstancedMesh(trunk, new THREE.MeshLambertMaterial({ color: 0xa6824f }), spots.length);
+  const imC = new THREE.InstancedMesh(crown, new THREE.MeshLambertMaterial({ color: 0xffffff }), spots.length);
+  const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), e = new THREE.Euler();
+  const greens = [0x5d9952, 0x6da85e, 0x7fb069, 0x4f8a47];
+  spots.forEach(([x, z, k, solid], idx) => {
+    e.set(rr(-0.1, 0.1), rng() * 6.28, rr(-0.1, 0.1)); q.setFromEuler(e);
+    p.set(x, CURB, z); s.set(k, k, k); m.compose(p, q, s);
+    imT.setMatrixAt(idx, m); imC.setMatrixAt(idx, m);
+    imC.setColorAt(idx, _col.set(pick(greens)));
+    if (solid) addCollider(x, z, 0.4, 0.4);
+  });
+  scene.add(imT, imC);
+}
+
 // ---------- street lamps (instanced poles + heads that glow at night) ----------
 const lampHeads = [];
 let lampMat = null;
@@ -599,13 +626,23 @@ const NPC_PALS = [
 const npcGeos = NPC_PALS.map(personGeo);
 
 // ---------- cars ----------
+// round vertex-coloured wheel (axle along X so it lies flat on its side)
+function wheelGeo(r, w, x, y, z, color) {
+  const g = new THREE.CylinderGeometry(r, r, w, 14, 1);
+  g.rotateZ(Math.PI / 2); g.translate(x, y, z); return colorize(g, color);
+}
 const carGeo = mergeGeos([
-  boxGeoC(2.0, 0.7, 4.6, 0, 0.75, 0, 0xffffff),          // body (white => tintable)
-  boxGeoC(1.7, 0.65, 2.3, 0, 1.35, -0.2, 0x2a3d4d),       // glass cabin
-  boxGeoC(0.4, 0.7, 0.7, 0.85, 0.35, 1.5, 0x23262b),
-  boxGeoC(0.4, 0.7, 0.7, -0.85, 0.35, 1.5, 0x23262b),
-  boxGeoC(0.4, 0.7, 0.7, 0.85, 0.35, -1.5, 0x23262b),
-  boxGeoC(0.4, 0.7, 0.7, -0.85, 0.35, -1.5, 0x23262b),
+  boxGeoC(2.0, 0.55, 4.6, 0, 0.72, 0, 0xffffff),          // lower body (white => tintable)
+  boxGeoC(1.9, 0.22, 4.2, 0, 1.0, 0, 0xffffff),           // upper body shoulder (tintable, slimmer)
+  boxGeoC(1.7, 0.6, 2.3, 0, 1.32, -0.2, 0x2a3d4d),        // glass cabin
+  wheelGeo(0.44, 0.34, 0.92, 0.42, 1.5, 0x1b1d22),        // round tyres
+  wheelGeo(0.44, 0.34, -0.92, 0.42, 1.5, 0x1b1d22),
+  wheelGeo(0.44, 0.34, 0.92, 0.42, -1.5, 0x1b1d22),
+  wheelGeo(0.44, 0.34, -0.92, 0.42, -1.5, 0x1b1d22),
+  wheelGeo(0.18, 0.36, 0.93, 0.42, 1.5, 0xc2c6cc),        // chrome hubcaps
+  wheelGeo(0.18, 0.36, -0.93, 0.42, 1.5, 0xc2c6cc),
+  wheelGeo(0.18, 0.36, 0.93, 0.42, -1.5, 0xc2c6cc),
+  wheelGeo(0.18, 0.36, -0.93, 0.42, -1.5, 0xc2c6cc),
   boxGeoC(0.34, 0.18, 0.1, 0.55, 0.85, 2.31, 0xfff4c4),   // headlights
   boxGeoC(0.34, 0.18, 0.1, -0.55, 0.85, 2.31, 0xfff4c4),
   boxGeoC(0.34, 0.18, 0.1, 0.55, 0.85, -2.31, 0xc8403a),  // taillights
@@ -621,8 +658,10 @@ function makeCar(color) {
 const bikeGeo = mergeGeos([
   boxGeoC(0.7, 0.5, 1.9, 0, 0.95, 0, 0xffffff),       // tank/body (tintable)
   boxGeoC(0.5, 0.22, 0.6, 0, 1.16, -0.6, 0x23262b),   // seat
-  boxGeoC(0.28, 0.82, 0.82, 0, 0.5, 1.0, 0x161616),   // front wheel
-  boxGeoC(0.28, 0.82, 0.82, 0, 0.5, -1.0, 0x161616),  // rear wheel
+  wheelGeo(0.46, 0.16, 0, 0.46, 1.0, 0x161616),       // round front wheel
+  wheelGeo(0.46, 0.16, 0, 0.46, -1.0, 0x161616),      // round rear wheel
+  wheelGeo(0.17, 0.18, 0, 0.46, 1.0, 0xc2c6cc),       // hubcaps
+  wheelGeo(0.17, 0.18, 0, 0.46, -1.0, 0xc2c6cc),
   boxGeoC(0.82, 0.12, 0.12, 0, 1.5, 0.86, 0x3a3f47),  // handlebars
   boxGeoC(0.24, 0.18, 0.1, 0, 1.26, 1.26, 0xfff4c4),  // headlight
   boxGeoC(0.55, 0.7, 0.5, 0, 1.72, -0.32, 0xff7a33),  // rider torso
