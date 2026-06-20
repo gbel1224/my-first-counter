@@ -5,6 +5,7 @@ export const STR = {
   introBlurb: "An open-world story: run jobs, drive the streets, and buy up the city one business at a time.",
   controlsHint: "Keyboard: WASD/arrows move, E = car, F = punch, Space = brake, B = buy/horn, Enter = talk.  Gamepad supported.",
   legend: ["🕹️ Left side — move & steer", "↑ Push up — accelerate", "Ⓐ Enter / exit car", "👊 Punch (on foot)", "🛑 Brake / reverse"],
+  features: ["🚗 Drive & drift", "🏁 Street races", "🏙️ Build your empire", "⭐ Level up", "🌴 Open world"],
   tutTitle: "HOW TO PLAY",
   tutLines: [
     "🕹️ Drag the LEFT side of the screen to move & steer",
