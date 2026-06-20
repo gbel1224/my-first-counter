@@ -744,7 +744,7 @@ scene.add(rampIM);
 
 // traffic cars on block-ring routes
 const traffic = [];
-for (let t = 0; t < 22; t++) {
+for (let t = 0; t < 30; t++) {
   const i = (rng() * N) | 0, j = (rng() * N) | 0;
   const x0 = roadC(i) + 4, x1 = roadC(i + 1) - 4, z0 = roadC(j) + 4, z1 = roadC(j + 1) - 4;
   const wp = [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
@@ -770,7 +770,7 @@ for (let i = 0; i < POLICE_N; i++) {
 
 // pedestrians
 const npcs = [];
-for (let t = 0; t < 34; t++) {
+for (let t = 0; t < 46; t++) {
   const i = (rng() * N) | 0, j = (rng() * N) | 0;
   const mesh = new THREE.Mesh(npcGeos[(rng() * npcGeos.length) | 0], matVC);
   mesh.scale.set(rr(0.92, 1.06), rr(0.9, 1.14), rr(0.92, 1.06));   // varied heights & builds
@@ -779,6 +779,34 @@ for (let t = 0; t < 34; t++) {
     mesh, x: blockMin(i) + rr(2, BLOCK - 2), z: blockMin(j) + rr(2, BLOCK - 2),
     h: rr(0, Math.PI * 2), speed: rr(1.0, 1.7), timer: rr(2, 6), phase: rr(0, 6),
   });
+}
+
+// parked cars along the curbs — static, rendered as a single instanced draw call
+{
+  const edge = ROAD / 2 - 1.3;                         // sit just inside the road edge, by the curb
+  const start = { x: PLAZA.x, z: roadC(3) - 12 };      // keep the player's spawn area clear
+  const ok = (x, z) => dist2(x, z, PLAZA.x, PLAZA.z) > 900 && dist2(x, z, start.x, start.z) > 576
+    && RAMPS.every(r => dist2(x, z, r.x, r.z) > 169);   // never block a stunt ramp
+  const spots = [];
+  for (let k = 0; k <= N; k++) {
+    const c = roadC(k);
+    for (let b = 0; b < N; b++) {
+      const z = bc(b) + rr(-16, 16), sv = rng() < 0.5 ? edge : -edge;
+      if (rng() < 0.72 && ok(c + sv, z)) spots.push([c + sv, z, sv > 0 ? 0 : Math.PI]);
+      const x = bc(b) + rr(-16, 16), sh = rng() < 0.5 ? edge : -edge;
+      if (rng() < 0.72 && ok(x, c + sh)) spots.push([x, c + sh, sh > 0 ? Math.PI / 2 : -Math.PI / 2]);
+    }
+  }
+  const im = new THREE.InstancedMesh(carGeo,
+    new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 50, specular: 0x444444 }), spots.length);
+  const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
+  spots.forEach(([x, z, yaw], idx) => {
+    p.set(x, 0, z); q.setFromAxisAngle(up, yaw); m.compose(p, q, s);
+    im.setMatrixAt(idx, m); im.setColorAt(idx, _col.set(pick(CAR_COLORS)));
+    const alongX = Math.abs(Math.sin(yaw)) > 0.5;      // orientation-aware collider footprint
+    addCollider(x, z, alongX ? 2.4 : 1.1, alongX ? 1.1 : 2.4);
+  });
+  scene.add(im);
 }
 
 // story characters
