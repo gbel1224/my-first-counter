@@ -252,6 +252,25 @@ const texWindows = canvasTex(256, (ctx, s) => {
     ctx.fillRect(x, y, ww, wh);
   }
 });
+// glass-tower facade — a uniform window grid that tiles seamlessly so it can repeat up tall skyscrapers
+const texTower = canvasTex(128, (ctx, s) => {
+  ctx.fillStyle = "#8fa6b8"; ctx.fillRect(0, 0, s, s);     // steel mullion frame
+  const R = 4, cell = s / R, p = cell * 0.16;
+  for (let cy = 0; cy < R; cy++) for (let cx = 0; cx < R; cx++) {
+    ctx.fillStyle = rng() < 0.2 ? "#ffe7b3" : (rng() < 0.5 ? "#5e7891" : "#728da3");
+    ctx.fillRect(cx * cell + p, cy * cell + p, cell - 2 * p, cell - 2 * p);
+  }
+}, 2, 7);
+// night version: a random subset of tower windows lit (emissive map after dark)
+const texTowerWin = canvasTex(128, (ctx, s) => {
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, s, s);
+  const R = 4, cell = s / R, p = cell * 0.16;
+  for (let cy = 0; cy < R; cy++) for (let cx = 0; cx < R; cx++) {
+    if (Math.random() < 0.55) continue;
+    ctx.fillStyle = Math.random() < 0.5 ? "#ffe7b3" : "#cfe3ff";
+    ctx.fillRect(cx * cell + p, cy * cell + p, cell - 2 * p, cell - 2 * p);
+  }
+}, 2, 7);
 
 // ---------- geometry helpers (merged vertex-colored boxes => 1 draw call per model) ----------
 const _col = new THREE.Color();
@@ -374,6 +393,7 @@ const GAS = { x: roadC(2) + 7, z: roadC(3) - 7 };   // roadside fuel station (we
 
 // buildings: one InstancedMesh, facade texture sides / plain roof, pastel instance tints
 const PASTELS = [0xf2d4c2, 0xd9e4f0, 0xf5e8c8, 0xd8ecd4, 0xecd3e2, 0xe7ded0, 0xc9dce6, 0xf0dcc0];
+const TOWER_TINTS = [0xbcd2e0, 0xc8d8e8, 0xd0e0e0, 0xe2e6ea, 0xb8c8d8, 0xd8d0c4, 0xc4d4dc];   // cool glass
 let buildingsIM, buildingMat = null;
 {
   const unit = new THREE.BoxGeometry(1, 1, 1);
@@ -382,21 +402,28 @@ let buildingsIM, buildingMat = null;
   buildingMat = matSide;
   const matRoof = new THREE.MeshLambertMaterial({ color: 0xb8ab9a });
   const mats = [matSide, matSide, matRoof, matRoof, matSide, matSide];
-  const placed = [];
+  const placed = [], towers = [];
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
     const key = i + "," + j;
     if (PARKS.has(key) || SPECIAL[key]) continue;
+    const downtown = i >= 1 && i <= 4 && j >= 1 && j <= 4;   // central core rises into skyscrapers
     for (const qx of [0, 1]) for (const qz of [0, 1]) {
       if (rng() < 0.26) continue;
-      const w = rr(16, 24), d = rr(16, 24), h = pick([8, 8, 12, 12, 16, 22, 30]);
       const x = blockMin(i) + 8 + 13 + qx * 28 + rr(-2, 2);
       const z = blockMin(j) + 8 + 13 + qz * 28 + rr(-2, 2);
-      placed.push({ x, z, w, d, h, tint: pick(PASTELS) });
-      addCollider(x, z, w / 2, d / 2);
+      if (downtown && rng() < 0.72) {                        // glass skyscraper
+        const w = rr(15, 22), d = rr(15, 22), h = rr(40, 94);
+        towers.push({ x, z, w, d, h, tint: pick(TOWER_TINTS) });
+        addCollider(x, z, w / 2, d / 2);
+      } else {                                               // low / mid-rise on the outskirts
+        const w = rr(16, 24), d = rr(16, 24), h = pick([8, 8, 12, 12, 16, 20, 26]);
+        placed.push({ x, z, w, d, h, tint: pick(PASTELS) });
+        addCollider(x, z, w / 2, d / 2);
+      }
     }
   }
-  buildingsIM = new THREE.InstancedMesh(unit, mats, placed.length);
   const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+  buildingsIM = new THREE.InstancedMesh(unit, mats, placed.length);
   placed.forEach((b, idx) => {
     p.set(b.x, CURB, b.z); s.set(b.w, b.h, b.d); q.identity();
     m.compose(p, q, s);
@@ -404,6 +431,19 @@ let buildingsIM, buildingMat = null;
     buildingsIM.setColorAt(idx, _col.set(b.tint));
   });
   scene.add(buildingsIM);
+
+  // downtown skyscrapers — own instanced mesh with the tiling glass-tower facade
+  const towerSide = new THREE.MeshLambertMaterial({ map: texTower, emissive: 0xffffff, emissiveMap: texTowerWin, emissiveIntensity: 0 });
+  specialMats.push(towerSide);                               // ride the night-window ramp
+  const towerMats = [towerSide, towerSide, matRoof, matRoof, towerSide, towerSide];
+  const towersIM = new THREE.InstancedMesh(unit, towerMats, towers.length);
+  towers.forEach((b, idx) => {
+    p.set(b.x, CURB, b.z); s.set(b.w, b.h, b.d); q.identity();
+    m.compose(p, q, s);
+    towersIM.setMatrixAt(idx, m);
+    towersIM.setColorAt(idx, _col.set(b.tint));
+  });
+  scene.add(towersIM);
 }
 
 // special buildings + labels — facade + lit-window textures (tinted by the accent colour),
