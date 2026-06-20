@@ -48,9 +48,10 @@ let pr = PR_CAP;
 renderer.setPixelRatio(pr);
 renderer.setSize(innerWidth, innerHeight);
 
-// post-processing bloom (beta, default OFF; any failure silently falls back to the plain renderer)
+// post-processing bloom (default ON for the premium neon look; any failure silently falls back to
+// the plain renderer, and the adaptive pixel-ratio guard keeps fps up — toggle in the progress panel)
 const BLOOM_KEY = "palm_city_bloom";
-let bloomOn = (() => { try { return localStorage.getItem(BLOOM_KEY) === "1"; } catch (e) { return false; } })();
+let bloomOn = (() => { try { const v = localStorage.getItem(BLOOM_KEY); return v === null ? true : v === "1"; } catch (e) { return true; } })();
 let bloomReady = false, bloomFailed = false, bloomW = 0, bloomH = 0;
 let rtScene, rtB1, rtB2, fsScene, fsCam, fsQuad, brightMat, blurMat, compMat;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic highlight roll-off for a premium look
@@ -1933,22 +1934,42 @@ function maybeTutorial() {
 const elIntro = dom("intro");
 function buildIntro() {
   elIntro.innerHTML = "";
+  const mk = (cls, parent) => { const e = document.createElement("div"); if (cls) e.className = cls; if (parent) parent.append(e); return e; };
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  // ---- cinematic backdrop: glowing sun, lit city skyline, sea, swaying palms ----
+  mk("sun", elIntro);
+  const skyline = mk("layer skyline", elIntro);
+  for (let i = 0; i < 16; i++) {
+    const b = mk("bld", skyline);
+    const w = Math.round(rnd(16, 34)), h = Math.round(rnd(40, 132));
+    b.style.width = w + "px"; b.style.height = h + "px";
+    const cols = Math.max(1, Math.floor(w / 9)), rows = Math.floor(h / 14);
+    for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++)
+      if (Math.random() < 0.5) { const win = mk("", b); win.style.cssText = "position:absolute;width:3px;height:3px;background:#ffd98a;border-radius:1px;box-shadow:0 0 4px #ffd98a;left:" + (5 + c * 8) + "px;bottom:" + (8 + r * 12) + "px"; }
+  }
+  mk("layer sea", elIntro);
+  const pl = mk("palm l", elIntro); pl.textContent = "🌴";
+  const pr = mk("palm r", elIntro); pr.textContent = "🌴";
+
+  // ---- hero content ----
+  const hero = mk("hero", elIntro);
   const h1 = document.createElement("h1"); h1.textContent = STR.title;
-  const tag = document.createElement("div"); tag.className = "tag"; tag.textContent = STR.tagline;
-  const blurb = document.createElement("div"); blurb.className = "blurb"; blurb.textContent = STR.introBlurb;
-  const hint = document.createElement("div"); hint.className = "hint"; hint.textContent = STR.controlsHint;
-  const legend = document.createElement("div"); legend.className = "legend";
-  legend.innerHTML = STR.legend.map(s => "<span>" + s + "</span>").join("");
+  const tag = mk("tag", hero); tag.textContent = STR.tagline;
+  const feats = mk("feats", hero);
+  feats.innerHTML = STR.features.map(f => '<span class="feat">' + f + "</span>").join("");
+  hero.insertBefore(h1, tag);
   const start = document.createElement("button");
   start.textContent = hasSave ? STR.continueGame : STR.start;
   start.addEventListener("click", () => beginPlay());
-  elIntro.append(h1, tag, blurb, legend, start, hint);
+  hero.append(start);
   if (hasSave) {
     const reset = document.createElement("button");
     reset.className = "secondary"; reset.textContent = STR.newGame;
     reset.addEventListener("click", resetGame);
-    elIntro.append(reset);
+    hero.append(reset);
   }
+  const hint = mk("hint", hero); hint.textContent = STR.controlsHint;
 }
 function beginPlay() {
   if (hasSave) { load(); applyOwnership(); }
