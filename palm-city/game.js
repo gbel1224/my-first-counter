@@ -406,17 +406,20 @@ let buildingsIM, buildingMat = null;
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
     const key = i + "," + j;
     if (PARKS.has(key) || SPECIAL[key]) continue;
-    const downtown = i >= 1 && i <= 4 && j >= 1 && j <= 4;   // central core rises into skyscrapers
+    const dc = Math.max(Math.abs(i - 2.5), Math.abs(j - 2.5));  // 0.5 = dead centre … 2.5 = city edge
+    const downtown = dc <= 1.5;                                 // core 4x4
+    const skip = downtown ? 0.08 : 0.18;                       // fill blocks more densely than before
+    const towerChance = downtown ? 0.92 : 0.55;                // skyscrapers almost everywhere downtown
     for (const qx of [0, 1]) for (const qz of [0, 1]) {
-      if (rng() < 0.26) continue;
+      if (rng() < skip) continue;
       const x = blockMin(i) + 8 + 13 + qx * 28 + rr(-2, 2);
       const z = blockMin(j) + 8 + 13 + qz * 28 + rr(-2, 2);
-      if (downtown && rng() < 0.72) {                        // glass skyscraper
-        const w = rr(15, 22), d = rr(15, 22), h = rr(40, 94);
+      if (rng() < towerChance) {                               // glass skyscraper — taller in the core
+        const w = rr(15, 22), d = rr(15, 22), h = downtown ? rr(50, 104) : rr(30, 64);
         towers.push({ x, z, w, d, h, tint: pick(TOWER_TINTS) });
         addCollider(x, z, w / 2, d / 2);
-      } else {                                               // low / mid-rise on the outskirts
-        const w = rr(16, 24), d = rr(16, 24), h = pick([8, 8, 12, 12, 16, 20, 26]);
+      } else {                                                 // occasional low / mid-rise infill
+        const w = rr(16, 24), d = rr(16, 24), h = pick([10, 14, 18, 22, 26]);
         placed.push({ x, z, w, d, h, tint: pick(PASTELS) });
         addCollider(x, z, w / 2, d / 2);
       }
