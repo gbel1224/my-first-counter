@@ -11,6 +11,8 @@
     font-family:-apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     -webkit-user-select:none; user-select:none; touch-action:none; overscroll-behavior:none; }
   canvas { display:block; }
+  /* color grade on the 3D layer only — richer, more vibrant, slightly warm "premium" look */
+  #scene { filter:saturate(1.14) contrast(1.05) brightness(1.02); }
   #ui { position:fixed; inset:0; pointer-events:none; }
   .pe { pointer-events:auto; }
   #flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none;
