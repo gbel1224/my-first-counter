@@ -744,7 +744,7 @@ scene.add(rampIM);
 
 // traffic cars on block-ring routes
 const traffic = [];
-for (let t = 0; t < 10; t++) {
+for (let t = 0; t < 22; t++) {
   const i = (rng() * N) | 0, j = (rng() * N) | 0;
   const x0 = roadC(i) + 4, x1 = roadC(i + 1) - 4, z0 = roadC(j) + 4, z1 = roadC(j + 1) - 4;
   const wp = [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
@@ -770,7 +770,7 @@ for (let i = 0; i < POLICE_N; i++) {
 
 // pedestrians
 const npcs = [];
-for (let t = 0; t < 14; t++) {
+for (let t = 0; t < 34; t++) {
   const i = (rng() * N) | 0, j = (rng() * N) | 0;
   const mesh = new THREE.Mesh(npcGeos[(rng() * npcGeos.length) | 0], matVC);
   mesh.scale.set(rr(0.92, 1.06), rr(0.9, 1.14), rr(0.92, 1.06));   // varied heights & builds
