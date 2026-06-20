@@ -626,13 +626,23 @@ const NPC_PALS = [
 const npcGeos = NPC_PALS.map(personGeo);
 
 // ---------- cars ----------
+// round vertex-coloured wheel (axle along X so it lies flat on its side)
+function wheelGeo(r, w, x, y, z, color) {
+  const g = new THREE.CylinderGeometry(r, r, w, 14, 1);
+  g.rotateZ(Math.PI / 2); g.translate(x, y, z); return colorize(g, color);
+}
 const carGeo = mergeGeos([
-  boxGeoC(2.0, 0.7, 4.6, 0, 0.75, 0, 0xffffff),          // body (white => tintable)
-  boxGeoC(1.7, 0.65, 2.3, 0, 1.35, -0.2, 0x2a3d4d),       // glass cabin
-  boxGeoC(0.4, 0.7, 0.7, 0.85, 0.35, 1.5, 0x23262b),
-  boxGeoC(0.4, 0.7, 0.7, -0.85, 0.35, 1.5, 0x23262b),
-  boxGeoC(0.4, 0.7, 0.7, 0.85, 0.35, -1.5, 0x23262b),
-  boxGeoC(0.4, 0.7, 0.7, -0.85, 0.35, -1.5, 0x23262b),
+  boxGeoC(2.0, 0.55, 4.6, 0, 0.72, 0, 0xffffff),          // lower body (white => tintable)
+  boxGeoC(1.9, 0.22, 4.2, 0, 1.0, 0, 0xffffff),           // upper body shoulder (tintable, slimmer)
+  boxGeoC(1.7, 0.6, 2.3, 0, 1.32, -0.2, 0x2a3d4d),        // glass cabin
+  wheelGeo(0.44, 0.34, 0.92, 0.42, 1.5, 0x1b1d22),        // round tyres
+  wheelGeo(0.44, 0.34, -0.92, 0.42, 1.5, 0x1b1d22),
+  wheelGeo(0.44, 0.34, 0.92, 0.42, -1.5, 0x1b1d22),
+  wheelGeo(0.44, 0.34, -0.92, 0.42, -1.5, 0x1b1d22),
+  wheelGeo(0.18, 0.36, 0.93, 0.42, 1.5, 0xc2c6cc),        // chrome hubcaps
+  wheelGeo(0.18, 0.36, -0.93, 0.42, 1.5, 0xc2c6cc),
+  wheelGeo(0.18, 0.36, 0.93, 0.42, -1.5, 0xc2c6cc),
+  wheelGeo(0.18, 0.36, -0.93, 0.42, -1.5, 0xc2c6cc),
   boxGeoC(0.34, 0.18, 0.1, 0.55, 0.85, 2.31, 0xfff4c4),   // headlights
   boxGeoC(0.34, 0.18, 0.1, -0.55, 0.85, 2.31, 0xfff4c4),
   boxGeoC(0.34, 0.18, 0.1, 0.55, 0.85, -2.31, 0xc8403a),  // taillights
@@ -648,8 +658,10 @@ function makeCar(color) {
 const bikeGeo = mergeGeos([
   boxGeoC(0.7, 0.5, 1.9, 0, 0.95, 0, 0xffffff),       // tank/body (tintable)
   boxGeoC(0.5, 0.22, 0.6, 0, 1.16, -0.6, 0x23262b),   // seat
-  boxGeoC(0.28, 0.82, 0.82, 0, 0.5, 1.0, 0x161616),   // front wheel
-  boxGeoC(0.28, 0.82, 0.82, 0, 0.5, -1.0, 0x161616),  // rear wheel
+  wheelGeo(0.46, 0.16, 0, 0.46, 1.0, 0x161616),       // round front wheel
+  wheelGeo(0.46, 0.16, 0, 0.46, -1.0, 0x161616),      // round rear wheel
+  wheelGeo(0.17, 0.18, 0, 0.46, 1.0, 0xc2c6cc),       // hubcaps
+  wheelGeo(0.17, 0.18, 0, 0.46, -1.0, 0xc2c6cc),
   boxGeoC(0.82, 0.12, 0.12, 0, 1.5, 0.86, 0x3a3f47),  // handlebars
   boxGeoC(0.24, 0.18, 0.1, 0, 1.26, 1.26, 0xfff4c4),  // headlight
   boxGeoC(0.55, 0.7, 0.5, 0, 1.72, -0.32, 0xff7a33),  // rider torso
