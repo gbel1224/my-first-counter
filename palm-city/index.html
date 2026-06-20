@@ -104,6 +104,16 @@
   @keyframes pop { from { transform:scale(.9); opacity:0; } to { transform:scale(1); opacity:1; } }
   .gcard, .scard, .ccard { animation:pop .18s ease-out; }
 
+  #tutorial { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    background:rgba(8,10,12,.72); z-index:12; }
+  #tutorial .tcard { background:rgba(18,24,20,.98); border-radius:18px; padding:20px 22px 18px;
+    width:min(420px, 90vw); box-shadow:0 12px 34px rgba(0,0,0,.55); animation:pop .2s ease-out; }
+  #ttitle { color:#ffd166; font-weight:800; font-size:18px; letter-spacing:2px; text-align:center; margin-bottom:14px; }
+  #tbody .trow { color:#e8efe6; font-size:13px; line-height:1.5; padding:5px 0;
+    border-bottom:1px solid rgba(255,255,255,.07); }
+  #tgo { display:block; margin:16px auto 0; font-size:16px; font-weight:800; letter-spacing:1px;
+    border:none; border-radius:26px; padding:13px 40px; background:#ffd166; color:#3d2410; }
+
   #confirm { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
     background:rgba(8,10,12,.66); z-index:10; }
   #confirm .ccard { background:rgba(18,24,20,.98); border-radius:18px; padding:22px 22px 18px;
@@ -170,6 +180,12 @@
   #stbody .ach.on .amark { background:#ffd166; }
   #stbody .ach .atext b { display:block; color:#fff; font-size:13px; }
   #stbody .ach .atext span { color:#bcd; font-size:11px; }
+  #stbody .lbtitle { color:#ffc966; font-size:11px; font-weight:800; margin:8px 0 3px; }
+  #stbody .lbrow { display:flex; justify-content:space-between; font-size:12px; color:#cfe;
+    padding:2px 6px; border-radius:6px; }
+  #stbody .lbrow b { color:#9fe6a0; font-weight:700; }
+  #stbody .lbrow.you { background:rgba(255,209,102,.18); color:#ffe9b3; font-weight:800; }
+  #stbody .lbrow.you b { color:#ffd166; }
   #stats .srow2 { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:6px; }
   #stweather { font-size:12px; font-weight:700; border:2px solid #7fb0e6; border-radius:24px;
     padding:9px 16px; background:transparent; color:#9fc4ee; }
@@ -209,6 +225,7 @@
   <div id="stats" class="pe"><div class="scard"><button id="stx" class="xclose">✕</button><div id="sttitle"></div><div id="stbody"></div><div class="srow2"><button id="stbloom"></button><button id="stweather"></button><button id="streset"></button><button id="stclose"></button></div></div></div>
   <div id="confirm" class="pe"><div class="ccard"><div id="cmsg"></div><div class="crow"><button id="cno"></button><button id="cyes"></button></div></div></div>
   <button id="photoclose" class="pe">✕ Photo</button>
+  <div id="tutorial" class="pe"><div class="tcard"><div id="ttitle"></div><div id="tbody"></div><button id="tgo"></button></div></div>
 </div>
 <div id="dev"></div>
 <script type="module" src="./game.js"></script>

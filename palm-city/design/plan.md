@@ -181,3 +181,8 @@ This completes the 5-phase "AAA for mobile" pass (juice → visuals → controls
 - **Damage**: police now *ram and drain health* (26/hit on a cooldown) instead of an instant bust; hard car crashes can also hurt. At 0 HP → **Wasted**: respawn at your apartment (if owned) else the plaza, fine scaled by wanted, wanted cleared, health restored — a real fight-or-flight survival loop (and the checkpoint/respawn system).
 - **Melee punch** (👊 button on foot / F key): quick jab that knocks back pedestrians and **takes down a fleeing crook on foot** (ties combat into the vigilante hustle). Animated on the hero's right arm.
 - Controls hint/legend updated. Smoke covers wasted+respawn, regen, and a punch KO.
+
+## v30 (vehicle fuel + local leaderboard + tutorial)
+- **Fuel**: a tank that burns while driving (faster with nitro), shown as a blue bar on the speedometer. A roadside **gas station** (pump + canopy, west-central) refuels when you're near. Empty = limp speed only (never hard-strands); low-fuel warning. Refills on respawn.
+- **Local leaderboard**: the progress panel now ranks your best lap per circuit against preset rivals (Vince/Rosa/Marco/Tony) with YOU highlighted — a replay/competition hook (no server; multiplayer intentionally not attempted).
+- **Tutorial**: a one-time "How to Play" overlay on first launch (controls + goals), input-gated, dismissed with a button and remembered via localStorage.

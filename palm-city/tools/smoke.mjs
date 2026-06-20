@@ -69,6 +69,8 @@ const gotoCar = (x, z) => { h.cars[0].x = x; h.cars[0].z = z; };
 const key = code => { fire("keydown", { code, preventDefault: () => {} }); run(2); fire("keyup", { code }); };
 
 h.beginPlay();
+assert(h.debug().tut, "first-launch tutorial shows");
+h.closeTut();
 run(80); assert(h.debug().dlg, "chapter 1 intro should open");
 talk(); assert(h.debug().mState === "active", "chapter 1 active");
 
@@ -178,6 +180,16 @@ h.crook.active = true; h.crook.x = h.player.x + 1; h.crook.z = h.player.z;
 const bustsPre = h.state.busts || 0;
 h.punch();
 assert((h.state.busts || 0) > bustsPre, "punched out a crook on foot");
+
+// fuel: burns while driving, refills at the gas station
+goto_(0, -3); h.cars[0].x = 0; h.cars[0].z = 0; h.cars[0].y = 0; h.cars[0].vy = 0;
+key("KeyE"); run(2); assert(h.debug().driving, "in a car for the fuel test");
+h.setFuel(40); h.cars[0].speed = 14;
+for (let i = 0; i < 120; i++) h.update(1 / 60);
+assert(h.debug().fuel < 40, "fuel burns while driving");
+gotoCar(h.GAS.x, h.GAS.z); run(120);
+assert(h.debug().fuel > 60, "refuels near the gas station");
+key("KeyE"); run(2);
 
 // stunt ramp: launch a car off a ramp and earn air time
 h.cars[0].x = h.player.x + 1; h.cars[0].z = h.player.z; h.cars[0].y = 0; h.cars[0].vy = 0;

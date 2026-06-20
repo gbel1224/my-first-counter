@@ -350,6 +350,7 @@ const PLAZA = { x: bc(2), z: bc(2) };
 const GARAGE = { x: bc(3), z: bc(2) };
 const HOME = { x: bc(2), z: bc(3) };
 const HOSPITAL = { x: bc(3), z: bc(4) };
+const GAS = { x: roadC(2) + 7, z: roadC(3) - 7 };   // roadside fuel station (west-central)
 
 // curb slabs: paved + grass, instanced
 {
@@ -421,6 +422,20 @@ specialBuilding(bc(5), bc(5), 40, 7, 30, 0x5fa8c9, STR.biz.marina.name, "rgba(30
 specialBuilding(GARAGE.x, GARAGE.z, 34, 8, 26, 0x5b6470, STR.garageName, "rgba(40,46,55,.9)");
 const homeSign = specialBuilding(HOME.x, HOME.z, 24, 11, 22, 0xc98a6b, STR.homeForSale, "rgba(150,90,50,.92)");
 specialBuilding(HOSPITAL.x, HOSPITAL.z, 30, 12, 26, 0xeef2f5, STR.hospitalName, "rgba(40,120,120,.92)");
+// gas station: a pump prop + canopy at the roadside; drive near to refuel
+{
+  const pump = new THREE.Mesh(mergeGeos([
+    boxGeoC(0.9, 1.4, 0.7, 0, 0.7, 0, 0xd24b3a), boxGeoC(0.7, 0.5, 0.5, 0, 1.25, 0.05, 0xf2efe6),
+    boxGeoC(0.12, 0.5, 0.12, 0.55, 0.95, 0, 0x2a2620),
+  ]), matVC);
+  pump.position.set(GAS.x, CURB, GAS.z); scene.add(pump);
+  const canopy = new THREE.Mesh(new THREE.BoxGeometry(6, 0.4, 6), new THREE.MeshLambertMaterial({ color: 0xd24b3a }));
+  canopy.position.set(GAS.x, CURB + 4.2, GAS.z); scene.add(canopy);
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 4, 6), new THREE.MeshLambertMaterial({ color: 0xb8ab9a }));
+  post.position.set(GAS.x + 2.4, CURB + 2, GAS.z + 2.4); scene.add(post);
+  const sign = textSprite(STR.gasName, "#fff", "rgba(200,70,50,.95)", 8, 2, 0);
+  sign.position.set(GAS.x, CURB + 5.2, GAS.z); scene.add(sign);
+}
 
 // plaza: fountain + hot dog cart
 {
@@ -1418,7 +1433,7 @@ function updateParamedic(dt) {
 // ---------- wanted level & police ----------
 let wanted = 0, wantedCD = 0, crimeCD = 0;
 // ---------- health / damage / respawn ----------
-let health = 100, hurtCD = 0, hitCD = 0;
+let health = 100, hurtCD = 0, hitCD = 0, fuel = 100, fuelWarned = false;
 function hurt(amount) {
   if (health <= 0) return;
   health = Math.max(0, health - amount);
@@ -1432,7 +1447,7 @@ function wasted() {
   if (driving) { driving.speed = 0; driving.lat = 0; driving = null; hero.group.visible = true; }
   const sp = state.home ? HOME : PLAZA;                 // respawn at home if owned, else the plaza
   player.x = sp.x; player.z = sp.z + 12; player.y = CURB; player.speed = 0;
-  health = 100; hurtCD = 2;
+  health = 100; hurtCD = 2; fuel = 100;
   wanted = 0; wantedCD = 0; crimeCD = 0;
   for (const p of police) { p.active = false; p.mesh.position.set(0, -9999, 0); }
   save();
@@ -1533,7 +1548,7 @@ addEventListener("keyup", e => keys.delete(e.code));
 const elJoy = dom("joy"), elKnob = dom("knob");
 let joyId = null, joyOx = 0, joyOy = 0, joyX = 0, joyY = 0;
 addEventListener("pointerdown", e => {
-  if (state.phase !== "play" || dlgLines || garageOpen || statsOpen) return;
+  if (state.phase !== "play" || dlgLines || garageOpen || statsOpen || tutOpen) return;
   if (e.target.closest && (e.target.closest(".btn") || e.target.closest("#dialogue") || e.target.closest("#garage") || e.target.closest("#stats"))) return;
   if (e.clientX > innerWidth * 0.55 || joyId !== null) return;
   joyId = e.pointerId; joyOx = e.clientX; joyOy = e.clientY;
@@ -1637,7 +1652,7 @@ const elSpeedo = dom("speedo"), spCtx = elSpeedo.getContext("2d");
 let lastMoneyShown = -1, lastBtnA = "", lastBtnB = "";
 
 // speedometer / gear dial (drawn while driving)
-function drawSpeedo(spd, boost) {
+function drawSpeedo(spd, boost, fuelPct) {
   const S = 92, cx = 46, cy = 46, R = 35, a0 = Math.PI * 0.75, a1 = Math.PI * 2.25;
   spCtx.clearRect(0, 0, S, S);
   spCtx.fillStyle = "rgba(20,28,24,.82)"; spCtx.beginPath(); spCtx.arc(cx, cy, 44, 0, 7); spCtx.fill();
@@ -1655,10 +1670,13 @@ function drawSpeedo(spd, boost) {
   spCtx.fillStyle = "#9fe6a0"; spCtx.font = "bold 8px sans-serif"; spCtx.fillText("KM/H", cx, cy + 14);
   const gear = spd < -0.5 ? "R" : Math.abs(spd) < 0.5 ? "N" : Math.abs(spd) < 9 ? "1" : Math.abs(spd) < 18 ? "2" : "3";
   spCtx.fillStyle = "#ffd166"; spCtx.font = "bold 12px sans-serif"; spCtx.fillText(gear, cx, cy - 13);
-  // nitro meter (bottom bar)
-  const bw = 52, bx = cx - bw / 2, by = 82;
-  spCtx.fillStyle = "rgba(255,255,255,.16)"; spCtx.fillRect(bx, by, bw, 4);
-  spCtx.fillStyle = (boost || 0) > 0.25 ? "#ff9d2e" : "#ff5b5b"; spCtx.fillRect(bx, by, bw * (boost || 0), 4);
+  // nitro meter + fuel gauge (bottom bars)
+  const bw = 52, bx = cx - bw / 2;
+  spCtx.fillStyle = "rgba(255,255,255,.16)"; spCtx.fillRect(bx, 78, bw, 4);
+  spCtx.fillStyle = (boost || 0) > 0.25 ? "#ff9d2e" : "#ff5b5b"; spCtx.fillRect(bx, 78, bw * (boost || 0), 4);
+  const fp = (fuelPct || 0) / 100;
+  spCtx.fillStyle = "rgba(255,255,255,.16)"; spCtx.fillRect(bx, 85, bw, 4);
+  spCtx.fillStyle = fp > 0.3 ? "#7fd6ff" : "#ff5b5b"; spCtx.fillRect(bx, 85, bw * fp, 4);
 }
 
 function nearestCar() {
@@ -1768,7 +1786,7 @@ function updateHUD() {
   brakeBtn.style.display = drive ? "block" : "none";
   boostBtn.style.display = drive ? "block" : "none";
   punchBtn.style.display = (!driving && !dlgLines && !garageOpen && !statsOpen) ? "block" : "none";
-  if (drive) { elSpeedo.style.display = "block"; drawSpeedo(driving.speed, boostMeter); }
+  if (drive) { elSpeedo.style.display = "block"; drawSpeedo(driving.speed, boostMeter, fuel); }
   else if (elSpeedo.style.display !== "none") elSpeedo.style.display = "none";
 
   if (photoMode) { missionMarker.group.visible = false; sideMarker.group.visible = false; crookMarker.group.visible = false; }
@@ -1849,6 +1867,21 @@ dom("cyes").addEventListener("click", () => { const cb = confirmCb; closeConfirm
 dom("cno").addEventListener("click", closeConfirm);
 function resetGame() { askConfirm(STR.confirmReset, () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} location.reload(); }); }
 
+// ---------- first-launch tutorial ----------
+const TUT_KEY = "palm_city_tut";
+let tutOpen = false;
+const elTut = dom("tutorial");
+{
+  dom("ttitle").textContent = STR.tutTitle;
+  dom("tbody").innerHTML = STR.tutLines.map(s => '<div class="trow">' + s + "</div>").join("");
+  const go = dom("tgo"); go.textContent = STR.tutBtn;
+  go.addEventListener("click", () => { tutOpen = false; elTut.style.display = "none"; try { localStorage.setItem(TUT_KEY, "1"); } catch (e) {} });
+}
+function maybeTutorial() {
+  let seen = false; try { seen = localStorage.getItem(TUT_KEY) === "1"; } catch (e) {}
+  if (!seen) { tutOpen = true; elTut.style.display = "flex"; }
+}
+
 // ---------- intro overlay ----------
 const elIntro = dom("intro");
 function buildIntro() {
@@ -1879,6 +1912,7 @@ function beginPlay() {
   if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
   if (state.mi < M.length) { mState = "wait"; mTimer = 0.7; }
   else mState = "done";
+  maybeTutorial();
 }
 buildIntro();
 
@@ -1996,6 +2030,17 @@ function renderStats() {
   html += '<div class="sgrid">';
   for (const C of CIRCUITS) html += cell(STR.medalEmoji(state.medals[C.id] || 0) + " " + STR.circuits[C.id].name, STR.statSeconds(state.races[C.id] || 0));
   html += "</div>";
+  // local leaderboard: rivals + your best lap, ranked per circuit
+  html += '<div class="shead">' + STR.leaderboard + "</div>";
+  const RIVALS = [["Vince", 0.54], ["Rosa", 0.63], ["Marco", 0.72], ["Tony", 0.81]];
+  for (const C of CIRCUITS) {
+    const rows = RIVALS.map(r => ({ name: r[0], t: C.limit * r[1], you: false }));
+    const you = state.races[C.id] || 0;
+    if (you > 0) rows.push({ name: "YOU", t: you, you: true });
+    rows.sort((a, b) => a.t - b.t);
+    html += '<div class="lbtitle">' + STR.circuits[C.id].name + "</div>";
+    rows.slice(0, 5).forEach((r, i) => { html += '<div class="lbrow' + (r.you ? " you" : "") + '"><span>' + (i + 1) + ". " + r.name + "</span><b>" + r.t.toFixed(1) + "s</b></div>"; });
+  }
   html += '<div class="shead">' + STR.achHeader + " · " + state.ach.length + "/" + ACH.length + "</div>";
   for (const a of ACH) {
     const on = state.ach.includes(a.id);
@@ -2094,32 +2139,39 @@ const SPRINT_RAMP = 2.5;   // seconds of holding sprint to reach top running spe
 
 function update(dt) {
   simTime += dt;
-  const inp = (dlgLines || garageOpen || statsOpen) ? { mx: 0, mz: 0, mag: 0 } : readInput();
+  const inp = (dlgLines || garageOpen || statsOpen || tutOpen) ? { mx: 0, mz: 0, mag: 0 } : readInput();
   const a = actA, b = actB, pn = actP; actA = false; actB = false; actP = false;
-  if (a && !dlgLines && !garageOpen && !statsOpen) doActionA();
-  if (b && !dlgLines && !garageOpen && !statsOpen) doActionB();
-  if (pn && !dlgLines && !garageOpen && !statsOpen) doPunch();
+  if (a && !dlgLines && !garageOpen && !statsOpen && !tutOpen) doActionA();
+  if (b && !dlgLines && !garageOpen && !statsOpen && !tutOpen) doActionB();
+  if (pn && !dlgLines && !garageOpen && !statsOpen && !tutOpen) doPunch();
   // health regen + combat cooldowns
   if (hitCD > 0) hitCD -= dt;
   if (punchCD > 0) punchCD -= dt;
   if (punchT > 0) punchT -= dt;
   if (hurtCD > 0) hurtCD -= dt; else if (health < 100) health = Math.min(100, health + 9 * dt);
+  // refuel near the gas station; low-fuel warning while driving
+  { const fx = driving ? driving.x : player.x, fz = driving ? driving.z : player.z;
+    if (dist2(fx, fz, GAS.x, GAS.z) < 90) fuel = Math.min(100, fuel + 26 * dt);
+    else if (driving && fuel < 18 && !fuelWarned) { fuelWarned = true; toast(STR.lowFuel); }
+    if (fuel > 25) fuelWarned = false; }
 
   if (driving) {
     const c = driving;
     // throttle / brake — dedicated brake button (or Space) decelerates then reverses
     const brakeAmt = braking() ? 1 : (inp.mz < 0 ? -inp.mz : 0);
-    const accel = (inp.mz > 0 && !braking()) ? (c.accel || 13) * inp.mz : 0;
+    const dry = fuel <= 0;                                          // out of gas → limp only
+    const accel = (inp.mz > 0 && !braking() && !dry) ? (c.accel || 13) * inp.mz : 0;
     const brake = brakeAmt > 0 ? 22 * brakeAmt : 0;
     // nitro: surge of accel + higher top speed while the meter lasts; recharges when off
-    const nitro = boosting();
+    const nitro = boosting() && !dry;
     boostMeter = clamp(boostMeter + (nitro ? -dt * 0.5 : dt * 0.32), 0, 1);
     c.speed += accel * (nitro ? 2 : 1) * dt;
     if (nitro) c.speed += 14 * dt;                                  // extra shove
     if (brake) c.speed = c.speed > 0 ? Math.max(0, c.speed - brake * dt) : Math.max(-8, c.speed - 6 * dt);
     if (brakeAmt > 0 && c.speed <= 0) c.speed = Math.max(-8, c.speed - 8 * dt);
     c.speed -= c.speed * 0.6 * dt;                                  // drag
-    c.speed = clamp(c.speed, -8, (c.top || 26) * (nitro ? 1.5 : 1));
+    c.speed = clamp(c.speed, -8, dry ? 5 : (c.top || 26) * (nitro ? 1.5 : 1));
+    fuel = Math.max(0, fuel - (Math.abs(c.speed) * 0.028 + (nitro ? 1.2 : 0)) * dt);   // burn fuel while driving
     if (nitro && c.y === 0) {                                        // exhaust flames + rumble
       emit(c.x - Math.sin(c.h) * 2.4, 0.6, c.z - Math.cos(c.h) * 2.4, rr(-0.4, 0.4), rr(0.2, 0.7), rr(-0.4, 0.4), 0.4, 0.95, 0.5, 0.15);
       addShake(0.05);
@@ -2456,6 +2508,9 @@ globalThis.__palmCity = {
   forceCrime: () => { if (wanted < 5) wanted++; wantedCD = 14; },
   hurt: n => hurt(n),
   punch: () => doPunch(),
+  closeTut: () => { tutOpen = false; elTut.style.display = "none"; },
+  setFuel: n => { fuel = n; },
+  GAS,
   crook, medic, HOSPITAL,
   paint: hex => applyPaint(hex),
   buyCurrent: () => buyCurrent(),
@@ -2464,5 +2519,5 @@ globalThis.__palmCity = {
   openStats: () => openStats(),
   closeStats: () => closeStats(),
   refreshAch: () => refreshAch(true),
-  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen, race: race.stage, rcp: race.cp, stats: statsOpen, health }),
+  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen, race: race.stage, rcp: race.cp, stats: statsOpen, health, fuel, tut: tutOpen }),
 };
