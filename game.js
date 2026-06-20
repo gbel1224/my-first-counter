@@ -444,6 +444,105 @@ let buildingsIM, buildingMat = null;
     towersIM.setColorAt(idx, _col.set(b.tint));
   });
   scene.add(towersIM);
+
+  // rooftop clutter: water tanks + antenna masts on every tower, red aircraft beacons on the tallest
+  const tankGeo = new THREE.CylinderGeometry(1.1, 1.1, 1.7, 8); tankGeo.translate(0, 0.85, 0);
+  const mastGeo = new THREE.BoxGeometry(0.24, 4.6, 0.24); mastGeo.translate(0, 2.3, 0);
+  const tankIM = new THREE.InstancedMesh(tankGeo, new THREE.MeshLambertMaterial({ color: 0x6f5e4c }), towers.length);
+  const mastIM = new THREE.InstancedMesh(mastGeo, new THREE.MeshLambertMaterial({ color: 0x3a3f47 }), towers.length);
+  const tall = towers.filter(b => b.h > 70);
+  const beaconGeo = new THREE.SphereGeometry(0.3, 8, 6);
+  const beaconIM = new THREE.InstancedMesh(beaconGeo, new THREE.MeshBasicMaterial({ color: 0xff2a1e }), tall.length);
+  towers.forEach((b, idx) => {
+    const topY = CURB + b.h;
+    m.makeTranslation(b.x - b.w * 0.2, topY, b.z + b.d * 0.2); tankIM.setMatrixAt(idx, m);
+    m.makeTranslation(b.x + b.w * 0.25, topY, b.z - b.d * 0.22); mastIM.setMatrixAt(idx, m);
+  });
+  tall.forEach((b, idx) => { m.makeTranslation(b.x + b.w * 0.25, CURB + b.h + 4.6, b.z - b.d * 0.22); beaconIM.setMatrixAt(idx, m); });
+  scene.add(tankIM, mastIM, beaconIM);
+}
+
+// outer ground gets a tiling grass texture so the outskirts aren't a flat colour
+{
+  const g = texGrass.clone(); g.needsUpdate = true; g.repeat.set(46, 46);
+  ground.material = new THREE.MeshLambertMaterial({ map: g });
+}
+
+// ---------- beach district (south of the city, on the open ground beyond the grid) ----------
+const SEA_Z = 348;            // shoreline; ocean fills everything past here
+{
+  const sandTex = canvasTex(128, (ctx, s) => {
+    ctx.fillStyle = "#e7d3a2"; ctx.fillRect(0, 0, s, s);
+    speckle(ctx, s, 520, ["#dec88e", "#efe1b6", "#d4ba80", "#ecd8a0"], 1, 3);
+  }, 16, 7);
+  const seaTex = canvasTex(128, (ctx, s) => {
+    ctx.fillStyle = "#2f8fb6"; ctx.fillRect(0, 0, s, s);
+    for (let i = 0; i < 30; i++) { ctx.strokeStyle = i % 2 ? "rgba(150,210,235,.5)" : "rgba(25,105,140,.5)"; ctx.lineWidth = 2; const y = rng() * s; ctx.beginPath(); ctx.moveTo(0, y); ctx.bezierCurveTo(s / 3, y + 5, 2 * s / 3, y - 5, s, y); ctx.stroke(); }
+  }, 26, 26);
+  const courtTex = canvasTex(256, (ctx, s) => {
+    ctx.fillStyle = "#3f6f54"; ctx.fillRect(0, 0, s, s);            // green sport surface
+    ctx.strokeStyle = "#f0ede0"; ctx.lineWidth = 4;
+    ctx.strokeRect(8, 8, s - 16, s - 16);
+    ctx.beginPath(); ctx.moveTo(s / 2, 8); ctx.lineTo(s / 2, s - 8); ctx.stroke();
+    ctx.beginPath(); ctx.arc(s / 2, s / 2, 34, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(s / 2, 8, 52, 0, Math.PI); ctx.stroke();
+    ctx.beginPath(); ctx.arc(s / 2, s - 8, 52, Math.PI, Math.PI * 2); ctx.stroke();
+  });
+
+  // sand strip along the shore, with grass behind it blending to the city
+  const sandW = 600, sand = new THREE.Mesh(new THREE.PlaneGeometry(sandW, 78, 1, 1),
+    new THREE.MeshLambertMaterial({ map: sandTex }));
+  sand.rotation.x = -Math.PI / 2; sand.position.set(10, 0.04, SEA_Z - 39);
+  scene.add(sand);
+  // ocean
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(1100, 340),
+    new THREE.MeshLambertMaterial({ map: seaTex, transparent: true, opacity: 0.94 }));
+  sea.rotation.x = -Math.PI / 2; sea.position.set(10, 0.03, SEA_Z + 170);
+  scene.add(sea);
+
+  // beach palms (compact instanced clump: leaning trunks + frond crowns)
+  const pspots = [];
+  for (let t = 0; t < 16; t++) pspots.push([rr(-260, 280), SEA_Z - rr(48, 74), rr(0.9, 1.3)]);
+  const ptrunk = new THREE.CylinderGeometry(0.18, 0.34, 6, 6); ptrunk.translate(0, 3, 0);
+  const fparts = [];
+  for (let f = 0; f < 8; f++) { const fr = new THREE.BoxGeometry(0.5, 0.07, 2.8); fr.translate(0, 0, 1.4); fr.rotateX(0.4); fr.rotateY(f / 8 * Math.PI * 2); fparts.push(fr); }
+  const pcrown = mergeGeos(fparts); pcrown.translate(0, 6, 0);
+  const ptIM = new THREE.InstancedMesh(ptrunk, new THREE.MeshLambertMaterial({ color: 0xa6824f }), pspots.length);
+  const pcIM = new THREE.InstancedMesh(pcrown, new THREE.MeshLambertMaterial({ color: 0xffffff }), pspots.length);
+  const e2 = new THREE.Euler(), q2 = new THREE.Quaternion(), m2 = new THREE.Matrix4(), pp = new THREE.Vector3(), ss = new THREE.Vector3();
+  const pg = [0x5d9952, 0x6da85e, 0x7fb069, 0x4f8a47];
+  pspots.forEach(([x, z, k], idx) => {
+    e2.set(rr(-0.12, 0.12), rng() * 6.28, rr(-0.12, 0.12)); q2.setFromEuler(e2);
+    pp.set(x, 0.04, z); ss.set(k, k, k); m2.compose(pp, q2, ss);
+    ptIM.setMatrixAt(idx, m2); pcIM.setMatrixAt(idx, m2); pcIM.setColorAt(idx, _col.set(pick(pg)));
+  });
+  scene.add(ptIM, pcIM);
+
+  // colourful beach umbrellas (cone canopy + pole)
+  const uCanopy = new THREE.ConeGeometry(2.0, 1.1, 10); uCanopy.translate(0, 2.6, 0);
+  const uPole = new THREE.CylinderGeometry(0.07, 0.07, 2.6, 6); uPole.translate(0, 1.3, 0);
+  const uColors = [0xe8543f, 0x3f7fe8, 0xf0c040, 0xe85fae, 0x58b368];
+  for (let t = 0; t < 12; t++) {
+    const x = rr(-250, 270), z = SEA_Z - rr(10, 34);
+    const can = new THREE.Mesh(uCanopy, new THREE.MeshLambertMaterial({ color: pick(uColors) }));
+    const pol = new THREE.Mesh(uPole, new THREE.MeshLambertMaterial({ color: 0xe8e0d0 }));
+    const grp = new THREE.Group(); grp.add(can, pol); grp.position.set(x, 0.04, z); grp.rotation.y = rng() * 6.28;
+    scene.add(grp);
+  }
+
+  // beachfront basketball court with two hoops
+  const courtX = 150, courtZ = SEA_Z - 60;
+  const court = new THREE.Mesh(new THREE.PlaneGeometry(30, 18), new THREE.MeshLambertMaterial({ map: courtTex }));
+  court.rotation.x = -Math.PI / 2; court.position.set(courtX, 0.05, courtZ); scene.add(court);
+  function hoop(x, z, faceZ) {
+    const grp = new THREE.Group();
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 3.6, 8), new THREE.MeshLambertMaterial({ color: 0x5a5f66 })); pole.position.y = 1.8;
+    const board = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.2, 0.1), new THREE.MeshLambertMaterial({ color: 0xf2f0e8 })); board.position.set(0, 3.3, faceZ * 0.45);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.06, 6, 16), new THREE.MeshLambertMaterial({ color: 0xff6a2e })); rim.rotation.x = Math.PI / 2; rim.position.set(0, 3.1, faceZ * 0.95);
+    grp.add(pole, board, rim); grp.position.set(x, 0.05, z); scene.add(grp);
+    addCollider(x, z, 0.4, 0.4);
+  }
+  hoop(courtX - 13, courtZ, 1); hoop(courtX + 13, courtZ, -1);
 }
 
 // special buildings + labels — facade + lit-window textures (tinted by the accent colour),
