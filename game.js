@@ -900,9 +900,9 @@ function articulatedPerson(p) {
   const hair = new THREE.Mesh(new THREE.SphereGeometry(0.185, 12, 9), hairMat); hair.scale.set(1.05, 0.82, 1.05); hair.position.set(0, 1.71, -0.04);
   const eye = x => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 5), mat(0x241c18)); s.position.set(x, 1.62, 0.15); return s; };
   g.add(legL, legR, armL, armR, hips, torso, neck, head, hair, eye(0.07), eye(-0.07));
-  const hatHolder = new THREE.Group(), glassHolder = new THREE.Group(), jacketHolder = new THREE.Group();
-  g.add(hatHolder, glassHolder, jacketHolder);
-  return { group: g, legL, legR, armL, armR, shirtMat, pantsMat, hairMat, hair, hatHolder, glassHolder, jacketHolder };
+  const hatHolder = new THREE.Group(), glassHolder = new THREE.Group(), jacketHolder = new THREE.Group(), beardHolder = new THREE.Group();
+  g.add(hatHolder, glassHolder, jacketHolder, beardHolder);
+  return { group: g, legL, legR, armL, armR, shirtMat, pantsMat, hairMat, hair, hatHolder, glassHolder, jacketHolder, beardHolder };
 }
 const HERO_PAL = { shirt: 0xff7a33, pants: 0xf5f0e6, skin: 0xe8b08a, hair: 0x3a2c20 };
 const NPC_PALS = [
@@ -1149,12 +1149,20 @@ const HAIRCUTS = [
   { name: "Blonde", color: 0xe6c26a, style: "short" },
   { name: "Ginger", color: 0xb5572a, style: "short" },
   { name: "Silver Fox", color: 0xcfcfcf, style: "short" },
+  { name: "Platinum", color: 0xeae6d8, style: "short" },
   { name: "Buzz Cut", color: 0x241c18, style: "buzz" },
+  { name: "Buzz Blonde", color: 0xc9a85e, style: "buzz" },
   { name: "Afro", color: 0x1a1410, style: "afro" },
+  { name: "Brown Afro", color: 0x4a3220, style: "afro" },
   { name: "Pompadour", color: 0x2a2018, style: "tall" },
+  { name: "Mohawk", color: 0x222018, style: "mohawk" },
+  { name: "Pink Mohawk", color: 0xe8488f, style: "mohawk" },
+  { name: "Blue Spike", color: 0x2f7fd0, style: "tall" },
   { name: "Long Blonde", color: 0xdcb45a, style: "long" },
   { name: "Long Brown", color: 0x4a3220, style: "long" },
+  { name: "Long Black", color: 0x1c1814, style: "long" },
   { name: "Pink Dye", color: 0xe86fae, style: "short" },
+  { name: "Green Dye", color: 0x4fb36a, style: "short" },
   { name: "Bald", color: 0x3a2c20, style: "bald" },
 ];
 function setHairStyle(style) {
@@ -1163,6 +1171,7 @@ function setHairStyle(style) {
   else if (style === "afro") { h.scale.set(1.5, 1.35, 1.5); h.position.set(0, 1.74, -0.02); }
   else if (style === "tall") { h.scale.set(1.0, 1.32, 1.0); h.position.set(0, 1.78, -0.04); }
   else if (style === "long") { h.scale.set(1.18, 1.08, 1.18); h.position.set(0, 1.66, -0.06); }
+  else if (style === "mohawk") { h.scale.set(0.42, 1.5, 1.05); h.position.set(0, 1.8, -0.02); }
   else if (style === "bald") { h.visible = false; }
   else { h.scale.set(1.05, 0.82, 1.05); h.position.set(0, 1.71, -0.04); }
 }
@@ -1236,6 +1245,32 @@ function setGlasses(g) {
   const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.02), m); bridge.position.set(0, 1.645, 0.17);
   hero.glassHolder.add(lens(0.08), lens(-0.08), bridge);
 }
+// beards / facial hair (built into the hero's beard holder, around the chin & jaw)
+const BEARDS = [
+  { name: "Clean Shaven", none: true }, { name: "Stubble", type: "full", color: 0x2a2118, scale: 0.55 },
+  { name: "Full Black", type: "full", color: 0x1f1812 }, { name: "Full Brown", type: "full", color: 0x4a3220 },
+  { name: "Full Ginger", type: "full", color: 0xa85a2c }, { name: "Grey Beard", type: "full", color: 0xb8b2a6 },
+  { name: "Goatee", type: "goatee", color: 0x241c14 }, { name: "Goatee Brown", type: "goatee", color: 0x4a3220 },
+  { name: "Mustache", type: "mustache", color: 0x2a2018 }, { name: "Blonde Beard", type: "full", color: 0xc9a85e },
+];
+function setBeard(b) {
+  clearHolder(hero.beardHolder);
+  if (!b || b.none) return;
+  const m = new THREE.MeshLambertMaterial({ color: b.color });
+  if (b.type === "full") {
+    const jaw = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 9, 0, 6.3, 1.3, 1.5), m);
+    jaw.scale.set(1.02, (b.scale || 0.9), 0.95); jaw.position.set(0, 1.57, 0.02); jaw.castShadow = true;
+    hero.beardHolder.add(jaw);
+  } else if (b.type === "goatee") {
+    const chin = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.12, 0.07), m); chin.position.set(0, 1.5, 0.13);
+    const stash = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.03, 0.04), m); stash.position.set(0, 1.585, 0.16);
+    hero.beardHolder.add(chin, stash);
+  } else if (b.type === "mustache") {
+    const stash = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.035, 0.04), m); stash.position.set(0, 1.585, 0.16);
+    hero.beardHolder.add(stash);
+  }
+}
+function applyBeard(idx, quiet) { state.beard = idx; setBeard(BEARDS[idx]); if (!quiet) { toast("🧔 " + BEARDS[idx].name); AudioSys.play("blip", 0.5); save(); } }
 function applyJacket(idx, quiet) { state.jacket = idx; setJacket(JACKETS[idx]); if (!quiet) { toast("🧥 " + JACKETS[idx].name); AudioSys.play("blip", 0.5); save(); } }
 function applyHat(idx, quiet) { state.hat = idx; setHat(HATS[idx]); if (!quiet) { toast("🎩 " + HATS[idx].name); AudioSys.play("blip", 0.5); save(); } }
 function applyGlasses(idx, quiet) { state.glasses = idx; setGlasses(GLASSES[idx]); if (!quiet) { toast("🕶 " + GLASSES[idx].name); AudioSys.play("blip", 0.5); save(); } }
@@ -1416,7 +1451,7 @@ const state = {
   apt: false,            // owns the apartment in the rough quarter
   outfit: -1,            // chosen wardrobe outfit (index, -1 = default)
   haircut: -1,           // chosen haircut (index, -1 = default)
-  jacket: 0, hat: 0, glasses: 0,   // accessory indices (0 = None)
+  jacket: 0, hat: 0, glasses: 0, beard: 0,   // accessory indices (0 = None)
   ach: [],               // unlocked achievement ids
   mi: 0,                 // mission index; 8 = story complete
   xp: 0,                 // experience toward the next player level
@@ -1425,7 +1460,7 @@ const state = {
 };
 function save() {
   state.maxMoney = Math.max(state.maxMoney || 0, Math.floor(state.money));
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, outfit: state.outfit, haircut: state.haircut, jacket: state.jacket, hat: state.hat, glasses: state.glasses, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, outfit: state.outfit, haircut: state.haircut, jacket: state.jacket, hat: state.hat, glasses: state.glasses, beard: state.beard, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
 }
 function load() {
   try {
@@ -1443,7 +1478,7 @@ function load() {
       state.rescues = d.rescues || 0;
       state.home = !!d.home; state.house = !!d.house; state.apt = !!d.apt;
       state.outfit = d.outfit == null ? -1 : d.outfit; state.haircut = d.haircut == null ? -1 : d.haircut;
-      state.jacket = d.jacket || 0; state.hat = d.hat || 0; state.glasses = d.glasses || 0;
+      state.jacket = d.jacket || 0; state.hat = d.hat || 0; state.glasses = d.glasses || 0; state.beard = d.beard || 0;
       state.ach = d.ach || [];
       state.xp = d.xp || 0;
       state.lvl = d.lvl || 1;
@@ -1497,7 +1532,7 @@ function applyOwnership() {
   for (const pr of PROPS) if (state[pr.flag]) markPropOwned(pr);
   if (state.outfit >= 0) applyOutfit(state.outfit, true);
   if (state.haircut >= 0) applyHaircut(state.haircut, true);
-  applyJacket(state.jacket || 0, true); applyHat(state.hat || 0, true); applyGlasses(state.glasses || 0, true);
+  applyJacket(state.jacket || 0, true); applyHat(state.hat || 0, true); applyGlasses(state.glasses || 0, true); applyBeard(state.beard || 0, true);
 }
 function unlockCar(c, color) {
   c.locked = false;
@@ -2630,7 +2665,10 @@ dom("stclose").addEventListener("click", closeStats);
 let styleOpen = false, styleKind = null, styleTab = "outfit";
 const elStyle = dom("style");
 function styleCfg() {
-  if (styleKind === "barber") return { list: HAIRCUTS, cur: state.haircut, apply: applyHaircut, dots: it => [it.color] };
+  if (styleKind === "barber") {
+    if (styleTab === "beard") return { list: BEARDS, cur: state.beard, apply: applyBeard, dots: it => it.none ? [] : [it.color] };
+    return { list: HAIRCUTS, cur: state.haircut, apply: applyHaircut, dots: it => [it.color] };
+  }
   if (styleTab === "jacket") return { list: JACKETS, cur: state.jacket, apply: applyJacket, dots: it => it.none ? [] : [it.color] };
   if (styleTab === "hat") return { list: HATS, cur: state.hat, apply: applyHat, dots: it => it.none ? [] : [it.color] };
   if (styleTab === "glasses") return { list: GLASSES, cur: state.glasses, apply: applyGlasses, dots: it => it.none ? [] : [it.color] };
@@ -2639,13 +2677,13 @@ function styleCfg() {
 function renderStyle() {
   dom("sytitle").textContent = styleKind === "barber" ? "💈 BARBER — pick a cut" : "👕 WARDROBE";
   const tabs = dom("sytabs"); tabs.innerHTML = "";
-  if (styleKind === "wardrobe") {
-    tabs.style.display = "flex";
-    [["outfit", "Outfit"], ["jacket", "Jacket"], ["hat", "Hat"], ["glasses", "Glasses"]].forEach(([k, lbl]) => {
-      const t = document.createElement("button"); t.className = "sytab" + (styleTab === k ? " sel" : ""); t.textContent = lbl;
-      t.addEventListener("click", () => { styleTab = k; renderStyle(); }); tabs.appendChild(t);
-    });
-  } else tabs.style.display = "none";
+  const tabSet = styleKind === "barber" ? [["hair", "Hair"], ["beard", "Beard"]]
+    : [["outfit", "Outfit"], ["jacket", "Jacket"], ["hat", "Hat"], ["glasses", "Glasses"]];
+  tabs.style.display = "flex";
+  tabSet.forEach(([k, lbl]) => {
+    const t = document.createElement("button"); t.className = "sytab" + (styleTab === k ? " sel" : ""); t.textContent = lbl;
+    t.addEventListener("click", () => { styleTab = k; renderStyle(); }); tabs.appendChild(t);
+  });
   const grid = dom("sygrid"); grid.innerHTML = "";
   const cfg = styleCfg();
   cfg.list.forEach((it, idx) => {
@@ -2661,7 +2699,7 @@ function renderStyle() {
     grid.appendChild(cell);
   });
 }
-function openStyleShop(kind) { styleKind = kind; styleTab = "outfit"; styleOpen = true; renderStyle(); elStyle.style.display = "flex"; }
+function openStyleShop(kind) { styleKind = kind; styleTab = kind === "barber" ? "hair" : "outfit"; styleOpen = true; renderStyle(); elStyle.style.display = "flex"; }
 function closeStyleShop() { styleOpen = false; styleKind = null; elStyle.style.display = "none"; }
 dom("syx").addEventListener("click", closeStyleShop);
 dom("sydone").addEventListener("click", closeStyleShop);
