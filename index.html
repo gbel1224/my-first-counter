@@ -187,6 +187,24 @@
   #gdone { font-size:15px; font-weight:800; letter-spacing:1px; border:none; border-radius:24px;
     padding:11px 34px; background:#ffd166; color:#3d2410; }
 
+  #style { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    background:rgba(12,16,20,.6); }
+  #style .scard { background:rgba(18,24,20,.97); border-radius:18px; padding:18px 20px 16px;
+    width:min(460px, 94vw); max-height:86vh; box-shadow:0 10px 30px rgba(0,0,0,.5);
+    position:relative; display:flex; flex-direction:column; }
+  #sytitle { color:#ffc966; font-weight:800; font-size:15px; text-transform:uppercase; letter-spacing:1px;
+    text-align:center; margin-bottom:14px; }
+  #sygrid { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; overflow-y:auto; padding:2px; }
+  .syopt { border:2px solid rgba(255,255,255,.16); border-radius:14px; padding:9px 6px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; gap:7px; background:rgba(255,255,255,.04); }
+  .syopt.sel { border-color:#ffd166; background:rgba(255,209,102,.12); }
+  .syopt:active { transform:scale(.95); }
+  .sysw { display:flex; gap:4px; }
+  .sydot { width:24px; height:24px; border-radius:50%; border:2px solid rgba(255,255,255,.3); }
+  .syname { color:#e8e4da; font-size:11px; font-weight:700; text-align:center; line-height:1.1; }
+  #sydone { margin-top:14px; align-self:center; font-size:15px; font-weight:800; letter-spacing:1px;
+    border:none; border-radius:24px; padding:11px 34px; background:#ffd166; color:#3d2410; }
+
   #stats { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
     background:rgba(12,16,20,.6); }
   #stats .scard { background:rgba(18,24,20,.97); border-radius:18px; padding:18px 20px 16px;
@@ -256,6 +274,7 @@
   <div id="intro" class="pe"></div>
   <div id="garage" class="pe"><div class="gcard"><button id="gx" class="xclose">✕</button><div id="gtitle"></div><div id="gstats"></div><button id="gbuy"></button><div id="gmods"><button id="gmEngine"></button><button id="gmTurbo"></button><button id="gmTyres"></button></div><div id="gswatches"></div><button id="gdone"></button></div></div>
   <div id="stats" class="pe"><div class="scard"><button id="stx" class="xclose">✕</button><div id="sttitle"></div><div id="stbody"></div><div class="srow2"><button id="stbloom"></button><button id="stweather"></button><button id="streset"></button><button id="stclose"></button></div></div></div>
+  <div id="style" class="pe"><div class="scard"><button id="syx" class="xclose">✕</button><div id="sytitle"></div><div id="sygrid"></div><button id="sydone">DONE</button></div></div>
   <div id="confirm" class="pe"><div class="ccard"><div id="cmsg"></div><div class="crow"><button id="cno"></button><button id="cyes"></button></div></div></div>
   <button id="photoclose" class="pe">✕ Photo</button>
   <div id="tutorial" class="pe"><div class="tcard"><div id="ttitle"></div><div id="tbody"></div><button id="tgo"></button></div></div>
