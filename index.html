@@ -196,6 +196,17 @@
     background:rgba(40,20,46,.82); color:#ffe9b3; border:1px solid rgba(220,160,255,.5);
     backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); box-shadow:0 6px 20px rgba(20,8,16,.5); }
   #decorbtn:active { transform:translateX(-50%) scale(.95); }
+  #arcadebtn { position:absolute; bottom:calc(86px + env(safe-area-inset-bottom,0px)); left:50%; transform:translateX(-50%);
+    display:none; padding:11px 22px; border-radius:26px; font-size:14px; font-weight:800; letter-spacing:1px;
+    background:rgba(18,28,48,.85); color:#9fe0ff; border:1px solid rgba(120,200,255,.5);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); box-shadow:0 6px 20px rgba(8,12,30,.5); }
+  #arcadebtn:active { transform:translateX(-50%) scale(.95); }
+  #arcade { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(8,8,14,.78); }
+  #arcade .acard { background:rgba(18,18,26,.98); border-radius:18px; padding:14px; display:flex; flex-direction:column;
+    align-items:center; position:relative; box-shadow:0 10px 30px rgba(0,0,0,.6); }
+  #actitle { color:#9fe0ff; font-weight:800; letter-spacing:1px; margin-bottom:8px; }
+  #arcadecanvas { width:min(300px, 82vw); height:auto; aspect-ratio:3/4; border-radius:10px; background:#0a0a12; touch-action:none; }
+  #acinfo { color:#ffe9b3; font-weight:700; margin-top:8px; min-height:18px; }
 
   #style { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
     background:rgba(12,16,20,.6); }
@@ -285,12 +296,14 @@
   <button id="btnA" class="btn pe"></button>
   <button id="doorbtn" class="pe">🚪 ENTER</button>
   <button id="decorbtn" class="pe">🎨 DECORATE</button>
+  <button id="arcadebtn" class="pe">🕹 PLAY</button>
   <canvas id="speedo" width="92" height="92"></canvas>
   <div id="dialogue" class="pe"><div id="dwho"></div><div id="dtext"></div><div id="dhint"></div></div>
   <div id="intro" class="pe"></div>
   <div id="garage" class="pe"><div class="gcard"><button id="gx" class="xclose">✕</button><div id="gtitle"></div><div id="gstats"></div><button id="gbuy"></button><div id="gmods"><button id="gmEngine"></button><button id="gmTurbo"></button><button id="gmTyres"></button></div><div id="gswatches"></div><button id="gdone"></button></div></div>
   <div id="stats" class="pe"><div class="scard"><button id="stx" class="xclose">✕</button><div id="sttitle"></div><div id="stbody"></div><div class="srow2"><button id="stbloom"></button><button id="stweather"></button><button id="streset"></button><button id="stclose"></button></div></div></div>
   <div id="style" class="pe"><div class="scard"><button id="syx" class="xclose">✕</button><div id="sytitle"></div><div id="sytabs"></div><div id="sygrid"></div><button id="sydone">DONE</button></div></div>
+  <div id="arcade" class="pe"><div class="acard"><button id="acx" class="xclose">✕</button><div id="actitle"></div><canvas id="arcadecanvas" width="300" height="400"></canvas><div id="acinfo"></div></div></div>
   <div id="confirm" class="pe"><div class="ccard"><div id="cmsg"></div><div class="crow"><button id="cno"></button><button id="cyes"></button></div></div></div>
   <button id="photoclose" class="pe">✕ Photo</button>
   <div id="tutorial" class="pe"><div class="tcard"><div id="ttitle"></div><div id="tbody"></div><button id="tgo"></button></div></div>
