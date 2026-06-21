@@ -458,7 +458,7 @@ const isResid = (i, j) => i <= 2 && j <= 2;
 const isGhetto = (i, j) => i <= 2 && j >= N - 3;
 const RESERVED = new Set(["1,1", "1," + (N - 2),     // buyable House & Apartment
   "0,1", "0," + (N - 2), (N - 1) + ",1", (N - 1) + "," + (N - 2),   // clothing stores & barbershops
-  (N / 2) + "," + (N / 2)]);   // Ammo Shop (central)
+  (N / 2) + "," + (N / 2), (N / 2 + 1) + "," + (N / 2)]);   // Ammo Shop + Bowling Alley (central)
 const SPECIAL = {}; for (const [k, v] of Object.entries({ "1,3": "wash", "4,2": "burger", "5,0": "club", "0,4": "depot", "1,2": "pizza", "2,4": "taxi", "5,5": "marina", "3,2": "garage", "2,3": "home", "3,4": "hospital" })) SPECIAL[_pad(k)] = v;
 const PLAZA = { x: Bc(2), z: Bc(2) };
 const GARAGE = { x: Bc(3), z: Bc(2) };
@@ -724,6 +724,7 @@ shopFront(bc(N - 1), bc(N - 2), "👗 BELLA BOUTIQUE", "rgba(150,40,150,.92)", 0
 shopFront(bc(0), bc(N - 2), "💈 FRESH CUTS", "rgba(30,90,140,.92)", 0x6fb7d9, 0xc23a36, "barber");      // barbershop (ghetto)
 shopFront(bc(N - 1), bc(1), "💈 THE FADE SHOP", "rgba(120,30,30,.92)", 0xd98a6b, 0x2b6fb0, "barber");   // barbershop (east)
 shopFront(bc(N / 2), bc(N / 2), "🔫 AMMO SHOP", "rgba(120,30,30,.95)", 0x7a3a30, 0x2a1a16, "ammo");   // weapons (central)
+specialBuilding(bc(N / 2 + 1), bc(N / 2), 40, 12, 30, 0x4a3f6a, "🎳 BOWLING ALLEY", "rgba(80,40,130,.95)");   // bowling + arcade (enterable)
 // gas station: a pump prop + canopy at the roadside; drive near to refuel
 {
   const pump = new THREE.Mesh(mergeGeos([
@@ -1355,6 +1356,8 @@ const INTHEMES = {
 };
 function buildInterior(theme) {
   while (intProps.children.length) { const c = intProps.children.pop(); if (c.geometry) c.geometry.dispose(); }
+  bowlGroup.visible = false;
+  if (theme === "bowling") { if (intWallMat) intWallMat.color.setHex(0xe8e0d0); intFloor.material.map = woodTex; intFloor.material.color.setHex(0xffffff); intFloor.material.needsUpdate = true; bowlGroup.visible = true; bowlEnter(); return; }
   if (theme === "home") { buildHome(); return; }          // your apartment is built from your saved decor
   if (intWallMat) intWallMat.color.setHex(0xffffff);
   const cfg = INTHEMES[theme] || INTHEMES.shop;
@@ -1394,6 +1397,7 @@ function buildHome() {
 }
 function themeOf(name) {
   const n = (name || "").toUpperCase();
+  if (n.includes("BOWL")) return "bowling";
   if (n.includes("AMMO")) return "armory";
   if (n.includes("BARBER") || n.includes("CUT") || n.includes("FADE")) return "barber";
   if (n.includes("THREAD") || n.includes("BOUTIQUE")) return "clothing";
@@ -1410,6 +1414,57 @@ function setSpriteText(sp, text) {
   const t = textSprite(text, "#fff", "rgba(20,20,24,.9)", 16, 4, 0);
   if (sp.material.map) sp.material.map.dispose();
   sp.material.map = t.material.map; t.material.dispose();
+}
+
+// ---------- bowling alley mini-game (lives inside the bowling building) ----------
+const bowlGroup = new THREE.Group(); bowlGroup.visible = false; scene.add(bowlGroup);
+const bowlScore = textSprite("", "#fff", "rgba(20,20,30,.92)", 16, 4, 0);
+const bowl = { rolling: false, ball: null, bx: 0, bz: 0, pins: [], cd: 0 };
+{
+  const midZ = INT.z + 1;
+  const lane = new THREE.Mesh(new THREE.BoxGeometry(5, 0.12, 13), new THREE.MeshLambertMaterial({ map: woodTex }));
+  lane.position.set(INT.x, 0.07, midZ); lane.receiveShadow = true; bowlGroup.add(lane);
+  for (const sx of [-2.95, 2.95]) { const g = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.18, 13), new THREE.MeshLambertMaterial({ color: 0x2a2d33 })); g.position.set(INT.x + sx, 0.05, midZ); bowlGroup.add(g); }
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.34, 16, 12), new THREE.MeshStandardMaterial({ color: 0x1a1f7a, metalness: 0.35, roughness: 0.22, envMapIntensity: 1 }));
+  ball.castShadow = true; bowl.ball = ball; bowlGroup.add(ball);
+  const pinGeo = new THREE.CylinderGeometry(0.1, 0.16, 0.7, 10); pinGeo.translate(0, 0.35, 0);
+  const pinMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const rows = [[0], [-0.4, 0.4], [-0.8, 0, 0.8], [-1.2, -0.4, 0.4, 1.2]];
+  const pz0 = INT.z + 5.0;
+  rows.forEach((row, ri) => row.forEach(px => { const m = new THREE.Mesh(pinGeo, pinMat); m.castShadow = true; const x = INT.x + px, z = pz0 + ri * 0.5; m.position.set(x, 0.07, z); bowlGroup.add(m); bowl.pins.push({ mesh: m, x, z, down: false }); }));
+  bowlScore.position.set(INT.x, 3.1, INT.z + 7.7); bowlGroup.add(bowlScore);
+  for (let i = 0; i < 4; i++) {   // arcade cabinets along the side wall (decor for now)
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.9), new THREE.MeshLambertMaterial({ color: [0xd2402f, 0x3f7fe8, 0x58b368, 0xc25cd6][i] }));
+    cab.position.set(INT.x - 8.6, 1.0, INT.z - 4 + i * 1.7); cab.castShadow = true; bowlGroup.add(cab);
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), new THREE.MeshBasicMaterial({ color: 0x6fd0ff })); scr.position.set(INT.x - 8.05, 1.55, INT.z - 4 + i * 1.7); scr.rotation.y = Math.PI / 2; bowlGroup.add(scr);
+  }
+}
+function resetPins() { for (const p of bowl.pins) { p.down = false; p.mesh.visible = true; p.mesh.rotation.set(0, 0, 0); p.mesh.position.set(p.x, 0.07, p.z); } }
+function placeBall() { bowl.ball.position.set(clamp(player.x, INT.x - 2.3, INT.x + 2.3), 0.4, INT.z - 4.5); }
+function bowlEnter() { bowl.rolling = false; bowl.cd = 0; resetPins(); placeBall(); setSpriteText(bowlScore, "🎳 Move onto the lane, then press BOWL"); }
+function doBowl() {
+  if (bowl.rolling || bowl.cd > 0) return;
+  bowl.rolling = true; bowl.bx = clamp(player.x, INT.x - 3.4, INT.x + 3.4); bowl.bz = INT.z - 4.5;
+  bowl.ball.position.set(bowl.bx, 0.4, bowl.bz); AudioSys.play("door", 0.4); buzz(12);
+}
+function updateBowling(dt) {
+  if (bowl.cd > 0) bowl.cd -= dt;
+  if (!bowl.rolling) { if (bowl.cd <= 0) placeBall(); return; }
+  bowl.bz += 19 * dt; bowl.ball.position.set(bowl.bx, 0.4, bowl.bz); bowl.ball.rotation.x -= 56 * dt;
+  if (bowl.bz >= INT.z + 4.9) {
+    bowl.rolling = false; bowl.cd = 2.6;
+    const gutter = Math.abs(bowl.bx - INT.x) > 2.35;
+    if (!gutter) {
+      bowl.pins.forEach(p => { if (!p.down && Math.abs(p.x - bowl.bx) < 0.9) p.down = true; });
+      for (let pass = 0; pass < 3; pass++) bowl.pins.forEach(p => { if (p.down) return; for (const q of bowl.pins) if (q.down && Math.abs(q.x - p.x) < 0.82 && Math.abs(q.z - p.z) < 1.5 && Math.random() < 0.72) { p.down = true; break; } });
+    }
+    let down = 0; bowl.pins.forEach(p => { if (p.down) { down++; p.mesh.rotation.x = (Math.random() < 0.5 ? 1 : -1) * Math.PI / 2; p.mesh.position.y = 0.16; } });
+    const strike = down === 10, reward = earn(down * 40 + (strike ? 400 : 0));
+    setSpriteText(bowlScore, gutter ? "🎳 Gutter ball! $0" : strike ? "🎳 STRIKE!  +$" + reward : "🎳 " + down + " pins!  +$" + reward);
+    if (strike) { AudioSys.play("jingle", 0.8); flash("#ffd166", 0.3); addShake(0.25); } else AudioSys.play("cash", 0.6);
+    buzz(20); save();
+    setTimeout(() => { if (inside && intTheme === "bowling") { resetPins(); setSpriteText(bowlScore, "🎳 Press BOWL"); } }, 2600);
+  }
 }
 function snapCam() { const d = inside ? 4.5 : 9, hh = inside ? 6 : 4.4; camYaw = player.h; camPos.set(player.x - Math.sin(player.h) * d, player.y + hh, player.z - Math.cos(player.h) * d); }
 function enterBuilding(e) {
@@ -2237,6 +2292,7 @@ function updatePolice(dt) {
 let actP = false, punchCD = 0, punchT = 0;
 function doPunch() {
   if (driving) return;
+  if (inside) { if (intTheme === "bowling") doBowl(); return; }   // BOWL inside the alley; no fists indoors
   if (armed()) { doShoot(); return; }              // fire if a weapon is equipped, else throw a punch
   if (punchCD > 0) return;
   punchCD = 0.45; punchT = 0.26; AudioSys.play("door", 0.4); buzz(15);
@@ -2592,7 +2648,7 @@ function updateHUD() {
   brakeBtn.style.display = drive ? "block" : "none";
   boostBtn.style.display = drive ? "block" : "none";
   punchBtn.style.display = (!driving && !dlgLines && !garageOpen && !statsOpen && !styleOpen) ? "block" : "none";
-  { const w = armed(); punchBtn.textContent = w ? "🔫 " + ammoOf(w) : "PUNCH"; }
+  { const w = armed(); punchBtn.textContent = (inside && intTheme === "bowling") ? "🎳 BOWL" : w ? "🔫 " + ammoOf(w) : "PUNCH"; }
   const menus = dlgLines || garageOpen || statsOpen || styleOpen;
   const showDoor = !menus && (inside || !!nearEnterable());
   doorBtn.style.display = showDoor ? "block" : "none";
@@ -3044,6 +3100,7 @@ function update(dt) {
   if (punchCD > 0) punchCD -= dt;
   if (shootCD > 0) shootCD -= dt;
   if (punchT > 0) punchT -= dt;
+  if (inside && intTheme === "bowling") updateBowling(dt);
   if (hurtCD > 0) hurtCD -= dt; else if (health < 100) health = Math.min(100, health + 9 * dt);
   // refuel near the gas station; low-fuel warning while driving
   { const fx = driving ? driving.x : player.x, fz = driving ? driving.z : player.z;
