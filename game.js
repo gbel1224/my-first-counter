@@ -254,6 +254,10 @@ function speckle(ctx, s, n, colors, r0, r1) {
 const texAsphalt = canvasTex(256, (ctx, s) => {
   ctx.fillStyle = "#46525a"; ctx.fillRect(0, 0, s, s);
   speckle(ctx, s, 260, ["#4d5a62", "#3f4a52", "#525e66"], 1, 3);
+  for (let i = 0; i < 5; i++) { ctx.fillStyle = "rgba(28,34,38,.28)"; ctx.fillRect(Math.random() * s, Math.random() * s, 18 + Math.random() * 36, 12 + Math.random() * 26); }  // tar patches
+  for (let i = 0; i < 4; i++) { ctx.fillStyle = "rgba(16,18,22,.3)"; ctx.beginPath(); ctx.ellipse(Math.random() * s, Math.random() * s, 7 + Math.random() * 12, 4 + Math.random() * 7, Math.random() * 3, 0, 7); ctx.fill(); }  // oil stains
+  ctx.strokeStyle = "rgba(24,28,32,.5)"; ctx.lineWidth = 1.2;
+  for (let i = 0; i < 6; i++) { ctx.beginPath(); let x = Math.random() * s, y = Math.random() * s; ctx.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (Math.random() - 0.5) * 36; y += (Math.random() - 0.5) * 36; ctx.lineTo(x, y); } ctx.stroke(); }  // cracks
   ctx.fillStyle = "#3a444b"; ctx.fillRect(0, 0, 14, s); ctx.fillRect(s - 14, 0, 14, s); // gutters
   ctx.fillStyle = "#e8c35a";                                  // center dashes (64 divides 256 => seamless)
   for (let y = 0; y < s; y += 64) ctx.fillRect(s / 2 - 3, y, 6, 32);
@@ -261,6 +265,9 @@ const texAsphalt = canvasTex(256, (ctx, s) => {
 const texSidewalk = canvasTex(256, (ctx, s) => {
   ctx.fillStyle = "#cfc5ae"; ctx.fillRect(0, 0, s, s);
   speckle(ctx, s, 200, ["#d6cdb8", "#c6bca4", "#cabfa9"], 1, 2.5);
+  for (let i = 0; i < 3; i++) { ctx.fillStyle = "rgba(150,138,116,.18)"; ctx.beginPath(); ctx.ellipse(Math.random() * s, Math.random() * s, 10 + Math.random() * 16, 8 + Math.random() * 12, 0, 0, 7); ctx.fill(); }  // stains
+  ctx.strokeStyle = "rgba(120,110,92,.45)"; ctx.lineWidth = 1;
+  for (let i = 0; i < 4; i++) { ctx.beginPath(); let x = Math.random() * s, y = Math.random() * s; ctx.moveTo(x, y); for (let k = 0; k < 4; k++) { x += (Math.random() - 0.5) * 28; y += (Math.random() - 0.5) * 28; ctx.lineTo(x, y); } ctx.stroke(); }  // cracks
   ctx.strokeStyle = "#b7ad96"; ctx.lineWidth = 3;
   for (let i = 0; i <= 4; i++) {
     const p = (s / 4) * i;
@@ -434,7 +441,7 @@ scene.add(ground);
 
 // roads: two merged meshes (all vertical, all horizontal)
 {
-  const matRoad = new THREE.MeshLambertMaterial({ map: texAsphalt });
+  const matRoad = new THREE.MeshStandardMaterial({ map: texAsphalt, roughness: 0.62, metalness: 0.0, envMapIntensity: 0.55 });
   const vGeos = [], hGeos = [];
   for (let k = 0; k <= N; k++) {
     let g = new THREE.PlaneGeometry(ROAD, 2 * HALF);
