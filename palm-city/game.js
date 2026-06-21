@@ -438,6 +438,7 @@ const PLAZA_KEY = _pad("2,2");   // recentred plaza block key
 // outskirt districts: a suburban neighbourhood (NW corner) and a run-down quarter (NE corner)
 const isResid = (i, j) => i <= 2 && j <= 2;
 const isGhetto = (i, j) => i <= 2 && j >= N - 3;
+const RESERVED = new Set(["1,1", "1," + (N - 2)]);   // lots held for the buyable House & Apartment
 const SPECIAL = {}; for (const [k, v] of Object.entries({ "1,3": "wash", "4,2": "burger", "5,0": "club", "0,4": "depot", "1,2": "pizza", "2,4": "taxi", "5,5": "marina", "3,2": "garage", "2,3": "home", "3,4": "hospital" })) SPECIAL[_pad(k)] = v;
 const PLAZA = { x: Bc(2), z: Bc(2) };
 const GARAGE = { x: Bc(3), z: Bc(2) };
@@ -478,7 +479,7 @@ let buildingsIM, buildingMat = null;
   const placed = [], towers = [], houses = [], ghetto = [];
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
     const key = i + "," + j;
-    if (PARKS.has(key) || SPECIAL[key]) continue;
+    if (PARKS.has(key) || SPECIAL[key] || RESERVED.has(key)) continue;
     const cen = (N - 1) / 2;
     const dc = Math.max(Math.abs(i - cen), Math.abs(j - cen));  // 0 = dead centre … grows to the city edge
     const downtown = dc <= 1.5;                                 // core 4x4
@@ -685,6 +686,18 @@ specialBuilding(Bc(5), Bc(5), 40, 7, 30, 0x5fa8c9, STR.biz.marina.name, "rgba(30
 specialBuilding(GARAGE.x, GARAGE.z, 34, 8, 26, 0x5b6470, STR.garageName, "rgba(40,46,55,.9)");
 const homeSign = specialBuilding(HOME.x, HOME.z, 24, 11, 22, 0xc98a6b, STR.homeForSale, "rgba(150,90,50,.92)");
 specialBuilding(HOSPITAL.x, HOSPITAL.z, 30, 12, 26, 0xeef2f5, STR.hospitalName, "rgba(40,120,120,.92)");
+
+// buyable properties (three tiers): a cheap apartment in the rough quarter, the central condo,
+// and a premium house out in the suburbs. Each is a for-sale building you walk up to and buy.
+const HOUSE_POS = { x: bc(1), z: bc(1) }, APT_POS = { x: bc(1), z: bc(N - 2) };
+const houseSign = specialBuilding(HOUSE_POS.x, HOUSE_POS.z, 22, 8, 20, 0xf0d8b0, STR.propForSale("🏡 House", 12000), "rgba(110,80,40,.92)");
+const aptSign = specialBuilding(APT_POS.x, APT_POS.z, 24, 15, 22, 0x8c8474, STR.propForSale("🏚 Apartment", 2500), "rgba(70,66,58,.92)");
+const HOME_COST = 6000;
+const PROPS = [
+  { id: "apartment", flag: "apt", label: "🏚 Apartment", cost: 2500, x: APT_POS.x, z: APT_POS.z, sign: aptSign },
+  { id: "condo", flag: "home", label: "🏢 Condo", cost: HOME_COST, x: HOME.x, z: HOME.z, sign: homeSign, ownLabel: STR.homeOwned },
+  { id: "house", flag: "house", label: "🏡 House", cost: 12000, x: HOUSE_POS.x, z: HOUSE_POS.z, sign: houseSign },
+];
 // gas station: a pump prop + canopy at the roadside; drive near to refuel
 {
   const pump = new THREE.Mesh(mergeGeos([
@@ -1262,7 +1275,9 @@ const state = {
   maxMoney: 0,           // high-water cash mark (for the Tycoon achievement)
   busts: 0,              // crooks busted (vigilante)
   rescues: 0,            // patients delivered (paramedic)
-  home: false,           // owns the apartment
+  home: false,           // owns the central condo (legacy "home" flag)
+  house: false,          // owns the suburban house
+  apt: false,            // owns the apartment in the rough quarter
   ach: [],               // unlocked achievement ids
   mi: 0,                 // mission index; 8 = story complete
   xp: 0,                 // experience toward the next player level
@@ -1271,7 +1286,7 @@ const state = {
 };
 function save() {
   state.maxMoney = Math.max(state.maxMoney || 0, Math.floor(state.money));
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
 }
 function load() {
   try {
@@ -1287,7 +1302,7 @@ function load() {
       state.maxMoney = d.maxMoney || 0;
       state.busts = d.busts || 0;
       state.rescues = d.rescues || 0;
-      state.home = !!d.home;
+      state.home = !!d.home; state.house = !!d.house; state.apt = !!d.apt;
       state.ach = d.ach || [];
       state.xp = d.xp || 0;
       state.lvl = d.lvl || 1;
@@ -1338,7 +1353,7 @@ function applyOwnership() {
   for (const i of state.palms) if (i >= 0 && i < palmCollected.length) palmCollected[i] = true;
   for (const c of cars) if (c.personal && state.cars[c.pid] != null) unlockCar(c, state.cars[c.pid]);
   for (const c of cars) if (c.personal) applyMods(c);
-  if (state.home) markHomeOwned();
+  for (const pr of PROPS) if (state[pr.flag]) markPropOwned(pr);
 }
 function unlockCar(c, color) {
   c.locked = false;
@@ -1368,19 +1383,24 @@ function buyMod(c, track) {
 }
 
 // ---------- apartment (buyable home + rest to pass time) ----------
-const HOME_COST = 6000;
-const nearHome = () => !driving && dist2(player.x, player.z, HOME.x, HOME.z) < 25;
-function markHomeOwned() {
-  homeSign.material.map.dispose();
-  const sp = textSprite(STR.homeOwned, "#fff", "rgba(90,150,90,.92)", 16, 4, 0);
-  homeSign.material.map = sp.material.map; sp.material.dispose();
+const nearProp = () => {
+  if (driving) return null;
+  for (const pr of PROPS) if (dist2(player.x, player.z, pr.x, pr.z) < 25) return pr;
+  return null;
+};
+function markPropOwned(pr) {
+  pr.sign.material.map.dispose();
+  const sp = textSprite(pr.ownLabel || STR.propOwned(pr.label), "#fff", "rgba(90,150,90,.92)", 16, 4, 0);
+  pr.sign.material.map = sp.material.map; sp.material.dispose();
 }
-function buyHome() {
-  if (state.money < HOME_COST) { toast(STR.needMore(HOME_COST - Math.floor(state.money))); return; }
-  state.money -= HOME_COST; state.home = true; markHomeOwned();
-  toast(STR.homeBought); AudioSys.play("jingle", 0.9); flash("#9fe6a0", 0.3); buzz(20); save();
+function buyProp(pr) {
+  if (state.money < pr.cost) { toast(STR.needMore(pr.cost - Math.floor(state.money))); return; }
+  state.money -= pr.cost; state[pr.flag] = true; markPropOwned(pr);
+  toast(STR.propBought(pr.label)); AudioSys.play("jingle", 0.9); flash("#9fe6a0", 0.3); buzz(20); save();
 }
 function restAtHome() { simTime += 120; toast(STR.rested); AudioSys.play("door", 0.6); save(); }
+const ownsAnyProp = () => state.home || state.house || state.apt;
+const homeSpawn = () => { for (const pr of PROPS) if (state[pr.flag]) return pr; return null; };
 
 function markOwned(b) {
   const lvl = state.owned[b.id] || 1;
@@ -1817,7 +1837,7 @@ function wasted() {
   state.money = Math.max(0, state.money - fine);
   toast(STR.wasted(fine)); AudioSys.play("door", 1); flash("#ff3b3b", 0.5); buzz([0, 80, 60, 140]);
   if (driving) { driving.speed = 0; driving.lat = 0; driving = null; hero.group.visible = true; }
-  const sp = state.home ? HOME : PLAZA;                 // respawn at home if owned, else the plaza
+  const sp = homeSpawn() || PLAZA;                      // respawn at an owned property, else the plaza
   player.x = sp.x; player.z = sp.z + 12; player.y = CURB; player.speed = 0;
   health = 100; hurtCD = 2; fuel = 100;
   wanted = 0; wantedCD = 0; crimeCD = 0;
@@ -2153,7 +2173,7 @@ function updateHUD() {
       const act = nearestBizAction();
       if (act) b = act.mode === "buy" ? STR.btnBuy(STR.biz[act.b.id].name, act.cost)
                                       : STR.btnUpgrade(act.lvl, act.cost);
-      else if (nearHome()) b = state.home ? STR.btnRest : STR.btnBuyHome(HOME_COST);
+      else if (nearProp()) { const pr = nearProp(); b = state[pr.flag] ? STR.btnRest : STR.btnBuyProp(pr.label, pr.cost); }
       else {
         const pc = nearestPersonalCar();
         if (pc) b = pc.locked ? STR.btnBuyCar(STR.pcars[pc.pid].name, pc.price) : STR.btnRepaint;
@@ -2398,7 +2418,7 @@ const ACH = [
   { id: "crown",   done: () => CIRCUITS.every(c => (state.races[c.id] || 0) > 0) },
   { id: "goldrush", done: () => CIRCUITS.every(c => (state.medals[c.id] || 0) >= 3) },
   { id: "vigil",   done: () => (state.busts || 0) >= 5 },
-  { id: "homeowner", done: () => !!state.home },
+  { id: "homeowner", done: () => ownsAnyProp() },
   { id: "medic",   done: () => (state.rescues || 0) >= 5 },
   { id: "tycoon",  done: () => (state.maxMoney || 0) >= 50000 },
   { id: "story",   done: () => state.mi >= M.length },
@@ -2534,7 +2554,7 @@ function doActionB() {
     }
     return;
   }
-  if (nearHome()) { if (state.home) restAtHome(); else buyHome(); return; }
+  { const pr = nearProp(); if (pr) { if (state[pr.flag]) restAtHome(); else buyProp(pr); return; } }
   const pc = nearestPersonalCar();
   if (pc) openShowroom(pc);
 }
