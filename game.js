@@ -879,17 +879,17 @@ function personGeo(p) {
     cylC(0.072, 0.056, 0.44, -0.1, 0.31, 0, shinC),
     cylC(0.108, 0.088, 0.44, 0.1, 0.71, 0, p.pants),         // upper legs
     cylC(0.108, 0.088, 0.44, -0.1, 0.71, 0, p.pants),
-    cylC(0.155, 0.165, 0.18, 0, 0.87, 0, p.pants),           // waistband
-    cylC(0.205, 0.14, 0.52, 0, 1.14, 0, p.shirt),            // torso (athletic V-taper)
-    sphC(0.088, 0.19, 1.37, 0, sleeveC),                     // shoulders (sloped, lower)
-    sphC(0.088, -0.19, 1.37, 0, sleeveC),
-    cylC(0.075, 0.057, 0.34, 0.205, 1.22, 0, sleeveC),       // upper arms
-    cylC(0.075, 0.057, 0.34, -0.205, 1.22, 0, sleeveC),
-    cylC(0.056, 0.046, 0.34, 0.205, 0.89, 0, foreC),         // forearms
-    cylC(0.056, 0.046, 0.34, -0.205, 0.89, 0, foreC),
-    sphC(0.06, 0.205, 0.71, 0, p.skin),                      // hands
-    sphC(0.06, -0.205, 0.71, 0, p.skin),
-    cylC(0.062, 0.078, 0.14, 0, 1.49, 0, p.skin),            // neck
+    cylC(0.155, 0.165, 0.18, 0, 0.86, 0, p.pants),           // waistband
+    cylC(0.2, 0.15, 0.5, 0, 1.1, 0, p.shirt),                // torso (athletic V-taper)
+    sphC(0.085, 0.185, 1.29, 0, sleeveC),                    // shoulders (low, sloped)
+    sphC(0.085, -0.185, 1.29, 0, sleeveC),
+    cylC(0.075, 0.057, 0.34, 0.205, 1.14, 0, sleeveC),       // upper arms
+    cylC(0.075, 0.057, 0.34, -0.205, 1.14, 0, sleeveC),
+    cylC(0.056, 0.046, 0.34, 0.205, 0.81, 0, foreC),         // forearms
+    cylC(0.056, 0.046, 0.34, -0.205, 0.81, 0, foreC),
+    sphC(0.06, 0.205, 0.63, 0, p.skin),                      // hands
+    sphC(0.06, -0.205, 0.63, 0, p.skin),
+    cylC(0.062, 0.08, 0.2, 0, 1.44, 0, p.skin),              // neck
     sphC(0.15, 0, 1.63, 0, p.skin, 1, 1.12, 0.95),           // head
     sphC(0.028, 0.06, 1.63, 0.13, 0x241c18),                 // eyes
     sphC(0.028, -0.06, 1.63, 0.13, 0x241c18),
@@ -928,16 +928,16 @@ function articulatedPerson(p) {
   const legL = leg(1), legR = leg(-1);
   // arm group (pivots at shoulder): upper arm (sleeve) -> forearm -> hand
   const arm = side => {
-    const grp = new THREE.Group(); grp.position.set(0.205 * side, 1.39, 0);
+    const grp = new THREE.Group(); grp.position.set(0.205 * side, 1.31, 0);
     grp.add(cyl(0.075, 0.057, 0.34, sleeveMat, -0.17), cyl(0.056, 0.046, 0.34, foreMat, -0.5));
     const hand = sph(0.06, skinMat, 1, 1.1, 0.8); hand.position.y = -0.7; grp.add(hand); return grp;
   };
   const armL = arm(1), armR = arm(-1);
-  const hips = cyl(0.155, 0.165, 0.18, pantsMat, 0.87);
-  const torso = cyl(0.205, 0.14, 0.52, shirtMat, 1.14);               // torso, athletic V
-  const shL = sph(0.088, sleeveMat); shL.position.set(0.19, 1.37, 0); // shoulders (sloped, lower)
-  const shR = sph(0.088, sleeveMat); shR.position.set(-0.19, 1.37, 0);
-  const neck = cyl(0.062, 0.078, 0.14, skinMat, 1.49);
+  const hips = cyl(0.155, 0.165, 0.18, pantsMat, 0.86);
+  const torso = cyl(0.2, 0.15, 0.5, shirtMat, 1.1);                  // torso, athletic V
+  const shL = sph(0.085, sleeveMat); shL.position.set(0.185, 1.29, 0); // shoulders (low, sloped)
+  const shR = sph(0.085, sleeveMat); shR.position.set(-0.185, 1.29, 0);
+  const neck = cyl(0.062, 0.08, 0.2, skinMat, 1.44);
   const head = sph(0.15, skinMat, 1, 1.12, 0.95); head.position.y = 1.63;
   const hair = sph(0.162, hairMat, 1.05, 0.82, 1.05); hair.position.set(0, 1.71, -0.04);
   const eye = x => { const s = sph(0.028, mat(0x241c18)); s.position.set(x, 1.63, 0.13); return s; };
