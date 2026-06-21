@@ -110,6 +110,9 @@ try {
 
 const specialMats = [];   // facade materials of the business buildings (ramped by the night cycle)
 
+// sky group follows the camera so the dome/sun/clouds are always centred on the player
+// (essential now the city is far larger than the dome radius)
+const skyGroup = new THREE.Group(); skyGroup.frustumCulled = false; scene.add(skyGroup);
 // gradient sky dome (1 draw call) — zenith→horizon, recoloured by the day/night cycle
 const skyUniforms = {
   topColor: { value: new THREE.Color(0x4a90d9) },
@@ -124,7 +127,7 @@ const skyDome = new THREE.Mesh(
     fragmentShader: "uniform vec3 topColor; uniform vec3 horizonColor; uniform float exponent; varying vec3 vDir; void main(){ float f = pow(max(vDir.y,0.0), exponent); gl_FragColor = vec4(mix(horizonColor, topColor, f), 1.0); }",
   }));
 skyDome.frustumCulled = false;
-scene.add(skyDome);
+skyGroup.add(skyDome);
 
 // sun (warm glowing disc) — bright by day, arcs across the sky
 const sunTex = canvasTex(64, (ctx, s) => {
@@ -133,7 +136,7 @@ const sunTex = canvasTex(64, (ctx, s) => {
 });
 const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, color: 0xfff0bd, transparent: true, opacity: 1, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
 sunSprite.scale.set(78, 78, 1);
-scene.add(sunSprite);
+skyGroup.add(sunSprite);
 // moon (pale cratered disc) — rises at night, opposite the sun
 const moonTex = canvasTex(96, (ctx, s) => {
   const c = s / 2;
@@ -145,11 +148,11 @@ const moonTex = canvasTex(96, (ctx, s) => {
 });
 const moonSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, fog: false }));
 moonSprite.scale.set(58, 58, 1);
-scene.add(moonSprite);
+skyGroup.add(moonSprite);
 
 // sky detail: drifting clouds (day) + stars (night) + sun/moon arc, faded by the night factor
 let starPts = null, cloudPts = null, cloudPos = null, cloudBase = null, cloudN = 0;
-const C_DAY = new THREE.Color(0xffe7c0), C_HORIZON = new THREE.Color(0xff7a2e), C_MOON = new THREE.Color(0x9fb4e0), _lc = new THREE.Color();
+const C_DAY = new THREE.Color(0xffe7c0), C_HORIZON = new THREE.Color(0xff7a2e), C_MOON = new THREE.Color(0x9fb4e0), _lc = new THREE.Color(), _white = new THREE.Color(0xffffff);
 function setSky(night) {
   const t = (simTime / 240) % 1, sa = t * Math.PI * 2, sy = Math.sin(sa), cx = Math.cos(sa);
   sunSprite.position.set(cx * 340, sy * 210 + 90, -240);
@@ -165,7 +168,8 @@ function setSky(night) {
   sun.color.copy(_lc);
   if (starPts) starPts.material.opacity = Math.min(1, night) * 0.95;
   if (cloudPts) {
-    cloudPts.material.opacity = (1 - night) * 0.5;
+    cloudPts.material.opacity = (1 - night) * 0.55;
+    cloudPts.material.color.copy(_lc).lerp(_white, 0.5);   // clouds catch the warm sunset light
     for (let i = 0; i < cloudN; i++) { let x = cloudBase[i] + simTime * 3; cloudPos[i * 3] = ((x + 700) % 1400 + 1400) % 1400 - 700; }
     cloudPts.geometry.attributes.position.needsUpdate = true;
   }
@@ -404,6 +408,7 @@ function textSprite(text, fg, bg, w, h, y) {
 
 // ---------- world build ----------
 const colliders = [];   // {x0,x1,z0,z1}
+const ENTERABLES = [];  // buildings you can walk into: { x, z, name, r (squared radius) }
 const colGrid = new Map();   // spatial hash so collision stays O(1) however big the city gets
 const colCell = v => Math.floor((v + HALF) / CELL);
 const addCollider = (x, z, hw, hd) => {
@@ -533,6 +538,8 @@ let buildingMat = null;
     }
   };
   boxChunks(placed, mats);
+  // make a scattering of ordinary buildings enterable too (generic lobby interior)
+  placed.forEach((b, i) => { if (i % 7 === 0) ENTERABLES.push({ x: b.x, z: b.z, name: "🏢 Lobby", r: Math.pow(Math.max(b.w, b.d) / 2 + 4, 2) }); });
 
   // downtown skyscrapers — tiling glass-tower facade (shared material across chunks for the night ramp)
   const towerSide = new THREE.MeshLambertMaterial({ map: texTower, emissive: 0xffffff, emissiveMap: texTowerWin, emissiveIntensity: 0 });
@@ -665,7 +672,6 @@ const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigg
 
 // special buildings + labels — facade + lit-window textures (tinted by the accent colour),
 // so businesses read as real buildings instead of flat colour blocks.
-const ENTERABLES = [];   // buildings you can walk into: { x, z, name, r (squared radius) }
 function specialBuilding(x, z, w, h, d, color, labelText, labelColor) {
   const matSide = new THREE.MeshLambertMaterial({ map: texFacade, color, emissive: 0xffffff, emissiveMap: texWindows, emissiveIntensity: 0 });
   const matRoof = new THREE.MeshLambertMaterial({ color: _col.set(color).lerp(new THREE.Color(0xb8ab9a), 0.55).getHex() });
@@ -873,6 +879,9 @@ function personGeo(p) {
     sphC(0.17, 0, 1.62, 0, p.skin, 1, 1.08, 1),              // head
     sphC(0.03, 0.07, 1.62, 0.15, 0x241c18),                  // eyes
     sphC(0.03, -0.07, 1.62, 0.15, 0x241c18),
+    sphC(0.04, 0, 1.585, 0.16, p.skin, 1, 1.3, 1.5),         // nose
+    sphC(0.045, 0.17, 1.62, 0, p.skin, 0.5, 1, 1),           // ears
+    sphC(0.045, -0.17, 1.62, 0, p.skin, 0.5, 1, 1),
   ];
   if (p.hat) {                                               // hat instead of bare hair
     parts.push(cylC(0.205, 0.215, 0.05, 0, 1.73, 0, p.hat));   // brim
@@ -904,7 +913,9 @@ function articulatedPerson(p) {
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 9), skinMat); head.scale.set(1, 1.08, 1); head.position.y = 1.62;
   const hair = new THREE.Mesh(new THREE.SphereGeometry(0.185, 12, 9), hairMat); hair.scale.set(1.05, 0.82, 1.05); hair.position.set(0, 1.71, -0.04);
   const eye = x => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 5), mat(0x241c18)); s.position.set(x, 1.62, 0.15); return s; };
-  g.add(legL, legR, armL, armR, hips, torso, neck, head, hair, eye(0.07), eye(-0.07));
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), skinMat); nose.scale.set(1, 1.3, 1.5); nose.position.set(0, 1.585, 0.16);
+  const ear = x => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), skinMat); s.scale.set(0.5, 1, 1); s.position.set(x, 1.62, 0); return s; };
+  g.add(legL, legR, armL, armR, hips, torso, neck, head, hair, eye(0.07), eye(-0.07), nose, ear(0.17), ear(-0.17));
   const hatHolder = new THREE.Group(), glassHolder = new THREE.Group(), jacketHolder = new THREE.Group(), beardHolder = new THREE.Group();
   g.add(hatHolder, glassHolder, jacketHolder, beardHolder);
   return { group: g, legL, legR, armL, armR, shirtMat, pantsMat, hairMat, hair, hatHolder, glassHolder, jacketHolder, beardHolder };
@@ -1296,28 +1307,73 @@ const INT = { x: 4000, z: 0 };
 let inside = false, intReturn = { x: 0, z: 0, h: 0 };
 const intSign = textSprite("", "#fff", "rgba(20,20,24,.9)", 16, 4, 0);
 const intLight = new THREE.PointLight(0xfff2d6, 0, 48, 1.4); intLight.position.set(INT.x, 4.2, INT.z + 1); scene.add(intLight);
+const intProps = new THREE.Group(); scene.add(intProps);
+let intFloor;
+// interior surface textures
+const R = Math.random;
+const woodTex = canvasTex(128, (ctx, s) => { for (let i = 0; i < 8; i++) { const w = s / 8; ctx.fillStyle = ["#9a6e44", "#a9794d", "#8f6440", "#b08355"][i % 4]; ctx.fillRect(i * w, 0, w, s); ctx.strokeStyle = "rgba(60,40,20,.35)"; ctx.strokeRect(i * w, 0, w, s); for (let k = 0; k < 12; k++) { ctx.fillStyle = "rgba(70,45,25,.16)"; ctx.fillRect(i * w + 3, R() * s, 6 + R() * 16, 1); } } }, 4, 4);
+const tileTex = canvasTex(128, (ctx, s) => { ctx.fillStyle = "#d9d9df"; ctx.fillRect(0, 0, s, s); const g = s / 4; ctx.strokeStyle = "#aab0bc"; ctx.lineWidth = 3; for (let i = 0; i <= 4; i++) { ctx.beginPath(); ctx.moveTo(i * g, 0); ctx.lineTo(i * g, s); ctx.moveTo(0, i * g); ctx.lineTo(s, i * g); ctx.stroke(); } }, 5, 5);
+const carpetTex = canvasTex(128, (ctx, s) => { ctx.fillStyle = "#7a3540"; ctx.fillRect(0, 0, s, s); for (let i = 0; i < 500; i++) { ctx.fillStyle = R() < 0.5 ? "#8a3d48" : "#6a2c36"; ctx.fillRect(R() * s, R() * s, 2, 2); } }, 6, 6);
+const concreteTex = canvasTex(128, (ctx, s) => { ctx.fillStyle = "#9a9a9e"; ctx.fillRect(0, 0, s, s); for (let i = 0; i < 360; i++) { ctx.fillStyle = ["#909094", "#a6a6aa", "#8a8a8e"][i % 3]; const r = 1 + R() * 2; ctx.fillRect(R() * s, R() * s, r, r); } }, 6, 6);
+const FLOORTEX = { wood: woodTex, tile: tileTex, carpet: carpetTex, concrete: concreteTex };
+const wallTex = canvasTex(64, (ctx, s) => { ctx.fillStyle = "#ece3d2"; ctx.fillRect(0, 0, s, s); for (let i = 0; i < 50; i++) { ctx.fillStyle = "rgba(0,0,0,.04)"; ctx.fillRect(R() * s, R() * s, 2, 2); } ctx.fillStyle = "#cdbfa6"; ctx.fillRect(0, s - 7, s, 7); }, 3, 1);
 {
-  const wallMat = new THREE.MeshLambertMaterial({ color: 0xe7ddca });
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 15), new THREE.MeshLambertMaterial({ color: 0x9a7d5a }));
-  floor.rotation.x = -Math.PI / 2; floor.position.set(INT.x, 0.02, INT.z + 0.5); floor.receiveShadow = true; scene.add(floor);
-  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(20, 15), new THREE.MeshLambertMaterial({ color: 0xf0ead8 }));
+  const wallMat = new THREE.MeshLambertMaterial({ map: wallTex });
+  intFloor = new THREE.Mesh(new THREE.PlaneGeometry(20, 15), new THREE.MeshLambertMaterial({ map: woodTex }));
+  intFloor.rotation.x = -Math.PI / 2; intFloor.position.set(INT.x, 0.02, INT.z + 0.5); intFloor.receiveShadow = true; scene.add(intFloor);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(20, 15), new THREE.MeshLambertMaterial({ color: 0xf2ecde }));
   ceil.rotation.x = Math.PI / 2; ceil.position.set(INT.x, 4.4, INT.z + 0.5); scene.add(ceil);
   const wall = (w, h, d, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat); m.position.set(x, y, z); m.receiveShadow = true; scene.add(m); };
-  wall(20, 4.4, 0.4, INT.x, 2.2, INT.z + 8);          // back wall
-  wall(0.4, 4.4, 15.4, INT.x - 10, 2.2, INT.z + 0.5);  // left wall
-  wall(0.4, 4.4, 15.4, INT.x + 10, 2.2, INT.z + 0.5);  // right wall
-  wall(7.2, 4.4, 0.4, INT.x - 6.4, 2.2, INT.z - 7);    // front wall (door gap in the middle)
+  wall(20, 4.4, 0.4, INT.x, 2.2, INT.z + 8);
+  wall(0.4, 4.4, 15.4, INT.x - 10, 2.2, INT.z + 0.5);
+  wall(0.4, 4.4, 15.4, INT.x + 10, 2.2, INT.z + 0.5);
+  wall(7.2, 4.4, 0.4, INT.x - 6.4, 2.2, INT.z - 7);
   wall(7.2, 4.4, 0.4, INT.x + 6.4, 2.2, INT.z - 7);
-  wall(20, 1.0, 0.4, INT.x, 3.9, INT.z - 7);           // lintel above the door
-  const counter = new THREE.Mesh(new THREE.BoxGeometry(8, 1.1, 1.4), new THREE.MeshLambertMaterial({ color: 0x6b4a32 }));
-  counter.position.set(INT.x, 0.55, INT.z + 6); counter.castShadow = counter.receiveShadow = true; scene.add(counter);
-  const shelf = z => { const s = new THREE.Mesh(new THREE.BoxGeometry(0.6, 3, 5), new THREE.MeshLambertMaterial({ color: 0xb9a07e })); s.position.set(INT.x - 9, 1.6, INT.z + z); s.castShadow = true; scene.add(s); };
-  shelf(2.5); shelf(-3);
-  const rug = new THREE.Mesh(new THREE.PlaneGeometry(7, 5), new THREE.MeshLambertMaterial({ color: 0xc25b5b }));
-  rug.rotation.x = -Math.PI / 2; rug.position.set(INT.x, 0.03, INT.z + 0.5); scene.add(rug);
+  wall(20, 1.0, 0.4, INT.x, 3.9, INT.z - 7);
   const lamp = new THREE.Mesh(new THREE.BoxGeometry(3, 0.18, 1.2), new THREE.MeshBasicMaterial({ color: 0xfff0c8 }));
   lamp.position.set(INT.x, 4.3, INT.z + 0.5); scene.add(lamp);
   intSign.position.set(INT.x, 3.45, INT.z + 7.7); scene.add(intSign);
+}
+// themed furniture, rebuilt on entry. box(w,h,d, x,y,z, color[, emissive])
+function ib(w, h, d, x, y, z, color, emis) {
+  const mm = emis ? new THREE.MeshBasicMaterial({ color }) : new THREE.MeshLambertMaterial({ color });
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mm);
+  m.position.set(INT.x + x, y, INT.z + z); m.castShadow = !emis; m.receiveShadow = !emis; intProps.add(m); return m;
+}
+const INTHEMES = {
+  home: { floor: "carpet", build: () => { ib(4, 0.8, 1.6, -4, 0.5, 4.4, 0x4a5f86); ib(4, 0.6, 0.5, -4, 1.0, 5.1, 0x55699a); ib(2.4, 0.4, 1.2, -4, 0.45, 2.4, 0x7a5a3a); ib(3, 1.7, 0.25, 6, 1.5, 6.7, 0x16181c); ib(2, 0.6, 1, 6, 0.5, 6, 0x2a2a2e); ib(0.5, 1.6, 0.5, 8.5, 0.85, -5, 0x3a7a3a); } },
+  armory: { floor: "concrete", build: () => { ib(7, 1.1, 1.2, 0, 0.55, 6, 0x3a3f47); ib(7, 1.6, 0.2, 0, 2.6, 7.7, 0x2a2620); for (let i = -3; i <= 3; i++) ib(0.16, 1.1, 0.4, i, 2.6, 7.55, 0x6b5a44); ib(2, 1.2, 2, 8, 0.6, -4, 0x6b5236); ib(2, 1.2, 2, 8, 0.6, -1, 0x6b5236); } },
+  club: { floor: "tile", floorTint: 0x5a5a72, build: () => { ib(8, 1.1, 1.4, 0, 0.55, 6, 0x241c30); ib(7, 1.4, 0.3, 0, 2.6, 7.6, 0x12101a); ib(6, 0.3, 0.3, 0, 2.0, 7.5, 0xff3b8b, true); ib(6, 0.3, 0.3, 0, 3.2, 7.5, 0x3bd0ff, true); for (let i = -3; i <= 3; i += 2) ib(0.5, 1.0, 0.5, i, 0.5, 3.6, 0x3a3a44); } },
+  food: { floor: "tile", build: () => { ib(8, 1.1, 1.4, 0, 0.55, 6, 0xb5532e); ib(5, 1.6, 0.2, 0, 2.7, 7.6, 0x1c1e22); ib(4.6, 1.3, 0.1, 0, 2.7, 7.5, 0xffcf3f, true); for (let i = -4; i <= 4; i += 2.6) { ib(1.4, 0.4, 1.4, i, 0.5, 1.5, 0xe6e6e6); ib(0.4, 0.9, 0.4, i, 0.45, 1.5, 0x9a9a9a); } } },
+  barber: { floor: "tile", build: () => { for (const sx of [-5, 5]) { ib(3, 1.6, 0.12, sx, 1.6, 7.5, 0x9fd8ea); ib(1, 0.5, 1, sx, 0.55, 5, 0x2a2a30); ib(0.85, 0.8, 0.85, sx, 1.1, 5, 0x4a4a55); } ib(5, 1.0, 1, 0, 0.5, 6.5, 0x3a3f47); } },
+  clothing: { floor: "wood", build: () => { for (const z of [2.5, 5.2]) { ib(0.1, 0.12, 4, -6, 2.0, z, 0x999999); for (let i = 0; i < 5; i++) ib(0.7, 1.3, 0.28, -6, 1.0, z - 1.6 + i * 0.8, [0xe8688f, 0x39b6c8, 0xf0c040, 0x7fd4a0, 0xb79ce0][i]); } ib(6, 2.4, 0.3, 6.5, 1.6, 4, 0xc9b79a); } },
+  hospital: { floor: "tile", floorTint: 0xe8f2f2, build: () => { ib(2, 0.6, 4, -5, 0.5, 4, 0xeef4f6); ib(2, 0.3, 4, -5, 0.92, 4, 0xbfe0e8); ib(0.45, 2, 0.45, 5.5, 1.2, 7, 0xcc3333, true); ib(1.3, 0.5, 0.45, 5.5, 1.55, 7.1, 0xcc3333, true); ib(1.6, 1.3, 1.4, 8, 0.65, 2, 0xdfe6ea); } },
+  garage: { floor: "concrete", build: () => { ib(2, 1.4, 0.7, -6, 0.8, 5.5, 0xc23a36); ib(5, 0.3, 2.4, 4, 0.25, 4, 0x2a2d33); for (let i = 0; i < 5; i++) ib(0.3, 1.7, 0.3, -8 + i * 0.45, 1.05, 7.6, 0x555a60); } },
+  warehouse: { floor: "concrete", build: () => { for (let i = -6; i <= 6; i += 3) for (let j = 0; j <= 6; j += 3) ib(2, 2, 2, i, 1.0, j, [0x8a6a3a, 0x6b5236, 0x9a7a4a][((i + 6) / 3) % 3]); } },
+  office: { floor: "carpet", floorTint: 0x7c828e, build: () => { ib(3, 1.0, 1.6, 0, 0.5, 5.5, 0x6a5a44); ib(1.2, 0.6, 1.2, 0, 0.45, 3.5, 0x2a2a30); ib(0.5, 1.6, 0.5, 8.5, 0.85, -5, 0x3a7a3a); ib(3.5, 2, 0.2, 0, 2.4, 7.7, 0xdfe6ea); } },
+  shop: { floor: "wood", build: () => { ib(7, 1.1, 1.4, 0, 0.55, 6, 0x6b4a32); for (const z of [2.5, -2.5]) { ib(0.6, 3, 4, -9, 1.6, z, 0xb9a07e); for (let i = 0; i < 5; i++) ib(0.55, 0.5, 0.55, -8.9, 0.6 + i * 0.6, z, [0xe8543f, 0x3f7fe8, 0xf0c040, 0x58b368, 0xc25cd6][i]); } } },
+};
+function buildInterior(theme) {
+  while (intProps.children.length) { const c = intProps.children.pop(); if (c.geometry) c.geometry.dispose(); }
+  const cfg = INTHEMES[theme] || INTHEMES.shop;
+  intFloor.material.map = FLOORTEX[cfg.floor] || woodTex;
+  intFloor.material.color.setHex(cfg.floorTint || 0xffffff);
+  intFloor.material.needsUpdate = true;
+  cfg.build();
+}
+function themeOf(name) {
+  const n = (name || "").toUpperCase();
+  if (n.includes("AMMO")) return "armory";
+  if (n.includes("BARBER") || n.includes("CUT") || n.includes("FADE")) return "barber";
+  if (n.includes("THREAD") || n.includes("BOUTIQUE")) return "clothing";
+  if (n.includes("BURGER") || n.includes("PIZZA") || n.includes("DOG")) return "food";
+  if (n.includes("CLUB")) return "club";
+  if (n.includes("HOSPITAL")) return "hospital";
+  if (n.includes("GARAGE")) return "garage";
+  if (n.includes("DEPOT")) return "warehouse";
+  if (n.includes("TAXI") || n.includes("MARINA") || n.includes("WASH")) return "office";
+  if (n.includes("HOUSE") || n.includes("CONDO") || n.includes("APART") || n.includes("HOME")) return "home";
+  return "shop";
 }
 function setSpriteText(sp, text) {
   const t = textSprite(text, "#fff", "rgba(20,20,24,.9)", 16, 4, 0);
@@ -1330,6 +1386,7 @@ function enterBuilding(e) {
   intReturn = { x: player.x, z: player.z, h: player.h };
   inside = true; intLight.intensity = 1.2;
   player.x = INT.x; player.z = INT.z + 0.5; player.h = 0; player.speed = 0;   // mid-room, facing the counter
+  buildInterior(themeOf(e.name));
   setSpriteText(intSign, e.name); snapCam(); AudioSys.play("door", 0.7);
 }
 function exitBuilding() {
@@ -1889,23 +1946,23 @@ let race = { stage: "idle", ci: -1, cp: 0, t: 0, armed: true };  // idle | activ
   }
   const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.BufferAttribute(sp, 3));
   starPts = new THREE.Points(sg, new THREE.PointsMaterial({ size: 2.3, map: partTex, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, sizeAttenuation: true }));
-  starPts.frustumCulled = false; scene.add(starPts);
+  starPts.frustumCulled = false; skyGroup.add(starPts);
 
   // puffy clouds: each cloud is a cluster of overlapping soft puffs
-  const CLOUDS = 26, PUFFS = 6;
+  const CLOUDS = 44, PUFFS = 9;
   cloudN = CLOUDS * PUFFS; cloudPos = new Float32Array(cloudN * 3); cloudBase = new Float32Array(cloudN);
   let ci = 0;
   for (let c = 0; c < CLOUDS; c++) {
-    const cx0 = rr(-650, 650), cy0 = rr(150, 260), cz0 = rr(-560, 560);
+    const cx0 = rr(-660, 660), cy0 = rr(140, 300), cz0 = rr(-600, 600), spread = rr(0.7, 1.5);
     for (let p = 0; p < PUFFS; p++) {
-      const x = cx0 + rr(-55, 55);
-      cloudBase[ci] = x; cloudPos[ci * 3] = x; cloudPos[ci * 3 + 1] = cy0 + rr(-16, 16); cloudPos[ci * 3 + 2] = cz0 + rr(-40, 40);
+      const x = cx0 + rr(-70, 70) * spread;
+      cloudBase[ci] = x; cloudPos[ci * 3] = x; cloudPos[ci * 3 + 1] = cy0 + rr(-14, 14); cloudPos[ci * 3 + 2] = cz0 + rr(-50, 50) * spread;
       ci++;
     }
   }
   const cg = new THREE.BufferGeometry(); cg.setAttribute("position", new THREE.BufferAttribute(cloudPos, 3));
-  cloudPts = new THREE.Points(cg, new THREE.PointsMaterial({ size: 150, map: partTex, color: 0xffffff, transparent: true, opacity: 0.4, depthWrite: false, fog: false, sizeAttenuation: true }));
-  cloudPts.frustumCulled = false; scene.add(cloudPts);
+  cloudPts = new THREE.Points(cg, new THREE.PointsMaterial({ size: 180, map: partTex, color: 0xfff2e0, transparent: true, opacity: 0.5, depthWrite: false, fog: false, sizeAttenuation: true }));
+  cloudPts.frustumCulled = false; skyGroup.add(cloudPts);
 }
 
 // ---------- weather: rain that follows the player, with a slow auto-cycle ----------
@@ -3182,6 +3239,7 @@ function update(dt) {
   tmpP.set(tx - Math.sin(camYaw) * dist, ty + h, tz - Math.cos(camYaw) * dist);
   camPos.lerp(tmpP, 1 - Math.exp(-5 * dt));
   camera.position.copy(camPos);
+  skyGroup.position.copy(camera.position);   // keep the sky centred on the player everywhere in the big city
   // screen shake (impacts, landings, busts, wins)
   if (shake > 0) {
     shake = Math.max(0, shake - dt * 2.4);
