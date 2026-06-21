@@ -865,32 +865,33 @@ let lampMat = null;
 
 // ---------- characters ----------
 function personGeo(p) {
+  // slimmer, taller, more life-like proportions (~6 heads tall)
   const parts = [
-    sphC(0.11, 0.12, 0.05, 0.05, 0x2a2620, 1.1, 0.7, 1.6),   // shoes
-    sphC(0.11, -0.12, 0.05, 0.05, 0x2a2620, 1.1, 0.7, 1.6),
-    cylC(0.1, 0.12, 0.62, 0.12, 0.42, 0, p.pants),           // legs (tapered)
-    cylC(0.1, 0.12, 0.62, -0.12, 0.42, 0, p.pants),
-    cylC(0.2, 0.22, 0.18, 0, 0.78, 0, p.pants),              // hips
-    cylC(0.26, 0.2, 0.6, 0, 1.12, 0, p.shirt),               // torso (wider shoulders)
-    cylC(0.07, 0.08, 0.56, 0.3, 1.12, 0, p.shirt),           // arms
-    cylC(0.07, 0.08, 0.56, -0.3, 1.12, 0, p.shirt),
-    sphC(0.075, 0.3, 0.83, 0, p.skin),                       // hands
-    sphC(0.075, -0.3, 0.83, 0, p.skin),
-    cylC(0.08, 0.09, 0.12, 0, 1.46, 0, p.skin),              // neck
-    sphC(0.17, 0, 1.62, 0, p.skin, 1, 1.08, 1),              // head
-    sphC(0.03, 0.07, 1.62, 0.15, 0x241c18),                  // eyes
-    sphC(0.03, -0.07, 1.62, 0.15, 0x241c18),
-    sphC(0.04, 0, 1.585, 0.16, p.skin, 1, 1.3, 1.5),         // nose
-    sphC(0.045, 0.17, 1.62, 0, p.skin, 0.5, 1, 1),           // ears
-    sphC(0.045, -0.17, 1.62, 0, p.skin, 0.5, 1, 1),
+    sphC(0.095, 0.1, 0.05, 0.06, 0x2a2620, 1.0, 0.55, 1.7),  // shoes
+    sphC(0.095, -0.1, 0.05, 0.06, 0x2a2620, 1.0, 0.55, 1.7),
+    cylC(0.085, 0.062, 0.86, 0.1, 0.45, 0, p.pants),         // legs (long, slim, tapered)
+    cylC(0.085, 0.062, 0.86, -0.1, 0.45, 0, p.pants),
+    cylC(0.15, 0.16, 0.18, 0, 0.86, 0, p.pants),             // hips (narrow)
+    cylC(0.18, 0.135, 0.6, 0, 1.18, 0, p.shirt),             // torso (slim, tapered to waist)
+    cylC(0.055, 0.046, 0.62, 0.2, 1.14, 0, p.shirt),         // arms (slim, at the sides)
+    cylC(0.055, 0.046, 0.62, -0.2, 1.14, 0, p.shirt),
+    sphC(0.058, 0.2, 0.82, 0, p.skin),                       // hands
+    sphC(0.058, -0.2, 0.82, 0, p.skin),
+    cylC(0.058, 0.07, 0.12, 0, 1.5, 0, p.skin),              // neck
+    sphC(0.15, 0, 1.63, 0, p.skin, 1, 1.12, 0.95),           // head (smaller, oval)
+    sphC(0.028, 0.06, 1.63, 0.13, 0x241c18),                 // eyes
+    sphC(0.028, -0.06, 1.63, 0.13, 0x241c18),
+    sphC(0.034, 0, 1.6, 0.14, p.skin, 0.9, 1.2, 1.4),        // nose
+    sphC(0.04, 0.145, 1.63, 0, p.skin, 0.5, 1, 1),           // ears
+    sphC(0.04, -0.145, 1.63, 0, p.skin, 0.5, 1, 1),
   ];
-  if (p.hat) {                                               // hat instead of bare hair
-    parts.push(cylC(0.205, 0.215, 0.05, 0, 1.73, 0, p.hat));   // brim
-    parts.push(cylC(0.15, 0.16, 0.18, 0, 1.83, 0, p.hat));     // crown
+  if (p.hat) {
+    parts.push(cylC(0.18, 0.19, 0.05, 0, 1.72, 0, p.hat));
+    parts.push(cylC(0.13, 0.14, 0.16, 0, 1.81, 0, p.hat));
   } else {
-    parts.push(sphC(0.185, 0, 1.71, -0.04, p.hair, 1.05, 0.82, 1.05));   // hair cap
-    if (p.hairStyle === "bun") parts.push(sphC(0.09, 0, 1.79, -0.14, p.hair));
-    else if (p.hairStyle === "long") parts.push(sphC(0.16, 0, 1.5, -0.12, p.hair, 1, 1.25, 0.7));
+    parts.push(sphC(0.162, 0, 1.71, -0.04, p.hair, 1.05, 0.82, 1.05));   // hair cap
+    if (p.hairStyle === "bun") parts.push(sphC(0.08, 0, 1.79, -0.13, p.hair));
+    else if (p.hairStyle === "long") parts.push(sphC(0.14, 0, 1.5, -0.11, p.hair, 1, 1.25, 0.7));
   }
   return mergeGeos(parts);
 }
@@ -899,23 +900,23 @@ function articulatedPerson(p) {
   const mat = c => new THREE.MeshLambertMaterial({ color: c });
   // shared materials so the wardrobe/barber can recolour the whole outfit/hair in one call
   const shirtMat = mat(p.shirt), pantsMat = mat(p.pants), skinMat = mat(p.skin), hairMat = mat(p.hair);
-  const limb = (rT, rB, h, m) => { const geo = new THREE.CylinderGeometry(rT, rB, h, 8, 1); geo.translate(0, -h / 2, 0); return new THREE.Mesh(geo, m); };
-  const legL = limb(0.1, 0.12, 0.66, pantsMat); legL.position.set(0.12, 0.7, 0);
-  const legR = limb(0.1, 0.12, 0.66, pantsMat); legR.position.set(-0.12, 0.7, 0);
-  const shoe = () => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 7), mat(0x2a2620)); s.scale.set(1.1, 0.7, 1.6); s.position.set(0, -0.66, 0.03); return s; };
+  const limb = (rT, rB, h, m) => { const geo = new THREE.CylinderGeometry(rT, rB, h, 10, 1); geo.translate(0, -h / 2, 0); return new THREE.Mesh(geo, m); };
+  const legL = limb(0.085, 0.062, 0.88, pantsMat); legL.position.set(0.1, 0.88, 0);
+  const legR = limb(0.085, 0.062, 0.88, pantsMat); legR.position.set(-0.1, 0.88, 0);
+  const shoe = () => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 7), mat(0x2a2620)); s.scale.set(1.0, 0.55, 1.7); s.position.set(0, -0.86, 0.05); return s; };
   legL.add(shoe()); legR.add(shoe());
-  const armL = limb(0.07, 0.08, 0.56, shirtMat); armL.position.set(0.3, 1.4, 0);
-  const armR = limb(0.07, 0.08, 0.56, shirtMat); armR.position.set(-0.3, 1.4, 0);
-  const hand = () => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), skinMat); s.position.set(0, -0.56, 0); return s; };
+  const armL = limb(0.055, 0.046, 0.62, shirtMat); armL.position.set(0.2, 1.44, 0);
+  const armR = limb(0.055, 0.046, 0.62, shirtMat); armR.position.set(-0.2, 1.44, 0);
+  const hand = () => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.058, 8, 6), skinMat); s.position.set(0, -0.62, 0); return s; };
   armL.add(hand()); armR.add(hand());
-  const hips = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.18, 10, 1), pantsMat); hips.position.y = 0.78;
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.2, 0.6, 10, 1), shirtMat); torso.position.y = 1.12;
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.12, 8, 1), skinMat); neck.position.y = 1.46;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 9), skinMat); head.scale.set(1, 1.08, 1); head.position.y = 1.62;
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.185, 12, 9), hairMat); hair.scale.set(1.05, 0.82, 1.05); hair.position.set(0, 1.71, -0.04);
-  const eye = x => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 5), mat(0x241c18)); s.position.set(x, 1.62, 0.15); return s; };
-  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), skinMat); nose.scale.set(1, 1.3, 1.5); nose.position.set(0, 1.585, 0.16);
-  const ear = x => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), skinMat); s.scale.set(0.5, 1, 1); s.position.set(x, 1.62, 0); return s; };
+  const hips = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.16, 0.18, 12, 1), pantsMat); hips.position.y = 0.86;
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.135, 0.6, 12, 1), shirtMat); torso.position.y = 1.18;
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.07, 0.12, 10, 1), skinMat); neck.position.y = 1.5;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 14, 10), skinMat); head.scale.set(1, 1.12, 0.95); head.position.y = 1.63;
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.162, 14, 10), hairMat); hair.scale.set(1.05, 0.82, 1.05); hair.position.set(0, 1.71, -0.04);
+  const eye = x => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.028, 7, 5), mat(0x241c18)); s.position.set(x, 1.63, 0.13); return s; };
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.034, 8, 6), skinMat); nose.scale.set(0.9, 1.2, 1.4); nose.position.set(0, 1.6, 0.14);
+  const ear = x => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), skinMat); s.scale.set(0.5, 1, 1); s.position.set(x, 1.63, 0); return s; };
   g.add(legL, legR, armL, armR, hips, torso, neck, head, hair, eye(0.07), eye(-0.07), nose, ear(0.17), ear(-0.17));
   const hatHolder = new THREE.Group(), glassHolder = new THREE.Group(), jacketHolder = new THREE.Group(), beardHolder = new THREE.Group();
   g.add(hatHolder, glassHolder, jacketHolder, beardHolder);
