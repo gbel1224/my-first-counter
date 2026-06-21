@@ -701,16 +701,18 @@ const PROPS = [
 ];
 
 // neighborhood storefronts: clothing stores & barbershops (textured shop + striped awning + sign)
-function shopFront(x, z, label, labelColor, bodyColor, awnColor) {
+const SHOPS = [];   // walk-up style shops: { x, z, kind }
+function shopFront(x, z, label, labelColor, bodyColor, awnColor, kind) {
   specialBuilding(x, z, 20, 7, 18, bodyColor, label, labelColor);
   const awn = new THREE.Mesh(new THREE.BoxGeometry(17, 0.5, 3.2), new THREE.MeshLambertMaterial({ color: awnColor }));
   awn.position.set(x, CURB + 3.4, z + 9 + 1.1); awn.rotation.x = -0.28; awn.receiveShadow = true;
   scene.add(awn);
+  SHOPS.push({ x, z: z + 9, kind });   // interact point is at the storefront
 }
-shopFront(bc(0), bc(1), "👕 THREADS", "rgba(190,60,110,.92)", 0xe87fae, 0xcf3f74);          // clothing (suburb)
-shopFront(bc(N - 1), bc(N - 2), "👗 BELLA BOUTIQUE", "rgba(150,40,150,.92)", 0xc78fd9, 0x7d3fc0); // clothing (east)
-shopFront(bc(0), bc(N - 2), "💈 FRESH CUTS", "rgba(30,90,140,.92)", 0x6fb7d9, 0xc23a36);      // barbershop (ghetto)
-shopFront(bc(N - 1), bc(1), "💈 THE FADE SHOP", "rgba(120,30,30,.92)", 0xd98a6b, 0x2b6fb0);   // barbershop (east)
+shopFront(bc(0), bc(1), "👕 THREADS", "rgba(190,60,110,.92)", 0xe87fae, 0xcf3f74, "wardrobe");          // clothing (suburb)
+shopFront(bc(N - 1), bc(N - 2), "👗 BELLA BOUTIQUE", "rgba(150,40,150,.92)", 0xc78fd9, 0x7d3fc0, "wardrobe"); // clothing (east)
+shopFront(bc(0), bc(N - 2), "💈 FRESH CUTS", "rgba(30,90,140,.92)", 0x6fb7d9, 0xc23a36, "barber");      // barbershop (ghetto)
+shopFront(bc(N - 1), bc(1), "💈 THE FADE SHOP", "rgba(120,30,30,.92)", 0xd98a6b, 0x2b6fb0, "barber");   // barbershop (east)
 // gas station: a pump prop + canopy at the roadside; drive near to refuel
 {
   const pump = new THREE.Mesh(mergeGeos([
@@ -880,23 +882,25 @@ function personGeo(p) {
 function articulatedPerson(p) {
   const g = new THREE.Group();
   const mat = c => new THREE.MeshLambertMaterial({ color: c });
-  const limb = (rT, rB, h, c) => { const geo = new THREE.CylinderGeometry(rT, rB, h, 8, 1); geo.translate(0, -h / 2, 0); return new THREE.Mesh(geo, mat(c)); };
-  const legL = limb(0.1, 0.12, 0.66, p.pants); legL.position.set(0.12, 0.7, 0);
-  const legR = limb(0.1, 0.12, 0.66, p.pants); legR.position.set(-0.12, 0.7, 0);
+  // shared materials so the wardrobe/barber can recolour the whole outfit/hair in one call
+  const shirtMat = mat(p.shirt), pantsMat = mat(p.pants), skinMat = mat(p.skin), hairMat = mat(p.hair);
+  const limb = (rT, rB, h, m) => { const geo = new THREE.CylinderGeometry(rT, rB, h, 8, 1); geo.translate(0, -h / 2, 0); return new THREE.Mesh(geo, m); };
+  const legL = limb(0.1, 0.12, 0.66, pantsMat); legL.position.set(0.12, 0.7, 0);
+  const legR = limb(0.1, 0.12, 0.66, pantsMat); legR.position.set(-0.12, 0.7, 0);
   const shoe = () => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 7), mat(0x2a2620)); s.scale.set(1.1, 0.7, 1.6); s.position.set(0, -0.66, 0.03); return s; };
   legL.add(shoe()); legR.add(shoe());
-  const armL = limb(0.07, 0.08, 0.56, p.shirt); armL.position.set(0.3, 1.4, 0);
-  const armR = limb(0.07, 0.08, 0.56, p.shirt); armR.position.set(-0.3, 1.4, 0);
-  const hand = () => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), mat(p.skin)); s.position.set(0, -0.56, 0); return s; };
+  const armL = limb(0.07, 0.08, 0.56, shirtMat); armL.position.set(0.3, 1.4, 0);
+  const armR = limb(0.07, 0.08, 0.56, shirtMat); armR.position.set(-0.3, 1.4, 0);
+  const hand = () => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), skinMat); s.position.set(0, -0.56, 0); return s; };
   armL.add(hand()); armR.add(hand());
-  const hips = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.18, 10, 1), mat(p.pants)); hips.position.y = 0.78;
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.2, 0.6, 10, 1), mat(p.shirt)); torso.position.y = 1.12;
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.12, 8, 1), mat(p.skin)); neck.position.y = 1.46;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 9), mat(p.skin)); head.scale.set(1, 1.08, 1); head.position.y = 1.62;
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.185, 12, 9), mat(p.hair)); hair.scale.set(1.05, 0.82, 1.05); hair.position.set(0, 1.71, -0.04);
+  const hips = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.18, 10, 1), pantsMat); hips.position.y = 0.78;
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.2, 0.6, 10, 1), shirtMat); torso.position.y = 1.12;
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.12, 8, 1), skinMat); neck.position.y = 1.46;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 9), skinMat); head.scale.set(1, 1.08, 1); head.position.y = 1.62;
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.185, 12, 9), hairMat); hair.scale.set(1.05, 0.82, 1.05); hair.position.set(0, 1.71, -0.04);
   const eye = x => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 5), mat(0x241c18)); s.position.set(x, 1.62, 0.15); return s; };
   g.add(legL, legR, armL, armR, hips, torso, neck, head, hair, eye(0.07), eye(-0.07));
-  return { group: g, legL, legR, armL, armR };
+  return { group: g, legL, legR, armL, armR, shirtMat, pantsMat, hairMat, hair };
 }
 const HERO_PAL = { shirt: 0xff7a33, pants: 0xf5f0e6, skin: 0xe8b08a, hair: 0x3a2c20 };
 const NPC_PALS = [
@@ -1121,6 +1125,62 @@ vince.visible = false;
 const hero = articulatedPerson(HERO_PAL);
 hero.group.traverse(o => { if (o.isMesh) o.castShadow = true; });
 scene.add(hero.group);
+
+// ---------- wardrobe (clothing) + barber (haircuts): change the player's look ----------
+const OUTFITS = [
+  { name: "Sunset Tee", shirt: 0xff7a33, pants: 0xf5f0e6 },
+  { name: "Aqua Casual", shirt: 0x39b6c8, pants: 0x33414d },
+  { name: "Rose Hoodie", shirt: 0xe8688f, pants: 0x3a3a44 },
+  { name: "Mint Fresh", shirt: 0x7fd4a0, pants: 0xeef0e8 },
+  { name: "Royal Suit", shirt: 0x2f3b73, pants: 0x222633 },
+  { name: "Cream Linen", shirt: 0xf2e6c8, pants: 0xc9a878 },
+  { name: "Neon Pop", shirt: 0xc6ff3a, pants: 0x2a2a2a },
+  { name: "Lavender", shirt: 0xb79ce0, pants: 0x4a4f59 },
+  { name: "Crimson", shirt: 0xd2402f, pants: 0xe8e4da },
+  { name: "Tropic", shirt: 0xffcf3f, pants: 0x1f8f8f },
+  { name: "Street Black", shirt: 0x23262b, pants: 0x3a3f47 },
+  { name: "Ocean Blue", shirt: 0x2f6fd0, pants: 0xdfe6ee },
+];
+const HAIRCUTS = [
+  { name: "Short Black", color: 0x241c18, style: "short" },
+  { name: "Brown Crop", color: 0x5a3b22, style: "short" },
+  { name: "Blonde", color: 0xe6c26a, style: "short" },
+  { name: "Ginger", color: 0xb5572a, style: "short" },
+  { name: "Silver Fox", color: 0xcfcfcf, style: "short" },
+  { name: "Buzz Cut", color: 0x241c18, style: "buzz" },
+  { name: "Afro", color: 0x1a1410, style: "afro" },
+  { name: "Pompadour", color: 0x2a2018, style: "tall" },
+  { name: "Long Blonde", color: 0xdcb45a, style: "long" },
+  { name: "Long Brown", color: 0x4a3220, style: "long" },
+  { name: "Pink Dye", color: 0xe86fae, style: "short" },
+  { name: "Bald", color: 0x3a2c20, style: "bald" },
+];
+function setHairStyle(style) {
+  const h = hero.hair; h.visible = true;
+  if (style === "buzz") { h.scale.set(1.02, 0.5, 1.02); h.position.set(0, 1.70, -0.02); }
+  else if (style === "afro") { h.scale.set(1.5, 1.35, 1.5); h.position.set(0, 1.74, -0.02); }
+  else if (style === "tall") { h.scale.set(1.0, 1.32, 1.0); h.position.set(0, 1.78, -0.04); }
+  else if (style === "long") { h.scale.set(1.18, 1.08, 1.18); h.position.set(0, 1.66, -0.06); }
+  else if (style === "bald") { h.visible = false; }
+  else { h.scale.set(1.05, 0.82, 1.05); h.position.set(0, 1.71, -0.04); }
+}
+function applyOutfit(idx, quiet) {
+  const o = OUTFITS[idx]; if (!o) return;
+  hero.shirtMat.color.setHex(o.shirt); hero.pantsMat.color.setHex(o.pants);
+  state.outfit = idx;
+  if (!quiet) { toast("👕 " + o.name); AudioSys.play("blip", 0.5); save(); }
+}
+function applyHaircut(idx, quiet) {
+  const hc = HAIRCUTS[idx]; if (!hc) return;
+  hero.hairMat.color.setHex(hc.color); setHairStyle(hc.style);
+  state.haircut = idx;
+  if (!quiet) { toast("💈 " + hc.name); AudioSys.play("blip", 0.5); save(); }
+}
+const nearShop = () => {
+  if (driving) return null;
+  for (const sh of SHOPS) if (dist2(player.x, player.z, sh.x, sh.z) < 30) return sh;
+  return null;
+};
 const player = { x: PLAZA.x, z: Rc(3) - 12, y: CURB, h: Math.PI, walkPhase: 0, speed: 0 };
 let driving = null;   // car object while driving
 
@@ -1291,6 +1351,8 @@ const state = {
   home: false,           // owns the central condo (legacy "home" flag)
   house: false,          // owns the suburban house
   apt: false,            // owns the apartment in the rough quarter
+  outfit: -1,            // chosen wardrobe outfit (index, -1 = default)
+  haircut: -1,           // chosen haircut (index, -1 = default)
   ach: [],               // unlocked achievement ids
   mi: 0,                 // mission index; 8 = story complete
   xp: 0,                 // experience toward the next player level
@@ -1299,7 +1361,7 @@ const state = {
 };
 function save() {
   state.maxMoney = Math.max(state.maxMoney || 0, Math.floor(state.money));
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, outfit: state.outfit, haircut: state.haircut, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
 }
 function load() {
   try {
@@ -1316,6 +1378,7 @@ function load() {
       state.busts = d.busts || 0;
       state.rescues = d.rescues || 0;
       state.home = !!d.home; state.house = !!d.house; state.apt = !!d.apt;
+      state.outfit = d.outfit == null ? -1 : d.outfit; state.haircut = d.haircut == null ? -1 : d.haircut;
       state.ach = d.ach || [];
       state.xp = d.xp || 0;
       state.lvl = d.lvl || 1;
@@ -1367,6 +1430,8 @@ function applyOwnership() {
   for (const c of cars) if (c.personal && state.cars[c.pid] != null) unlockCar(c, state.cars[c.pid]);
   for (const c of cars) if (c.personal) applyMods(c);
   for (const pr of PROPS) if (state[pr.flag]) markPropOwned(pr);
+  if (state.outfit >= 0) applyOutfit(state.outfit, true);
+  if (state.haircut >= 0) applyHaircut(state.haircut, true);
 }
 function unlockCar(c, color) {
   c.locked = false;
@@ -1953,7 +2018,7 @@ addEventListener("keyup", e => keys.delete(e.code));
 const elJoy = dom("joy"), elKnob = dom("knob");
 let joyId = null, joyOx = 0, joyOy = 0, joyX = 0, joyY = 0;
 addEventListener("pointerdown", e => {
-  if (state.phase !== "play" || dlgLines || garageOpen || statsOpen || tutOpen) return;
+  if (state.phase !== "play" || dlgLines || garageOpen || statsOpen || tutOpen || styleOpen) return;
   if (e.target.closest && (e.target.closest(".btn") || e.target.closest("#dialogue") || e.target.closest("#garage") || e.target.closest("#stats"))) return;
   if (e.clientX > innerWidth * 0.55 || joyId !== null) return;
   joyId = e.pointerId; joyOx = e.clientX; joyOy = e.clientY;
@@ -2187,6 +2252,7 @@ function updateHUD() {
       if (act) b = act.mode === "buy" ? STR.btnBuy(STR.biz[act.b.id].name, act.cost)
                                       : STR.btnUpgrade(act.lvl, act.cost);
       else if (nearProp()) { const pr = nearProp(); b = state[pr.flag] ? STR.btnRest : STR.btnBuyProp(pr.label, pr.cost); }
+      else if (nearShop()) { b = nearShop().kind === "wardrobe" ? "👕 TRY ON" : "💈 HAIRCUT"; }
       else {
         const pc = nearestPersonalCar();
         if (pc) b = pc.locked ? STR.btnBuyCar(STR.pcars[pc.pid].name, pc.price) : STR.btnRepaint;
@@ -2197,10 +2263,10 @@ function updateHUD() {
   if (b !== lastBtnB) { btnB.style.display = b ? "block" : "none"; btnB.textContent = b; lastBtnB = b; }
 
   // brake/boost buttons + speedometer: only while driving · punch: only on foot
-  const drive = driving && !dlgLines && !garageOpen && !statsOpen;
+  const drive = driving && !dlgLines && !garageOpen && !statsOpen && !styleOpen;
   brakeBtn.style.display = drive ? "block" : "none";
   boostBtn.style.display = drive ? "block" : "none";
-  punchBtn.style.display = (!driving && !dlgLines && !garageOpen && !statsOpen) ? "block" : "none";
+  punchBtn.style.display = (!driving && !dlgLines && !garageOpen && !statsOpen && !styleOpen) ? "block" : "none";
   if (drive) { elSpeedo.style.display = "block"; drawSpeedo(driving.speed, boostMeter, fuel); }
   else if (elSpeedo.style.display !== "none") elSpeedo.style.display = "none";
 
@@ -2493,6 +2559,32 @@ function openStats() { statsOpen = true; renderStats(); elStats.style.display = 
 function closeStats() { statsOpen = false; elStats.style.display = "none"; }
 dom("statsbtn").addEventListener("click", () => { if (state.phase === "play" && !dlgLines) openStats(); });
 dom("stclose").addEventListener("click", closeStats);
+
+// ---------- style shop UI (wardrobe / barber): try looks on, the player changes live ----------
+let styleOpen = false, styleKind = null;
+const elStyle = dom("style");
+function renderStyle() {
+  const grid = dom("sygrid"); grid.innerHTML = "";
+  const wardrobe = styleKind === "wardrobe";
+  dom("sytitle").textContent = wardrobe ? "👕 WARDROBE — pick an outfit" : "💈 BARBER — pick a cut";
+  const list = wardrobe ? OUTFITS : HAIRCUTS;
+  const cur = wardrobe ? state.outfit : state.haircut;
+  const dot = c => { const d = document.createElement("div"); d.className = "sydot"; d.style.background = "#" + (c >>> 0).toString(16).slice(-6).padStart(6, "0"); return d; };
+  list.forEach((it, idx) => {
+    const cell = document.createElement("div");
+    cell.className = "syopt" + (idx === cur ? " sel" : "");
+    const sw = document.createElement("div"); sw.className = "sysw";
+    if (wardrobe) { sw.appendChild(dot(it.shirt)); sw.appendChild(dot(it.pants)); } else sw.appendChild(dot(it.color));
+    const nm = document.createElement("div"); nm.className = "syname"; nm.textContent = it.name;
+    cell.appendChild(sw); cell.appendChild(nm);
+    cell.addEventListener("click", () => { if (wardrobe) applyOutfit(idx); else applyHaircut(idx); renderStyle(); });
+    grid.appendChild(cell);
+  });
+}
+function openStyleShop(kind) { styleKind = kind; styleOpen = true; renderStyle(); elStyle.style.display = "flex"; }
+function closeStyleShop() { styleOpen = false; styleKind = null; elStyle.style.display = "none"; }
+dom("syx").addEventListener("click", closeStyleShop);
+dom("sydone").addEventListener("click", closeStyleShop);
 dom("stx").addEventListener("click", closeStats);
 dom("stclose").textContent = STR.statsClose;
 {
@@ -2520,7 +2612,7 @@ setMute((() => { try { return localStorage.getItem(MUTE_KEY) === "1"; } catch (e
 // photo mode: hide all HUD for a clean shot; you can still drive/walk to frame it
 let photoMode = false;
 function setPhoto(on) { photoMode = on; if (document.body.classList) document.body.classList.toggle("photo", on); }
-dom("photobtn").addEventListener("click", () => { if (state.phase === "play" && !dlgLines && !garageOpen && !statsOpen) setPhoto(true); });
+dom("photobtn").addEventListener("click", () => { if (state.phase === "play" && !dlgLines && !garageOpen && !statsOpen && !styleOpen) setPhoto(true); });
 dom("photoclose").addEventListener("click", () => setPhoto(false));
 
 // ---------- actions ----------
@@ -2568,6 +2660,7 @@ function doActionB() {
     return;
   }
   { const pr = nearProp(); if (pr) { if (state[pr.flag]) restAtHome(); else buyProp(pr); return; } }
+  { const sh = nearShop(); if (sh) { openStyleShop(sh.kind); return; } }
   const pc = nearestPersonalCar();
   if (pc) openShowroom(pc);
 }
@@ -2579,11 +2672,11 @@ const SPRINT_RAMP = 2.5;   // seconds of holding sprint to reach top running spe
 
 function update(dt) {
   simTime += dt;
-  const inp = (dlgLines || garageOpen || statsOpen || tutOpen) ? { mx: 0, mz: 0, mag: 0 } : readInput();
+  const inp = (dlgLines || garageOpen || statsOpen || tutOpen || styleOpen) ? { mx: 0, mz: 0, mag: 0 } : readInput();
   const a = actA, b = actB, pn = actP; actA = false; actB = false; actP = false;
-  if (a && !dlgLines && !garageOpen && !statsOpen && !tutOpen) doActionA();
-  if (b && !dlgLines && !garageOpen && !statsOpen && !tutOpen) doActionB();
-  if (pn && !dlgLines && !garageOpen && !statsOpen && !tutOpen) doPunch();
+  if (a && !dlgLines && !garageOpen && !statsOpen && !tutOpen && !styleOpen) doActionA();
+  if (b && !dlgLines && !garageOpen && !statsOpen && !tutOpen && !styleOpen) doActionB();
+  if (pn && !dlgLines && !garageOpen && !statsOpen && !tutOpen && !styleOpen) doPunch();
   // health regen + combat cooldowns
   if (hitCD > 0) hitCD -= dt;
   if (punchCD > 0) punchCD -= dt;
