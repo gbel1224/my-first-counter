@@ -452,7 +452,8 @@ const PLAZA_KEY = _pad("2,2");   // recentred plaza block key
 const isResid = (i, j) => i <= 2 && j <= 2;
 const isGhetto = (i, j) => i <= 2 && j >= N - 3;
 const RESERVED = new Set(["1,1", "1," + (N - 2),     // buyable House & Apartment
-  "0,1", "0," + (N - 2), (N - 1) + ",1", (N - 1) + "," + (N - 2)]);   // clothing stores & barbershops
+  "0,1", "0," + (N - 2), (N - 1) + ",1", (N - 1) + "," + (N - 2),   // clothing stores & barbershops
+  (N / 2) + "," + (N / 2)]);   // Ammo Shop (central)
 const SPECIAL = {}; for (const [k, v] of Object.entries({ "1,3": "wash", "4,2": "burger", "5,0": "club", "0,4": "depot", "1,2": "pizza", "2,4": "taxi", "5,5": "marina", "3,2": "garage", "2,3": "home", "3,4": "hospital" })) SPECIAL[_pad(k)] = v;
 const PLAZA = { x: Bc(2), z: Bc(2) };
 const GARAGE = { x: Bc(3), z: Bc(2) };
@@ -716,6 +717,7 @@ shopFront(bc(0), bc(1), "👕 THREADS", "rgba(190,60,110,.92)", 0xe87fae, 0xcf3f
 shopFront(bc(N - 1), bc(N - 2), "👗 BELLA BOUTIQUE", "rgba(150,40,150,.92)", 0xc78fd9, 0x7d3fc0, "wardrobe"); // clothing (east)
 shopFront(bc(0), bc(N - 2), "💈 FRESH CUTS", "rgba(30,90,140,.92)", 0x6fb7d9, 0xc23a36, "barber");      // barbershop (ghetto)
 shopFront(bc(N - 1), bc(1), "💈 THE FADE SHOP", "rgba(120,30,30,.92)", 0xd98a6b, 0x2b6fb0, "barber");   // barbershop (east)
+shopFront(bc(N / 2), bc(N / 2), "🔫 AMMO SHOP", "rgba(120,30,30,.95)", 0x7a3a30, 0x2a1a16, "ammo");   // weapons (central)
 // gas station: a pump prop + canopy at the roadside; drive near to refuel
 {
   const pump = new THREE.Mesh(mergeGeos([
@@ -1512,6 +1514,7 @@ const state = {
   outfit: -1,            // chosen wardrobe outfit (index, -1 = default)
   haircut: -1,           // chosen haircut (index, -1 = default)
   jacket: 0, hat: 0, glasses: 0, beard: 0,   // accessory indices (0 = None)
+  weapon: null, ammo: {},   // equipped weapon index + owned ammo per weapon id
   ach: [],               // unlocked achievement ids
   mi: 0,                 // mission index; 8 = story complete
   xp: 0,                 // experience toward the next player level
@@ -1520,7 +1523,7 @@ const state = {
 };
 function save() {
   state.maxMoney = Math.max(state.maxMoney || 0, Math.floor(state.money));
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, outfit: state.outfit, haircut: state.haircut, jacket: state.jacket, hat: state.hat, glasses: state.glasses, beard: state.beard, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, outfit: state.outfit, haircut: state.haircut, jacket: state.jacket, hat: state.hat, glasses: state.glasses, beard: state.beard, weapon: state.weapon, ammo: state.ammo, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
 }
 function load() {
   try {
@@ -1539,6 +1542,7 @@ function load() {
       state.home = !!d.home; state.house = !!d.house; state.apt = !!d.apt;
       state.outfit = d.outfit == null ? -1 : d.outfit; state.haircut = d.haircut == null ? -1 : d.haircut;
       state.jacket = d.jacket || 0; state.hat = d.hat || 0; state.glasses = d.glasses || 0; state.beard = d.beard || 0;
+      state.weapon = (d.weapon == null ? null : d.weapon); state.ammo = d.ammo || {};
       state.ach = d.ach || [];
       state.xp = d.xp || 0;
       state.lvl = d.lvl || 1;
@@ -2142,7 +2146,9 @@ function updatePolice(dt) {
 // ---------- melee: punch to fight back / take down crooks on foot ----------
 let actP = false, punchCD = 0, punchT = 0;
 function doPunch() {
-  if (punchCD > 0 || driving) return;
+  if (driving) return;
+  if (armed()) { doShoot(); return; }              // fire if a weapon is equipped, else throw a punch
+  if (punchCD > 0) return;
   punchCD = 0.45; punchT = 0.26; AudioSys.play("door", 0.4); buzz(15);
   const fx = Math.sin(player.h), fz = Math.cos(player.h);
   const hx = player.x + fx * 1.4, hz = player.z + fz * 1.4;
@@ -2160,6 +2166,54 @@ function doPunch() {
     best.x += Math.sin(best.h) * 0.7; best.z += Math.cos(best.h) * 0.7;
     burst(best.x, 1.0, best.z, 6, 0.8, 1.2, 0.4, 0.95, 0.85, 0.6); addShake(0.12);
   }
+}
+
+// ---------- weapons (bought at the Ammo Shop; fire with the on-foot action button) ----------
+const WEAPONS = [
+  { id: "pistol", name: "🔫 Pistol", price: 800, rate: 0.34, range: 32, ammo: 60, spread: 0.02, pellets: 1 },
+  { id: "smg", name: "💥 SMG", price: 3500, rate: 0.1, range: 28, ammo: 200, spread: 0.06, pellets: 1 },
+  { id: "shotgun", name: "🟥 Shotgun", price: 6000, rate: 0.72, range: 19, ammo: 48, spread: 0.16, pellets: 6 },
+  { id: "rifle", name: "🎯 Rifle", price: 12000, rate: 0.5, range: 48, ammo: 80, spread: 0.008, pellets: 1 },
+];
+const armed = () => state.weapon != null && WEAPONS[state.weapon];
+const ammoOf = w => state.ammo[w.id] || 0;
+function buyWeapon(idx) {
+  const w = WEAPONS[idx];
+  const first = state.ammo[w.id] === undefined;
+  const cost = first ? w.price : Math.round(w.price * 0.25);   // first buy = the gun, later = an ammo refill
+  if (state.money < cost) { toast(STR.needMore(cost - Math.floor(state.money))); return; }
+  state.money -= cost;
+  state.ammo[w.id] = (state.ammo[w.id] || 0) + w.ammo;
+  state.weapon = idx;
+  toast(w.name + (first ? " bought!" : " · +" + w.ammo + " ammo"));
+  AudioSys.play("cash"); buzz(20); save();
+}
+let shootCD = 0;
+function doShoot() {
+  const w = armed(); if (!w) return;
+  if (shootCD > 0) return;
+  if (ammoOf(w) <= 0) { toast("Out of ammo — restock at the 🔫 Ammo Shop"); AudioSys.play("blip", 0.4); return; }
+  shootCD = w.rate; state.ammo[w.id] = ammoOf(w) - 1;
+  AudioSys.play("blip", 0.8); buzz(18); addShake(0.15); punchT = 0.18;
+  const fx = Math.sin(player.h), fz = Math.cos(player.h);
+  burst(player.x + fx * 0.9, 1.42, player.z + fz * 0.9, 5, 0.5, 0.5, 0.16, 1, 0.86, 0.4);   // muzzle flash
+  for (let s = 0; s < (w.pellets || 1); s++) {
+    const sp = (Math.random() - 0.5) * w.spread * 2;
+    const ax = Math.sin(player.h + sp), az = Math.cos(player.h + sp);
+    let best = null, bestT = w.range;
+    for (const n of npcs) {
+      const dx = n.x - player.x, dz = n.z - player.z, t = dx * ax + dz * az;
+      if (t < 1 || t > bestT) continue;
+      if (Math.abs(dx * az - dz * ax) > 1.5) continue;
+      bestT = t; best = n;
+    }
+    if (best) {
+      best.flee = 2.4; best.h = Math.atan2(best.x - player.x, best.z - player.z);
+      best.x += ax * 1.3; best.z += az * 1.3;
+      burst(best.x, 1.0, best.z, 9, 1.0, 1.5, 0.5, 0.95, 0.3, 0.25);
+    }
+  }
+  registerCrime();   // firing in public draws police heat
 }
 
 // ---------- input ----------
@@ -2442,6 +2496,7 @@ function updateHUD() {
   brakeBtn.style.display = drive ? "block" : "none";
   boostBtn.style.display = drive ? "block" : "none";
   punchBtn.style.display = (!driving && !dlgLines && !garageOpen && !statsOpen && !styleOpen) ? "block" : "none";
+  { const w = armed(); punchBtn.textContent = w ? "🔫 " + ammoOf(w) : "PUNCH"; }
   const showDoor = (!dlgLines && !garageOpen && !statsOpen && !styleOpen) && (inside || !!nearEnterable());
   doorBtn.style.display = showDoor ? "block" : "none";
   if (showDoor) doorBtn.textContent = inside ? "🚪 EXIT" : "🚪 ENTER";
@@ -2742,6 +2797,7 @@ dom("stclose").addEventListener("click", closeStats);
 let styleOpen = false, styleKind = null, styleTab = "outfit";
 const elStyle = dom("style");
 function styleCfg() {
+  if (styleKind === "ammo") return { list: WEAPONS, cur: (state.weapon == null ? -1 : state.weapon), apply: buyWeapon, dots: () => [], ammo: true };
   if (styleKind === "barber") {
     if (styleTab === "beard") return { list: BEARDS, cur: state.beard, apply: applyBeard, dots: it => it.none ? [] : [it.color] };
     return { list: HAIRCUTS, cur: state.haircut, apply: applyHaircut, dots: it => [it.color] };
@@ -2752,15 +2808,19 @@ function styleCfg() {
   return { list: OUTFITS, cur: state.outfit, apply: applyOutfit, dots: it => [it.shirt, it.pants] };
 }
 function renderStyle() {
-  dom("sytitle").textContent = styleKind === "barber" ? "💈 BARBER — pick a cut" : "👕 WARDROBE";
+  dom("sytitle").textContent = styleKind === "ammo" ? "🔫 AMMO SHOP — buy weapons & ammo"
+    : styleKind === "barber" ? "💈 BARBER — pick a cut" : "👕 WARDROBE";
   const tabs = dom("sytabs"); tabs.innerHTML = "";
-  const tabSet = styleKind === "barber" ? [["hair", "Hair"], ["beard", "Beard"]]
-    : [["outfit", "Outfit"], ["jacket", "Jacket"], ["hat", "Hat"], ["glasses", "Glasses"]];
-  tabs.style.display = "flex";
-  tabSet.forEach(([k, lbl]) => {
-    const t = document.createElement("button"); t.className = "sytab" + (styleTab === k ? " sel" : ""); t.textContent = lbl;
-    t.addEventListener("click", () => { styleTab = k; renderStyle(); }); tabs.appendChild(t);
-  });
+  if (styleKind === "ammo") tabs.style.display = "none";
+  else {
+    const tabSet = styleKind === "barber" ? [["hair", "Hair"], ["beard", "Beard"]]
+      : [["outfit", "Outfit"], ["jacket", "Jacket"], ["hat", "Hat"], ["glasses", "Glasses"]];
+    tabs.style.display = "flex";
+    tabSet.forEach(([k, lbl]) => {
+      const t = document.createElement("button"); t.className = "sytab" + (styleTab === k ? " sel" : ""); t.textContent = lbl;
+      t.addEventListener("click", () => { styleTab = k; renderStyle(); }); tabs.appendChild(t);
+    });
+  }
   const grid = dom("sygrid"); grid.innerHTML = "";
   const cfg = styleCfg();
   cfg.list.forEach((it, idx) => {
@@ -2770,7 +2830,8 @@ function renderStyle() {
     const dots = cfg.dots(it);
     if (!dots.length) { const d = document.createElement("div"); d.className = "sydot"; d.style.background = "repeating-linear-gradient(45deg,#555,#555 4px,#777 4px,#777 8px)"; sw.appendChild(d); }
     else dots.forEach(c => { const d = document.createElement("div"); d.className = "sydot"; d.style.background = "#" + (c >>> 0).toString(16).slice(-6).padStart(6, "0"); sw.appendChild(d); });
-    const nm = document.createElement("div"); nm.className = "syname"; nm.textContent = it.name;
+    const nm = document.createElement("div"); nm.className = "syname";
+    nm.textContent = cfg.ammo ? it.name + "  $" + it.price + (state.ammo[it.id] === undefined ? "" : " · ammo " + (state.ammo[it.id] || 0)) : it.name;
     cell.appendChild(sw); cell.appendChild(nm);
     cell.addEventListener("click", () => { cfg.apply(idx); renderStyle(); });
     grid.appendChild(cell);
@@ -2875,6 +2936,7 @@ function update(dt) {
   // health regen + combat cooldowns
   if (hitCD > 0) hitCD -= dt;
   if (punchCD > 0) punchCD -= dt;
+  if (shootCD > 0) shootCD -= dt;
   if (punchT > 0) punchT -= dt;
   if (hurtCD > 0) hurtCD -= dt; else if (health < 100) health = Math.min(100, health + 9 * dt);
   // refuel near the gas station; low-fuel warning while driving
