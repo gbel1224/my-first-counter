@@ -438,7 +438,8 @@ const PLAZA_KEY = _pad("2,2");   // recentred plaza block key
 // outskirt districts: a suburban neighbourhood (NW corner) and a run-down quarter (NE corner)
 const isResid = (i, j) => i <= 2 && j <= 2;
 const isGhetto = (i, j) => i <= 2 && j >= N - 3;
-const RESERVED = new Set(["1,1", "1," + (N - 2)]);   // lots held for the buyable House & Apartment
+const RESERVED = new Set(["1,1", "1," + (N - 2),     // buyable House & Apartment
+  "0,1", "0," + (N - 2), (N - 1) + ",1", (N - 1) + "," + (N - 2)]);   // clothing stores & barbershops
 const SPECIAL = {}; for (const [k, v] of Object.entries({ "1,3": "wash", "4,2": "burger", "5,0": "club", "0,4": "depot", "1,2": "pizza", "2,4": "taxi", "5,5": "marina", "3,2": "garage", "2,3": "home", "3,4": "hospital" })) SPECIAL[_pad(k)] = v;
 const PLAZA = { x: Bc(2), z: Bc(2) };
 const GARAGE = { x: Bc(3), z: Bc(2) };
@@ -698,6 +699,18 @@ const PROPS = [
   { id: "condo", flag: "home", label: "🏢 Condo", cost: HOME_COST, x: HOME.x, z: HOME.z, sign: homeSign, ownLabel: STR.homeOwned },
   { id: "house", flag: "house", label: "🏡 House", cost: 12000, x: HOUSE_POS.x, z: HOUSE_POS.z, sign: houseSign },
 ];
+
+// neighborhood storefronts: clothing stores & barbershops (textured shop + striped awning + sign)
+function shopFront(x, z, label, labelColor, bodyColor, awnColor) {
+  specialBuilding(x, z, 20, 7, 18, bodyColor, label, labelColor);
+  const awn = new THREE.Mesh(new THREE.BoxGeometry(17, 0.5, 3.2), new THREE.MeshLambertMaterial({ color: awnColor }));
+  awn.position.set(x, CURB + 3.4, z + 9 + 1.1); awn.rotation.x = -0.28; awn.receiveShadow = true;
+  scene.add(awn);
+}
+shopFront(bc(0), bc(1), "👕 THREADS", "rgba(190,60,110,.92)", 0xe87fae, 0xcf3f74);          // clothing (suburb)
+shopFront(bc(N - 1), bc(N - 2), "👗 BELLA BOUTIQUE", "rgba(150,40,150,.92)", 0xc78fd9, 0x7d3fc0); // clothing (east)
+shopFront(bc(0), bc(N - 2), "💈 FRESH CUTS", "rgba(30,90,140,.92)", 0x6fb7d9, 0xc23a36);      // barbershop (ghetto)
+shopFront(bc(N - 1), bc(1), "💈 THE FADE SHOP", "rgba(120,30,30,.92)", 0xd98a6b, 0x2b6fb0);   // barbershop (east)
 // gas station: a pump prop + canopy at the roadside; drive near to refuel
 {
   const pump = new THREE.Mesh(mergeGeos([
