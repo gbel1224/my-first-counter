@@ -309,6 +309,29 @@ const texTowerWin = canvasTex(128, (ctx, s) => {
     ctx.fillRect(cx * cell + p, cy * cell + p, cell - 2 * p, cell - 2 * p);
   }
 }, 2, 7);
+// run-down apartment facade: grimy stucco, some boarded windows, cracks + graffiti
+const texGhetto = canvasTex(128, (ctx, s) => {
+  ctx.fillStyle = "#9a8e7c"; ctx.fillRect(0, 0, s, s);
+  for (let i = 0; i < 220; i++) { ctx.fillStyle = ["#8a7e6c", "#857a68", "#a89c88", "#6f6555"][i & 3]; const r = 1 + Math.random() * 3; ctx.fillRect(Math.random() * s, Math.random() * s, r, r); }
+  const R = 4, cell = s / R, p = cell * 0.2;
+  for (let cy = 0; cy < R; cy++) for (let cx = 0; cx < R; cx++) {
+    const wx = cx * cell + p, wy = cy * cell + p, ww = cell - 2 * p, wh = cell - 2 * p;
+    if (Math.random() < 0.35) { ctx.fillStyle = "#6b5236"; ctx.fillRect(wx, wy, ww, wh); ctx.strokeStyle = "#4a3724"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(wx, wy); ctx.lineTo(wx + ww, wy + wh); ctx.moveTo(wx + ww, wy); ctx.lineTo(wx, wy + wh); ctx.stroke(); }
+    else { ctx.fillStyle = Math.random() < 0.5 ? "#3a4048" : "#4a4438"; ctx.fillRect(wx, wy, ww, wh); }
+  }
+  ctx.strokeStyle = "rgba(40,32,24,.5)"; ctx.lineWidth = 1.5;
+  for (let i = 0; i < 5; i++) { ctx.beginPath(); let x = Math.random() * s, y = Math.random() * s; ctx.moveTo(x, y); for (let k = 0; k < 4; k++) { x += (Math.random() - 0.5) * 26; y += 6 + Math.random() * 14; ctx.lineTo(x, y); } ctx.stroke(); }
+  for (let i = 0; i < 3; i++) { ctx.fillStyle = ["#c0476b", "#3fa0d0", "#e0b020", "#5fb060"][(Math.random() * 4) | 0]; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.arc(Math.random() * s, Math.random() * s, 4 + Math.random() * 5, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
+}, 2, 3);
+const texGhettoWin = canvasTex(128, (ctx, s) => {
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, s, s);
+  const R = 4, cell = s / R, p = cell * 0.2;
+  for (let cy = 0; cy < R; cy++) for (let cx = 0; cx < R; cx++) {
+    if (Math.random() < 0.78) continue;                  // few lights on in the rough part of town
+    ctx.fillStyle = Math.random() < 0.5 ? "#ffd98a" : "#d9c089";
+    ctx.fillRect(cx * cell + p, cy * cell + p, cell - 2 * p, cell - 2 * p);
+  }
+}, 2, 3);
 
 // ---------- geometry helpers (merged vertex-colored boxes => 1 draw call per model) ----------
 const _col = new THREE.Color();
@@ -412,6 +435,9 @@ scene.add(ground);
 const _pad = k => { const [a, b] = k.split(",").map(Number); return (a + O) + "," + (b + O); };
 const PARKS = new Set(["2,2", "1,1", "4,4"].map(_pad));
 const PLAZA_KEY = _pad("2,2");   // recentred plaza block key
+// outskirt districts: a suburban neighbourhood (NW corner) and a run-down quarter (NE corner)
+const isResid = (i, j) => i <= 2 && j <= 2;
+const isGhetto = (i, j) => i <= 2 && j >= N - 3;
 const SPECIAL = {}; for (const [k, v] of Object.entries({ "1,3": "wash", "4,2": "burger", "5,0": "club", "0,4": "depot", "1,2": "pizza", "2,4": "taxi", "5,5": "marina", "3,2": "garage", "2,3": "home", "3,4": "hospital" })) SPECIAL[_pad(k)] = v;
 const PLAZA = { x: Bc(2), z: Bc(2) };
 const GARAGE = { x: Bc(3), z: Bc(2) };
@@ -424,7 +450,7 @@ const GAS = { x: Rc(2) + 7, z: Rc(3) - 7 };   // roadside fuel station (west-cen
   const slab = new THREE.BoxGeometry(BLOCK, CURB * 2, BLOCK);
   const paved = [], grass = [];
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++)
-    (PARKS.has(i + "," + j) && i + "," + j !== PLAZA_KEY ? grass : paved).push([bc(i), bc(j)]);
+    ((isResid(i, j) || (PARKS.has(i + "," + j) && i + "," + j !== PLAZA_KEY)) ? grass : paved).push([bc(i), bc(j)]);
   const m = new THREE.Matrix4();
   const mk = (list, tex) => {
     const im = new THREE.InstancedMesh(slab, new THREE.MeshLambertMaterial({ map: tex }), list.length);
@@ -438,6 +464,9 @@ const GAS = { x: Rc(2) + 7, z: Rc(3) - 7 };   // roadside fuel station (west-cen
 // buildings: one InstancedMesh, facade texture sides / plain roof, pastel instance tints
 const PASTELS = [0xf2d4c2, 0xd9e4f0, 0xf5e8c8, 0xd8ecd4, 0xecd3e2, 0xe7ded0, 0xc9dce6, 0xf0dcc0];
 const TOWER_TINTS = [0xbcd2e0, 0xc8d8e8, 0xd0e0e0, 0xe2e6ea, 0xb8c8d8, 0xd8d0c4, 0xc4d4dc];   // cool glass
+const HOUSE_TINTS = [0xf3e2c4, 0xe8d6be, 0xd9e6dc, 0xf0e0d2, 0xe6dcc8, 0xdce6ea, 0xf2ddc6];   // pastel stucco
+const HOUSE_ROOFS = [0xb5532e, 0x9a6b4a, 0x7a7e84, 0xa84e3a, 0x6f5a45, 0x8a6340];
+const GHETTO_TINTS = [0x9a8e7c, 0x8c8474, 0xa2937c, 0x86806e, 0x948a72, 0x7e7866];   // grimy
 let buildingsIM, buildingMat = null;
 {
   const unit = new THREE.BoxGeometry(1, 1, 1);
@@ -446,20 +475,29 @@ let buildingsIM, buildingMat = null;
   buildingMat = matSide;
   const matRoof = new THREE.MeshLambertMaterial({ color: 0xb8ab9a });
   const mats = [matSide, matSide, matRoof, matRoof, matSide, matSide];
-  const placed = [], towers = [];
+  const placed = [], towers = [], houses = [], ghetto = [];
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
     const key = i + "," + j;
     if (PARKS.has(key) || SPECIAL[key]) continue;
     const cen = (N - 1) / 2;
     const dc = Math.max(Math.abs(i - cen), Math.abs(j - cen));  // 0 = dead centre … grows to the city edge
     const downtown = dc <= 1.5;                                 // core 4x4
+    const resid = isResid(i, j), slum = isGhetto(i, j);
     const skip = downtown ? 0.08 : 0.18;                       // fill blocks more densely than before
     const towerChance = downtown ? 0.92 : 0.55;                // skyscrapers almost everywhere downtown
     for (const qx of [0, 1]) for (const qz of [0, 1]) {
       if (rng() < skip) continue;
       const x = blockMin(i) + 8 + 13 + qx * 28 + rr(-2, 2);
       const z = blockMin(j) + 8 + 13 + qz * 28 + rr(-2, 2);
-      if (rng() < towerChance) {                               // glass skyscraper — taller in the core
+      if (resid) {                                             // suburban house with a pitched roof
+        const w = rr(9, 13), d = rr(9, 13), h = rr(5, 7);
+        houses.push({ x, z, w, d, h, tint: pick(HOUSE_TINTS), roof: pick(HOUSE_ROOFS) });
+        addCollider(x, z, w / 2, d / 2);
+      } else if (slum) {                                       // run-down low-rise apartment
+        const w = rr(16, 22), d = rr(16, 22), h = rr(8, 18);
+        ghetto.push({ x, z, w, d, h, tint: pick(GHETTO_TINTS) });
+        addCollider(x, z, w / 2, d / 2);
+      } else if (rng() < towerChance) {                        // glass skyscraper — taller in the core
         const w = rr(15, 22), d = rr(15, 22), h = downtown ? rr(50, 104) : rr(30, 64);
         towers.push({ x, z, w, d, h, tint: pick(TOWER_TINTS) });
         addCollider(x, z, w / 2, d / 2);
@@ -492,6 +530,35 @@ let buildingsIM, buildingMat = null;
     towersIM.setColorAt(idx, _col.set(b.tint));
   });
   scene.add(towersIM);
+
+  // suburban houses: tinted stucco bodies + pyramid roofs
+  if (houses.length) {
+    const houseBodyIM = new THREE.InstancedMesh(unit, new THREE.MeshLambertMaterial({ color: 0xffffff }), houses.length);
+    houseBodyIM.receiveShadow = true;
+    const roofUnit = new THREE.ConeGeometry(0.82, 1, 4); roofUnit.rotateY(Math.PI / 4); roofUnit.translate(0, 0.5, 0);
+    const roofIM = new THREE.InstancedMesh(roofUnit, new THREE.MeshLambertMaterial({ color: 0xffffff }), houses.length);
+    roofIM.receiveShadow = true;
+    houses.forEach((b, idx) => {
+      p.set(b.x, CURB, b.z); s.set(b.w, b.h, b.d); q.identity(); m.compose(p, q, s);
+      houseBodyIM.setMatrixAt(idx, m); houseBodyIM.setColorAt(idx, _col.set(b.tint));
+      p.set(b.x, CURB + b.h, b.z); s.set(b.w * 0.92, rr(2.6, 3.8), b.d * 0.92); m.compose(p, q, s);
+      roofIM.setMatrixAt(idx, m); roofIM.setColorAt(idx, _col.set(b.roof));
+    });
+    scene.add(houseBodyIM, roofIM);
+  }
+
+  // run-down apartments: grimy facade with boarded windows
+  if (ghetto.length) {
+    const ghettoSide = new THREE.MeshLambertMaterial({ map: texGhetto, emissive: 0xffffff, emissiveMap: texGhettoWin, emissiveIntensity: 0 });
+    specialMats.push(ghettoSide);
+    const ghettoIM = new THREE.InstancedMesh(unit, [ghettoSide, ghettoSide, matRoof, matRoof, ghettoSide, ghettoSide], ghetto.length);
+    ghettoIM.receiveShadow = true;
+    ghetto.forEach((b, idx) => {
+      p.set(b.x, CURB, b.z); s.set(b.w, b.h, b.d); q.identity(); m.compose(p, q, s);
+      ghettoIM.setMatrixAt(idx, m); ghettoIM.setColorAt(idx, _col.set(b.tint));
+    });
+    scene.add(ghettoIM);
+  }
 
   // rooftop clutter: water tanks + antenna masts on every tower, red aircraft beacons on the tallest
   const tankGeo = new THREE.CylinderGeometry(1.1, 1.1, 1.7, 8); tankGeo.translate(0, 0.85, 0);
