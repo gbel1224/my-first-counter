@@ -17,7 +17,7 @@ const rr = (a, b) => a + rng() * (b - a);
 const pick = arr => arr[(rng() * arr.length) | 0];
 
 // ---------- city constants ----------
-const N = 10, CELL = 88, ROAD = 18, BLOCK = 70;   // 10x10 city (was 6) — bigger, Miami-scale
+const N = 16, CELL = 88, ROAD = 18, BLOCK = 70;   // 16x16 city — much bigger (offset keeps the original districts centred)
 const HALF = (N * CELL + ROAD) / 2;
 const roadC = k => -HALF + ROAD / 2 + k * CELL;
 const blockMin = i => roadC(i) + ROAD / 2;
@@ -664,6 +664,7 @@ const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigg
 
 // special buildings + labels — facade + lit-window textures (tinted by the accent colour),
 // so businesses read as real buildings instead of flat colour blocks.
+const ENTERABLES = [];   // buildings you can walk into: { x, z, name, r (squared radius) }
 function specialBuilding(x, z, w, h, d, color, labelText, labelColor) {
   const matSide = new THREE.MeshLambertMaterial({ map: texFacade, color, emissive: 0xffffff, emissiveMap: texWindows, emissiveIntensity: 0 });
   const matRoof = new THREE.MeshLambertMaterial({ color: _col.set(color).lerp(new THREE.Color(0xb8ab9a), 0.55).getHex() });
@@ -675,6 +676,8 @@ function specialBuilding(x, z, w, h, d, color, labelText, labelColor) {
   const sp = textSprite(labelText, "#fff", labelColor, 16, 4, 0);
   sp.position.set(x, CURB + h + 3, z);
   scene.add(sp);
+  const rad = Math.min(Math.max(w, d) / 2 + 5, 15);
+  ENTERABLES.push({ x, z, name: labelText, r: rad * rad });   // every business/shop/property is enterable
   return sp;
 }
 specialBuilding(Bc(1), Bc(3), 42, 9, 26, 0x6fb7d9, STR.biz.wash.name, "rgba(40,90,130,.9)");
@@ -1038,7 +1041,7 @@ scene.add(rampIM);
 
 // traffic cars on block-ring routes
 const traffic = [];
-for (let t = 0; t < 52; t++) {
+for (let t = 0; t < 70; t++) {
   const i = (rng() * N) | 0, j = (rng() * N) | 0;
   const x0 = roadC(i) + 4, x1 = roadC(i + 1) - 4, z0 = roadC(j) + 4, z1 = roadC(j + 1) - 4;
   const wp = [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
@@ -1064,7 +1067,7 @@ for (let i = 0; i < POLICE_N; i++) {
 
 // pedestrians
 const npcs = [];
-for (let t = 0; t < 74; t++) {
+for (let t = 0; t < 96; t++) {
   const i = (rng() * N) | 0, j = (rng() * N) | 0;
   const mesh = new THREE.Mesh(npcGeos[(rng() * npcGeos.length) | 0], matVC);
   mesh.scale.set(rr(0.92, 1.06), rr(0.9, 1.14), rr(0.92, 1.06));   // varied heights & builds
@@ -1281,6 +1284,59 @@ const nearShop = () => {
 };
 const player = { x: PLAZA.x, z: Rc(3) - 12, y: CURB, h: Math.PI, walkPhase: 0, speed: 0 };
 let driving = null;   // car object while driving
+
+// ---------- enterable building interiors (a single furnished room, staged far from the city) ----------
+const INT = { x: 4000, z: 0 };
+let inside = false, intReturn = { x: 0, z: 0, h: 0 };
+const intSign = textSprite("", "#fff", "rgba(20,20,24,.9)", 16, 4, 0);
+const intLight = new THREE.PointLight(0xfff2d6, 0, 48, 1.4); intLight.position.set(INT.x, 4.2, INT.z + 1); scene.add(intLight);
+{
+  const wallMat = new THREE.MeshLambertMaterial({ color: 0xe7ddca });
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 15), new THREE.MeshLambertMaterial({ color: 0x9a7d5a }));
+  floor.rotation.x = -Math.PI / 2; floor.position.set(INT.x, 0.02, INT.z + 0.5); floor.receiveShadow = true; scene.add(floor);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(20, 15), new THREE.MeshLambertMaterial({ color: 0xf0ead8 }));
+  ceil.rotation.x = Math.PI / 2; ceil.position.set(INT.x, 4.4, INT.z + 0.5); scene.add(ceil);
+  const wall = (w, h, d, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat); m.position.set(x, y, z); m.receiveShadow = true; scene.add(m); };
+  wall(20, 4.4, 0.4, INT.x, 2.2, INT.z + 8);          // back wall
+  wall(0.4, 4.4, 15.4, INT.x - 10, 2.2, INT.z + 0.5);  // left wall
+  wall(0.4, 4.4, 15.4, INT.x + 10, 2.2, INT.z + 0.5);  // right wall
+  wall(7.2, 4.4, 0.4, INT.x - 6.4, 2.2, INT.z - 7);    // front wall (door gap in the middle)
+  wall(7.2, 4.4, 0.4, INT.x + 6.4, 2.2, INT.z - 7);
+  wall(20, 1.0, 0.4, INT.x, 3.9, INT.z - 7);           // lintel above the door
+  const counter = new THREE.Mesh(new THREE.BoxGeometry(8, 1.1, 1.4), new THREE.MeshLambertMaterial({ color: 0x6b4a32 }));
+  counter.position.set(INT.x, 0.55, INT.z + 6); counter.castShadow = counter.receiveShadow = true; scene.add(counter);
+  const shelf = z => { const s = new THREE.Mesh(new THREE.BoxGeometry(0.6, 3, 5), new THREE.MeshLambertMaterial({ color: 0xb9a07e })); s.position.set(INT.x - 9, 1.6, INT.z + z); s.castShadow = true; scene.add(s); };
+  shelf(2.5); shelf(-3);
+  const rug = new THREE.Mesh(new THREE.PlaneGeometry(7, 5), new THREE.MeshLambertMaterial({ color: 0xc25b5b }));
+  rug.rotation.x = -Math.PI / 2; rug.position.set(INT.x, 0.03, INT.z + 0.5); scene.add(rug);
+  const lamp = new THREE.Mesh(new THREE.BoxGeometry(3, 0.18, 1.2), new THREE.MeshBasicMaterial({ color: 0xfff0c8 }));
+  lamp.position.set(INT.x, 4.3, INT.z + 0.5); scene.add(lamp);
+  intSign.position.set(INT.x, 3.45, INT.z + 7.7); scene.add(intSign);
+}
+function setSpriteText(sp, text) {
+  const t = textSprite(text, "#fff", "rgba(20,20,24,.9)", 16, 4, 0);
+  if (sp.material.map) sp.material.map.dispose();
+  sp.material.map = t.material.map; t.material.dispose();
+}
+function snapCam() { const d = inside ? 4.5 : 9, hh = inside ? 6 : 4.4; camYaw = player.h; camPos.set(player.x - Math.sin(player.h) * d, player.y + hh, player.z - Math.cos(player.h) * d); }
+function enterBuilding(e) {
+  if (driving || inside) return;
+  intReturn = { x: player.x, z: player.z, h: player.h };
+  inside = true; intLight.intensity = 1.2;
+  player.x = INT.x; player.z = INT.z + 0.5; player.h = 0; player.speed = 0;   // mid-room, facing the counter
+  setSpriteText(intSign, e.name); snapCam(); AudioSys.play("door", 0.7);
+}
+function exitBuilding() {
+  if (!inside) return;
+  inside = false; intLight.intensity = 0;
+  player.x = intReturn.x; player.z = intReturn.z; player.h = intReturn.h; player.speed = 0;
+  snapCam(); AudioSys.play("door", 0.6);
+}
+const nearEnterable = () => {
+  if (driving || inside) return null;
+  for (const e of ENTERABLES) if (dist2(player.x, player.z, e.x, e.z) < e.r) return e;
+  return null;
+};
 
 // ---------- blob shadows (one instanced draw) ----------
 const SHADOW_N = 1 + cars.length + traffic.length + police.length + npcs.length + 3;
@@ -2146,6 +2202,11 @@ addEventListener("pointercancel", joyEnd);
 document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
 
 const btnA = dom("btnA"), btnB = dom("btnB"), brakeBtn = dom("brake"), boostBtn = dom("boost"), punchBtn = dom("punch");
+const doorBtn = dom("doorbtn");
+doorBtn.addEventListener("click", () => {
+  if (state.phase !== "play" || dlgLines || garageOpen || statsOpen || styleOpen) return;
+  if (inside) exitBuilding(); else { const e = nearEnterable(); if (e) enterBuilding(e); }
+});
 let brakeHeld = false, boostHeld = false, boostMeter = 1;
 btnA.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actA = true; });
 btnB.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actB = true; bHeld = true; });
@@ -2191,6 +2252,11 @@ function hitsCollider(x, z, r) {
   return false;
 }
 function moveWithCollision(o, dx, dz, r) {
+  if (inside && o === player) {                          // confined to the interior room
+    o.x = clamp(o.x + dx, INT.x - 9.3, INT.x + 9.3);
+    o.z = clamp(o.z + dz, INT.z - 6.3, INT.z + 7.2);
+    return;
+  }
   const lim = HALF - 3;
   let nx = clamp(o.x + dx, -lim, lim);
   if (!hitsCollider(nx, o.z, r)) o.x = nx; else if (driving === o) { o.speed *= -0.25; carHit(o); }
@@ -2368,6 +2434,9 @@ function updateHUD() {
   brakeBtn.style.display = drive ? "block" : "none";
   boostBtn.style.display = drive ? "block" : "none";
   punchBtn.style.display = (!driving && !dlgLines && !garageOpen && !statsOpen && !styleOpen) ? "block" : "none";
+  const showDoor = (!dlgLines && !garageOpen && !statsOpen && !styleOpen) && (inside || !!nearEnterable());
+  doorBtn.style.display = showDoor ? "block" : "none";
+  if (showDoor) doorBtn.textContent = inside ? "🚪 EXIT" : "🚪 ENTER";
   if (drive) { elSpeedo.style.display = "block"; drawSpeedo(driving.speed, boostMeter, fuel); }
   else if (elSpeedo.style.display !== "none") elSpeedo.style.display = "none";
 
@@ -3039,7 +3108,7 @@ function update(dt) {
   // camera
   const tx = driving ? driving.x : player.x, tz = driving ? driving.z : player.z;
   const ty = driving ? driving.mesh.position.y : player.y;
-  const dist = driving ? 14 : 9, h = driving ? 6 : 4.4;
+  const dist = driving ? 14 : (inside ? 4.5 : 9), h = driving ? 6 : (inside ? 6 : 4.4);
   tmpP.set(tx - Math.sin(camYaw) * dist, ty + h, tz - Math.cos(camYaw) * dist);
   camPos.lerp(tmpP, 1 - Math.exp(-5 * dt));
   camera.position.copy(camPos);

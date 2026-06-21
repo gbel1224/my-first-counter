@@ -186,6 +186,11 @@
   #garage .gsw:active { transform:scale(.92); }
   #gdone { font-size:15px; font-weight:800; letter-spacing:1px; border:none; border-radius:24px;
     padding:11px 34px; background:#ffd166; color:#3d2410; }
+  #doorbtn { position:absolute; bottom:calc(34px + env(safe-area-inset-bottom,0px)); left:50%; transform:translateX(-50%);
+    display:none; padding:13px 26px; border-radius:28px; font-size:15px; font-weight:800; letter-spacing:1px;
+    background:rgba(30,16,28,.8); color:#ffe9b3; border:1px solid rgba(255,205,140,.45);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); box-shadow:0 6px 20px rgba(20,8,16,.5); }
+  #doorbtn:active { transform:translateX(-50%) scale(.95); }
 
   #style { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
     background:rgba(12,16,20,.6); }
@@ -273,6 +278,7 @@
   <button id="boost" class="btn pe">BOOST</button>
   <button id="punch" class="btn pe">PUNCH</button>
   <button id="btnA" class="btn pe"></button>
+  <button id="doorbtn" class="pe">🚪 ENTER</button>
   <canvas id="speedo" width="92" height="92"></canvas>
   <div id="dialogue" class="pe"><div id="dwho"></div><div id="dtext"></div><div id="dhint"></div></div>
   <div id="intro" class="pe"></div>
