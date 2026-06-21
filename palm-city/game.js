@@ -900,7 +900,9 @@ function articulatedPerson(p) {
   const hair = new THREE.Mesh(new THREE.SphereGeometry(0.185, 12, 9), hairMat); hair.scale.set(1.05, 0.82, 1.05); hair.position.set(0, 1.71, -0.04);
   const eye = x => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 5), mat(0x241c18)); s.position.set(x, 1.62, 0.15); return s; };
   g.add(legL, legR, armL, armR, hips, torso, neck, head, hair, eye(0.07), eye(-0.07));
-  return { group: g, legL, legR, armL, armR, shirtMat, pantsMat, hairMat, hair };
+  const hatHolder = new THREE.Group(), glassHolder = new THREE.Group(), jacketHolder = new THREE.Group();
+  g.add(hatHolder, glassHolder, jacketHolder);
+  return { group: g, legL, legR, armL, armR, shirtMat, pantsMat, hairMat, hair, hatHolder, glassHolder, jacketHolder };
 }
 const HERO_PAL = { shirt: 0xff7a33, pants: 0xf5f0e6, skin: 0xe8b08a, hair: 0x3a2c20 };
 const NPC_PALS = [
@@ -1176,6 +1178,67 @@ function applyHaircut(idx, quiet) {
   state.haircut = idx;
   if (!quiet) { toast("💈 " + hc.name); AudioSys.play("blip", 0.5); save(); }
 }
+
+// accessories: jackets, hats, glasses (built on demand into the hero's holder groups)
+const JACKETS = [
+  { name: "None", none: true }, { name: "Leather Black", color: 0x1c1c20 }, { name: "Denim", color: 0x3f5e86 },
+  { name: "Bomber Green", color: 0x3f5a3a }, { name: "Red Varsity", color: 0xb2342f }, { name: "Cream Coat", color: 0xe6dcc4 },
+  { name: "Purple", color: 0x6a4a9c }, { name: "Hi-Vis Orange", color: 0xff7a1e },
+];
+const HATS = [
+  { name: "None", none: true }, { name: "Red Cap", type: "cap", color: 0xc0392b }, { name: "Blue Cap", type: "cap", color: 0x2f6fb0 },
+  { name: "Beanie", type: "beanie", color: 0x3a3f47 }, { name: "Fedora", type: "fedora", color: 0x4a3826 },
+  { name: "Bucket Hat", type: "bucket", color: 0x6f8b4a }, { name: "Top Hat", type: "tophat", color: 0x16161a }, { name: "Pink Beanie", type: "beanie", color: 0xe86fae },
+];
+const GLASSES = [
+  { name: "None", none: true }, { name: "Sunglasses", type: "dark", color: 0x111114 }, { name: "Aviators", type: "dark", color: 0x2a3340 },
+  { name: "Round", type: "clear", color: 0x222222 }, { name: "Neon Pink", type: "dark", color: 0xe0408a }, { name: "Ski Goggles", type: "dark", color: 0x30b0c0 },
+];
+function clearHolder(grp) { while (grp.children.length) { const c = grp.children.pop(); if (c.geometry) c.geometry.dispose(); } }
+function setJacket(j) {
+  clearHolder(hero.jacketHolder);
+  if (!j || j.none) return;
+  const m = new THREE.MeshLambertMaterial({ color: j.color });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.24, 0.64, 12, 1, true), m); body.position.y = 1.12;
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.21, 0.12, 12, 1, true), m); collar.position.y = 1.42;
+  const sl = x => { const a = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.085, 0.46, 8), m); a.position.set(x, 1.28, 0); return a; };
+  body.castShadow = collar.castShadow = true;
+  hero.jacketHolder.add(body, collar, sl(0.3), sl(-0.3));
+}
+function setHat(h) {
+  clearHolder(hero.hatHolder);
+  if (!h || h.none) return;
+  const m = new THREE.MeshLambertMaterial({ color: h.color });
+  const parts = [];
+  if (h.type === "cap") {
+    const crown = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 8, 0, 6.3, 0, 1.5), m); crown.scale.set(1, 0.72, 1); crown.position.y = 1.74;
+    const brim = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.04, 0.22), m); brim.position.set(0, 1.71, 0.2);
+    parts.push(crown, brim);
+  } else if (h.type === "beanie") {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.205, 12, 8, 0, 6.3, 0, 1.9), m); b.scale.set(1.03, 0.95, 1.03); b.position.y = 1.72; parts.push(b);
+  } else if (h.type === "fedora") {
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.22, 12), m); crown.position.y = 1.85;
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.33, 0.03, 18), m); brim.position.y = 1.76; parts.push(crown, brim);
+  } else if (h.type === "bucket") {
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.21, 0.2, 12), m); crown.position.y = 1.8;
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.04, 18), m); brim.position.y = 1.72; parts.push(crown, brim);
+  } else if (h.type === "tophat") {
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.36, 14), m); crown.position.y = 1.94;
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.03, 18), m); brim.position.y = 1.76; parts.push(crown, brim);
+  }
+  parts.forEach(p => { p.castShadow = true; hero.hatHolder.add(p); });
+}
+function setGlasses(g) {
+  clearHolder(hero.glassHolder);
+  if (!g || g.none) return;
+  const m = new THREE.MeshLambertMaterial({ color: g.color, transparent: g.type === "clear", opacity: g.type === "clear" ? 0.5 : 1 });
+  const lens = x => { const l = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.085, 0.02), m); l.position.set(x, 1.635, 0.17); return l; };
+  const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.02), m); bridge.position.set(0, 1.645, 0.17);
+  hero.glassHolder.add(lens(0.08), lens(-0.08), bridge);
+}
+function applyJacket(idx, quiet) { state.jacket = idx; setJacket(JACKETS[idx]); if (!quiet) { toast("🧥 " + JACKETS[idx].name); AudioSys.play("blip", 0.5); save(); } }
+function applyHat(idx, quiet) { state.hat = idx; setHat(HATS[idx]); if (!quiet) { toast("🎩 " + HATS[idx].name); AudioSys.play("blip", 0.5); save(); } }
+function applyGlasses(idx, quiet) { state.glasses = idx; setGlasses(GLASSES[idx]); if (!quiet) { toast("🕶 " + GLASSES[idx].name); AudioSys.play("blip", 0.5); save(); } }
 const nearShop = () => {
   if (driving) return null;
   for (const sh of SHOPS) if (dist2(player.x, player.z, sh.x, sh.z) < 30) return sh;
@@ -1353,6 +1416,7 @@ const state = {
   apt: false,            // owns the apartment in the rough quarter
   outfit: -1,            // chosen wardrobe outfit (index, -1 = default)
   haircut: -1,           // chosen haircut (index, -1 = default)
+  jacket: 0, hat: 0, glasses: 0,   // accessory indices (0 = None)
   ach: [],               // unlocked achievement ids
   mi: 0,                 // mission index; 8 = story complete
   xp: 0,                 // experience toward the next player level
@@ -1361,7 +1425,7 @@ const state = {
 };
 function save() {
   state.maxMoney = Math.max(state.maxMoney || 0, Math.floor(state.money));
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, outfit: state.outfit, haircut: state.haircut, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, outfit: state.outfit, haircut: state.haircut, jacket: state.jacket, hat: state.hat, glasses: state.glasses, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
 }
 function load() {
   try {
@@ -1379,6 +1443,7 @@ function load() {
       state.rescues = d.rescues || 0;
       state.home = !!d.home; state.house = !!d.house; state.apt = !!d.apt;
       state.outfit = d.outfit == null ? -1 : d.outfit; state.haircut = d.haircut == null ? -1 : d.haircut;
+      state.jacket = d.jacket || 0; state.hat = d.hat || 0; state.glasses = d.glasses || 0;
       state.ach = d.ach || [];
       state.xp = d.xp || 0;
       state.lvl = d.lvl || 1;
@@ -1432,6 +1497,7 @@ function applyOwnership() {
   for (const pr of PROPS) if (state[pr.flag]) markPropOwned(pr);
   if (state.outfit >= 0) applyOutfit(state.outfit, true);
   if (state.haircut >= 0) applyHaircut(state.haircut, true);
+  applyJacket(state.jacket || 0, true); applyHat(state.hat || 0, true); applyGlasses(state.glasses || 0, true);
 }
 function unlockCar(c, color) {
   c.locked = false;
@@ -2561,27 +2627,41 @@ dom("statsbtn").addEventListener("click", () => { if (state.phase === "play" && 
 dom("stclose").addEventListener("click", closeStats);
 
 // ---------- style shop UI (wardrobe / barber): try looks on, the player changes live ----------
-let styleOpen = false, styleKind = null;
+let styleOpen = false, styleKind = null, styleTab = "outfit";
 const elStyle = dom("style");
+function styleCfg() {
+  if (styleKind === "barber") return { list: HAIRCUTS, cur: state.haircut, apply: applyHaircut, dots: it => [it.color] };
+  if (styleTab === "jacket") return { list: JACKETS, cur: state.jacket, apply: applyJacket, dots: it => it.none ? [] : [it.color] };
+  if (styleTab === "hat") return { list: HATS, cur: state.hat, apply: applyHat, dots: it => it.none ? [] : [it.color] };
+  if (styleTab === "glasses") return { list: GLASSES, cur: state.glasses, apply: applyGlasses, dots: it => it.none ? [] : [it.color] };
+  return { list: OUTFITS, cur: state.outfit, apply: applyOutfit, dots: it => [it.shirt, it.pants] };
+}
 function renderStyle() {
+  dom("sytitle").textContent = styleKind === "barber" ? "💈 BARBER — pick a cut" : "👕 WARDROBE";
+  const tabs = dom("sytabs"); tabs.innerHTML = "";
+  if (styleKind === "wardrobe") {
+    tabs.style.display = "flex";
+    [["outfit", "Outfit"], ["jacket", "Jacket"], ["hat", "Hat"], ["glasses", "Glasses"]].forEach(([k, lbl]) => {
+      const t = document.createElement("button"); t.className = "sytab" + (styleTab === k ? " sel" : ""); t.textContent = lbl;
+      t.addEventListener("click", () => { styleTab = k; renderStyle(); }); tabs.appendChild(t);
+    });
+  } else tabs.style.display = "none";
   const grid = dom("sygrid"); grid.innerHTML = "";
-  const wardrobe = styleKind === "wardrobe";
-  dom("sytitle").textContent = wardrobe ? "👕 WARDROBE — pick an outfit" : "💈 BARBER — pick a cut";
-  const list = wardrobe ? OUTFITS : HAIRCUTS;
-  const cur = wardrobe ? state.outfit : state.haircut;
-  const dot = c => { const d = document.createElement("div"); d.className = "sydot"; d.style.background = "#" + (c >>> 0).toString(16).slice(-6).padStart(6, "0"); return d; };
-  list.forEach((it, idx) => {
+  const cfg = styleCfg();
+  cfg.list.forEach((it, idx) => {
     const cell = document.createElement("div");
-    cell.className = "syopt" + (idx === cur ? " sel" : "");
+    cell.className = "syopt" + (idx === cfg.cur ? " sel" : "");
     const sw = document.createElement("div"); sw.className = "sysw";
-    if (wardrobe) { sw.appendChild(dot(it.shirt)); sw.appendChild(dot(it.pants)); } else sw.appendChild(dot(it.color));
+    const dots = cfg.dots(it);
+    if (!dots.length) { const d = document.createElement("div"); d.className = "sydot"; d.style.background = "repeating-linear-gradient(45deg,#555,#555 4px,#777 4px,#777 8px)"; sw.appendChild(d); }
+    else dots.forEach(c => { const d = document.createElement("div"); d.className = "sydot"; d.style.background = "#" + (c >>> 0).toString(16).slice(-6).padStart(6, "0"); sw.appendChild(d); });
     const nm = document.createElement("div"); nm.className = "syname"; nm.textContent = it.name;
     cell.appendChild(sw); cell.appendChild(nm);
-    cell.addEventListener("click", () => { if (wardrobe) applyOutfit(idx); else applyHaircut(idx); renderStyle(); });
+    cell.addEventListener("click", () => { cfg.apply(idx); renderStyle(); });
     grid.appendChild(cell);
   });
 }
-function openStyleShop(kind) { styleKind = kind; styleOpen = true; renderStyle(); elStyle.style.display = "flex"; }
+function openStyleShop(kind) { styleKind = kind; styleTab = "outfit"; styleOpen = true; renderStyle(); elStyle.style.display = "flex"; }
 function closeStyleShop() { styleOpen = false; styleKind = null; elStyle.style.display = "none"; }
 dom("syx").addEventListener("click", closeStyleShop);
 dom("sydone").addEventListener("click", closeStyleShop);
