@@ -67,7 +67,7 @@ document.body.insertBefore(renderer.domElement, document.getElementById("ui"));
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xf9c071);          // golden-hour haze (warm, sunset-biased cycle)
-scene.fog = new THREE.Fog(0xf9c071, 175, 440);
+scene.fog = new THREE.Fog(0xf9c071, 230, 720);
 
 const camera = new THREE.PerspectiveCamera(64, innerWidth / innerHeight, 0.5, 900);
 camera.position.set(0, 8, -14);
@@ -187,13 +187,13 @@ function setGlow(night) {
 // day/night cycle (4 min): warm day -> dusk -> night -> dawn
 const ENV_KEYS = [
   // Golden-sunset biased cycle: warm amber daytime, a rich sunset, then a short night.
-  { t: 0.00, sky: new THREE.Color(0xf9c071), top: new THREE.Color(0xf0934a), sun: 1.55, hemi: 1.02, far: 440, night: 0.0 },
-  { t: 0.50, sky: new THREE.Color(0xf9c071), top: new THREE.Color(0xf0934a), sun: 1.55, hemi: 1.02, far: 440, night: 0.0 },
-  { t: 0.60, sky: new THREE.Color(0xf3863f), top: new THREE.Color(0xb44e72), sun: 1.2,  hemi: 0.82, far: 410, night: 0.4 },
-  { t: 0.68, sky: new THREE.Color(0x6a4368), top: new THREE.Color(0x281f40), sun: 0.5,  hemi: 0.55, far: 360, night: 0.85 },
-  { t: 0.82, sky: new THREE.Color(0x2c3354), top: new THREE.Color(0x10142c), sun: 0.2,  hemi: 0.46, far: 350, night: 1.0 },
-  { t: 0.90, sky: new THREE.Color(0xef9b63), top: new THREE.Color(0x8a5e8c), sun: 1.05, hemi: 0.86, far: 410, night: 0.32 },
-  { t: 1.00, sky: new THREE.Color(0xf9c071), top: new THREE.Color(0xf0934a), sun: 1.55, hemi: 1.02, far: 440, night: 0.0 },
+  { t: 0.00, sky: new THREE.Color(0xf9c071), top: new THREE.Color(0xf0934a), sun: 1.55, hemi: 1.02, far: 720, night: 0.0 },
+  { t: 0.50, sky: new THREE.Color(0xf9c071), top: new THREE.Color(0xf0934a), sun: 1.55, hemi: 1.02, far: 720, night: 0.0 },
+  { t: 0.60, sky: new THREE.Color(0xf3863f), top: new THREE.Color(0xb44e72), sun: 1.2,  hemi: 0.82, far: 660, night: 0.4 },
+  { t: 0.68, sky: new THREE.Color(0x6a4368), top: new THREE.Color(0x281f40), sun: 0.5,  hemi: 0.55, far: 560, night: 0.85 },
+  { t: 0.82, sky: new THREE.Color(0x2c3354), top: new THREE.Color(0x10142c), sun: 0.2,  hemi: 0.46, far: 560, night: 1.0 },
+  { t: 0.90, sky: new THREE.Color(0xef9b63), top: new THREE.Color(0x8a5e8c), sun: 1.05, hemi: 0.86, far: 660, night: 0.32 },
+  { t: 1.00, sky: new THREE.Color(0xf9c071), top: new THREE.Color(0xf0934a), sun: 1.55, hemi: 1.02, far: 720, night: 0.0 },
 ];
 const _sky = new THREE.Color(), _top = new THREE.Color(), _sunCol = new THREE.Color();
 function envUpdate() {
@@ -213,9 +213,10 @@ function envUpdate() {
   skyUniforms.topColor.value.copy(_top.lerpColors(a.top, b.top, k));
   const night = a.night + (b.night - a.night) * k;
   palmIM.material.emissiveIntensity = 1 + night * 1.7;          // Golden Palms glow at night
-  if (buildingMat) buildingMat.emissiveIntensity = night * 0.95;   // windows light up after dark
-  for (const mm of specialMats) mm.emissiveIntensity = night * 0.95;  // business windows too
-  if (lampMat) lampMat.emissiveIntensity = night * 1.5;            // street lamps glow after dark
+  if (buildingMat) buildingMat.emissiveIntensity = night * 1.2;    // windows light up after dark
+  for (const mm of specialMats) mm.emissiveIntensity = night * 1.2;   // business windows too
+  if (lampMat) lampMat.emissiveIntensity = night * 2.2;            // street lamps glow after dark
+  if (lampPoolMat) lampPoolMat.opacity = night * 0.5;             // ground light pools under lamps
   setGlow(night);
   setSky(night);
   updateCarLights(night);
@@ -833,7 +834,7 @@ specialBuilding(bc(N / 2 + 1), bc(N / 2), 40, 12, 30, 0x4a3f6a, "🎳 BOWLING AL
 
 // ---------- street lamps (instanced poles + heads that glow at night) ----------
 const lampHeads = [];
-let lampMat = null;
+let lampMat = null, lampPoolMat = null;
 {
   const pole = new THREE.CylinderGeometry(0.16, 0.22, 7, 6); pole.translate(0, 3.5, 0);
   const head = new THREE.BoxGeometry(0.8, 0.42, 0.8); head.translate(0, 7.05, 0);
@@ -845,6 +846,12 @@ let lampMat = null;
   const m = new THREE.Matrix4();
   spots.forEach(([x, z], idx) => { m.makeTranslation(x, CURB, z); poleIM.setMatrixAt(idx, m); headIM.setMatrixAt(idx, m); lampHeads.push([x, 7.05 + CURB, z]); });
   scene.add(poleIM, headIM);
+  // warm light pools cast on the ground under each lamp at night
+  const poolGeo = new THREE.CircleGeometry(3.4, 18); poolGeo.rotateX(-Math.PI / 2);
+  lampPoolMat = new THREE.MeshBasicMaterial({ color: 0xffd38a, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+  const poolIM = new THREE.InstancedMesh(poolGeo, lampPoolMat, spots.length);
+  spots.forEach(([x, z], idx) => { m.makeTranslation(x, 0.07, z); poolIM.setMatrixAt(idx, m); });
+  scene.add(poolIM);
 }
 
 // ---------- road centre-line markings (one instanced draw) ----------
