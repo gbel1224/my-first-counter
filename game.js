@@ -865,28 +865,31 @@ let lampMat = null;
 
 // ---------- characters ----------
 function personGeo(p) {
-  // casual athletic build: tank top, knee shorts, bare arms & shins, sneakers (~6 heads)
-  const SHOE = 0xf0eee6, SOLE = 0x35353c;
+  // casual build, varied clothing: top tank/tee/long, bottom shorts/pants, sneakers (~6 heads)
+  const SHOE = 0xf0eee6, SOLE = 0x35353c, top = p.top || "tee", bottom = p.bottom || "pants";
+  const sleeveC = top === "tank" ? p.skin : p.shirt;         // upper arm + shoulder
+  const foreC = top === "long" ? p.shirt : p.skin;           // forearm (long sleeve covers it)
+  const shinC = bottom === "shorts" ? p.skin : p.pants;      // lower leg (shorts = bare)
   const parts = [
     sphC(0.1, 0.1, 0.055, 0.05, SHOE, 1.0, 0.5, 1.85),       // sneakers
     sphC(0.1, -0.1, 0.055, 0.05, SHOE, 1.0, 0.5, 1.85),
     sphC(0.1, 0.1, 0.025, 0.05, SOLE, 1.06, 0.26, 1.9),      // soles
     sphC(0.1, -0.1, 0.025, 0.05, SOLE, 1.06, 0.26, 1.9),
-    cylC(0.072, 0.056, 0.44, 0.1, 0.31, 0, p.skin),          // bare shins
-    cylC(0.072, 0.056, 0.44, -0.1, 0.31, 0, p.skin),
-    cylC(0.108, 0.088, 0.44, 0.1, 0.71, 0, p.pants),         // shorts (thigh, knee-length)
+    cylC(0.072, 0.056, 0.44, 0.1, 0.31, 0, shinC),           // lower legs
+    cylC(0.072, 0.056, 0.44, -0.1, 0.31, 0, shinC),
+    cylC(0.108, 0.088, 0.44, 0.1, 0.71, 0, p.pants),         // upper legs
     cylC(0.108, 0.088, 0.44, -0.1, 0.71, 0, p.pants),
-    cylC(0.155, 0.165, 0.18, 0, 0.87, 0, p.pants),           // shorts waistband
-    cylC(0.205, 0.14, 0.56, 0, 1.18, 0, p.shirt),            // tank top (athletic V-taper)
-    sphC(0.088, 0.175, 1.45, 0, p.skin),                     // bare shoulders
-    sphC(0.088, -0.175, 1.45, 0, p.skin),
-    cylC(0.075, 0.057, 0.34, 0.205, 1.29, 0, p.skin),        // bare upper arms
-    cylC(0.075, 0.057, 0.34, -0.205, 1.29, 0, p.skin),
-    cylC(0.056, 0.046, 0.34, 0.205, 0.96, 0, p.skin),        // forearms
-    cylC(0.056, 0.046, 0.34, -0.205, 0.96, 0, p.skin),
-    sphC(0.06, 0.205, 0.78, 0, p.skin),                      // hands
-    sphC(0.06, -0.205, 0.78, 0, p.skin),
-    cylC(0.062, 0.075, 0.13, 0, 1.5, 0, p.skin),             // neck
+    cylC(0.155, 0.165, 0.18, 0, 0.87, 0, p.pants),           // waistband
+    cylC(0.205, 0.14, 0.52, 0, 1.14, 0, p.shirt),            // torso (athletic V-taper)
+    sphC(0.088, 0.19, 1.37, 0, sleeveC),                     // shoulders (sloped, lower)
+    sphC(0.088, -0.19, 1.37, 0, sleeveC),
+    cylC(0.075, 0.057, 0.34, 0.205, 1.22, 0, sleeveC),       // upper arms
+    cylC(0.075, 0.057, 0.34, -0.205, 1.22, 0, sleeveC),
+    cylC(0.056, 0.046, 0.34, 0.205, 0.89, 0, foreC),         // forearms
+    cylC(0.056, 0.046, 0.34, -0.205, 0.89, 0, foreC),
+    sphC(0.06, 0.205, 0.71, 0, p.skin),                      // hands
+    sphC(0.06, -0.205, 0.71, 0, p.skin),
+    cylC(0.062, 0.078, 0.14, 0, 1.49, 0, p.skin),            // neck
     sphC(0.15, 0, 1.63, 0, p.skin, 1, 1.12, 0.95),           // head
     sphC(0.028, 0.06, 1.63, 0.13, 0x241c18),                 // eyes
     sphC(0.028, -0.06, 1.63, 0.13, 0x241c18),
@@ -909,30 +912,32 @@ function articulatedPerson(p) {
   const mat = c => new THREE.MeshLambertMaterial({ color: c });
   // shared materials so the wardrobe/barber can recolour the whole outfit/hair in one call
   const shirtMat = mat(p.shirt), pantsMat = mat(p.pants), skinMat = mat(p.skin), hairMat = mat(p.hair), shoeMat = mat(0xf0eee6), soleMat = mat(0x35353c);
+  const top = p.top || "tee", bottom = p.bottom || "pants";
+  const sleeveMat = top === "tank" ? skinMat : shirtMat, foreMat = top === "long" ? shirtMat : skinMat, shinMat = bottom === "shorts" ? skinMat : pantsMat;
   const cyl = (rT, rB, h, m, y) => { const me = new THREE.Mesh(new THREE.CylinderGeometry(rT, rB, h, 12, 1), m); if (y != null) me.position.y = y; return me; };
   const sph = (r, m, sx, sy, sz) => { const s = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 10), m); if (sx != null) s.scale.set(sx, sy, sz); return s; };
-  // leg group (pivots at hip): shorts thigh -> bare shin -> sneaker
+  // leg group (pivots at hip): thigh -> lower leg -> sneaker
   const leg = side => {
     const grp = new THREE.Group(); grp.position.set(0.1 * side, 0.9, 0);
     const thigh = cyl(0.108, 0.088, 0.44, pantsMat, -0.19);
-    const shin = cyl(0.072, 0.056, 0.44, skinMat, -0.61);
+    const shin = cyl(0.072, 0.056, 0.44, shinMat, -0.61);
     const sneaker = sph(0.1, shoeMat, 1.0, 0.5, 1.85); sneaker.position.set(0, -0.83, 0.05);
     const sole = sph(0.1, soleMat, 1.06, 0.26, 1.9); sole.position.set(0, -0.86, 0.05);
     grp.add(thigh, shin, sneaker, sole); return grp;
   };
   const legL = leg(1), legR = leg(-1);
-  // arm group (pivots at shoulder): bare athletic arm (tank top)
+  // arm group (pivots at shoulder): upper arm (sleeve) -> forearm -> hand
   const arm = side => {
-    const grp = new THREE.Group(); grp.position.set(0.205 * side, 1.45, 0);
-    grp.add(cyl(0.075, 0.057, 0.34, skinMat, -0.17), cyl(0.056, 0.046, 0.34, skinMat, -0.5));
+    const grp = new THREE.Group(); grp.position.set(0.205 * side, 1.39, 0);
+    grp.add(cyl(0.075, 0.057, 0.34, sleeveMat, -0.17), cyl(0.056, 0.046, 0.34, foreMat, -0.5));
     const hand = sph(0.06, skinMat, 1, 1.1, 0.8); hand.position.y = -0.7; grp.add(hand); return grp;
   };
   const armL = arm(1), armR = arm(-1);
   const hips = cyl(0.155, 0.165, 0.18, pantsMat, 0.87);
-  const torso = cyl(0.205, 0.14, 0.56, shirtMat, 1.18);               // tank top, athletic V
-  const shL = sph(0.088, skinMat); shL.position.set(0.175, 1.45, 0);  // bare shoulders
-  const shR = sph(0.088, skinMat); shR.position.set(-0.175, 1.45, 0);
-  const neck = cyl(0.062, 0.075, 0.13, skinMat, 1.5);
+  const torso = cyl(0.205, 0.14, 0.52, shirtMat, 1.14);               // torso, athletic V
+  const shL = sph(0.088, sleeveMat); shL.position.set(0.19, 1.37, 0); // shoulders (sloped, lower)
+  const shR = sph(0.088, sleeveMat); shR.position.set(-0.19, 1.37, 0);
+  const neck = cyl(0.062, 0.078, 0.14, skinMat, 1.49);
   const head = sph(0.15, skinMat, 1, 1.12, 0.95); head.position.y = 1.63;
   const hair = sph(0.162, hairMat, 1.05, 0.82, 1.05); hair.position.set(0, 1.71, -0.04);
   const eye = x => { const s = sph(0.028, mat(0x241c18)); s.position.set(x, 1.63, 0.13); return s; };
@@ -943,16 +948,17 @@ function articulatedPerson(p) {
   g.add(hatHolder, glassHolder, jacketHolder, beardHolder);
   return { group: g, legL, legR, armL, armR, shirtMat, pantsMat, hairMat, hair, hatHolder, glassHolder, jacketHolder, beardHolder };
 }
-const HERO_PAL = { shirt: 0xff7a33, pants: 0xf5f0e6, skin: 0xe8b08a, hair: 0x3a2c20 };
+// top: "tank" (bare arms) | "tee" (short sleeves) | "long" (full sleeves); bottom: "shorts" | "pants"
+const HERO_PAL = { shirt: 0xff7a33, pants: 0x3a4452, skin: 0xe8b08a, hair: 0x3a2c20, top: "tee", bottom: "pants" };
 const NPC_PALS = [
-  { shirt: 0x6fb7d9, pants: 0x4a4f59, skin: 0xe8b08a, hair: 0x2c2620 },
-  { shirt: 0xecd3e2, pants: 0x7a6f5c, skin: 0xc98f6b, hair: 0x1f1a16, hairStyle: "bun" },
-  { shirt: 0x9fe6a0, pants: 0x3f4a52, skin: 0xf0c8a0, hair: 0x6b4a2a, hat: 0x394150 },
-  { shirt: 0xf5e8c8, pants: 0x8e5fc9, skin: 0xd9a37a, hair: 0x3a2c20, hairStyle: "long" },
-  { shirt: 0xd95f4b, pants: 0xd9e4f0, skin: 0xe8b08a, hair: 0x55524e },
-  { shirt: 0x4a6fa5, pants: 0x2c2620, skin: 0x8d5a3b, hair: 0x161210, hat: 0xb23b3b },
-  { shirt: 0xf0a93f, pants: 0x3a3f47, skin: 0xf0c8a0, hair: 0x7a5a3a, hairStyle: "bun" },
-  { shirt: 0x7d6fc9, pants: 0x4a4f59, skin: 0xc98f6b, hair: 0x2c2620, hairStyle: "long" },
+  { shirt: 0x6fb7d9, pants: 0x4a4f59, skin: 0xe8b08a, hair: 0x2c2620, top: "tee", bottom: "pants" },
+  { shirt: 0xecd3e2, pants: 0x7a6f5c, skin: 0xc98f6b, hair: 0x1f1a16, hairStyle: "bun", top: "tank", bottom: "shorts" },
+  { shirt: 0x9fe6a0, pants: 0x3f4a52, skin: 0xf0c8a0, hair: 0x6b4a2a, hat: 0x394150, top: "long", bottom: "pants" },
+  { shirt: 0xf5e8c8, pants: 0x8e5fc9, skin: 0xd9a37a, hair: 0x3a2c20, hairStyle: "long", top: "tee", bottom: "shorts" },
+  { shirt: 0xd95f4b, pants: 0xd9e4f0, skin: 0xe8b08a, hair: 0x55524e, top: "tank", bottom: "pants" },
+  { shirt: 0x4a6fa5, pants: 0x2c2620, skin: 0x8d5a3b, hair: 0x161210, hat: 0xb23b3b, top: "tee", bottom: "pants" },
+  { shirt: 0xf0a93f, pants: 0x3a3f47, skin: 0xf0c8a0, hair: 0x7a5a3a, hairStyle: "bun", top: "long", bottom: "shorts" },
+  { shirt: 0x7d6fc9, pants: 0x4a4f59, skin: 0xc98f6b, hair: 0x2c2620, hairStyle: "long", top: "tee", bottom: "pants" },
 ];
 const npcGeos = NPC_PALS.map(personGeo);
 
