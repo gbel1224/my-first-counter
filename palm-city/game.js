@@ -17,7 +17,7 @@ const rr = (a, b) => a + rng() * (b - a);
 const pick = arr => arr[(rng() * arr.length) | 0];
 
 // ---------- city constants ----------
-const N = 16, CELL = 88, ROAD = 18, BLOCK = 70;   // 16x16 city — much bigger (offset keeps the original districts centred)
+const N = 32, CELL = 88, ROAD = 18, BLOCK = 70;   // 32x32 city — ~10x the original area (chunked rendering keeps it fast)
 const HALF = (N * CELL + ROAD) / 2;
 const roadC = k => -HALF + ROAD / 2 + k * CELL;
 const blockMin = i => roadC(i) + ROAD / 2;
@@ -404,10 +404,23 @@ function textSprite(text, fg, bg, w, h, y) {
 
 // ---------- world build ----------
 const colliders = [];   // {x0,x1,z0,z1}
-const addCollider = (x, z, hw, hd) => colliders.push({ x0: x - hw, x1: x + hw, z0: z - hd, z1: z + hd });
+const colGrid = new Map();   // spatial hash so collision stays O(1) however big the city gets
+const colCell = v => Math.floor((v + HALF) / CELL);
+const addCollider = (x, z, hw, hd) => {
+  const b = { x0: x - hw, x1: x + hw, z0: z - hd, z1: z + hd };
+  colliders.push(b);
+  for (let ci = colCell(b.x0); ci <= colCell(b.x1); ci++)
+    for (let cj = colCell(b.z0); cj <= colCell(b.z1); cj++) {
+      const k = ci + "," + cj; let a = colGrid.get(k); if (!a) colGrid.set(k, a = []); a.push(b);
+    }
+};
+// coarse render chunks so the big-city instanced meshes get frustum-culled per region
+const CHUNKW = 4 * CELL;
+const chunkKey = (x, z) => Math.floor((x + HALF) / CHUNKW) + "," + Math.floor((z + HALF) / CHUNKW);
+function byChunk(list) { const map = new Map(); for (const b of list) { const k = chunkKey(b.x, b.z); let a = map.get(k); if (!a) map.set(k, a = []); a.push(b); } return [...map.values()]; }
 
 const matVC = new THREE.MeshLambertMaterial({ vertexColors: true });
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(2600, 2600),
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 1700, 2 * HALF + 1700),
   new THREE.MeshLambertMaterial({ color: 0x9aab72 }));
 ground.geometry.rotateX(-Math.PI / 2);
 ground.receiveShadow = true;
@@ -469,7 +482,7 @@ const TOWER_TINTS = [0xbcd2e0, 0xc8d8e8, 0xd0e0e0, 0xe2e6ea, 0xb8c8d8, 0xd8d0c4,
 const HOUSE_TINTS = [0xf3e2c4, 0xe8d6be, 0xd9e6dc, 0xf0e0d2, 0xe6dcc8, 0xdce6ea, 0xf2ddc6];   // pastel stucco
 const HOUSE_ROOFS = [0xb5532e, 0x9a6b4a, 0x7a7e84, 0xa84e3a, 0x6f5a45, 0x8a6340];
 const GHETTO_TINTS = [0x9a8e7c, 0x8c8474, 0xa2937c, 0x86806e, 0x948a72, 0x7e7866];   // grimy
-let buildingsIM, buildingMat = null;
+let buildingMat = null;
 {
   const unit = new THREE.BoxGeometry(1, 1, 1);
   unit.translate(0, 0.5, 0);
@@ -511,55 +524,42 @@ let buildingsIM, buildingMat = null;
     }
   }
   const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
-  buildingsIM = new THREE.InstancedMesh(unit, mats, placed.length);
-  placed.forEach((b, idx) => {
-    p.set(b.x, CURB, b.z); s.set(b.w, b.h, b.d); q.identity();
-    m.compose(p, q, s);
-    buildingsIM.setMatrixAt(idx, m);
-    buildingsIM.setColorAt(idx, _col.set(b.tint));
-  });
-  scene.add(buildingsIM);
+  const boxChunks = (list, material) => {
+    for (const items of byChunk(list)) {
+      const im = new THREE.InstancedMesh(unit, material, items.length); im.receiveShadow = true;
+      items.forEach((b, idx) => { p.set(b.x, CURB, b.z); s.set(b.w, b.h, b.d); q.identity(); m.compose(p, q, s); im.setMatrixAt(idx, m); im.setColorAt(idx, _col.set(b.tint)); });
+      scene.add(im);
+    }
+  };
+  boxChunks(placed, mats);
 
-  // downtown skyscrapers — own instanced mesh with the tiling glass-tower facade
+  // downtown skyscrapers — tiling glass-tower facade (shared material across chunks for the night ramp)
   const towerSide = new THREE.MeshLambertMaterial({ map: texTower, emissive: 0xffffff, emissiveMap: texTowerWin, emissiveIntensity: 0 });
-  specialMats.push(towerSide);                               // ride the night-window ramp
-  const towerMats = [towerSide, towerSide, matRoof, matRoof, towerSide, towerSide];
-  const towersIM = new THREE.InstancedMesh(unit, towerMats, towers.length);
-  towers.forEach((b, idx) => {
-    p.set(b.x, CURB, b.z); s.set(b.w, b.h, b.d); q.identity();
-    m.compose(p, q, s);
-    towersIM.setMatrixAt(idx, m);
-    towersIM.setColorAt(idx, _col.set(b.tint));
-  });
-  scene.add(towersIM);
+  specialMats.push(towerSide);
+  boxChunks(towers, [towerSide, towerSide, matRoof, matRoof, towerSide, towerSide]);
 
-  // suburban houses: tinted stucco bodies + pyramid roofs
+  // suburban houses: tinted stucco bodies + pyramid roofs (chunked)
   if (houses.length) {
-    const houseBodyIM = new THREE.InstancedMesh(unit, new THREE.MeshLambertMaterial({ color: 0xffffff }), houses.length);
-    houseBodyIM.receiveShadow = true;
+    const bodyMat = new THREE.MeshLambertMaterial({ color: 0xffffff }), roofMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
     const roofUnit = new THREE.ConeGeometry(0.82, 1, 4); roofUnit.rotateY(Math.PI / 4); roofUnit.translate(0, 0.5, 0);
-    const roofIM = new THREE.InstancedMesh(roofUnit, new THREE.MeshLambertMaterial({ color: 0xffffff }), houses.length);
-    roofIM.receiveShadow = true;
-    houses.forEach((b, idx) => {
-      p.set(b.x, CURB, b.z); s.set(b.w, b.h, b.d); q.identity(); m.compose(p, q, s);
-      houseBodyIM.setMatrixAt(idx, m); houseBodyIM.setColorAt(idx, _col.set(b.tint));
-      p.set(b.x, CURB + b.h, b.z); s.set(b.w * 0.92, rr(2.6, 3.8), b.d * 0.92); m.compose(p, q, s);
-      roofIM.setMatrixAt(idx, m); roofIM.setColorAt(idx, _col.set(b.roof));
-    });
-    scene.add(houseBodyIM, roofIM);
+    for (const items of byChunk(houses)) {
+      const bIM = new THREE.InstancedMesh(unit, bodyMat, items.length); bIM.receiveShadow = true;
+      const rIM = new THREE.InstancedMesh(roofUnit, roofMat, items.length); rIM.receiveShadow = true;
+      items.forEach((b, idx) => {
+        p.set(b.x, CURB, b.z); s.set(b.w, b.h, b.d); q.identity(); m.compose(p, q, s);
+        bIM.setMatrixAt(idx, m); bIM.setColorAt(idx, _col.set(b.tint));
+        p.set(b.x, CURB + b.h, b.z); s.set(b.w * 0.92, rr(2.6, 3.8), b.d * 0.92); m.compose(p, q, s);
+        rIM.setMatrixAt(idx, m); rIM.setColorAt(idx, _col.set(b.roof));
+      });
+      scene.add(bIM, rIM);
+    }
   }
 
-  // run-down apartments: grimy facade with boarded windows
+  // run-down apartments: grimy facade with boarded windows (chunked)
   if (ghetto.length) {
     const ghettoSide = new THREE.MeshLambertMaterial({ map: texGhetto, emissive: 0xffffff, emissiveMap: texGhettoWin, emissiveIntensity: 0 });
     specialMats.push(ghettoSide);
-    const ghettoIM = new THREE.InstancedMesh(unit, [ghettoSide, ghettoSide, matRoof, matRoof, ghettoSide, ghettoSide], ghetto.length);
-    ghettoIM.receiveShadow = true;
-    ghetto.forEach((b, idx) => {
-      p.set(b.x, CURB, b.z); s.set(b.w, b.h, b.d); q.identity(); m.compose(p, q, s);
-      ghettoIM.setMatrixAt(idx, m); ghettoIM.setColorAt(idx, _col.set(b.tint));
-    });
-    scene.add(ghettoIM);
+    boxChunks(ghetto, [ghettoSide, ghettoSide, matRoof, matRoof, ghettoSide, ghettoSide]);
   }
 
   // rooftop clutter: water tanks + antenna masts on every tower, red aircraft beacons on the tallest
@@ -581,7 +581,7 @@ let buildingsIM, buildingMat = null;
 
 // outer ground gets a tiling grass texture so the outskirts aren't a flat colour
 {
-  const g = texGrass.clone(); g.needsUpdate = true; g.repeat.set(86, 86);
+  const g = texGrass.clone(); g.needsUpdate = true; const gr = Math.round((2 * HALF + 1700) / 30); g.repeat.set(gr, gr);
   ground.material = new THREE.MeshLambertMaterial({ map: g });
 }
 
@@ -1041,7 +1041,7 @@ scene.add(rampIM);
 
 // traffic cars on block-ring routes
 const traffic = [];
-for (let t = 0; t < 70; t++) {
+for (let t = 0; t < 200; t++) {
   const i = (rng() * N) | 0, j = (rng() * N) | 0;
   const x0 = roadC(i) + 4, x1 = roadC(i + 1) - 4, z0 = roadC(j) + 4, z1 = roadC(j + 1) - 4;
   const wp = [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
@@ -1067,7 +1067,7 @@ for (let i = 0; i < POLICE_N; i++) {
 
 // pedestrians
 const npcs = [];
-for (let t = 0; t < 96; t++) {
+for (let t = 0; t < 260; t++) {
   const i = (rng() * N) | 0, j = (rng() * N) | 0;
   const mesh = new THREE.Mesh(npcGeos[(rng() * npcGeos.length) | 0], matVC);
   mesh.scale.set(rr(0.92, 1.06), rr(0.9, 1.14), rr(0.92, 1.06));   // varied heights & builds
@@ -1095,16 +1095,20 @@ for (let t = 0; t < 96; t++) {
       if (rng() < 0.72 && ok(x, c + sh)) spots.push([x, c + sh, sh > 0 ? Math.PI / 2 : -Math.PI / 2]);
     }
   }
-  const im = new THREE.InstancedMesh(carGeo,
-    new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.5, roughness: 0.38, envMapIntensity: 1.0 }), spots.length);
+  const parkMat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.5, roughness: 0.38, envMapIntensity: 1.0 });
   const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
-  spots.forEach(([x, z, yaw], idx) => {
-    p.set(x, 0, z); q.setFromAxisAngle(up, yaw); m.compose(p, q, s);
-    im.setMatrixAt(idx, m); im.setColorAt(idx, _col.set(pick(CAR_COLORS)));
+  spots.forEach(([x, z, yaw]) => {
     const alongX = Math.abs(Math.sin(yaw)) > 0.5;      // orientation-aware collider footprint
     addCollider(x, z, alongX ? 2.4 : 1.1, alongX ? 1.1 : 2.4);
   });
-  scene.add(im);
+  // chunk the parked cars so distant ones get frustum-culled (PBR cars are the heaviest static prop)
+  const chunks = new Map();
+  for (const sp of spots) { const k = chunkKey(sp[0], sp[1]); let a = chunks.get(k); if (!a) chunks.set(k, a = []); a.push(sp); }
+  for (const arr of chunks.values()) {
+    const im = new THREE.InstancedMesh(carGeo, parkMat, arr.length);
+    arr.forEach(([x, z, yaw], idx) => { p.set(x, 0, z); q.setFromAxisAngle(up, yaw); m.compose(p, q, s); im.setMatrixAt(idx, m); im.setColorAt(idx, _col.set(pick(CAR_COLORS))); });
+    scene.add(im);
+  }
 }
 
 // story characters
@@ -2243,12 +2247,16 @@ let gpHeld = false, gpHeldB = false;
 
 // ---------- movement / collision ----------
 function hitsCollider(x, z, r) {
-  for (let i = 0; i < colliders.length; i++) {
-    const b = colliders[i];
-    const cx = clamp(x, b.x0, b.x1), cz = clamp(z, b.z0, b.z1);
-    const dx = x - cx, dz = z - cz;
-    if (dx * dx + dz * dz < r * r) return true;
-  }
+  for (let ci = colCell(x - r); ci <= colCell(x + r); ci++)
+    for (let cj = colCell(z - r); cj <= colCell(z + r); cj++) {
+      const arr = colGrid.get(ci + "," + cj); if (!arr) continue;
+      for (let i = 0; i < arr.length; i++) {
+        const b = arr[i];
+        const cx = clamp(x, b.x0, b.x1), cz = clamp(z, b.z0, b.z1);
+        const dx = x - cx, dz = z - cz;
+        if (dx * dx + dz * dz < r * r) return true;
+      }
+    }
   return false;
 }
 function moveWithCollision(o, dx, dz, r) {
