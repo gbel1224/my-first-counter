@@ -82,11 +82,11 @@ scene.add(sun.target);
 // real-time sun shadows (dynamic objects only, to stay mobile-friendly); follows the player
 if (renderer.shadowMap) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; }
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.near = 10; sun.shadow.camera.far = 460;
-sun.shadow.camera.left = -78; sun.shadow.camera.right = 78;
-sun.shadow.camera.top = 78; sun.shadow.camera.bottom = -78;
-sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.3;
+sun.shadow.mapSize.set(3072, 3072);
+sun.shadow.camera.near = 8; sun.shadow.camera.far = 560;
+sun.shadow.camera.left = -100; sun.shadow.camera.right = 100;
+sun.shadow.camera.top = 100; sun.shadow.camera.bottom = -100;
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.35;
 const _sunDir = new THREE.Vector3(0.45, 0.8, 0.4).normalize();   // current key-light direction (set by the cycle)
 function updateSunShadow() {
   const tx = driving ? driving.x : player.x, tz = driving ? driving.z : player.z;
@@ -532,7 +532,7 @@ let buildingMat = null;
   const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
   const boxChunks = (list, material) => {
     for (const items of byChunk(list)) {
-      const im = new THREE.InstancedMesh(unit, material, items.length); im.receiveShadow = true;
+      const im = new THREE.InstancedMesh(unit, material, items.length); im.receiveShadow = true; im.castShadow = true;
       items.forEach((b, idx) => { p.set(b.x, CURB, b.z); s.set(b.w, b.h, b.d); q.identity(); m.compose(p, q, s); im.setMatrixAt(idx, m); im.setColorAt(idx, _col.set(b.tint)); });
       scene.add(im);
     }
@@ -551,8 +551,8 @@ let buildingMat = null;
     const bodyMat = new THREE.MeshLambertMaterial({ color: 0xffffff }), roofMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
     const roofUnit = new THREE.ConeGeometry(0.82, 1, 4); roofUnit.rotateY(Math.PI / 4); roofUnit.translate(0, 0.5, 0);
     for (const items of byChunk(houses)) {
-      const bIM = new THREE.InstancedMesh(unit, bodyMat, items.length); bIM.receiveShadow = true;
-      const rIM = new THREE.InstancedMesh(roofUnit, roofMat, items.length); rIM.receiveShadow = true;
+      const bIM = new THREE.InstancedMesh(unit, bodyMat, items.length); bIM.receiveShadow = true; bIM.castShadow = true;
+      const rIM = new THREE.InstancedMesh(roofUnit, roofMat, items.length); rIM.receiveShadow = true; rIM.castShadow = true;
       items.forEach((b, idx) => {
         p.set(b.x, CURB, b.z); s.set(b.w, b.h, b.d); q.identity(); m.compose(p, q, s);
         bIM.setMatrixAt(idx, m); bIM.setColorAt(idx, _col.set(b.tint));
@@ -678,6 +678,7 @@ function specialBuilding(x, z, w, h, d, color, labelText, labelColor) {
   specialMats.push(matSide);
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [matSide, matSide, matRoof, matRoof, matSide, matSide]);
   mesh.position.set(x, CURB + h / 2, z);
+  mesh.castShadow = true; mesh.receiveShadow = true;
   scene.add(mesh);
   addCollider(x, z, w / 2, d / 2);
   const sp = textSprite(labelText, "#fff", labelColor, 16, 4, 0);
