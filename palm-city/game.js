@@ -1308,7 +1308,7 @@ let inside = false, intReturn = { x: 0, z: 0, h: 0 };
 const intSign = textSprite("", "#fff", "rgba(20,20,24,.9)", 16, 4, 0);
 const intLight = new THREE.PointLight(0xfff2d6, 0, 48, 1.4); intLight.position.set(INT.x, 4.2, INT.z + 1); scene.add(intLight);
 const intProps = new THREE.Group(); scene.add(intProps);
-let intFloor;
+let intFloor, intWallMat, intTheme = "shop";
 // interior surface textures
 const R = Math.random;
 const woodTex = canvasTex(128, (ctx, s) => { for (let i = 0; i < 8; i++) { const w = s / 8; ctx.fillStyle = ["#9a6e44", "#a9794d", "#8f6440", "#b08355"][i % 4]; ctx.fillRect(i * w, 0, w, s); ctx.strokeStyle = "rgba(60,40,20,.35)"; ctx.strokeRect(i * w, 0, w, s); for (let k = 0; k < 12; k++) { ctx.fillStyle = "rgba(70,45,25,.16)"; ctx.fillRect(i * w + 3, R() * s, 6 + R() * 16, 1); } } }, 4, 4);
@@ -1318,7 +1318,7 @@ const concreteTex = canvasTex(128, (ctx, s) => { ctx.fillStyle = "#9a9a9e"; ctx.
 const FLOORTEX = { wood: woodTex, tile: tileTex, carpet: carpetTex, concrete: concreteTex };
 const wallTex = canvasTex(64, (ctx, s) => { ctx.fillStyle = "#ece3d2"; ctx.fillRect(0, 0, s, s); for (let i = 0; i < 50; i++) { ctx.fillStyle = "rgba(0,0,0,.04)"; ctx.fillRect(R() * s, R() * s, 2, 2); } ctx.fillStyle = "#cdbfa6"; ctx.fillRect(0, s - 7, s, 7); }, 3, 1);
 {
-  const wallMat = new THREE.MeshLambertMaterial({ map: wallTex });
+  const wallMat = intWallMat = new THREE.MeshLambertMaterial({ map: wallTex });
   intFloor = new THREE.Mesh(new THREE.PlaneGeometry(20, 15), new THREE.MeshLambertMaterial({ map: woodTex }));
   intFloor.rotation.x = -Math.PI / 2; intFloor.position.set(INT.x, 0.02, INT.z + 0.5); intFloor.receiveShadow = true; scene.add(intFloor);
   const ceil = new THREE.Mesh(new THREE.PlaneGeometry(20, 15), new THREE.MeshLambertMaterial({ color: 0xf2ecde }));
@@ -1355,11 +1355,42 @@ const INTHEMES = {
 };
 function buildInterior(theme) {
   while (intProps.children.length) { const c = intProps.children.pop(); if (c.geometry) c.geometry.dispose(); }
+  if (theme === "home") { buildHome(); return; }          // your apartment is built from your saved decor
+  if (intWallMat) intWallMat.color.setHex(0xffffff);
   const cfg = INTHEMES[theme] || INTHEMES.shop;
   intFloor.material.map = FLOORTEX[cfg.floor] || woodTex;
   intFloor.material.color.setHex(cfg.floorTint || 0xffffff);
   intFloor.material.needsUpdate = true;
   cfg.build();
+}
+// ---------- apartment decoration: pick furniture/colours, saved in state.decor ----------
+const DECOR = {
+  wall: { name: "Wall", opts: [{ n: "Cream", c: 0xece3d2 }, { n: "Sky", c: 0xcfe0ee }, { n: "Sage", c: 0xd2e0cf }, { n: "Blush", c: 0xeed4d8 }, { n: "Slate", c: 0x9aa0ac }, { n: "Tan", c: 0xe2cfa6 }, { n: "Lilac", c: 0xddd2ec }] },
+  floor: { name: "Floor", opts: [{ n: "Wood", tex: "wood" }, { n: "Tile", tex: "tile" }, { n: "Carpet", tex: "carpet" }, { n: "Concrete", tex: "concrete" }] },
+  sofa: { name: "Sofa", opts: [{ n: "None", none: true }, { n: "Navy", c: 0x3a4f76 }, { n: "Teal", c: 0x2e7d78 }, { n: "Mustard", c: 0xd0a23a }, { n: "Crimson", c: 0xa23a3a }, { n: "Grey", c: 0x6a6e76 }, { n: "Plum", c: 0x6a4a7a }] },
+  bed: { name: "Bed", opts: [{ n: "None", none: true }, { n: "Blue", c: 0x4a6f9a }, { n: "Green", c: 0x4a8a5a }, { n: "Red", c: 0xa24a4a }, { n: "Cream", c: 0xe0d6c0 }] },
+  rug: { name: "Rug", opts: [{ n: "None", none: true }, { n: "Red", c: 0xb24a4a }, { n: "Blue", c: 0x3a5a8a }, { n: "Gold", c: 0xc7a23a }, { n: "Green", c: 0x4a7a5a }, { n: "Mono", c: 0x3a3a40 }] },
+  tv: { name: "TV", opts: [{ n: "None", none: true }, { n: "Stand", c: 0x2a2a2e }, { n: "Walnut", c: 0x5a3f2a }, { n: "White", c: 0xdedede }] },
+  plant: { name: "Plant", opts: [{ n: "None", none: true }, { n: "Palm", c: 0x3a8a4a }, { n: "Fern", c: 0x5aa05a }, { n: "Cactus", c: 0x6a9a4a }] },
+  table: { name: "Table", opts: [{ n: "None", none: true }, { n: "Wood", c: 0x7a5a3a }, { n: "Black", c: 0x2a2a2e }, { n: "Glass", c: 0xbfd6e0 }] },
+  art: { name: "Wall Art", opts: [{ n: "None", none: true }, { n: "Sunset", c: 0xff8a3a }, { n: "Ocean", c: 0x3a8ac0 }, { n: "Abstract", c: 0xc04a8a }, { n: "Forest", c: 0x3a7a4a }] },
+  lamp: { name: "Lamp", opts: [{ n: "None", none: true }, { n: "Warm", c: 0xffd98a }, { n: "Cool", c: 0xbfe0ff }, { n: "Pink", c: 0xffb0d0 }] },
+};
+const swatchTexCol = { wood: 0x9a6e44, tile: 0xd9d9df, carpet: 0x7a3540, concrete: 0x9a9a9e };
+function buildHome() {
+  const d = state.decor;
+  if (intWallMat) intWallMat.color.setHex(DECOR.wall.opts[d.wall].c);
+  intFloor.material.map = FLOORTEX[DECOR.floor.opts[d.floor].tex]; intFloor.material.color.setHex(0xffffff); intFloor.material.needsUpdate = true;
+  const opt = slot => DECOR[slot].opts[d[slot]];
+  let o;
+  o = opt("rug"); if (!o.none) { const rug = new THREE.Mesh(new THREE.PlaneGeometry(6, 4), new THREE.MeshLambertMaterial({ color: o.c })); rug.rotation.x = -Math.PI / 2; rug.position.set(INT.x, 0.04, INT.z + 3.6); intProps.add(rug); }
+  o = opt("sofa"); if (!o.none) { ib(4, 0.8, 1.6, -4, 0.5, 5, o.c); ib(4, 0.6, 0.5, -4, 1.05, 5.7, o.c); ib(0.5, 0.7, 1.6, -6, 0.7, 5, o.c); ib(0.5, 0.7, 1.6, -2, 0.7, 5, o.c); }
+  o = opt("table"); if (!o.none) { ib(2.2, 0.12, 1.1, -4, 0.5, 2.6, o.c); ib(0.15, 0.5, 0.15, -4.9, 0.25, 2.1, o.c); ib(0.15, 0.5, 0.15, -3.1, 0.25, 3.1, o.c); }
+  o = opt("tv"); if (!o.none) { ib(2, 0.6, 1, 6, 0.4, 6.2, o.c); ib(3, 1.7, 0.18, 6, 1.6, 6.9, 0x121316); }
+  o = opt("bed"); if (!o.none) { ib(3.6, 0.5, 2.4, 7, 0.4, 1.5, 0x6a5a44); ib(3.6, 0.35, 2.4, 7, 0.72, 1.5, o.c); ib(3.6, 0.3, 0.6, 7, 0.95, 0.5, 0xf2efe6); }
+  o = opt("plant"); if (!o.none) { ib(0.55, 0.8, 0.55, 8.6, 0.4, -5, 0x8a5a36); ib(0.9, 1.1, 0.9, 8.6, 1.3, -5, o.c); }
+  o = opt("art"); if (!o.none) { ib(2.6, 1.5, 0.1, 0, 2.5, 7.7, 0x2a2218); ib(2.3, 1.25, 0.06, 0, 2.5, 7.74, o.c); }
+  o = opt("lamp"); if (!o.none) { ib(0.18, 1.9, 0.18, 8.6, 0.95, 6, 0x2a2a30); ib(0.8, 0.55, 0.8, 8.6, 2.0, 6, 0xf0ead8); intProps.add((() => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), new THREE.MeshBasicMaterial({ color: o.c })); m.position.set(INT.x + 8.6, 1.95, INT.z + 6); return m; })()); }
 }
 function themeOf(name) {
   const n = (name || "").toUpperCase();
@@ -1386,7 +1417,7 @@ function enterBuilding(e) {
   intReturn = { x: player.x, z: player.z, h: player.h };
   inside = true; intLight.intensity = 1.2;
   player.x = INT.x; player.z = INT.z + 0.5; player.h = 0; player.speed = 0;   // mid-room, facing the counter
-  buildInterior(themeOf(e.name));
+  intTheme = themeOf(e.name); buildInterior(intTheme);
   setSpriteText(intSign, e.name); snapCam(); AudioSys.play("door", 0.7);
 }
 function exitBuilding() {
@@ -1572,6 +1603,7 @@ const state = {
   haircut: -1,           // chosen haircut (index, -1 = default)
   jacket: 0, hat: 0, glasses: 0, beard: 0,   // accessory indices (0 = None)
   weapon: null, ammo: {},   // equipped weapon index + owned ammo per weapon id
+  decor: { wall: 0, floor: 2, sofa: 1, bed: 1, rug: 1, tv: 1, plant: 1, table: 1, art: 1, lamp: 1 },   // apartment furnishings
   ach: [],               // unlocked achievement ids
   mi: 0,                 // mission index; 8 = story complete
   xp: 0,                 // experience toward the next player level
@@ -1580,7 +1612,7 @@ const state = {
 };
 function save() {
   state.maxMoney = Math.max(state.maxMoney || 0, Math.floor(state.money));
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, outfit: state.outfit, haircut: state.haircut, jacket: state.jacket, hat: state.hat, glasses: state.glasses, beard: state.beard, weapon: state.weapon, ammo: state.ammo, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, outfit: state.outfit, haircut: state.haircut, jacket: state.jacket, hat: state.hat, glasses: state.glasses, beard: state.beard, weapon: state.weapon, ammo: state.ammo, decor: state.decor, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
 }
 function load() {
   try {
@@ -1600,6 +1632,7 @@ function load() {
       state.outfit = d.outfit == null ? -1 : d.outfit; state.haircut = d.haircut == null ? -1 : d.haircut;
       state.jacket = d.jacket || 0; state.hat = d.hat || 0; state.glasses = d.glasses || 0; state.beard = d.beard || 0;
       state.weapon = (d.weapon == null ? null : d.weapon); state.ammo = d.ammo || {};
+      if (d.decor) state.decor = Object.assign({}, state.decor, d.decor);
       state.ach = d.ach || [];
       state.xp = d.xp || 0;
       state.lvl = d.lvl || 1;
@@ -2322,6 +2355,12 @@ doorBtn.addEventListener("click", () => {
   if (state.phase !== "play" || dlgLines || garageOpen || statsOpen || styleOpen) return;
   if (inside) exitBuilding(); else { const e = nearEnterable(); if (e) enterBuilding(e); }
 });
+const decorBtn = dom("decorbtn");
+const canDecorate = () => inside && intTheme === "home" && ownsAnyProp();
+decorBtn.addEventListener("click", () => {
+  if (state.phase !== "play" || dlgLines || garageOpen || statsOpen || styleOpen) return;
+  if (canDecorate()) openStyleShop("decor");
+});
 let brakeHeld = false, boostHeld = false, boostMeter = 1;
 btnA.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actA = true; });
 btnB.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actB = true; bHeld = true; });
@@ -2554,9 +2593,11 @@ function updateHUD() {
   boostBtn.style.display = drive ? "block" : "none";
   punchBtn.style.display = (!driving && !dlgLines && !garageOpen && !statsOpen && !styleOpen) ? "block" : "none";
   { const w = armed(); punchBtn.textContent = w ? "🔫 " + ammoOf(w) : "PUNCH"; }
-  const showDoor = (!dlgLines && !garageOpen && !statsOpen && !styleOpen) && (inside || !!nearEnterable());
+  const menus = dlgLines || garageOpen || statsOpen || styleOpen;
+  const showDoor = !menus && (inside || !!nearEnterable());
   doorBtn.style.display = showDoor ? "block" : "none";
   if (showDoor) doorBtn.textContent = inside ? "🚪 EXIT" : "🚪 ENTER";
+  decorBtn.style.display = (!menus && canDecorate()) ? "block" : "none";
   if (drive) { elSpeedo.style.display = "block"; drawSpeedo(driving.speed, boostMeter, fuel); }
   else if (elSpeedo.style.display !== "none") elSpeedo.style.display = "none";
 
@@ -2853,7 +2894,13 @@ dom("stclose").addEventListener("click", closeStats);
 // ---------- style shop UI (wardrobe / barber): try looks on, the player changes live ----------
 let styleOpen = false, styleKind = null, styleTab = "outfit";
 const elStyle = dom("style");
+function applyDecor(slot, idx) {
+  state.decor[slot] = idx;
+  if (inside && intTheme === "home") buildInterior("home");
+  AudioSys.play("blip", 0.4); save();
+}
 function styleCfg() {
+  if (styleKind === "decor") { const slot = styleTab, D = DECOR[slot]; return { list: D.opts, cur: state.decor[slot], apply: idx => applyDecor(slot, idx), dots: o => o.none ? [] : [o.c != null ? o.c : swatchTexCol[o.tex]] }; }
   if (styleKind === "ammo") return { list: WEAPONS, cur: (state.weapon == null ? -1 : state.weapon), apply: buyWeapon, dots: () => [], ammo: true };
   if (styleKind === "barber") {
     if (styleTab === "beard") return { list: BEARDS, cur: state.beard, apply: applyBeard, dots: it => it.none ? [] : [it.color] };
@@ -2866,11 +2913,13 @@ function styleCfg() {
 }
 function renderStyle() {
   dom("sytitle").textContent = styleKind === "ammo" ? "🔫 AMMO SHOP — buy weapons & ammo"
+    : styleKind === "decor" ? "🎨 DECORATE YOUR APARTMENT"
     : styleKind === "barber" ? "💈 BARBER — pick a cut" : "👕 WARDROBE";
   const tabs = dom("sytabs"); tabs.innerHTML = "";
   if (styleKind === "ammo") tabs.style.display = "none";
   else {
-    const tabSet = styleKind === "barber" ? [["hair", "Hair"], ["beard", "Beard"]]
+    const tabSet = styleKind === "decor" ? Object.keys(DECOR).map(k => [k, DECOR[k].name])
+      : styleKind === "barber" ? [["hair", "Hair"], ["beard", "Beard"]]
       : [["outfit", "Outfit"], ["jacket", "Jacket"], ["hat", "Hat"], ["glasses", "Glasses"]];
     tabs.style.display = "flex";
     tabSet.forEach(([k, lbl]) => {
@@ -2894,7 +2943,7 @@ function renderStyle() {
     grid.appendChild(cell);
   });
 }
-function openStyleShop(kind) { styleKind = kind; styleTab = kind === "barber" ? "hair" : "outfit"; styleOpen = true; renderStyle(); elStyle.style.display = "flex"; }
+function openStyleShop(kind) { styleKind = kind; styleTab = kind === "barber" ? "hair" : kind === "decor" ? "wall" : "outfit"; styleOpen = true; renderStyle(); elStyle.style.display = "flex"; }
 function closeStyleShop() { styleOpen = false; styleKind = null; elStyle.style.display = "none"; }
 dom("syx").addEventListener("click", closeStyleShop);
 dom("sydone").addEventListener("click", closeStyleShop);

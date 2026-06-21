@@ -191,6 +191,11 @@
     background:rgba(30,16,28,.8); color:#ffe9b3; border:1px solid rgba(255,205,140,.45);
     backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); box-shadow:0 6px 20px rgba(20,8,16,.5); }
   #doorbtn:active { transform:translateX(-50%) scale(.95); }
+  #decorbtn { position:absolute; bottom:calc(86px + env(safe-area-inset-bottom,0px)); left:50%; transform:translateX(-50%);
+    display:none; padding:11px 22px; border-radius:26px; font-size:14px; font-weight:800; letter-spacing:1px;
+    background:rgba(40,20,46,.82); color:#ffe9b3; border:1px solid rgba(220,160,255,.5);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); box-shadow:0 6px 20px rgba(20,8,16,.5); }
+  #decorbtn:active { transform:translateX(-50%) scale(.95); }
 
   #style { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
     background:rgba(12,16,20,.6); }
@@ -279,6 +284,7 @@
   <button id="punch" class="btn pe">PUNCH</button>
   <button id="btnA" class="btn pe"></button>
   <button id="doorbtn" class="pe">🚪 ENTER</button>
+  <button id="decorbtn" class="pe">🎨 DECORATE</button>
   <canvas id="speedo" width="92" height="92"></canvas>
   <div id="dialogue" class="pe"><div id="dwho"></div><div id="dtext"></div><div id="dhint"></div></div>
   <div id="intro" class="pe"></div>
