@@ -611,8 +611,8 @@ let buildingMat = null;
   // make a scattering of ordinary buildings enterable too (generic lobby interior)
   placed.forEach((b, i) => { if (i % 7 === 0) ENTERABLES.push({ x: b.x, z: b.z, name: "🏢 Lobby", r: Math.pow(Math.max(b.w, b.d) / 2 + 4, 2) }); });
 
-  // downtown skyscrapers — tiling glass-tower facade (shared material across chunks for the night ramp)
-  const towerSide = new THREE.MeshLambertMaterial({ map: texTower, emissive: 0xffffff, emissiveMap: texTowerWin, emissiveIntensity: 0 });
+  // downtown skyscrapers — reflective glass-tower facade (PBR so the sky env mirrors off the glass)
+  const towerSide = new THREE.MeshStandardMaterial({ map: texTower, metalness: 0.62, roughness: 0.32, envMapIntensity: 1.15, emissive: 0xffffff, emissiveMap: texTowerWin, emissiveIntensity: 0 });
   specialMats.push(towerSide);
   boxChunks(towers, [towerSide, towerSide, matRoof, matRoof, towerSide, towerSide]);
 
@@ -3592,8 +3592,8 @@ function buildBloom() {
     fragmentShader: "uniform sampler2D tDiffuse; uniform float threshold; varying vec2 vUv; void main(){ vec3 c=texture2D(tDiffuse,vUv).rgb; float l=dot(c,vec3(0.299,0.587,0.114)); gl_FragColor=vec4(c*smoothstep(threshold,threshold+0.18,l),1.0); }" });
   blurMat = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, dir: { value: new THREE.Vector2() } }, vertexShader: BLOOM_VERT,
     fragmentShader: "uniform sampler2D tDiffuse; uniform vec2 dir; varying vec2 vUv; void main(){ vec3 s=texture2D(tDiffuse,vUv).rgb*0.227027; s+=texture2D(tDiffuse,vUv+dir*1.3846).rgb*0.316216; s+=texture2D(tDiffuse,vUv-dir*1.3846).rgb*0.316216; s+=texture2D(tDiffuse,vUv+dir*3.2308).rgb*0.07027; s+=texture2D(tDiffuse,vUv-dir*3.2308).rgb*0.07027; gl_FragColor=vec4(s,1.0); }" });
-  compMat = new THREE.ShaderMaterial({ uniforms: { tScene: { value: null }, tBloom: { value: null }, strength: { value: 1.05 } }, vertexShader: BLOOM_VERT,
-    fragmentShader: "uniform sampler2D tScene; uniform sampler2D tBloom; uniform float strength; varying vec2 vUv; vec3 toSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,vec3(0.0)),vec3(0.41666))-0.055, step(0.0031308,c)); } void main(){ vec3 sc=texture2D(tScene,vUv).rgb; vec3 bl=texture2D(tBloom,vUv).rgb; gl_FragColor=vec4(clamp(toSRGB(sc+bl*strength),0.0,1.0),1.0); }" });
+  compMat = new THREE.ShaderMaterial({ uniforms: { tScene: { value: null }, tBloom: { value: null }, strength: { value: 1.05 }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(bloomW, bloomH) } }, vertexShader: BLOOM_VERT,
+    fragmentShader: "uniform sampler2D tScene; uniform sampler2D tBloom; uniform float strength; uniform float uTime; uniform vec2 uRes; varying vec2 vUv; vec3 toSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,vec3(0.0)),vec3(0.41666))-0.055, step(0.0031308,c)); } float hash(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); } void main(){ vec2 uv=vUv; vec2 d=uv-0.5; float r2=dot(d,d); float ca=r2*0.004; vec3 sc; sc.r=texture2D(tScene,uv+d*ca).r; sc.g=texture2D(tScene,uv).g; sc.b=texture2D(tScene,uv-d*ca).b; vec3 bl=texture2D(tBloom,uv).rgb; vec3 col=toSRGB(max(sc+bl*strength,0.0)); float luma=dot(col,vec3(0.2126,0.7152,0.0722)); col=mix(vec3(luma),col,1.11); col=(col-0.5)*1.055+0.5; col*=1.0-r2*0.62; float g=hash(uv*uRes+fract(uTime))-0.5; col+=g*0.018; gl_FragColor=vec4(clamp(col,0.0,1.0),1.0); }" });
   bloomReady = true;
 }
 function blit(mat, target) { fsQuad.material = mat; renderer.setRenderTarget(target || null); renderer.render(fsScene, fsCam); }
@@ -3611,7 +3611,9 @@ function renderBloom() {
   blurMat.uniforms.tDiffuse.value = rtB2.texture; blurMat.uniforms.dir.value.set(0, th); blit(blurMat, rtB1);
   blurMat.uniforms.tDiffuse.value = rtB1.texture; blurMat.uniforms.dir.value.set(tw * 2.2, 0); blit(blurMat, rtB2);
   blurMat.uniforms.tDiffuse.value = rtB2.texture; blurMat.uniforms.dir.value.set(0, th * 2.2); blit(blurMat, rtB1);
-  compMat.uniforms.tScene.value = rtScene.texture; compMat.uniforms.tBloom.value = rtB1.texture; blit(compMat, null);
+  compMat.uniforms.tScene.value = rtScene.texture; compMat.uniforms.tBloom.value = rtB1.texture;
+  compMat.uniforms.uTime.value = simTime; compMat.uniforms.uRes.value.set(bloomW, bloomH);
+  blit(compMat, null);
   renderer.setRenderTarget(null);
 }
 function renderFrame() {
