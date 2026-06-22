@@ -119,13 +119,45 @@ const skyUniforms = {
   topColor: { value: new THREE.Color(0x4a90d9) },
   horizonColor: { value: new THREE.Color(0xf7c98e) },
   exponent: { value: 0.65 },
+  hazeColor: { value: new THREE.Color(0xfbd9a6) },
+  cloudColor: { value: new THREE.Color(0xffffff) },
+  cloudAmt: { value: 0.6 },
+  sunDir: { value: new THREE.Vector3(0, 0.6, -1).normalize() },
+  sunCol: { value: new THREE.Color(0xffe6b0) },
+  uTime: { value: 0 },
 };
+const SKY_FRAG = `
+  uniform vec3 topColor; uniform vec3 horizonColor; uniform float exponent;
+  uniform vec3 hazeColor; uniform vec3 cloudColor; uniform float cloudAmt;
+  uniform vec3 sunDir; uniform vec3 sunCol; uniform float uTime;
+  varying vec3 vDir;
+  float h21(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+  float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+    float a=h21(i), b=h21(i+vec2(1.0,0.0)), c=h21(i+vec2(0.0,1.0)), d=h21(i+vec2(1.0,1.0));
+    return mix(mix(a,b,f.x), mix(c,d,f.x), f.y); }
+  float fbm(vec2 p){ float s=0.0, a=0.5; for(int k=0;k<5;k++){ s+=a*vnoise(p); p*=2.03; a*=0.5; } return s; }
+  void main(){
+    vec3 dir = normalize(vDir);
+    float f = pow(max(dir.y,0.0), exponent);
+    vec3 sky = mix(horizonColor, topColor, f);
+    sky = mix(sky, hazeColor, smoothstep(0.22, -0.02, dir.y) * 0.7);   // thick haze toward the horizon
+    float sd = max(dot(dir, sunDir), 0.0);
+    sky += sunCol * (pow(sd, 6.0) * 0.35 + pow(sd, 260.0) * 1.1);       // atmospheric sun scattering
+    if (dir.y > 0.015) {
+      vec2 uv = dir.xz / (dir.y + 0.16);
+      float c = fbm(uv * 1.7 + vec2(uTime * 0.011, uTime * 0.005));
+      c = smoothstep(0.52, 0.96, c) * smoothstep(0.0, 0.32, dir.y) * cloudAmt;
+      vec3 lit = mix(cloudColor, sunCol, pow(sd, 3.0) * 0.6);            // clouds catch the sun
+      sky = mix(sky, lit, c);
+    }
+    gl_FragColor = vec4(sky, 1.0);
+  }`;
 const skyDome = new THREE.Mesh(
-  new THREE.SphereGeometry(700, 24, 12),
+  new THREE.SphereGeometry(700, 32, 16),
   new THREE.ShaderMaterial({
     uniforms: skyUniforms, side: THREE.BackSide, depthWrite: false, fog: false,
     vertexShader: "varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
-    fragmentShader: "uniform vec3 topColor; uniform vec3 horizonColor; uniform float exponent; varying vec3 vDir; void main(){ float f = pow(max(vDir.y,0.0), exponent); gl_FragColor = vec4(mix(horizonColor, topColor, f), 1.0); }",
+    fragmentShader: SKY_FRAG,
   }));
 skyDome.frustumCulled = false;
 skyGroup.add(skyDome);
@@ -176,11 +208,18 @@ function setSky(night) {
   sun.color.copy(_lc);
   if (starPts) starPts.material.opacity = Math.min(1, night) * 0.95;
   if (cloudPts) {
-    cloudPts.material.opacity = (1 - night) * 0.55;
+    cloudPts.material.opacity = (1 - night) * 0.32;
     cloudPts.material.color.copy(_lc).lerp(_white, 0.5);   // clouds catch the warm sunset light
     for (let i = 0; i < cloudN; i++) { let x = cloudBase[i] + simTime * 3; cloudPos[i * 3] = ((x + 700) % 1400 + 1400) % 1400 - 700; }
     cloudPts.geometry.attributes.position.needsUpdate = true;
   }
+  // procedural sky-dome: feed sun direction, scattering colour and drifting cloud layer
+  skyUniforms.uTime.value = simTime;
+  skyUniforms.sunDir.value.copy(sunSprite.position).normalize();
+  skyUniforms.sunCol.value.copy(_lc).multiplyScalar(clamp(1 - night, 0.04, 1) * 0.9);
+  skyUniforms.hazeColor.value.copy(skyUniforms.horizonColor.value).lerp(_white, 0.12);
+  skyUniforms.cloudColor.value.copy(_white).lerp(_lc, 0.3 + night * 0.45);
+  skyUniforms.cloudAmt.value = 0.35 + (1 - night) * 0.3;   // puffy by day, faint wisps at night
 }
 
 // neon glow cloud (fake bloom) — additive sprites at landmarks/signs, lit by the night factor
@@ -1031,6 +1070,42 @@ const NPC_PALS = [
   { shirt: 0x7d6fc9, pants: 0x4a4f59, skin: 0xc98f6b, hair: 0x2c2620, hairStyle: "long", top: "tee", bottom: "pants" },
 ];
 const npcGeos = NPC_PALS.map(personGeo);
+// lightweight articulated walker: a merged upper body + four swinging limbs (legs & arms)
+// so the crowd actually strides. geometries are shared per palette; only meshes/groups differ.
+function walkerGeos(p) {
+  const SHOE = 0x2a2620;
+  const top = p.hat
+    ? [cylC(0.18, 0.19, 0.05, 0, 1.72, 0, p.hat), cylC(0.13, 0.14, 0.16, 0, 1.81, 0, p.hat)]
+    : [sphC(0.152, 0, 1.7, -0.035, p.hair, 1.05, 0.82, 1.05),
+       ...(p.hairStyle === "bun" ? [sphC(0.075, 0, 1.78, -0.12, p.hair)]
+         : p.hairStyle === "long" ? [sphC(0.13, 0, 1.51, -0.1, p.hair, 1, 1.25, 0.7)] : [])];
+  const body = mergeGeos([
+    cylC(0.145, 0.155, 0.16, 0, 0.88, 0, p.pants),          // hips
+    cylC(0.17, 0.13, 0.5, 0, 1.12, 0, p.shirt),             // torso
+    cylC(0.056, 0.07, 0.14, 0, 1.46, 0, p.skin),            // neck
+    sphC(0.14, 0, 1.63, 0, p.skin, 1, 1.13, 0.95),          // head
+    sphC(0.026, 0.055, 1.63, 0.12, 0x241c18),               // eyes
+    sphC(0.026, -0.055, 1.63, 0.12, 0x241c18),
+    sphC(0.03, 0, 1.6, 0.13, p.skin, 0.9, 1.2, 1.4),        // nose
+    sphC(0.038, 0.135, 1.63, 0, p.skin, 0.5, 1, 1),         // ears
+    sphC(0.038, -0.135, 1.63, 0, p.skin, 0.5, 1, 1),
+    ...top,
+  ]);
+  // limb geometries built around their pivot (origin) so a parent group can swing them
+  const leg = mergeGeos([cylC(0.08, 0.06, 0.84, 0, -0.42, 0, p.pants), sphC(0.092, 0, -0.82, 0.05, SHOE, 1.0, 0.55, 1.7)]);
+  const arm = mergeGeos([cylC(0.057, 0.045, 0.56, 0, -0.28, 0, p.shirt), sphC(0.053, 0, -0.58, 0, p.skin)]);
+  return { body, leg, arm };
+}
+const npcWalkerGeos = NPC_PALS.map(walkerGeos);
+function makeWalker(W) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(W.body, matVC); body.castShadow = true;
+  const limb = (geo, x, y) => { const grp = new THREE.Group(); grp.position.set(x, y, 0); grp.add(new THREE.Mesh(geo, matVC)); return grp; };   // limbs skip real shadows (blob shadow grounds them)
+  const legL = limb(W.leg, 0.1, 0.88), legR = limb(W.leg, -0.1, 0.88);
+  const armL = limb(W.arm, 0.172, 1.36), armR = limb(W.arm, -0.172, 1.36);
+  g.add(body, legL, legR, armL, armR);
+  return { group: g, legL, legR, armL, armR };
+}
 
 // ---------- cars ----------
 // round vertex-coloured wheel (axle along X so it lies flat on its side)
@@ -1181,13 +1256,13 @@ for (let i = 0; i < POLICE_N; i++) {
 const npcs = [];
 for (let t = 0; t < 260; t++) {
   const i = (rng() * N) | 0, j = (rng() * N) | 0;
-  const mesh = new THREE.Mesh(npcGeos[(rng() * npcGeos.length) | 0], matVC);
-  mesh.scale.set(rr(0.92, 1.06), rr(0.9, 1.14), rr(0.92, 1.06));   // varied heights & builds
-  mesh.castShadow = true;
-  scene.add(mesh);
+  const w = makeWalker(npcWalkerGeos[(rng() * npcWalkerGeos.length) | 0]);
+  w.group.scale.set(rr(0.92, 1.06), rr(0.9, 1.14), rr(0.92, 1.06));   // varied heights & builds
+  scene.add(w.group);
   npcs.push({
-    mesh, x: blockMin(i) + rr(2, BLOCK - 2), z: blockMin(j) + rr(2, BLOCK - 2),
-    h: rr(0, Math.PI * 2), speed: rr(1.0, 1.7), timer: rr(2, 6), phase: rr(0, 6),
+    mesh: w.group, legL: w.legL, legR: w.legR, armL: w.armL, armR: w.armR,
+    x: blockMin(i) + rr(2, BLOCK - 2), z: blockMin(j) + rr(2, BLOCK - 2),
+    h: rr(0, Math.PI * 2), speed: rr(1.0, 1.7), timer: rr(2, 6), phase: rr(0, 6), walkPhase: rr(0, 6),
   });
 }
 
@@ -3454,11 +3529,18 @@ function update(dt) {
     const ox = n.x, oz = n.z;
     const sp = n.flee > 0 ? 3.8 : n.speed;
     moveWithCollision(n, Math.sin(n.h) * sp * dt, Math.cos(n.h) * sp * dt, 0.4);
-    if (Math.abs(n.x - ox) + Math.abs(n.z - oz) < sp * dt * 0.3) n.h += Math.PI + rr(-0.5, 0.5);
+    const moved = Math.abs(n.x - ox) + Math.abs(n.z - oz);
+    if (moved < sp * dt * 0.3) n.h += Math.PI + rr(-0.5, 0.5);
+    // stride: advance the walk cycle with speed, swing legs & arms in opposition, bob with each step
+    const stepping = moved > sp * dt * 0.3;
+    n.walkPhase += sp * dt * 2.6;
+    const sw = stepping ? Math.sin(n.walkPhase) * Math.min(1, sp / 2.2) * 0.7 : (n.legL.rotation.x * 0.85);
+    n.legL.rotation.x = sw; n.legR.rotation.x = -sw;
+    n.armL.rotation.x = -sw * 0.8; n.armR.rotation.x = sw * 0.8;
     const gy = groundY(n.x, n.z);
-    n.mesh.position.set(n.x, gy + Math.abs(Math.sin(simTime * 9 + n.phase)) * 0.05, n.z);
+    n.mesh.position.set(n.x, gy + (stepping ? Math.abs(Math.sin(n.walkPhase)) * 0.05 : 0), n.z);
     n.mesh.rotation.y = n.h;
-    n.mesh.rotation.z = Math.sin(simTime * 9 + n.phase) * 0.07;
+    n.mesh.rotation.z = stepping ? Math.sin(n.walkPhase) * 0.05 : 0;
   }
 
   // income + missions
