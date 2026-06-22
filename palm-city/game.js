@@ -444,6 +444,7 @@ function byChunk(list) { const map = new Map(); for (const b of list) { const k 
 const matVC = new THREE.MeshLambertMaterial({ vertexColors: true });
 let roadMat = null, sidewalkMat = null;   // exposed so rain can make the floor wet
 let oceanTex = null;   // exposed so the sea can drift/shimmer
+let foamMat = null;    // shoreline foam (pulses like waves)
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 1700, 2 * HALF + 1700),
   new THREE.MeshLambertMaterial({ color: 0x9aab72 }));
 ground.geometry.rotateX(-Math.PI / 2);
@@ -479,6 +480,13 @@ scene.add(ground);
   const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
   spots.forEach(([x, z, rot], idx) => { p.set(x, 0.055, z); q.setFromAxisAngle(up, rot); m.compose(p, q, s); im.setMatrixAt(idx, m); });
   im.frustumCulled = false; scene.add(im);
+  // solid white stop lines just inside each crosswalk
+  const slGeo = new THREE.PlaneGeometry(ROAD - 3.5, 0.7); slGeo.rotateX(-Math.PI / 2);
+  const slIM = new THREE.InstancedMesh(slGeo, new THREE.MeshBasicMaterial({ color: 0xeef0ee }), spots.length);
+  const sl = [];
+  for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) { const cx = roadC(i), cz = roadC(j); sl.push([cx, cz + ROAD / 2 + 0.5, 0], [cx, cz - ROAD / 2 - 0.5, 0], [cx + ROAD / 2 + 0.5, cz, Math.PI / 2], [cx - ROAD / 2 - 0.5, cz, Math.PI / 2]); }
+  sl.forEach(([x, z, rot], idx) => { p.set(x, 0.052, z); q.setFromAxisAngle(up, rot); m.compose(p, q, s); slIM.setMatrixAt(idx, m); });
+  slIM.frustumCulled = false; scene.add(slIM);
 }
 
 // block layout
@@ -656,9 +664,14 @@ const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigg
   scene.add(sand);
   // ocean
   const sea = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 900, 600),
-    new THREE.MeshLambertMaterial({ map: seaTex, transparent: true, opacity: 0.94 }));
+    new THREE.MeshStandardMaterial({ map: seaTex, transparent: true, opacity: 0.92, roughness: 0.14, metalness: 0.0, envMapIntensity: 1.1 }));
   sea.rotation.x = -Math.PI / 2; sea.position.set(10, 0.03, SEA_Z + 295);
   scene.add(sea);
+  // shoreline foam band where the water meets the sand
+  const foamTex = canvasTex(128, (ctx, s) => { ctx.clearRect(0, 0, s, s); for (let i = 0; i < 90; i++) { ctx.fillStyle = "rgba(255,255,255," + (0.3 + Math.random() * 0.5) + ")"; ctx.beginPath(); ctx.arc(Math.random() * s, s * 0.5 + (Math.random() - 0.5) * s * 0.7, 2 + Math.random() * 6, 0, 7); ctx.fill(); } }, 60, 1);
+  const foam = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 200, 7), new THREE.MeshBasicMaterial({ map: foamTex, transparent: true, depthWrite: false }));
+  foam.rotation.x = -Math.PI / 2; foam.position.set(10, 0.05, SEA_Z - 1);
+  scene.add(foam); foamMat = foam.material;
 
   // beach palms (compact instanced clump: leaning trunks + frond crowns)
   const pspots = [];
@@ -3213,6 +3226,7 @@ const SPRINT_RAMP = 2.5;   // seconds of holding sprint to reach top running spe
 function update(dt) {
   simTime += dt;
   if (oceanTex) { oceanTex.offset.x += dt * 0.006; oceanTex.offset.y += dt * 0.011; }   // drifting water
+  if (foamMat) foamMat.opacity = 0.5 + Math.sin(simTime * 1.4) * 0.28;                   // waves washing the shore
   const inp = (dlgLines || garageOpen || statsOpen || tutOpen || styleOpen || arcadeOpen) ? { mx: 0, mz: 0, mag: 0 } : readInput();
   const a = actA, b = actB, pn = actP; actA = false; actB = false; actP = false;
   if (a && !dlgLines && !garageOpen && !statsOpen && !tutOpen && !styleOpen && !arcadeOpen) doActionA();
@@ -3493,11 +3507,11 @@ function buildBloom() {
   rtB2 = new THREE.WebGLRenderTarget(hw, hh); rtB2.texture.colorSpace = THREE.LinearSRGBColorSpace;
   fsScene = new THREE.Scene(); fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   fsQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)); fsScene.add(fsQuad);
-  brightMat = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, threshold: { value: 0.78 } }, vertexShader: BLOOM_VERT,
+  brightMat = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, threshold: { value: 0.7 } }, vertexShader: BLOOM_VERT,
     fragmentShader: "uniform sampler2D tDiffuse; uniform float threshold; varying vec2 vUv; void main(){ vec3 c=texture2D(tDiffuse,vUv).rgb; float l=dot(c,vec3(0.299,0.587,0.114)); gl_FragColor=vec4(c*smoothstep(threshold,threshold+0.18,l),1.0); }" });
   blurMat = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, dir: { value: new THREE.Vector2() } }, vertexShader: BLOOM_VERT,
     fragmentShader: "uniform sampler2D tDiffuse; uniform vec2 dir; varying vec2 vUv; void main(){ vec3 s=texture2D(tDiffuse,vUv).rgb*0.227027; s+=texture2D(tDiffuse,vUv+dir*1.3846).rgb*0.316216; s+=texture2D(tDiffuse,vUv-dir*1.3846).rgb*0.316216; s+=texture2D(tDiffuse,vUv+dir*3.2308).rgb*0.07027; s+=texture2D(tDiffuse,vUv-dir*3.2308).rgb*0.07027; gl_FragColor=vec4(s,1.0); }" });
-  compMat = new THREE.ShaderMaterial({ uniforms: { tScene: { value: null }, tBloom: { value: null }, strength: { value: 0.8 } }, vertexShader: BLOOM_VERT,
+  compMat = new THREE.ShaderMaterial({ uniforms: { tScene: { value: null }, tBloom: { value: null }, strength: { value: 1.05 } }, vertexShader: BLOOM_VERT,
     fragmentShader: "uniform sampler2D tScene; uniform sampler2D tBloom; uniform float strength; varying vec2 vUv; vec3 toSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,vec3(0.0)),vec3(0.41666))-0.055, step(0.0031308,c)); } void main(){ vec3 sc=texture2D(tScene,vUv).rgb; vec3 bl=texture2D(tBloom,vUv).rgb; gl_FragColor=vec4(clamp(toSRGB(sc+bl*strength),0.0,1.0),1.0); }" });
   bloomReady = true;
 }
