@@ -138,6 +138,10 @@ const sunTex = canvasTex(64, (ctx, s) => {
 const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, color: 0xfff0bd, transparent: true, opacity: 1, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
 sunSprite.scale.set(78, 78, 1);
 skyGroup.add(sunSprite);
+// wide atmospheric glare halo around the sun (warm bloom-like spill across the sky)
+const sunGlare = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, color: 0xffcf8a, transparent: true, opacity: 0, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+sunGlare.scale.set(340, 340, 1);
+skyGroup.add(sunGlare);
 // moon (pale cratered disc) — rises at night, opposite the sun
 const moonTex = canvasTex(96, (ctx, s) => {
   const c = s / 2;
@@ -158,6 +162,9 @@ function setSky(night) {
   const t = (simTime / 240) % 1, sa = t * Math.PI * 2, sy = Math.sin(sa), cx = Math.cos(sa);
   sunSprite.position.set(cx * 340, sy * 210 + 90, -240);
   sunSprite.material.opacity = clamp(1 - night * 1.4, 0, 1);
+  sunGlare.position.copy(sunSprite.position);
+  // glare blooms strongest when the sun is low (sunrise/sunset), and dies out at night
+  sunGlare.material.opacity = clamp(1 - night * 1.5, 0, 1) * (0.22 + clamp(1 - Math.abs(sy) * 1.4, 0, 1) * 0.5);
   moonSprite.position.set(-cx * 340, -sy * 210 + 90, -240);
   moonSprite.material.opacity = clamp(night * 1.3, 0, 1);
   // key light follows whichever body is up, and warms near the horizon / cools at night
@@ -1656,6 +1663,25 @@ shadowGeo.rotateX(-Math.PI / 2);
 const shadowIM = new THREE.InstancedMesh(shadowGeo,
   new THREE.MeshBasicMaterial({ color: 0x2a2218, map: shadowTex, transparent: true, opacity: 0.42, depthWrite: false }), SHADOW_N);
 scene.add(shadowIM);
+
+// ---------- skid marks (rubber laid on the asphalt while sliding; one instanced ring buffer) ----------
+const SKID_MAX = 260;
+const skidTex = canvasTex(32, (ctx, s) => {     // soft-edged streak, dark in the middle, fading at the sides
+  ctx.clearRect(0, 0, s, s);
+  for (let x = 0; x < s; x++) { const e = 1 - Math.abs(x / s - 0.5) * 2; ctx.globalAlpha = Math.pow(e, 0.7) * 0.6; ctx.fillStyle = "#000"; ctx.fillRect(x, 0, 1, s); }
+}, 1, 1);
+const skidGeo = new THREE.PlaneGeometry(0.32, 1.7); skidGeo.rotateX(-Math.PI / 2);
+const skidIM = new THREE.InstancedMesh(skidGeo, new THREE.MeshBasicMaterial({ map: skidTex, transparent: true, opacity: 0.55, depthWrite: false }), SKID_MAX);
+skidIM.frustumCulled = false; skidIM.count = SKID_MAX;
+{ const m = new THREE.Matrix4().makeScale(0, 0, 0); for (let i = 0; i < SKID_MAX; i++) skidIM.setMatrixAt(i, m); skidIM.instanceMatrix.needsUpdate = true; }
+scene.add(skidIM);
+let skidHead = 0;
+const _skP = new THREE.Vector3(), _skQ = new THREE.Quaternion(), _skS = new THREE.Vector3(1, 1, 1), _skM = new THREE.Matrix4(), _skUp = new THREE.Vector3(0, 1, 0);
+function layStreak(x, z, h) {
+  _skP.set(x, 0.07, z); _skQ.setFromAxisAngle(_skUp, h); _skM.compose(_skP, _skQ, _skS);
+  skidIM.setMatrixAt(skidHead, _skM); skidHead = (skidHead + 1) % SKID_MAX;
+  skidIM.instanceMatrix.needsUpdate = true;
+}
 
 // ---------- juice: particles (1 draw call), screen shake, haptics, flash ----------
 const PMAXN = 160;
@@ -3329,6 +3355,12 @@ function update(dt) {
       driftCD = 0.04;
       emit(c.x - Math.sin(c.h) * 2.2, 0.3, c.z - Math.cos(c.h) * 2.2,
         rr(-0.5, 0.5), rr(0.4, 1.0), rr(-0.5, 0.5), 0.55, 0.4, 0.4, 0.44);
+    }
+    // lay rubber: two parallel streaks at the rear wheels whenever the tyres are sliding
+    if (c.y === 0 && Math.abs(c.lat) > 3.4 && Math.abs(c.speed) > 5) {
+      const rx = Math.cos(c.h), rz = -Math.sin(c.h), bx = c.x - Math.sin(c.h) * 1.7, bz = c.z - Math.cos(c.h) * 1.7;
+      layStreak(bx + rx * 0.7, bz + rz * 0.7, c.h);
+      layStreak(bx - rx * 0.7, bz - rz * 0.7, c.h);
     }
     // stunt ramps + vertical physics
     if (c.rampCD > 0) c.rampCD -= dt;
