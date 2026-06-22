@@ -1030,17 +1030,17 @@ function makeCar(color) {
   return mesh;
 }
 // motorbike — a nimble vehicle that reuses the whole car driving system
-const bikeGeo = mergeGeos([
-  boxGeoC(0.7, 0.5, 1.9, 0, 0.95, 0, 0xffffff),       // tank/body (tintable)
-  boxGeoC(0.5, 0.22, 0.6, 0, 1.16, -0.6, 0x23262b),   // seat
-  wheelGeo(0.46, 0.16, 0, 0.46, 1.0, 0x161616),       // round front wheel
-  wheelGeo(0.46, 0.16, 0, 0.46, -1.0, 0x161616),      // round rear wheel
-  wheelGeo(0.17, 0.18, 0, 0.46, 1.0, 0xc2c6cc),       // hubcaps
-  wheelGeo(0.17, 0.18, 0, 0.46, -1.0, 0xc2c6cc),
-  boxGeoC(0.82, 0.12, 0.12, 0, 1.5, 0.86, 0x3a3f47),  // handlebars
-  boxGeoC(0.24, 0.18, 0.1, 0, 1.26, 1.26, 0xfff4c4),  // headlight
-  boxGeoC(0.55, 0.7, 0.5, 0, 1.72, -0.32, 0xff7a33),  // rider torso
-  boxGeoC(0.34, 0.34, 0.32, 0, 2.2, -0.42, 0xe8b08a), // rider head
+const bikeGeo = mergeGeos([                              // low, realistic scale (shorter than the rider)
+  boxGeoC(0.4, 0.32, 1.4, 0, 0.6, 0, 0xffffff),         // tank/body (tintable)
+  boxGeoC(0.42, 0.13, 0.5, 0, 0.66, -0.4, 0x23262b),    // seat
+  wheelGeo(0.32, 0.14, 0, 0.32, 0.82, 0x161616),        // front wheel
+  wheelGeo(0.32, 0.14, 0, 0.32, -0.82, 0x161616),       // rear wheel
+  wheelGeo(0.12, 0.16, 0, 0.32, 0.82, 0xc2c6cc),        // hubcaps
+  wheelGeo(0.12, 0.16, 0, 0.32, -0.82, 0xc2c6cc),
+  boxGeoC(0.64, 0.08, 0.1, 0, 0.9, 0.6, 0x3a3f47),      // handlebars
+  boxGeoC(0.2, 0.14, 0.08, 0, 0.78, 0.78, 0xfff4c4),    // headlight
+  boxGeoC(0.42, 0.5, 0.36, 0, 1.02, -0.16, 0xff7a33),   // seated rider torso
+  boxGeoC(0.26, 0.3, 0.26, 0, 1.4, -0.2, 0xe8b08a),     // rider head
 ]);
 function makeBike(color) {
   const mesh = new THREE.Mesh(bikeGeo, new THREE.MeshStandardMaterial({ vertexColors: true, color, metalness: 0.6, roughness: 0.3, envMapIntensity: 1.1 }));
