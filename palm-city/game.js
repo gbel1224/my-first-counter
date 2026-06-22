@@ -565,7 +565,8 @@ const isResid = (i, j) => i <= 2 && j <= 2;
 const isGhetto = (i, j) => i <= 2 && j >= N - 3;
 const RESERVED = new Set(["1,1", "1," + (N - 2),     // buyable House & Apartment
   "0,1", "0," + (N - 2), (N - 1) + ",1", (N - 1) + "," + (N - 2),   // clothing stores & barbershops
-  (N / 2) + "," + (N / 2), (N / 2 + 1) + "," + (N / 2)]);   // Ammo Shop + Bowling Alley (central)
+  (N / 2) + "," + (N / 2), (N / 2 + 1) + "," + (N / 2),   // Ammo Shop + Bowling Alley (central)
+  (N / 2 - 1) + "," + (N / 2 - 2)]);   // Gun Store (by the plaza, facing spawn)
 const SPECIAL = {}; for (const [k, v] of Object.entries({ "1,3": "wash", "4,2": "burger", "5,0": "club", "0,4": "depot", "1,2": "pizza", "2,4": "taxi", "5,5": "marina", "3,2": "garage", "2,3": "home", "3,4": "hospital" })) SPECIAL[_pad(k)] = v;
 const PLAZA = { x: Bc(2), z: Bc(2) };
 const GARAGE = { x: Bc(3), z: Bc(2) };
@@ -839,6 +840,7 @@ shopFront(bc(N - 1), bc(N - 2), "👗 BELLA BOUTIQUE", "rgba(150,40,150,.92)", 0
 shopFront(bc(0), bc(N - 2), "💈 FRESH CUTS", "rgba(30,90,140,.92)", 0x6fb7d9, 0xc23a36, "barber");      // barbershop (ghetto)
 shopFront(bc(N - 1), bc(1), "💈 THE FADE SHOP", "rgba(120,30,30,.92)", 0xd98a6b, 0x2b6fb0, "barber");   // barbershop (east)
 shopFront(bc(N / 2), bc(N / 2), "🔫 AMMO SHOP", "rgba(120,30,30,.95)", 0x7a3a30, 0x2a1a16, "ammo");   // weapons (central)
+shopFront(bc(N / 2 - 1), bc(N / 2 - 2), "🔫 GUNS & AMMO", "rgba(40,40,46,.96)", 0x3a3f47, 0x14181c, "ammo");   // weapon store by the plaza (faces spawn)
 specialBuilding(bc(N / 2 + 1), bc(N / 2), 40, 12, 30, 0x4a3f6a, "🎳 BOWLING ALLEY", "rgba(80,40,130,.95)");   // bowling + arcade (enterable)
 // gas station: a pump prop + canopy at the roadside; drive near to refuel
 {
