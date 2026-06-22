@@ -218,9 +218,11 @@ function envUpdate() {
   for (const mm of specialMats) mm.emissiveIntensity = night * 1.2;   // business windows too
   if (lampMat) lampMat.emissiveIntensity = night * 2.2;            // street lamps glow after dark
   if (lampPoolMat) lampPoolMat.opacity = night * 0.5;             // ground light pools under lamps
+  if (lampConeMat) lampConeMat.opacity = night * 0.16;            // volumetric light shafts under lamps
   setGlow(night);
   setSky(night);
   updateCarLights(night);
+  updateHeadBeams(night);
 }
 
 addEventListener("resize", onResize);
@@ -288,6 +290,12 @@ const texLeaf = canvasTex(64, (ctx, s) => {
 }, 3, 3);
 // zebra crosswalk (white bars on transparent), 1:1 (no tiling)
 const texCrosswalk = canvasTex(64, (ctx, s) => { ctx.clearRect(0, 0, s, s); ctx.fillStyle = "#eef0ee"; const bars = 5, bw = s / (bars * 2 - 1); for (let i = 0; i < bars; i++) ctx.fillRect(i * bw * 2, 0, bw, s); }, 1, 1);
+// lane turn-arrow (points toward +Z = away from viewer / toward the intersection), white on transparent
+const texArrow = canvasTex(64, (ctx, s) => {
+  ctx.clearRect(0, 0, s, s); ctx.fillStyle = "#e7ebe4"; const cx = s / 2;
+  ctx.fillRect(cx - s * 0.07, s * 0.34, s * 0.14, s * 0.5);    // shaft
+  ctx.beginPath(); ctx.moveTo(cx, s * 0.12); ctx.lineTo(cx - s * 0.22, s * 0.42); ctx.lineTo(cx + s * 0.22, s * 0.42); ctx.closePath(); ctx.fill();  // head
+}, 1, 1);
 const texFacade = canvasTex(256, (ctx, s) => {
   ctx.fillStyle = "#f5efe2"; ctx.fillRect(0, 0, s, s);
   const band = 44;                                       // street-level storefront band
@@ -487,6 +495,18 @@ scene.add(ground);
   for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) { const cx = roadC(i), cz = roadC(j); sl.push([cx, cz + ROAD / 2 + 0.5, 0], [cx, cz - ROAD / 2 - 0.5, 0], [cx + ROAD / 2 + 0.5, cz, Math.PI / 2], [cx - ROAD / 2 - 0.5, cz, Math.PI / 2]); }
   sl.forEach(([x, z, rot], idx) => { p.set(x, 0.052, z); q.setFromAxisAngle(up, rot); m.compose(p, q, s); slIM.setMatrixAt(idx, m); });
   slIM.frustumCulled = false; scene.add(slIM);
+  // lane turn-arrows: one in the right-hand approach lane on each side of every intersection, pointing in
+  const arGeo = new THREE.PlaneGeometry(3.2, 5.2); arGeo.rotateX(-Math.PI / 2);
+  const arMat = new THREE.MeshBasicMaterial({ map: texArrow, transparent: true, depthWrite: false });
+  const lane = ROAD / 4, back = ROAD / 2 + 8.5;   // right-hand lane offset, distance back from the box
+  const ar = [];
+  for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
+    const cx = roadC(i), cz = roadC(j);
+    ar.push([cx + lane, cz - back, 0], [cx - lane, cz + back, Math.PI], [cx - back, cz + lane, -Math.PI / 2], [cx + back, cz - lane, Math.PI / 2]);
+  }
+  const arIM = new THREE.InstancedMesh(arGeo, arMat, ar.length);
+  ar.forEach(([x, z, rot], idx) => { p.set(x, 0.058, z); q.setFromAxisAngle(up, rot); m.compose(p, q, s); arIM.setMatrixAt(idx, m); });
+  arIM.frustumCulled = false; scene.add(arIM);
 }
 
 // block layout
@@ -881,7 +901,7 @@ specialBuilding(bc(N / 2 + 1), bc(N / 2), 40, 12, 30, 0x4a3f6a, "🎳 BOWLING AL
 
 // ---------- street lamps (instanced poles + heads that glow at night) ----------
 const lampHeads = [];
-let lampMat = null, lampPoolMat = null;
+let lampMat = null, lampPoolMat = null, lampConeMat = null;
 {
   const pole = new THREE.CylinderGeometry(0.16, 0.22, 7, 6); pole.translate(0, 3.5, 0);
   const head = new THREE.BoxGeometry(0.8, 0.42, 0.8); head.translate(0, 7.05, 0);
@@ -899,6 +919,12 @@ let lampMat = null, lampPoolMat = null;
   const poolIM = new THREE.InstancedMesh(poolGeo, lampPoolMat, spots.length);
   spots.forEach(([x, z], idx) => { m.makeTranslation(x, 0.07, z); poolIM.setMatrixAt(idx, m); });
   scene.add(poolIM);
+  // soft volumetric light cone hanging under each lamp (additive, fades up at night)
+  const coneGeo = new THREE.ConeGeometry(3.0, 6.6, 16, 1, true); coneGeo.translate(0, 6.6 / 2 + 0.4, 0);
+  lampConeMat = new THREE.MeshBasicMaterial({ color: 0xffd38a, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+  const coneIM = new THREE.InstancedMesh(coneGeo, lampConeMat, spots.length);
+  spots.forEach(([x, z], idx) => { m.makeTranslation(x, 0.1, z); coneIM.setMatrixAt(idx, m); });
+  coneIM.frustumCulled = false; scene.add(coneIM);
 }
 
 // ---------- road centre-line markings (one instanced draw) ----------
@@ -1620,10 +1646,15 @@ const nearEnterable = () => {
 
 // ---------- blob shadows (one instanced draw) ----------
 const SHADOW_N = 1 + cars.length + traffic.length + police.length + npcs.length + 3;
-const shadowGeo = new THREE.CircleGeometry(1, 14);
+// soft radial falloff so contact shadows read as ambient occlusion, not flat discs
+const shadowTex = canvasTex(64, (ctx, s) => {
+  const c = s / 2;
+  for (let r = c; r > 0; r--) { const t = 1 - r / c; ctx.globalAlpha = t * t * 0.85; ctx.beginPath(); ctx.arc(c, c, r, 0, 7); ctx.fillStyle = "#000"; ctx.fill(); }
+}, 1, 1);
+const shadowGeo = new THREE.PlaneGeometry(2, 2);
 shadowGeo.rotateX(-Math.PI / 2);
 const shadowIM = new THREE.InstancedMesh(shadowGeo,
-  new THREE.MeshBasicMaterial({ color: 0x33291c, transparent: true, opacity: 0.3, depthWrite: false }), SHADOW_N);
+  new THREE.MeshBasicMaterial({ color: 0x2a2218, map: shadowTex, transparent: true, opacity: 0.42, depthWrite: false }), SHADOW_N);
 scene.add(shadowIM);
 
 // ---------- juice: particles (1 draw call), screen shake, haptics, flash ----------
@@ -1710,6 +1741,24 @@ function updateCarLights(g) {
     }
   }
   hlGeo.attributes.position.needsUpdate = true; hlGeo.attributes.color.needsUpdate = true;
+}
+// player headlight beams: two flat fans spilling forward onto the road, only while driving at night
+const headBeams = new THREE.Group(); headBeams.visible = false;
+{
+  const bGeo = new THREE.ConeGeometry(2.2, 11, 14, 1, true); bGeo.rotateX(-Math.PI / 2); bGeo.translate(0, 0, -11 / 2);
+  const bMat = new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0.0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+  headBeams.userData.mat = bMat;
+  for (const s of [-1, 1]) { const b = new THREE.Mesh(bGeo, bMat); b.position.x = s * 0.7; b.scale.y = 0.16; headBeams.add(b); }
+  scene.add(headBeams);
+}
+function updateHeadBeams(g) {
+  const on = !!driving && g > 0.04;
+  headBeams.visible = on;
+  if (!on) return;
+  headBeams.userData.mat.opacity = 0.12 + g * 0.18;
+  const fx = Math.sin(driving.h), fz = Math.cos(driving.h);
+  headBeams.position.set(driving.x + fx * 2.6, 0.12, driving.z + fz * 2.6);
+  headBeams.rotation.y = driving.h;
 }
 
 // ---------- markers ----------
