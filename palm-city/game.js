@@ -53,6 +53,7 @@ const PR_FLOOR = 0.75;                                  // never blurrier than t
 let pr = PR_CAP;
 renderer.setPixelRatio(pr);
 renderer.setSize(innerWidth, innerHeight);
+const MAXANISO = (renderer.capabilities && renderer.capabilities.getMaxAnisotropy) ? renderer.capabilities.getMaxAnisotropy() : 1;   // crisp textures at grazing angles
 
 // post-processing bloom (default ON for the premium neon look; any failure silently falls back to
 // the plain renderer, and the adaptive pixel-ratio guard keeps fps up — toggle in the progress panel)
@@ -238,6 +239,7 @@ function canvasTex(size, draw, repX = 1, repY = 1) {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = MAXANISO;            // crisp textures at grazing angles (distant roads/facades)
   t.repeat.set(repX, repY);
   return t;
 }
@@ -284,6 +286,8 @@ const texLeaf = canvasTex(64, (ctx, s) => {
   ctx.fillStyle = "#eef3df"; ctx.fillRect(0, 0, s, s);
   for (let i = 0; i < 150; i++) { ctx.fillStyle = Math.random() < 0.5 ? "rgba(64,86,46,.45)" : "rgba(255,255,255,.4)"; ctx.beginPath(); ctx.arc(Math.random() * s, Math.random() * s, 1.5 + Math.random() * 3.5, 0, 7); ctx.fill(); }
 }, 3, 3);
+// zebra crosswalk (white bars on transparent), 1:1 (no tiling)
+const texCrosswalk = canvasTex(64, (ctx, s) => { ctx.clearRect(0, 0, s, s); ctx.fillStyle = "#eef0ee"; const bars = 5, bw = s / (bars * 2 - 1); for (let i = 0; i < bars; i++) ctx.fillRect(i * bw * 2, 0, bw, s); }, 1, 1);
 const texFacade = canvasTex(256, (ctx, s) => {
   ctx.fillStyle = "#f5efe2"; ctx.fillRect(0, 0, s, s);
   const band = 44;                                       // street-level storefront band
@@ -439,6 +443,7 @@ function byChunk(list) { const map = new Map(); for (const b of list) { const k 
 
 const matVC = new THREE.MeshLambertMaterial({ vertexColors: true });
 let roadMat = null, sidewalkMat = null;   // exposed so rain can make the floor wet
+let oceanTex = null;   // exposed so the sea can drift/shimmer
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 1700, 2 * HALF + 1700),
   new THREE.MeshLambertMaterial({ color: 0x9aab72 }));
 ground.geometry.rotateX(-Math.PI / 2);
@@ -460,6 +465,20 @@ scene.add(ground);
   const rv = new THREE.Mesh(mergeGeos(vGeos), matRoad), rh = new THREE.Mesh(mergeGeos(hGeos), matRoad);
   rv.receiveShadow = rh.receiveShadow = true;
   scene.add(rv, rh);
+}
+// zebra crosswalks on all four sides of every intersection
+{
+  const cwGeo = new THREE.PlaneGeometry(ROAD - 3, 3.4); cwGeo.rotateX(-Math.PI / 2);
+  const cwMat = new THREE.MeshBasicMaterial({ map: texCrosswalk, transparent: true, depthWrite: false });
+  const spots = [];
+  for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
+    const cx = roadC(i), cz = roadC(j);
+    spots.push([cx, cz + ROAD / 2 + 2.1, 0], [cx, cz - ROAD / 2 - 2.1, 0], [cx + ROAD / 2 + 2.1, cz, Math.PI / 2], [cx - ROAD / 2 - 2.1, cz, Math.PI / 2]);
+  }
+  const im = new THREE.InstancedMesh(cwGeo, cwMat, spots.length);
+  const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
+  spots.forEach(([x, z, rot], idx) => { p.set(x, 0.055, z); q.setFromAxisAngle(up, rot); m.compose(p, q, s); im.setMatrixAt(idx, m); });
+  im.frustumCulled = false; scene.add(im);
 }
 
 // block layout
@@ -616,7 +635,7 @@ const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigg
     ctx.fillStyle = "#e7d3a2"; ctx.fillRect(0, 0, s, s);
     speckle(ctx, s, 520, ["#dec88e", "#efe1b6", "#d4ba80", "#ecd8a0"], 1, 3);
   }, 16, 7);
-  const seaTex = canvasTex(128, (ctx, s) => {
+  const seaTex = oceanTex = canvasTex(128, (ctx, s) => {
     ctx.fillStyle = "#2f8fb6"; ctx.fillRect(0, 0, s, s);
     for (let i = 0; i < 30; i++) { ctx.strokeStyle = i % 2 ? "rgba(150,210,235,.5)" : "rgba(25,105,140,.5)"; ctx.lineWidth = 2; const y = rng() * s; ctx.beginPath(); ctx.moveTo(0, y); ctx.bezierCurveTo(s / 3, y + 5, 2 * s / 3, y - 5, s, y); ctx.stroke(); }
   }, 26, 26);
@@ -3193,6 +3212,7 @@ const SPRINT_RAMP = 2.5;   // seconds of holding sprint to reach top running spe
 
 function update(dt) {
   simTime += dt;
+  if (oceanTex) { oceanTex.offset.x += dt * 0.006; oceanTex.offset.y += dt * 0.011; }   // drifting water
   const inp = (dlgLines || garageOpen || statsOpen || tutOpen || styleOpen || arcadeOpen) ? { mx: 0, mz: 0, mag: 0 } : readInput();
   const a = actA, b = actB, pn = actP; actA = false; actB = false; actP = false;
   if (a && !dlgLines && !garageOpen && !statsOpen && !tutOpen && !styleOpen && !arcadeOpen) doActionA();
