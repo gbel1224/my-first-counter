@@ -279,6 +279,11 @@ const texGrass = canvasTex(256, (ctx, s) => {
   ctx.fillStyle = "#7fb069"; ctx.fillRect(0, 0, s, s);
   speckle(ctx, s, 240, ["#8abc73", "#74a45f", "#90c47c", "#6d9b58"], 2, 6);
 }, 12, 12);
+// leafy mottle for tree/palm canopies (tinted green per-instance) — light & dark leaf clusters
+const texLeaf = canvasTex(64, (ctx, s) => {
+  ctx.fillStyle = "#eef3df"; ctx.fillRect(0, 0, s, s);
+  for (let i = 0; i < 150; i++) { ctx.fillStyle = Math.random() < 0.5 ? "rgba(64,86,46,.45)" : "rgba(255,255,255,.4)"; ctx.beginPath(); ctx.arc(Math.random() * s, Math.random() * s, 1.5 + Math.random() * 3.5, 0, 7); ctx.fill(); }
+}, 3, 3);
 const texFacade = canvasTex(256, (ctx, s) => {
   ctx.fillStyle = "#f5efe2"; ctx.fillRect(0, 0, s, s);
   const band = 44;                                       // street-level storefront band
@@ -433,6 +438,7 @@ const chunkKey = (x, z) => Math.floor((x + HALF) / CHUNKW) + "," + Math.floor((z
 function byChunk(list) { const map = new Map(); for (const b of list) { const k = chunkKey(b.x, b.z); let a = map.get(k); if (!a) map.set(k, a = []); a.push(b); } return [...map.values()]; }
 
 const matVC = new THREE.MeshLambertMaterial({ vertexColors: true });
+let roadMat = null, sidewalkMat = null;   // exposed so rain can make the floor wet
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 1700, 2 * HALF + 1700),
   new THREE.MeshLambertMaterial({ color: 0x9aab72 }));
 ground.geometry.rotateX(-Math.PI / 2);
@@ -441,7 +447,7 @@ scene.add(ground);
 
 // roads: two merged meshes (all vertical, all horizontal)
 {
-  const matRoad = new THREE.MeshStandardMaterial({ map: texAsphalt, roughness: 0.62, metalness: 0.0, envMapIntensity: 0.55 });
+  const matRoad = roadMat = new THREE.MeshStandardMaterial({ map: texAsphalt, roughness: 0.62, metalness: 0.0, envMapIntensity: 0.55 });
   const vGeos = [], hGeos = [];
   for (let k = 0; k <= N; k++) {
     let g = new THREE.PlaneGeometry(ROAD, 2 * HALF);
@@ -481,13 +487,15 @@ const GAS = { x: Rc(2) + 7, z: Rc(3) - 7 };   // roadside fuel station (west-cen
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++)
     ((isResid(i, j) || (PARKS.has(i + "," + j) && i + "," + j !== PLAZA_KEY)) ? grass : paved).push([bc(i), bc(j)]);
   const m = new THREE.Matrix4();
-  const mk = (list, tex) => {
-    const im = new THREE.InstancedMesh(slab, new THREE.MeshLambertMaterial({ map: tex }), list.length);
+  const mk = (list, tex, pbr) => {
+    const mat = pbr ? (sidewalkMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, metalness: 0.0, envMapIntensity: 0.35 }))
+      : new THREE.MeshLambertMaterial({ map: tex });
+    const im = new THREE.InstancedMesh(slab, mat, list.length);
     im.receiveShadow = true;
     list.forEach(([x, z], i) => { m.makeTranslation(x, 0, z); im.setMatrixAt(i, m); });
     scene.add(im);
   };
-  mk(paved, texSidewalk); mk(grass, texGrass);
+  mk(paved, texSidewalk, true); mk(grass, texGrass);
 }
 
 // buildings: one InstancedMesh, facade texture sides / plain roof, pastel instance tints
@@ -641,7 +649,7 @@ const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigg
   for (let f = 0; f < 8; f++) { const fr = new THREE.BoxGeometry(0.5, 0.07, 2.8); fr.translate(0, 0, 1.4); fr.rotateX(0.4); fr.rotateY(f / 8 * Math.PI * 2); fparts.push(fr); }
   const pcrown = mergeGeos(fparts); pcrown.translate(0, 6, 0);
   const ptIM = new THREE.InstancedMesh(ptrunk, new THREE.MeshLambertMaterial({ color: 0xa6824f }), pspots.length);
-  const pcIM = new THREE.InstancedMesh(pcrown, new THREE.MeshLambertMaterial({ color: 0xffffff }), pspots.length);
+  const pcIM = new THREE.InstancedMesh(pcrown, new THREE.MeshLambertMaterial({ color: 0xffffff, map: texLeaf }), pspots.length);
   const e2 = new THREE.Euler(), q2 = new THREE.Quaternion(), m2 = new THREE.Matrix4(), pp = new THREE.Vector3(), ss = new THREE.Vector3();
   const pg = [0x5d9952, 0x6da85e, 0x7fb069, 0x4f8a47];
   pspots.forEach(([x, z, k], idx) => {
@@ -800,7 +808,7 @@ specialBuilding(bc(N / 2 + 1), bc(N / 2), 40, 12, 30, 0x4a3f6a, "🎳 BOWLING AL
   const canopy = new THREE.IcosahedronGeometry(1.5, 1);
   canopy.translate(0, 2.6, 0);
   const imT = new THREE.InstancedMesh(trunk, new THREE.MeshLambertMaterial({ color: 0x7a5a3a }), spots.length);
-  const imC = new THREE.InstancedMesh(canopy, new THREE.MeshLambertMaterial({ color: 0xffffff }), spots.length);
+  const imC = new THREE.InstancedMesh(canopy, new THREE.MeshLambertMaterial({ color: 0xffffff, map: texLeaf }), spots.length);
   const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
   const greens = [0x6da85e, 0x7fb069, 0x5d9952, 0x8fbc6f];
   spots.forEach(([x, z, k], idx) => {
@@ -826,7 +834,7 @@ specialBuilding(bc(N / 2 + 1), bc(N / 2), 40, 12, 30, 0x4a3f6a, "🎳 BOWLING AL
   const crown = mergeGeos(fparts); crown.translate(0, 6, 0);
 
   const imT = new THREE.InstancedMesh(trunk, new THREE.MeshLambertMaterial({ color: 0xa6824f }), spots.length);
-  const imC = new THREE.InstancedMesh(crown, new THREE.MeshLambertMaterial({ color: 0xffffff }), spots.length);
+  const imC = new THREE.InstancedMesh(crown, new THREE.MeshLambertMaterial({ color: 0xffffff, map: texLeaf }), spots.length);
   const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), e = new THREE.Euler();
   const greens = [0x5d9952, 0x6da85e, 0x7fb069, 0x4f8a47];
   spots.forEach(([x, z, k, solid], idx) => {
@@ -2176,6 +2184,9 @@ function updateWeather(dt) {
     sun.intensity *= (1 - weather * 0.35);
     hemi.intensity *= (1 - weather * 0.2);
   }
+  // wet flooring: darker + far more reflective as the rain picks up
+  if (roadMat) { roadMat.roughness = 0.62 - weather * 0.42; roadMat.envMapIntensity = 0.55 + weather * 0.95; roadMat.color.setScalar(1 - weather * 0.32); }
+  if (sidewalkMat) { sidewalkMat.roughness = 0.85 - weather * 0.52; sidewalkMat.envMapIntensity = 0.35 + weather * 0.75; sidewalkMat.color.setScalar(1 - weather * 0.22); }
 }
 
 function updateRace(dt) {
