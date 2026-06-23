@@ -903,7 +903,9 @@ specialBuilding(bc(N / 2 + 1), bc(N / 2), 40, 12, 30, 0x4a3f6a, "🎳 BOWLING AL
     const i = (rng() * N) | 0, j = (rng() * N) | 0;
     if (PARKS.has(i + "," + j)) continue;
     const x = blockMin(i) + pick([4, BLOCK - 4]), z = blockMin(j) + rr(6, BLOCK - 6);
-    spots.push([x, z, rr(0.7, 1.1)]);
+    const k = rr(0.7, 1.1);                             // (drawn unconditionally to keep RNG stable)
+    if (hitsCollider(x, z, 1.4)) continue;             // don't plant a tree clipping into a building/prop
+    spots.push([x, z, k]);
   }
   const trunk = new THREE.CylinderGeometry(0.22, 0.34, 1.7, 6);
   trunk.translate(0, 0.85, 0);
