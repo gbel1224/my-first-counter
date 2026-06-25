@@ -291,6 +291,35 @@ function canvasTex(size, draw, repX = 1, repY = 1) {
   t.repeat.set(repX, repY);
   return t;
 }
+// derive a tangent-space normal map from a grayscale height field (dark = recessed, light = raised),
+// so flat textured surfaces gain real relief under the sun. degrades to a flat normal when the test
+// harness has no readable 2D context (getImageData unavailable).
+function canvasNormalTex(size, drawHeight, repX = 1, repY = 1) {
+  const c = document.createElement("canvas"); c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#808080"; ctx.fillRect(0, 0, size, size);
+  drawHeight(ctx, size);
+  let src = null;
+  try { const d = ctx.getImageData(0, 0, size, size); if (d && d.data) src = d.data; } catch (e) {}
+  if (src) {
+    const H = (x, y) => src[(((y + size) % size) * size + ((x + size) % size)) * 4] / 255;
+    const out = ctx.createImageData(size, size), o = out.data;
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const dx = H(x - 1, y) - H(x + 1, y), dy = H(x, y - 1) - H(x, y + 1);
+      const inv = 1 / Math.hypot(dx, dy, 1), i = (y * size + x) * 4;
+      o[i] = (dx * inv * 0.5 + 0.5) * 255;
+      o[i + 1] = (dy * inv * 0.5 + 0.5) * 255;
+      o[i + 2] = (inv * 0.5 + 0.5) * 255;
+      o[i + 3] = 255;
+    }
+    ctx.putImageData(out, 0, 0);
+  }
+  const t = new THREE.CanvasTexture(c);             // default (linear) colour space — correct for normal data
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(repX, repY);
+  t.anisotropy = MAXANISO;
+  return t;
+}
 // speckle that wraps across edges so the tile stays seamless
 function speckle(ctx, s, n, colors, r0, r1) {
   for (let i = 0; i < n; i++) {
@@ -312,6 +341,13 @@ const texAsphalt = canvasTex(256, (ctx, s) => {
   ctx.fillStyle = "#e8c35a";                                  // center dashes (64 divides 256 => seamless)
   for (let y = 0; y < s; y += 64) ctx.fillRect(s / 2 - 3, y, 6, 32);
 }, 1, 30);
+// asphalt relief: pebble grain + recessed cracks and gutter grooves
+const texAsphaltNormal = canvasNormalTex(256, (ctx, s) => {
+  for (let i = 0; i < 220; i++) { ctx.fillStyle = Math.random() < 0.5 ? "#8e8e8e" : "#727272"; ctx.beginPath(); ctx.arc(Math.random() * s, Math.random() * s, 1 + Math.random() * 2, 0, 7); ctx.fill(); }
+  ctx.fillStyle = "#6a6a6a"; ctx.fillRect(0, 0, 14, s); ctx.fillRect(s - 14, 0, 14, s);   // gutter grooves
+  ctx.strokeStyle = "#5a5a5a"; ctx.lineWidth = 1.4;
+  for (let i = 0; i < 6; i++) { ctx.beginPath(); let x = Math.random() * s, y = Math.random() * s; ctx.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (Math.random() - 0.5) * 36; y += (Math.random() - 0.5) * 36; ctx.lineTo(x, y); } ctx.stroke(); }
+}, 1, 30);
 const texSidewalk = canvasTex(256, (ctx, s) => {
   ctx.fillStyle = "#cfc5ae"; ctx.fillRect(0, 0, s, s);
   speckle(ctx, s, 200, ["#d6cdb8", "#c6bca4", "#cabfa9"], 1, 2.5);
@@ -319,6 +355,16 @@ const texSidewalk = canvasTex(256, (ctx, s) => {
   ctx.strokeStyle = "rgba(120,110,92,.45)"; ctx.lineWidth = 1;
   for (let i = 0; i < 4; i++) { ctx.beginPath(); let x = Math.random() * s, y = Math.random() * s; ctx.moveTo(x, y); for (let k = 0; k < 4; k++) { x += (Math.random() - 0.5) * 28; y += (Math.random() - 0.5) * 28; ctx.lineTo(x, y); } ctx.stroke(); }  // cracks
   ctx.strokeStyle = "#b7ad96"; ctx.lineWidth = 3;
+  for (let i = 0; i <= 4; i++) {
+    const p = (s / 4) * i;
+    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, s); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(s, p); ctx.stroke();
+  }
+}, 16, 16);
+// sidewalk relief: faint grain + recessed expansion joints between the paving slabs
+const texSidewalkNormal = canvasNormalTex(256, (ctx, s) => {
+  for (let i = 0; i < 160; i++) { ctx.fillStyle = Math.random() < 0.5 ? "#8c8c8c" : "#767676"; ctx.beginPath(); ctx.arc(Math.random() * s, Math.random() * s, 1 + Math.random() * 1.6, 0, 7); ctx.fill(); }
+  ctx.strokeStyle = "#5e5e5e"; ctx.lineWidth = 3;
   for (let i = 0; i <= 4; i++) {
     const p = (s / 4) * i;
     ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, s); ctx.stroke();
@@ -363,6 +409,17 @@ const texWindows = canvasTex(256, (ctx, s) => {
     const x = 14 + cx * ((s - 28) / cols) + 4, y = 12 + cy * ((s - band - 24) / rows);
     ctx.fillStyle = Math.random() < 0.5 ? "#ffd98a" : "#ffe7b3";
     ctx.fillRect(x, y, ww, wh);
+  }
+});
+// facade relief: raised mullion frames around recessed window glass + a sunk storefront band
+const texFacadeNormal = canvasNormalTex(256, (ctx, s) => {
+  const band = 44, cols = 6, rows = 7, ww = 22, wh = 18;
+  ctx.fillStyle = "#8c8c8c"; ctx.fillRect(0, 0, s, s);                 // wall plane
+  ctx.fillStyle = "#787878"; ctx.fillRect(0, s - band, s, band);      // storefront recessed
+  for (let cx = 0; cx < cols; cx++) for (let cy = 0; cy < rows; cy++) {
+    const x = 14 + cx * ((s - 28) / cols) + 4, y = 12 + cy * ((s - band - 24) / rows);
+    ctx.fillStyle = "#bcbcbc"; ctx.fillRect(x - 2, y - 2, ww + 4, wh + 4);   // raised frame
+    ctx.fillStyle = "#5a5a5a"; ctx.fillRect(x, y, ww, wh);                   // recessed glass
   }
 });
 // glass-tower facade — a uniform window grid that tiles seamlessly so it can repeat up tall skyscrapers
@@ -510,7 +567,8 @@ scene.add(ground);
 
 // roads: two merged meshes (all vertical, all horizontal)
 {
-  const matRoad = roadMat = new THREE.MeshStandardMaterial({ map: texAsphalt, roughness: 0.62, metalness: 0.0, envMapIntensity: 0.55 });
+  const matRoad = roadMat = new THREE.MeshStandardMaterial({ map: texAsphalt, normalMap: texAsphaltNormal, roughness: 0.62, metalness: 0.0, envMapIntensity: 0.55 });
+  matRoad.normalScale.set(0.7, 0.7);
   const vGeos = [], hGeos = [];
   for (let k = 0; k <= N; k++) {
     let g = new THREE.PlaneGeometry(ROAD, 2 * HALF);
@@ -586,8 +644,9 @@ const GAS = { x: Rc(2) + 7, z: Rc(3) - 7 };   // roadside fuel station (west-cen
     ((isResid(i, j) || (PARKS.has(i + "," + j) && i + "," + j !== PLAZA_KEY)) ? grass : paved).push([bc(i), bc(j)]);
   const m = new THREE.Matrix4();
   const mk = (list, tex, pbr) => {
-    const mat = pbr ? (sidewalkMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, metalness: 0.0, envMapIntensity: 0.35 }))
+    const mat = pbr ? (sidewalkMat = new THREE.MeshStandardMaterial({ map: tex, normalMap: texSidewalkNormal, roughness: 0.85, metalness: 0.0, envMapIntensity: 0.35 }))
       : new THREE.MeshLambertMaterial({ map: tex });
+    if (pbr) mat.normalScale.set(0.9, 0.9);
     const im = new THREE.InstancedMesh(slab, mat, list.length);
     im.receiveShadow = true;
     list.forEach(([x, z], i) => { m.makeTranslation(x, 0, z); im.setMatrixAt(i, m); });
@@ -606,7 +665,8 @@ let buildingMat = null;
 {
   const unit = new THREE.BoxGeometry(1, 1, 1);
   unit.translate(0, 0.5, 0);
-  const matSide = new THREE.MeshLambertMaterial({ map: texFacade, emissive: 0xffffff, emissiveMap: texWindows, emissiveIntensity: 0 });
+  const matSide = new THREE.MeshLambertMaterial({ map: texFacade, normalMap: texFacadeNormal, emissive: 0xffffff, emissiveMap: texWindows, emissiveIntensity: 0 });
+  matSide.normalScale.set(1.15, 1.15);
   buildingMat = matSide;
   const matRoof = new THREE.MeshLambertMaterial({ color: 0xb8ab9a });
   const mats = [matSide, matSide, matRoof, matRoof, matSide, matSide];
@@ -792,7 +852,8 @@ const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigg
 // special buildings + labels — facade + lit-window textures (tinted by the accent colour),
 // so businesses read as real buildings instead of flat colour blocks.
 function specialBuilding(x, z, w, h, d, color, labelText, labelColor) {
-  const matSide = new THREE.MeshLambertMaterial({ map: texFacade, color, emissive: 0xffffff, emissiveMap: texWindows, emissiveIntensity: 0 });
+  const matSide = new THREE.MeshLambertMaterial({ map: texFacade, normalMap: texFacadeNormal, color, emissive: 0xffffff, emissiveMap: texWindows, emissiveIntensity: 0 });
+  matSide.normalScale.set(1.15, 1.15);
   const matRoof = new THREE.MeshLambertMaterial({ color: _col.set(color).lerp(new THREE.Color(0xb8ab9a), 0.55).getHex() });
   specialMats.push(matSide);
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [matSide, matSide, matRoof, matRoof, matSide, matSide]);
