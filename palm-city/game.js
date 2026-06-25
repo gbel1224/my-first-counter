@@ -61,7 +61,8 @@ const BLOOM_KEY = "palm_city_bloom";
 let bloomOn = (() => { try { const v = localStorage.getItem(BLOOM_KEY); return v === null ? true : v === "1"; } catch (e) { return true; } })();
 let bloomReady = false, bloomFailed = false, bloomW = 0, bloomH = 0;
 let rtScene, rtB1, rtB2, fsScene, fsCam, fsQuad, brightMat, blurMat, compMat;
-let rtAO, rtAOb, aoMat, aoOn = true;   // depth-based ambient occlusion (rides the bloom offscreen pass)
+let rtAO, rtAOb, aoMat;   // depth-based ambient occlusion (rides the bloom offscreen pass)
+let aoOn = (() => { try { return localStorage.getItem("palm_city_ao") !== "0"; } catch (e) { return true; } })();
 renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic highlight roll-off for a premium look
 renderer.toneMappingExposure = 1.3;
 renderer.domElement.id = "scene";   // CSS color-grades the 3D layer (HUD sits above, ungraded)
@@ -254,7 +255,7 @@ const ENV_MIDDAY = [
   { t: 0.90, sky: new THREE.Color(0x9fb9d8), top: new THREE.Color(0x6a8ec0), sun: 1.15, hemi: 0.88, far: 700, night: 0.32 },
   { t: 1.00, sky: new THREE.Color(0xbcd6ec), top: new THREE.Color(0x7fb0e0), sun: 1.85, hemi: 1.12, far: 880, night: 0.0 },
 ];
-let dayMode = (() => { try { return localStorage.getItem("palm_city_light") === "midday" ? "midday" : "golden"; } catch (e) { return "golden"; } })();
+let dayMode = (() => { try { return localStorage.getItem("palm_city_light") === "golden" ? "golden" : "midday"; } catch (e) { return "midday"; } })();   // neutral midday is the default look
 let gradeSat = dayMode === "midday" ? 0.92 : 1.0;   // saturation multiplier in the final grade (was a hard 1.11)
 const _sky = new THREE.Color(), _top = new THREE.Color(), _sunCol = new THREE.Color();
 function envUpdate() {
@@ -1441,30 +1442,52 @@ for (let t = 0; t < 260; t++) {
   const start = { x: PLAZA.x, z: Rc(3) - 12 };      // keep the player's spawn area clear
   const ok = (x, z) => dist2(x, z, PLAZA.x, PLAZA.z) > 900 && dist2(x, z, start.x, start.z) > 576
     && RAMPS.every(r => dist2(x, z, r.x, r.z) > 169);   // never block a stunt ramp
-  const spots = [];
+  // a boxy delivery van mixed into the curbside parking for vehicle variety (tintable white body)
+  const vanGeo = mergeGeos([
+    boxGeoC(2.05, 0.5, 5.0, 0, 0.5, 0, 0x20242a),        // chassis
+    boxGeoC(2.1, 1.6, 3.0, 0, 1.45, -0.85, 0xffffff),    // cargo box (tintable)
+    boxGeoC(2.0, 1.05, 1.7, 0, 1.05, 1.65, 0xffffff),    // cab (tintable)
+    boxGeoC(1.82, 0.62, 0.12, 0, 1.35, 2.52, 0x223040),  // windshield
+    boxGeoC(0.12, 0.5, 1.0, 1.0, 1.2, 1.7, 0x223040),    // cab side windows
+    boxGeoC(0.12, 0.5, 1.0, -1.0, 1.2, 1.7, 0x223040),
+    wheelGeo(0.5, 0.34, 0.95, 0.5, 1.5, 0x161616), wheelGeo(0.5, 0.34, -0.95, 0.5, 1.5, 0x161616),
+    wheelGeo(0.5, 0.34, 0.95, 0.5, -1.5, 0x161616), wheelGeo(0.5, 0.34, -0.95, 0.5, -1.5, 0x161616),
+    wheelGeo(0.2, 0.36, 0.97, 0.5, 1.5, 0xc2c6cc), wheelGeo(0.2, 0.36, -0.97, 0.5, 1.5, 0xc2c6cc),
+    wheelGeo(0.2, 0.36, 0.97, 0.5, -1.5, 0xc2c6cc), wheelGeo(0.2, 0.36, -0.97, 0.5, -1.5, 0xc2c6cc),
+    boxGeoC(0.3, 0.18, 0.1, 0.6, 0.7, 2.52, 0xfff4c4), boxGeoC(0.3, 0.18, 0.1, -0.6, 0.7, 2.52, 0xfff4c4),  // headlights
+    boxGeoC(0.32, 0.5, 0.1, 0.85, 1.3, -2.35, 0xc8403a), boxGeoC(0.32, 0.5, 0.1, -0.85, 1.3, -2.35, 0xc8403a),  // taillights
+  ]);
+  const VAN_COLORS = [0xe8e4da, 0xc8ccd2, 0x8a9098, 0x3a4452, 0xd8d4c8, 0x9a6a4a];
+  const carSpots = [], vanSpots = [];
+  // route ~1-in-6 spots to vans, chosen deterministically from position (no rng() => seeded stream untouched)
+  const route = (x, z, yaw) => (((Math.floor(x * 7.3 + z * 3.1) % 6) + 6) % 6 === 0 ? vanSpots : carSpots).push([x, z, yaw]);
   for (let k = 0; k <= N; k++) {
     const c = roadC(k);
     for (let b = 0; b < N; b++) {
       const z = bc(b) + rr(-16, 16), sv = rng() < 0.5 ? edge : -edge;
-      if (rng() < 0.72 && ok(c + sv, z)) spots.push([c + sv, z, sv > 0 ? 0 : Math.PI]);
+      if (rng() < 0.72 && ok(c + sv, z)) route(c + sv, z, sv > 0 ? 0 : Math.PI);
       const x = bc(b) + rr(-16, 16), sh = rng() < 0.5 ? edge : -edge;
-      if (rng() < 0.72 && ok(x, c + sh)) spots.push([x, c + sh, sh > 0 ? Math.PI / 2 : -Math.PI / 2]);
+      if (rng() < 0.72 && ok(x, c + sh)) route(x, c + sh, sh > 0 ? Math.PI / 2 : -Math.PI / 2);
     }
   }
   const parkMat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.5, roughness: 0.38, envMapIntensity: 1.0 });
   const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
-  spots.forEach(([x, z, yaw]) => {
-    const alongX = Math.abs(Math.sin(yaw)) > 0.5;      // orientation-aware collider footprint
-    addCollider(x, z, alongX ? 2.4 : 1.1, alongX ? 1.1 : 2.4);
-  });
-  // chunk the parked cars so distant ones get frustum-culled (PBR cars are the heaviest static prop)
-  const chunks = new Map();
-  for (const sp of spots) { const k = chunkKey(sp[0], sp[1]); let a = chunks.get(k); if (!a) chunks.set(k, a = []); a.push(sp); }
-  for (const arr of chunks.values()) {
-    const im = new THREE.InstancedMesh(carGeo, parkMat, arr.length);
-    arr.forEach(([x, z, yaw], idx) => { p.set(x, 0, z); q.setFromAxisAngle(up, yaw); m.compose(p, q, s); im.setMatrixAt(idx, m); im.setColorAt(idx, _col.set(pick(CAR_COLORS))); });
-    scene.add(im);
-  }
+  // chunk parked vehicles so distant ones get frustum-culled (PBR cars are the heaviest static prop)
+  const emit = (list, geo, halfL, colors) => {
+    list.forEach(([x, z, yaw]) => {
+      const alongX = Math.abs(Math.sin(yaw)) > 0.5;      // orientation-aware collider footprint
+      addCollider(x, z, alongX ? halfL : 1.15, alongX ? 1.15 : halfL);
+    });
+    const chunks = new Map();
+    for (const sp of list) { const k = chunkKey(sp[0], sp[1]); let a = chunks.get(k); if (!a) chunks.set(k, a = []); a.push(sp); }
+    for (const arr of chunks.values()) {
+      const im = new THREE.InstancedMesh(geo, parkMat, arr.length);
+      arr.forEach(([x, z, yaw], idx) => { p.set(x, 0, z); q.setFromAxisAngle(up, yaw); m.compose(p, q, s); im.setMatrixAt(idx, m); im.setColorAt(idx, _col.set(pick(colors))); });
+      scene.add(im);
+    }
+  };
+  emit(carSpots, carGeo, 2.4, CAR_COLORS);   // sedans
+  emit(vanSpots, vanGeo, 2.7, VAN_COLORS);   // delivery vans (taller, longer)
 }
 
 // story characters
@@ -3475,6 +3498,12 @@ dom("stclose").textContent = STR.statsClose;
   if (lb) {
     lb.textContent = lightLabel();
     lb.addEventListener("click", () => { applyDayMode(dayMode === "midday" ? "golden" : "midday", true); lb.textContent = lightLabel(); });
+  }
+  const ab = dom("stao");
+  if (ab) {
+    const aoLabel = () => "🌑 AO: " + (aoOn ? "On" : "Off");
+    ab.textContent = aoLabel();
+    ab.addEventListener("click", () => { aoOn = !aoOn; try { localStorage.setItem("palm_city_ao", aoOn ? "1" : "0"); } catch (e) {} ab.textContent = aoLabel(); });
   }
 }
 dom("streset").addEventListener("click", resetGame);
