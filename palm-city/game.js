@@ -3026,12 +3026,10 @@ function drawSpeedo(spd, boost, fuelPct) {
 }
 
 function nearestCar() {
-  let best = null, bd = 25;
-  for (const c of cars) {
-    if (c.locked) continue;                      // can't drive a car you haven't bought
-    const d = dist2(player.x, player.z, c.x, c.z);
-    if (d < bd) { bd = d; best = c; }
-  }
+  let best = null, bd = Infinity;
+  const consider = (c, range) => { const d = dist2(player.x, player.z, c.x, c.z); if (d < range && d < bd) { bd = d; best = c; } };
+  for (const c of cars) if (!c.locked) consider(c, 25);     // your own cars (wider reach)
+  for (const t of traffic) if (!t.jacked) consider(t, 16);  // ...or jack any street car nearby
   return best;
 }
 function nearestPersonalCar() {
@@ -3568,7 +3566,17 @@ function doActionA() {
     AudioSys.play("door", 0.8);
   } else {
     const c = nearestCar();
-    if (c) { driving = c; hero.group.visible = false; AudioSys.play("door", 0.8); }
+    if (c) {
+      if (c.wp && !c.jacked) {                      // carjacking a street car (traffic cars carry a .wp route)
+        c.jacked = true;                            // stop its AI route — the player has the wheel now
+        c.y = 0; c.vy = 0; c.lat = 0; c.rampCD = 0; c.airStart = 0;   // give it the player-physics fields
+        c.heatMult = c.heatMult || 1.4;             // a stolen car runs a little hotter with the cops
+        for (const n of npcs) if (dist2(n.x, n.z, c.x, c.z) < 225) { n.flee = 2.8; n.h = Math.atan2(n.x - c.x, n.z - c.z); }   // bystanders scatter
+        registerCrime();                            // jacking draws police heat
+        toast("🚗 Carjacked — floor it!"); buzz(30);
+      }
+      driving = c; hero.group.visible = false; AudioSys.play("door", 0.8);
+    }
   }
 }
 function doActionB() {
@@ -3732,6 +3740,7 @@ function update(dt) {
 
   // traffic
   for (const t of traffic) {
+    if (t.jacked) continue;   // being driven by the player, or left abandoned after a jack
     const [tx, tz] = t.wp[t.next];
     const dx = tx - t.x, dz = tz - t.z;
     const d = Math.hypot(dx, dz);
@@ -4025,7 +4034,7 @@ requestAnimationFrame(frame);
 
 // dev instrumentation: programmatic state/input access for automated smoke runs (?dev=1 tooling)
 globalThis.__palmCity = {
-  state, player, cars, police, update, beginPlay, advanceDialogue,
+  state, player, cars, police, traffic, update, beginPlay, advanceDialogue,
   forceCrime: () => { if (wanted < 5) wanted++; wantedCD = 14; },
   hurt: n => hurt(n),
   punch: () => doPunch(),
