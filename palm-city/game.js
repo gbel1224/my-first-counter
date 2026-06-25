@@ -1191,11 +1191,14 @@ function articulatedPerson(p) {
   const shirtMat = mat(p.shirt), pantsMat = mat(p.pants), skinMat = mat(p.skin), hairMat = mat(p.hair), shoeMat = mat(0x2a2620);
   const cyl = (rT, rB, h, m, y) => { const me = new THREE.Mesh(new THREE.CylinderGeometry(rT, rB, h, 16, 1), m); if (y != null) me.position.y = y; return me; };
   const sph = (r, m, sx, sy, sz) => { const s = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), m); if (sx != null) s.scale.set(sx, sy, sz); return s; };
-  // leg group (pivots at hip): single clothed leg + shoe
+  // leg group (pivots at hip): thigh + a child knee group (shin + shoe) so the lower leg can flex
   const leg = side => {
-    const grp = new THREE.Group(); grp.position.set(0.1 * side, 0.88, 0);
-    grp.add(cyl(0.08, 0.06, 0.84, pantsMat, -0.42));
-    const shoe = sph(0.092, shoeMat, 1.0, 0.55, 1.7); shoe.position.set(0, -0.82, 0.05); grp.add(shoe); return grp;
+    const hip = new THREE.Group(); hip.position.set(0.1 * side, 0.88, 0);
+    hip.add(cyl(0.08, 0.07, 0.42, pantsMat, -0.21));       // thigh
+    const knee = new THREE.Group(); knee.position.set(0, -0.42, 0);
+    knee.add(cyl(0.07, 0.055, 0.42, pantsMat, -0.21));     // shin
+    const shoe = sph(0.092, shoeMat, 1.0, 0.55, 1.7); shoe.position.set(0, -0.40, 0.05); knee.add(shoe);
+    hip.add(knee); hip.knee = knee; return hip;
   };
   const legL = leg(1), legR = leg(-1);
   // arm group (pivots at shoulder): clothed arm + hand
@@ -1221,7 +1224,7 @@ function articulatedPerson(p) {
     nose, ear(0.135), ear(-0.135));
   const hatHolder = new THREE.Group(), glassHolder = new THREE.Group(), jacketHolder = new THREE.Group(), beardHolder = new THREE.Group();
   g.add(hatHolder, glassHolder, jacketHolder, beardHolder);
-  return { group: g, legL, legR, armL, armR, shirtMat, pantsMat, hairMat, hair, hatHolder, glassHolder, jacketHolder, beardHolder };
+  return { group: g, legL, legR, armL, armR, kneeL: legL.knee, kneeR: legR.knee, shirtMat, pantsMat, hairMat, hair, hatHolder, glassHolder, jacketHolder, beardHolder };
 }
 // top: "tank" (bare arms) | "tee" (short sleeves) | "long" (full sleeves); bottom: "shorts" | "pants"
 const HERO_PAL = { shirt: 0xff7a33, pants: 0x3a4452, skin: 0xe8b08a, hair: 0x3a2c20, top: "tee", bottom: "pants" };
@@ -1261,20 +1264,29 @@ function walkerGeos(p) {
     sphC(0.038, -0.135, 1.63, 0, p.skin, 0.5, 1, 1),
     ...top,
   ]);
-  // limb geometries built around their pivot (origin) so a parent group can swing them
-  const leg = mergeGeos([cylC(0.08, 0.06, 0.84, 0, -0.42, 0, p.pants), sphC(0.092, 0, -0.82, 0.05, SHOE, 1.0, 0.55, 1.7)]);
+  // limb geometries built around their pivot (origin) so a parent group can swing them.
+  // legs split at the knee: thigh hangs from the hip, shin (with the shoe) hangs from the knee.
+  const thigh = cylC(0.08, 0.07, 0.42, 0, -0.21, 0, p.pants);
+  const shin = mergeGeos([cylC(0.07, 0.055, 0.42, 0, -0.21, 0, p.pants), sphC(0.092, 0, -0.40, 0.05, SHOE, 1.0, 0.55, 1.7)]);
   const arm = mergeGeos([cylC(0.057, 0.045, 0.56, 0, -0.28, 0, p.shirt), sphC(0.053, 0, -0.58, 0, p.skin)]);
-  return { body, leg, arm };
+  return { body, thigh, shin, arm };
 }
 const npcWalkerGeos = NPC_PALS.map(walkerGeos);
 function makeWalker(W) {
   const g = new THREE.Group();
   const body = new THREE.Mesh(W.body, matPerson); body.castShadow = true;
   const limb = (geo, x, y) => { const grp = new THREE.Group(); grp.position.set(x, y, 0); grp.add(new THREE.Mesh(geo, matPerson)); return grp; };   // limbs skip real shadows (blob shadow grounds them)
-  const legL = limb(W.leg, 0.1, 0.88), legR = limb(W.leg, -0.1, 0.88);
+  const legGrp = x => {                                  // hip group (thigh) with a child knee group (shin)
+    const hip = new THREE.Group(); hip.position.set(x, 0.88, 0);
+    hip.add(new THREE.Mesh(W.thigh, matPerson));
+    const knee = new THREE.Group(); knee.position.set(0, -0.42, 0);
+    knee.add(new THREE.Mesh(W.shin, matPerson));
+    hip.add(knee); hip.knee = knee; return hip;
+  };
+  const legL = legGrp(0.1), legR = legGrp(-0.1);
   const armL = limb(W.arm, 0.172, 1.36), armR = limb(W.arm, -0.172, 1.36);
   g.add(body, legL, legR, armL, armR);
-  return { group: g, legL, legR, armL, armR };
+  return { group: g, legL, legR, armL, armR, kneeL: legL.knee, kneeR: legR.knee };
 }
 
 // ---------- cars ----------
@@ -1430,7 +1442,7 @@ for (let t = 0; t < 260; t++) {
   w.group.scale.set(rr(0.92, 1.06), rr(0.9, 1.14), rr(0.92, 1.06));   // varied heights & builds
   scene.add(w.group);
   npcs.push({
-    mesh: w.group, legL: w.legL, legR: w.legR, armL: w.armL, armR: w.armR,
+    mesh: w.group, legL: w.legL, legR: w.legR, armL: w.armL, armR: w.armR, kneeL: w.kneeL, kneeR: w.kneeR,
     x: blockMin(i) + rr(2, BLOCK - 2), z: blockMin(j) + rr(2, BLOCK - 2),
     h: rr(0, Math.PI * 2), speed: rr(1.0, 1.7), timer: rr(2, 6), phase: rr(0, 6), walkPhase: rr(0, 6),
   });
@@ -3757,9 +3769,14 @@ function update(dt) {
     // stride: advance the walk cycle with speed, swing legs & arms in opposition, bob with each step
     const stepping = moved > sp * dt * 0.3;
     n.walkPhase += sp * dt * 2.6;
-    const sw = stepping ? Math.sin(n.walkPhase) * Math.min(1, sp / 2.2) * 0.38 : (n.legL.rotation.x * 0.85);
+    const spd = Math.min(1, sp / 2.2);
+    const sw = stepping ? Math.sin(n.walkPhase) * spd * 0.4 : (n.legL.rotation.x * 0.85);
     n.legL.rotation.x = sw; n.legR.rotation.x = -sw;
     n.armL.rotation.x = -sw * 0.7; n.armR.rotation.x = sw * 0.7;
+    // knees only flex (never hyperextend): each shin tucks up as its leg swings through under the body
+    const kAmp = stepping ? spd * 0.95 : 0;
+    n.kneeL.rotation.x = kAmp * Math.max(0, -Math.cos(n.walkPhase));   // flexes mid-swing, straight at the extremes
+    n.kneeR.rotation.x = kAmp * Math.max(0, Math.cos(n.walkPhase));
     const gy = groundY(n.x, n.z);
     n.mesh.position.set(n.x, gy + (stepping ? Math.abs(Math.sin(n.walkPhase)) * 0.03 : 0), n.z);
     n.mesh.rotation.y = n.h;
@@ -3816,9 +3833,13 @@ function update(dt) {
     player.y += (gy - player.y) * Math.min(1, 12 * dt);
     hero.group.position.set(player.x, player.y, player.z);
     hero.group.rotation.y = player.h;
-    const sw = Math.sin(player.walkPhase) * Math.min(1, player.speed / 4) * 0.42;
+    const gait = Math.min(1, player.speed / 4);
+    const sw = Math.sin(player.walkPhase) * gait * 0.45;
     hero.legL.rotation.x = sw; hero.legR.rotation.x = -sw;
     hero.armL.rotation.x = -sw * 0.7; hero.armR.rotation.x = sw * 0.7;
+    const kAmp = gait * 1.0;   // knees flex as each shin swings through (never hyperextend)
+    hero.kneeL.rotation.x = kAmp * Math.max(0, -Math.cos(player.walkPhase));
+    hero.kneeR.rotation.x = kAmp * Math.max(0, Math.cos(player.walkPhase));
     if (punchT > 0) hero.armR.rotation.x = -1.5;   // forward jab during a punch
   }
   for (const c of cars) {
