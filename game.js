@@ -2700,6 +2700,7 @@ function updateParamedic(dt) {
 
 // ---------- wanted level & police ----------
 let wanted = 0, wantedCD = 0, crimeCD = 0;
+let bustTimer = 0, copsOnYou = false;   // on-foot arrest timer + escape (broke-contact) tracking
 // ---------- health / damage / respawn ----------
 let health = 100, hurtCD = 0, hitCD = 0, fuel = 100, fuelWarned = false;
 function hurt(amount) {
@@ -2716,7 +2717,7 @@ function wasted() {
   const sp = homeSpawn() || PLAZA;                      // respawn at an owned property, else the plaza
   player.x = sp.x; player.z = sp.z + 12; player.y = CURB; player.speed = 0;
   health = 100; hurtCD = 2; fuel = 100;
-  wanted = 0; wantedCD = 0; crimeCD = 0;
+  wanted = 0; wantedCD = 0; crimeCD = 0; bustTimer = 0; copsOnYou = false;
   for (const p of police) { p.active = false; p.mesh.position.set(0, -9999, 0); }
   save();
 }
@@ -2737,18 +2738,15 @@ function bust() {
   toast(STR.busted(fine));
   AudioSys.play("door", 1);
   addShake(0.7); buzz([0, 60, 40, 120]); flash("#ff3b3b", 0.42);
-  wanted = 0; wantedCD = 0; crimeCD = 0;
+  wanted = 0; wantedCD = 0; crimeCD = 0; bustTimer = 0; copsOnYou = false;
   for (const p of police) { p.active = false; p.mesh.position.set(0, -9999, 0); }
   save();
 }
 function updatePolice(dt) {
   if (crimeCD > 0) crimeCD -= dt;
-  if (wanted > 0) {
-    wantedCD -= dt * (driving && driving.heatMult ? driving.heatMult : 1);
-    if (wantedCD <= 0) { wanted = Math.max(0, wanted - 1); wantedCD = 8; if (wanted === 0) toast(STR.wantedClear); }
-  }
   const heat = heatActive();
   const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
+  let nearestD = Infinity, grabbing = false;
   for (let i = 0; i < police.length; i++) {
     const p = police[i];
     const want = i < heat;
@@ -2756,12 +2754,13 @@ function updatePolice(dt) {
       const ang = Math.random() * Math.PI * 2;
       p.x = clamp(px + Math.cos(ang) * 72, -HALF + 3, HALF - 3);
       p.z = clamp(pz + Math.sin(ang) * 72, -HALF + 3, HALF - 3);
-      p.h = Math.atan2(px - p.x, pz - p.z); p.speed = 0; p.active = true;
+      p.h = Math.atan2(px - p.x, pz - p.z); p.speed = 0; p.active = true; p.shootCD = rr(0.6, 1.6);
     } else if (!want && p.active) {
       p.active = false; p.mesh.position.set(0, -9999, 0);
     }
     if (!p.active) continue;
     const dx = px - p.x, dz = pz - p.z, d = Math.hypot(dx, dz) || 1;
+    if (d < nearestD) nearestD = d;
     p.h = lerpAngle(p.h, Math.atan2(dx, dz), 1 - Math.exp(-4 * dt));
     const tgt = dlgLines ? 0 : 19 + heat * 1.2;   // higher stars = faster, scarier police
     p.speed += (tgt - p.speed) * Math.min(1, 3 * dt);
@@ -2769,10 +2768,32 @@ function updatePolice(dt) {
     p.mesh.position.set(p.x, groundY(p.x, p.z), p.z);
     p.mesh.rotation.y = p.h;
     p.bar.material.emissive.setHex((Math.floor(simTime * 6) % 2) ? 0x2244ff : 0xff2222);
-    if (!dlgLines && d < 3.6 && hitCD <= 0) {   // police ram you — drains health instead of instant bust
+    if (!dlgLines && driving && d < 3.6 && hitCD <= 0) {   // PIT ram — drains your health in a car
       hitCD = 0.8; hurt(26);
-      const a = Math.atan2(px - p.x, pz - p.z);
-      if (!driving) { player.x += Math.sin(a) * 1.2; player.z += Math.cos(a) * 1.2; }
+    }
+    if (!driving && d < 2.8) grabbing = true;               // close enough on foot to make the arrest
+    // gunfire from 3 stars up: dangerous at range, far less accurate while you sprint or drive fast
+    if (!dlgLines && heat >= 3 && d > 4 && d < 42) {
+      p.shootCD -= dt;
+      if (p.shootCD <= 0) {
+        p.shootCD = rr(0.9, 1.7);
+        burst(p.x + Math.sin(p.h) * 1.1, 1.3, p.z + Math.cos(p.h) * 1.1, 4, 0.5, 0.5, 0.14, 1.0, 0.86, 0.4);   // muzzle flash
+        AudioSys.play("blip", 0.55);
+        const fast = (driving ? Math.abs(driving.speed) : player.speed) > 6;
+        if (Math.random() < clamp(0.5 - d * 0.009 - (fast ? 0.2 : 0), 0.05, 0.5)) hurt(driving ? 5 : 9);
+      }
+    }
+  }
+  // on-foot arrest: stay cornered by a cop for ~1.1s and you're BUSTED (lose cash, not your life)
+  if (grabbing && !driving) { bustTimer += dt; if (bustTimer >= 1.1) { bustTimer = 0; bust(); return; } }
+  else bustTimer = Math.max(0, bustTimer - dt * 2);
+  // escape: heat only cools once you've broken contact with every cop (out-run / out-manoeuvre them)
+  if (wanted > 0) {
+    if (nearestD <= 60) { wantedCD = Math.max(wantedCD, 6); copsOnYou = true; }
+    else {
+      if (copsOnYou) { copsOnYou = false; toast("🚓 Shaking them — keep moving!"); }
+      wantedCD -= dt * (driving && driving.heatMult ? driving.heatMult : 1);
+      if (wantedCD <= 0) { wanted = Math.max(0, wanted - 1); wantedCD = 8; if (wanted === 0) toast(STR.wantedClear); }
     }
   }
 }
