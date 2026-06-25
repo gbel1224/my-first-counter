@@ -242,12 +242,26 @@ const ENV_KEYS = [
   { t: 0.90, sky: new THREE.Color(0xef9b63), top: new THREE.Color(0x8a5e8c), sun: 1.05, hemi: 0.86, far: 660, night: 0.32 },
   { t: 1.00, sky: new THREE.Color(0xf9c071), top: new THREE.Color(0xf0934a), sun: 1.55, hemi: 1.02, far: 720, night: 0.0 },
 ];
+// neutral-daylight alternative ("midday" lighting option): cool blue daytime sky + clearer air,
+// keeping the same dusk/night so the cycle still has variety. selected via the stats-panel toggle.
+const ENV_MIDDAY = [
+  { t: 0.00, sky: new THREE.Color(0xbcd6ec), top: new THREE.Color(0x7fb0e0), sun: 1.85, hemi: 1.12, far: 880, night: 0.0 },
+  { t: 0.50, sky: new THREE.Color(0xbcd6ec), top: new THREE.Color(0x7fb0e0), sun: 1.85, hemi: 1.12, far: 880, night: 0.0 },
+  { t: 0.60, sky: new THREE.Color(0xe6ab78), top: new THREE.Color(0xb0687a), sun: 1.2,  hemi: 0.82, far: 680, night: 0.4 },
+  { t: 0.68, sky: new THREE.Color(0x6a4368), top: new THREE.Color(0x281f40), sun: 0.5,  hemi: 0.55, far: 560, night: 0.85 },
+  { t: 0.82, sky: new THREE.Color(0x2c3354), top: new THREE.Color(0x10142c), sun: 0.2,  hemi: 0.46, far: 560, night: 1.0 },
+  { t: 0.90, sky: new THREE.Color(0x9fb9d8), top: new THREE.Color(0x6a8ec0), sun: 1.15, hemi: 0.88, far: 700, night: 0.32 },
+  { t: 1.00, sky: new THREE.Color(0xbcd6ec), top: new THREE.Color(0x7fb0e0), sun: 1.85, hemi: 1.12, far: 880, night: 0.0 },
+];
+let dayMode = (() => { try { return localStorage.getItem("palm_city_light") === "midday" ? "midday" : "golden"; } catch (e) { return "golden"; } })();
+let gradeSat = dayMode === "midday" ? 0.92 : 1.0;   // saturation multiplier in the final grade (was a hard 1.11)
 const _sky = new THREE.Color(), _top = new THREE.Color(), _sunCol = new THREE.Color();
 function envUpdate() {
+  const KEYS = dayMode === "midday" ? ENV_MIDDAY : ENV_KEYS;
   const t = (simTime / 240) % 1;
-  let a = ENV_KEYS[0], b = ENV_KEYS[ENV_KEYS.length - 1];
-  for (let i = 1; i < ENV_KEYS.length; i++) {
-    if (ENV_KEYS[i].t >= t) { a = ENV_KEYS[i - 1]; b = ENV_KEYS[i]; break; }
+  let a = KEYS[0], b = KEYS[KEYS.length - 1];
+  for (let i = 1; i < KEYS.length; i++) {
+    if (KEYS[i].t >= t) { a = KEYS[i - 1]; b = KEYS[i]; break; }
   }
   const k = b.t === a.t ? 0 : (t - a.t) / (b.t - a.t);
   _sky.lerpColors(a.sky, b.sky, k);
@@ -330,7 +344,7 @@ function speckle(ctx, s, n, colors, r0, r1) {
     }
   }
 }
-const texAsphalt = canvasTex(256, (ctx, s) => {
+const texAsphalt = canvasTex(384, (ctx, s) => {
   ctx.fillStyle = "#46525a"; ctx.fillRect(0, 0, s, s);
   speckle(ctx, s, 260, ["#4d5a62", "#3f4a52", "#525e66"], 1, 3);
   for (let i = 0; i < 5; i++) { ctx.fillStyle = "rgba(28,34,38,.28)"; ctx.fillRect(Math.random() * s, Math.random() * s, 18 + Math.random() * 36, 12 + Math.random() * 26); }  // tar patches
@@ -348,7 +362,7 @@ const texAsphaltNormal = canvasNormalTex(256, (ctx, s) => {
   ctx.strokeStyle = "#5a5a5a"; ctx.lineWidth = 1.4;
   for (let i = 0; i < 6; i++) { ctx.beginPath(); let x = Math.random() * s, y = Math.random() * s; ctx.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (Math.random() - 0.5) * 36; y += (Math.random() - 0.5) * 36; ctx.lineTo(x, y); } ctx.stroke(); }
 }, 1, 30);
-const texSidewalk = canvasTex(256, (ctx, s) => {
+const texSidewalk = canvasTex(384, (ctx, s) => {
   ctx.fillStyle = "#cfc5ae"; ctx.fillRect(0, 0, s, s);
   speckle(ctx, s, 200, ["#d6cdb8", "#c6bca4", "#cabfa9"], 1, 2.5);
   for (let i = 0; i < 3; i++) { ctx.fillStyle = "rgba(150,138,116,.18)"; ctx.beginPath(); ctx.ellipse(Math.random() * s, Math.random() * s, 10 + Math.random() * 16, 8 + Math.random() * 12, 0, 0, 7); ctx.fill(); }  // stains
@@ -3456,9 +3470,29 @@ dom("stclose").textContent = STR.statsClose;
   const wb = dom("stweather");
   wb.textContent = STR.weatherToggle(weatherMode);
   wb.addEventListener("click", () => { weatherMode = (weatherMode + 1) % 3; wb.textContent = STR.weatherToggle(weatherMode); });
+  const lb = dom("stlight");
+  if (lb) {
+    lb.textContent = lightLabel();
+    lb.addEventListener("click", () => { applyDayMode(dayMode === "midday" ? "golden" : "midday", true); lb.textContent = lightLabel(); });
+  }
 }
 dom("streset").addEventListener("click", resetGame);
 dom("streset").textContent = STR.newGame;
+
+// lighting mood toggle: golden-hour (stylised) vs neutral midday (photoreal). persisted like bloom/mute.
+function lightLabel() { return dayMode === "midday" ? "☀️ Midday" : "\u{1F305} Golden hour"; }
+function applyDayMode(mode, refresh) {
+  dayMode = mode === "midday" ? "midday" : "golden";
+  const midday = dayMode === "midday";
+  sun.color.setHex(midday ? 0xfff1da : 0xffd9a0);
+  hemi.color.setHex(midday ? 0xdce8f6 : 0xffe8c4);
+  renderer.toneMappingExposure = midday ? 1.18 : 1.3;
+  gradeSat = midday ? 0.92 : 1.0;
+  if (compMat) compMat.uniforms.uSat.value = gradeSat;
+  try { localStorage.setItem("palm_city_light", dayMode); } catch (e) {}
+  if (refresh) envUpdate();   // refresh sky / fog / sun intensity immediately (runtime toggle only)
+}
+applyDayMode(dayMode, false);   // startup: set lights only; the first frame's envUpdate does the rest
 
 // mute toggle (persisted separately from the save)
 const muteBtn = dom("mute");
@@ -3833,8 +3867,8 @@ function buildBloom() {
     fragmentShader: "uniform sampler2D tDiffuse; uniform float threshold; varying vec2 vUv; void main(){ vec3 c=texture2D(tDiffuse,vUv).rgb; float l=dot(c,vec3(0.299,0.587,0.114)); gl_FragColor=vec4(c*smoothstep(threshold,threshold+0.18,l),1.0); }" });
   blurMat = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, dir: { value: new THREE.Vector2() } }, vertexShader: BLOOM_VERT,
     fragmentShader: "uniform sampler2D tDiffuse; uniform vec2 dir; varying vec2 vUv; void main(){ vec3 s=texture2D(tDiffuse,vUv).rgb*0.227027; s+=texture2D(tDiffuse,vUv+dir*1.3846).rgb*0.316216; s+=texture2D(tDiffuse,vUv-dir*1.3846).rgb*0.316216; s+=texture2D(tDiffuse,vUv+dir*3.2308).rgb*0.07027; s+=texture2D(tDiffuse,vUv-dir*3.2308).rgb*0.07027; gl_FragColor=vec4(s,1.0); }" });
-  compMat = new THREE.ShaderMaterial({ uniforms: { tScene: { value: null }, tBloom: { value: null }, strength: { value: 1.05 }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(bloomW, bloomH) } }, vertexShader: BLOOM_VERT,
-    fragmentShader: "uniform sampler2D tScene; uniform sampler2D tBloom; uniform float strength; uniform float uTime; uniform vec2 uRes; varying vec2 vUv; vec3 toSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,vec3(0.0)),vec3(0.41666))-0.055, step(0.0031308,c)); } float hash(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); } void main(){ vec2 uv=vUv; vec2 d=uv-0.5; float r2=dot(d,d); float ca=r2*0.004; vec3 sc; sc.r=texture2D(tScene,uv+d*ca).r; sc.g=texture2D(tScene,uv).g; sc.b=texture2D(tScene,uv-d*ca).b; vec3 bl=texture2D(tBloom,uv).rgb; vec3 col=toSRGB(max(sc+bl*strength,0.0)); float luma=dot(col,vec3(0.2126,0.7152,0.0722)); col=mix(vec3(luma),col,1.11); col=(col-0.5)*1.055+0.5; col*=1.0-r2*0.62; float g=hash(uv*uRes+fract(uTime))-0.5; col+=g*0.018; gl_FragColor=vec4(clamp(col,0.0,1.0),1.0); }" });
+  compMat = new THREE.ShaderMaterial({ uniforms: { tScene: { value: null }, tBloom: { value: null }, strength: { value: 1.05 }, uSat: { value: gradeSat }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(bloomW, bloomH) } }, vertexShader: BLOOM_VERT,
+    fragmentShader: "uniform sampler2D tScene; uniform sampler2D tBloom; uniform float strength; uniform float uSat; uniform float uTime; uniform vec2 uRes; varying vec2 vUv; vec3 toSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,vec3(0.0)),vec3(0.41666))-0.055, step(0.0031308,c)); } float hash(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); } void main(){ vec2 uv=vUv; vec2 d=uv-0.5; float r2=dot(d,d); float ca=r2*0.004; vec3 sc; sc.r=texture2D(tScene,uv+d*ca).r; sc.g=texture2D(tScene,uv).g; sc.b=texture2D(tScene,uv-d*ca).b; vec3 bl=texture2D(tBloom,uv).rgb; vec3 col=toSRGB(max(sc+bl*strength,0.0)); float luma=dot(col,vec3(0.2126,0.7152,0.0722)); col=mix(vec3(luma),col,uSat); col=(col-0.5)*1.055+0.5; col*=1.0-r2*0.62; float g=hash(uv*uRes+fract(uTime))-0.5; col+=g*0.018; gl_FragColor=vec4(clamp(col,0.0,1.0),1.0); }" });
   bloomReady = true;
 }
 function blit(mat, target) { fsQuad.material = mat; renderer.setRenderTarget(target || null); renderer.render(fsScene, fsCam); }
