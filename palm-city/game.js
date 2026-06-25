@@ -61,6 +61,7 @@ const BLOOM_KEY = "palm_city_bloom";
 let bloomOn = (() => { try { const v = localStorage.getItem(BLOOM_KEY); return v === null ? true : v === "1"; } catch (e) { return true; } })();
 let bloomReady = false, bloomFailed = false, bloomW = 0, bloomH = 0;
 let rtScene, rtB1, rtB2, fsScene, fsCam, fsQuad, brightMat, blurMat, compMat;
+let rtAO, rtAOb, aoMat, aoOn = true;   // depth-based ambient occlusion (rides the bloom offscreen pass)
 renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic highlight roll-off for a premium look
 renderer.toneMappingExposure = 1.3;
 renderer.domElement.id = "scene";   // CSS color-grades the 3D layer (HUD sits above, ungraded)
@@ -3858,17 +3859,22 @@ function buildBloom() {
   const sz = renderer.getDrawingBufferSize(new THREE.Vector2());
   bloomW = Math.max(2, sz.x); bloomH = Math.max(2, sz.y);
   const hw = Math.max(1, bloomW >> 1), hh = Math.max(1, bloomH >> 1);
-  rtScene = new THREE.WebGLRenderTarget(bloomW, bloomH); rtScene.texture.colorSpace = THREE.LinearSRGBColorSpace;
+  rtScene = new THREE.WebGLRenderTarget(bloomW, bloomH, { depthTexture: new THREE.DepthTexture(bloomW, bloomH) }); rtScene.texture.colorSpace = THREE.LinearSRGBColorSpace;
   rtB1 = new THREE.WebGLRenderTarget(hw, hh); rtB1.texture.colorSpace = THREE.LinearSRGBColorSpace;
   rtB2 = new THREE.WebGLRenderTarget(hw, hh); rtB2.texture.colorSpace = THREE.LinearSRGBColorSpace;
+  rtAO = new THREE.WebGLRenderTarget(hw, hh); rtAO.texture.colorSpace = THREE.LinearSRGBColorSpace;     // half-res AO buffer
+  rtAOb = new THREE.WebGLRenderTarget(hw, hh); rtAOb.texture.colorSpace = THREE.LinearSRGBColorSpace;   // AO blur ping-pong
+  // depth-only SSAO: darken crevices & where objects meet the ground for a grounded, real feel
+  aoMat = new THREE.ShaderMaterial({ uniforms: { tDepth: { value: null }, uRes: { value: new THREE.Vector2() }, uNear: { value: 0.1 }, uFar: { value: 1000 }, uRadius: { value: 0.9 }, uStrength: { value: 1.2 }, uBias: { value: 0.035 } }, vertexShader: BLOOM_VERT,
+    fragmentShader: "uniform sampler2D tDepth; uniform vec2 uRes; uniform float uNear; uniform float uFar; uniform float uRadius; uniform float uStrength; uniform float uBias; varying vec2 vUv; float lin(float d){ float z=d*2.0-1.0; return (2.0*uNear*uFar)/(uFar+uNear - z*(uFar-uNear)); } float h21(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); } void main(){ float dc=texture2D(tDepth,vUv).r; if(dc>=0.9999){ gl_FragColor=vec4(1.0); return; } float cz=lin(dc); float rot=h21(vUv*uRes)*6.2831853; float aspect=uRes.x/uRes.y; float radUV=clamp(uRadius/cz,0.004,0.045); float occ=0.0; for(int i=0;i<8;i++){ float a=float(i)*0.7853981+rot; vec2 dir=vec2(cos(a),sin(a)); dir.x/=aspect; float r=radUV*(0.35+0.65*h21(vUv*uRes+float(i)*1.7)); float sz=lin(texture2D(tDepth,vUv+dir*r).r); float diff=cz-sz; occ+=step(uBias,diff)*(1.0-smoothstep(uRadius*0.6,uRadius*1.6,diff)); } float ao=1.0-(occ/8.0)*uStrength; gl_FragColor=vec4(vec3(clamp(ao,0.0,1.0)),1.0); }" });
   fsScene = new THREE.Scene(); fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   fsQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)); fsScene.add(fsQuad);
   brightMat = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, threshold: { value: 0.7 } }, vertexShader: BLOOM_VERT,
     fragmentShader: "uniform sampler2D tDiffuse; uniform float threshold; varying vec2 vUv; void main(){ vec3 c=texture2D(tDiffuse,vUv).rgb; float l=dot(c,vec3(0.299,0.587,0.114)); gl_FragColor=vec4(c*smoothstep(threshold,threshold+0.18,l),1.0); }" });
   blurMat = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, dir: { value: new THREE.Vector2() } }, vertexShader: BLOOM_VERT,
     fragmentShader: "uniform sampler2D tDiffuse; uniform vec2 dir; varying vec2 vUv; void main(){ vec3 s=texture2D(tDiffuse,vUv).rgb*0.227027; s+=texture2D(tDiffuse,vUv+dir*1.3846).rgb*0.316216; s+=texture2D(tDiffuse,vUv-dir*1.3846).rgb*0.316216; s+=texture2D(tDiffuse,vUv+dir*3.2308).rgb*0.07027; s+=texture2D(tDiffuse,vUv-dir*3.2308).rgb*0.07027; gl_FragColor=vec4(s,1.0); }" });
-  compMat = new THREE.ShaderMaterial({ uniforms: { tScene: { value: null }, tBloom: { value: null }, strength: { value: 1.05 }, uSat: { value: gradeSat }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(bloomW, bloomH) } }, vertexShader: BLOOM_VERT,
-    fragmentShader: "uniform sampler2D tScene; uniform sampler2D tBloom; uniform float strength; uniform float uSat; uniform float uTime; uniform vec2 uRes; varying vec2 vUv; vec3 toSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,vec3(0.0)),vec3(0.41666))-0.055, step(0.0031308,c)); } float hash(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); } void main(){ vec2 uv=vUv; vec2 d=uv-0.5; float r2=dot(d,d); float ca=r2*0.004; vec3 sc; sc.r=texture2D(tScene,uv+d*ca).r; sc.g=texture2D(tScene,uv).g; sc.b=texture2D(tScene,uv-d*ca).b; vec3 bl=texture2D(tBloom,uv).rgb; vec3 col=toSRGB(max(sc+bl*strength,0.0)); float luma=dot(col,vec3(0.2126,0.7152,0.0722)); col=mix(vec3(luma),col,uSat); col=(col-0.5)*1.055+0.5; col*=1.0-r2*0.62; float g=hash(uv*uRes+fract(uTime))-0.5; col+=g*0.018; gl_FragColor=vec4(clamp(col,0.0,1.0),1.0); }" });
+  compMat = new THREE.ShaderMaterial({ uniforms: { tScene: { value: null }, tBloom: { value: null }, tAO: { value: null }, uAO: { value: 1 }, strength: { value: 1.05 }, uSat: { value: gradeSat }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(bloomW, bloomH) } }, vertexShader: BLOOM_VERT,
+    fragmentShader: "uniform sampler2D tScene; uniform sampler2D tBloom; uniform sampler2D tAO; uniform float uAO; uniform float strength; uniform float uSat; uniform float uTime; uniform vec2 uRes; varying vec2 vUv; vec3 toSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,vec3(0.0)),vec3(0.41666))-0.055, step(0.0031308,c)); } float hash(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); } void main(){ vec2 uv=vUv; vec2 d=uv-0.5; float r2=dot(d,d); float ca=r2*0.004; vec3 sc; sc.r=texture2D(tScene,uv+d*ca).r; sc.g=texture2D(tScene,uv).g; sc.b=texture2D(tScene,uv-d*ca).b; float ao=texture2D(tAO,uv).r; sc*=mix(1.0,ao,uAO); vec3 bl=texture2D(tBloom,uv).rgb; vec3 col=toSRGB(max(sc+bl*strength,0.0)); float luma=dot(col,vec3(0.2126,0.7152,0.0722)); col=mix(vec3(luma),col,uSat); col=(col-0.5)*1.055+0.5; col*=1.0-r2*0.62; float g=hash(uv*uRes+fract(uTime))-0.5; col+=g*0.018; gl_FragColor=vec4(clamp(col,0.0,1.0),1.0); }" });
   bloomReady = true;
 }
 function blit(mat, target) { fsQuad.material = mat; renderer.setRenderTarget(target || null); renderer.render(fsScene, fsCam); }
@@ -3878,8 +3884,21 @@ function renderBloom() {
     bloomW = Math.max(2, sz.x); bloomH = Math.max(2, sz.y);
     const hw = Math.max(1, bloomW >> 1), hh = Math.max(1, bloomH >> 1);
     rtScene.setSize(bloomW, bloomH); rtB1.setSize(hw, hh); rtB2.setSize(hw, hh);
+    rtAO.setSize(hw, hh); rtAOb.setSize(hw, hh);
   }
   renderer.setRenderTarget(rtScene); renderer.render(scene, camera);
+  // SSAO: compute occlusion from the scene depth, denoise, hand to the composite
+  compMat.uniforms.tAO.value = rtAO.texture;
+  if (aoOn) {
+    aoMat.uniforms.tDepth.value = rtScene.depthTexture;
+    aoMat.uniforms.uNear.value = camera.near; aoMat.uniforms.uFar.value = camera.far;
+    aoMat.uniforms.uRes.value.set(bloomW, bloomH);
+    blit(aoMat, rtAO);
+    const aw = 1 / Math.max(1, bloomW >> 1), ah = 1 / Math.max(1, bloomH >> 1);
+    blurMat.uniforms.tDiffuse.value = rtAO.texture; blurMat.uniforms.dir.value.set(aw, 0); blit(blurMat, rtAOb);
+    blurMat.uniforms.tDiffuse.value = rtAOb.texture; blurMat.uniforms.dir.value.set(0, ah); blit(blurMat, rtAO);
+    compMat.uniforms.uAO.value = 1;
+  } else compMat.uniforms.uAO.value = 0;
   brightMat.uniforms.tDiffuse.value = rtScene.texture; blit(brightMat, rtB1);
   const tw = 1 / Math.max(1, bloomW >> 1), th = 1 / Math.max(1, bloomH >> 1);
   blurMat.uniforms.tDiffuse.value = rtB1.texture; blurMat.uniforms.dir.value.set(tw, 0); blit(blurMat, rtB2);
