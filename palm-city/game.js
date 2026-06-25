@@ -429,11 +429,11 @@ function colorize(g, color) {
   return g;
 }
 function cylC(rT, rB, h, x, y, z, color) {
-  const g = new THREE.CylinderGeometry(rT, rB, h, 10, 1);
+  const g = new THREE.CylinderGeometry(rT, rB, h, 16, 1);
   g.translate(x, y, z); return colorize(g, color);
 }
 function sphC(r, x, y, z, color, sx = 1, sy = 1, sz = 1) {
-  const g = new THREE.SphereGeometry(r, 12, 9);
+  const g = new THREE.SphereGeometry(r, 18, 14);
   if (sx !== 1 || sy !== 1 || sz !== 1) g.scale(sx, sy, sz);
   g.translate(x, y, z); return colorize(g, color);
 }
@@ -496,6 +496,9 @@ const chunkKey = (x, z) => Math.floor((x + HALF) / CHUNKW) + "," + Math.floor((z
 function byChunk(list) { const map = new Map(); for (const b of list) { const k = chunkKey(b.x, b.z); let a = map.get(k); if (!a) map.set(k, a = []); a.push(b); } return [...map.values()]; }
 
 const matVC = new THREE.MeshLambertMaterial({ vertexColors: true });
+// characters get their own PBR material (like the cars) so they catch the sky's image-based lighting
+// instead of looking flat — matte skin/cloth (high roughness) with a gentle environment fill
+const matPerson = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0.0, envMapIntensity: 0.55 });
 let roadMat = null, sidewalkMat = null;   // exposed so rain can make the floor wet
 let oceanTex = null;   // exposed so the sea can drift/shimmer
 let foamMat = null;    // shoreline foam (pulses like waves)
@@ -1013,8 +1016,12 @@ function personGeo(p) {
     sphC(0.053, -0.172, 0.79, 0, p.skin),
     cylC(0.056, 0.07, 0.14, 0, 1.46, 0, p.skin),             // neck
     sphC(0.14, 0, 1.63, 0, p.skin, 1, 1.13, 0.95),           // head
-    sphC(0.026, 0.055, 1.63, 0.12, 0x241c18),                // eyes
-    sphC(0.026, -0.055, 1.63, 0.12, 0x241c18),
+    sphC(0.03, 0.055, 1.632, 0.11, 0xf2efe6),                // eye whites
+    sphC(0.03, -0.055, 1.632, 0.11, 0xf2efe6),
+    sphC(0.016, 0.058, 1.632, 0.132, 0x20242b),              // irises
+    sphC(0.016, -0.058, 1.632, 0.132, 0x20242b),
+    sphC(0.028, 0.057, 1.672, 0.112, p.hair, 1.3, 0.4, 0.7), // brows (tinted to hair)
+    sphC(0.028, -0.057, 1.672, 0.112, p.hair, 1.3, 0.4, 0.7),
     sphC(0.03, 0, 1.6, 0.13, p.skin, 0.9, 1.2, 1.4),         // nose
     sphC(0.038, 0.135, 1.63, 0, p.skin, 0.5, 1, 1),          // ears
     sphC(0.038, -0.135, 1.63, 0, p.skin, 0.5, 1, 1),
@@ -1031,11 +1038,11 @@ function personGeo(p) {
 }
 function articulatedPerson(p) {
   const g = new THREE.Group();
-  const mat = c => new THREE.MeshLambertMaterial({ color: c });
+  const mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.82, metalness: 0.0, envMapIntensity: 0.55 });   // PBR, matches the crowd + cars
   // shared materials so the wardrobe/barber can recolour the whole outfit/hair in one call
   const shirtMat = mat(p.shirt), pantsMat = mat(p.pants), skinMat = mat(p.skin), hairMat = mat(p.hair), shoeMat = mat(0x2a2620);
-  const cyl = (rT, rB, h, m, y) => { const me = new THREE.Mesh(new THREE.CylinderGeometry(rT, rB, h, 12, 1), m); if (y != null) me.position.y = y; return me; };
-  const sph = (r, m, sx, sy, sz) => { const s = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 10), m); if (sx != null) s.scale.set(sx, sy, sz); return s; };
+  const cyl = (rT, rB, h, m, y) => { const me = new THREE.Mesh(new THREE.CylinderGeometry(rT, rB, h, 16, 1), m); if (y != null) me.position.y = y; return me; };
+  const sph = (r, m, sx, sy, sz) => { const s = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), m); if (sx != null) s.scale.set(sx, sy, sz); return s; };
   // leg group (pivots at hip): single clothed leg + shoe
   const leg = side => {
     const grp = new THREE.Group(); grp.position.set(0.1 * side, 0.88, 0);
@@ -1055,10 +1062,15 @@ function articulatedPerson(p) {
   const neck = cyl(0.056, 0.07, 0.14, skinMat, 1.46);
   const head = sph(0.14, skinMat, 1, 1.13, 0.95); head.position.y = 1.63;
   const hair = sph(0.152, hairMat, 1.05, 0.82, 1.05); hair.position.set(0, 1.7, -0.035);
-  const eye = x => { const s = sph(0.026, mat(0x241c18)); s.position.set(x, 1.63, 0.12); return s; };
+  const eyeWhiteMat = mat(0xf2efe6), irisMat = mat(0x20242b);
+  const eyeW = x => { const s = sph(0.03, eyeWhiteMat); s.position.set(x, 1.632, 0.11); return s; };
+  const iris = x => { const s = sph(0.016, irisMat); s.position.set(x, 1.632, 0.132); return s; };
+  const brow = x => { const s = sph(0.028, hairMat, 1.3, 0.4, 0.7); s.position.set(x, 1.672, 0.112); return s; };
   const nose = sph(0.03, skinMat, 0.9, 1.2, 1.4); nose.position.set(0, 1.6, 0.13);
   const ear = x => { const s = sph(0.038, skinMat, 0.5, 1, 1); s.position.set(x, 1.63, 0); return s; };
-  g.add(legL, legR, hips, torso, armL, armR, neck, head, hair, eye(0.055), eye(-0.055), nose, ear(0.135), ear(-0.135));
+  g.add(legL, legR, hips, torso, armL, armR, neck, head, hair,
+    eyeW(0.055), eyeW(-0.055), iris(0.058), iris(-0.058), brow(0.057), brow(-0.057),
+    nose, ear(0.135), ear(-0.135));
   const hatHolder = new THREE.Group(), glassHolder = new THREE.Group(), jacketHolder = new THREE.Group(), beardHolder = new THREE.Group();
   g.add(hatHolder, glassHolder, jacketHolder, beardHolder);
   return { group: g, legL, legR, armL, armR, shirtMat, pantsMat, hairMat, hair, hatHolder, glassHolder, jacketHolder, beardHolder };
@@ -1090,8 +1102,12 @@ function walkerGeos(p) {
     cylC(0.17, 0.13, 0.5, 0, 1.12, 0, p.shirt),             // torso
     cylC(0.056, 0.07, 0.14, 0, 1.46, 0, p.skin),            // neck
     sphC(0.14, 0, 1.63, 0, p.skin, 1, 1.13, 0.95),          // head
-    sphC(0.026, 0.055, 1.63, 0.12, 0x241c18),               // eyes
-    sphC(0.026, -0.055, 1.63, 0.12, 0x241c18),
+    sphC(0.03, 0.055, 1.632, 0.11, 0xf2efe6),               // eye whites
+    sphC(0.03, -0.055, 1.632, 0.11, 0xf2efe6),
+    sphC(0.016, 0.058, 1.632, 0.132, 0x20242b),             // irises
+    sphC(0.016, -0.058, 1.632, 0.132, 0x20242b),
+    sphC(0.028, 0.057, 1.672, 0.112, p.hair, 1.3, 0.4, 0.7),// brows (tinted to hair)
+    sphC(0.028, -0.057, 1.672, 0.112, p.hair, 1.3, 0.4, 0.7),
     sphC(0.03, 0, 1.6, 0.13, p.skin, 0.9, 1.2, 1.4),        // nose
     sphC(0.038, 0.135, 1.63, 0, p.skin, 0.5, 1, 1),         // ears
     sphC(0.038, -0.135, 1.63, 0, p.skin, 0.5, 1, 1),
@@ -1105,8 +1121,8 @@ function walkerGeos(p) {
 const npcWalkerGeos = NPC_PALS.map(walkerGeos);
 function makeWalker(W) {
   const g = new THREE.Group();
-  const body = new THREE.Mesh(W.body, matVC); body.castShadow = true;
-  const limb = (geo, x, y) => { const grp = new THREE.Group(); grp.position.set(x, y, 0); grp.add(new THREE.Mesh(geo, matVC)); return grp; };   // limbs skip real shadows (blob shadow grounds them)
+  const body = new THREE.Mesh(W.body, matPerson); body.castShadow = true;
+  const limb = (geo, x, y) => { const grp = new THREE.Group(); grp.position.set(x, y, 0); grp.add(new THREE.Mesh(geo, matPerson)); return grp; };   // limbs skip real shadows (blob shadow grounds them)
   const legL = limb(W.leg, 0.1, 0.88), legR = limb(W.leg, -0.1, 0.88);
   const armL = limb(W.arm, 0.172, 1.36), armR = limb(W.arm, -0.172, 1.36);
   g.add(body, legL, legR, armL, armR);
@@ -1306,7 +1322,7 @@ for (let t = 0; t < 260; t++) {
 
 // story characters
 function storyNPC(pal, x, z, name) {
-  const mesh = new THREE.Mesh(personGeo(pal), matVC);
+  const mesh = new THREE.Mesh(personGeo(pal), matPerson);
   mesh.castShadow = true;
   mesh.position.set(x, CURB, z);
   const tag = textSprite(name, "#1d2a20", "rgba(255,209,102,.95)", 5, 1.25, 2.3);
@@ -2465,7 +2481,7 @@ function updateVigilante(dt) {
 const medic = { stage: "idle", cd: 35, t: 0, x: 0, z: 0 };
 const medicMarker = makeMarker(0x44d0ff);
 medicMarker.group.visible = false;
-const patient = new THREE.Mesh(personGeo({ shirt: 0xedeff2, pants: 0x9aa0a8, skin: 0xe8b08a, hair: 0x3a2c20 }), matVC);
+const patient = new THREE.Mesh(personGeo({ shirt: 0xedeff2, pants: 0x9aa0a8, skin: 0xe8b08a, hair: 0x3a2c20 }), matPerson);
 patient.visible = false; scene.add(patient);
 function updateParamedic(dt) {
   if (state.mi < M.length || dlgLines) { medicMarker.group.visible = false; patient.visible = false; return; }   // freeplay only
