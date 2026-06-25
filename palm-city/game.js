@@ -3757,13 +3757,13 @@ function update(dt) {
     // stride: advance the walk cycle with speed, swing legs & arms in opposition, bob with each step
     const stepping = moved > sp * dt * 0.3;
     n.walkPhase += sp * dt * 2.6;
-    const sw = stepping ? Math.sin(n.walkPhase) * Math.min(1, sp / 2.2) * 0.7 : (n.legL.rotation.x * 0.85);
+    const sw = stepping ? Math.sin(n.walkPhase) * Math.min(1, sp / 2.2) * 0.38 : (n.legL.rotation.x * 0.85);
     n.legL.rotation.x = sw; n.legR.rotation.x = -sw;
-    n.armL.rotation.x = -sw * 0.8; n.armR.rotation.x = sw * 0.8;
+    n.armL.rotation.x = -sw * 0.7; n.armR.rotation.x = sw * 0.7;
     const gy = groundY(n.x, n.z);
-    n.mesh.position.set(n.x, gy + (stepping ? Math.abs(Math.sin(n.walkPhase)) * 0.05 : 0), n.z);
+    n.mesh.position.set(n.x, gy + (stepping ? Math.abs(Math.sin(n.walkPhase)) * 0.03 : 0), n.z);
     n.mesh.rotation.y = n.h;
-    n.mesh.rotation.z = stepping ? Math.sin(n.walkPhase) * 0.05 : 0;
+    n.mesh.rotation.z = stepping ? Math.sin(n.walkPhase) * 0.025 : 0;
   }
 
   // income + missions
@@ -3816,9 +3816,9 @@ function update(dt) {
     player.y += (gy - player.y) * Math.min(1, 12 * dt);
     hero.group.position.set(player.x, player.y, player.z);
     hero.group.rotation.y = player.h;
-    const sw = Math.sin(player.walkPhase) * Math.min(1, player.speed / 4) * 0.75;
+    const sw = Math.sin(player.walkPhase) * Math.min(1, player.speed / 4) * 0.42;
     hero.legL.rotation.x = sw; hero.legR.rotation.x = -sw;
-    hero.armL.rotation.x = -sw * 0.8; hero.armR.rotation.x = sw * 0.8;
+    hero.armL.rotation.x = -sw * 0.7; hero.armR.rotation.x = sw * 0.7;
     if (punchT > 0) hero.armR.rotation.x = -1.5;   // forward jab during a punch
   }
   for (const c of cars) {
