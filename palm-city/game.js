@@ -1043,6 +1043,77 @@ let lampMat = null, lampPoolMat = null, lampConeMat = null;
   coneIM.frustumCulled = false; scene.add(coneIM);
 }
 
+// ---------- street clutter: trash cans, hydrants, benches & planters along the sidewalks ----------
+// a busy, lived-in street reads far more real than empty pavement. placed with a *local* PRNG so the
+// main seeded stream (NPCs, missions, traffic) is byte-for-byte unchanged.
+{
+  let _cs = 0x9e3779b9 >>> 0;
+  const crand = () => { _cs = (_cs + 0x6D2B79F5) >>> 0; let t = _cs; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const matProp = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.05, envMapIntensity: 0.5 });
+  // prop geometries (origin at the base; instanced onto the curb height)
+  const trashGeo = mergeGeos([
+    cylC(0.28, 0.32, 0.92, 0, 0.46, 0, 0x3a4a40),           // bin body
+    cylC(0.31, 0.31, 0.07, 0, 0.95, 0, 0x2a352f),           // lid rim
+    sphC(0.30, 0, 0.99, 0, 0x2a352f, 1, 0.45, 1),           // domed lid
+  ]);
+  const hydrantGeo = mergeGeos([
+    cylC(0.17, 0.2, 0.5, 0, 0.25, 0, 0xb5392b),             // body
+    sphC(0.17, 0, 0.52, 0, 0xb5392b, 1, 0.7, 1),            // dome cap
+    cylC(0.06, 0.06, 0.1, 0, 0.62, 0, 0x922b20),            // top bolt
+    boxGeoC(0.52, 0.13, 0.13, 0, 0.36, 0, 0xc24535),        // side arms
+  ]);
+  const benchGeo = mergeGeos([
+    boxGeoC(1.6, 0.09, 0.5, 0, 0.5, 0, 0x6b4a2e),           // seat
+    boxGeoC(1.6, 0.42, 0.09, 0, 0.74, -0.2, 0x6b4a2e),      // backrest
+    boxGeoC(0.1, 0.5, 0.46, 0.7, 0.25, 0, 0x3a3f47),        // legs
+    boxGeoC(0.1, 0.5, 0.46, -0.7, 0.25, 0, 0x3a3f47),
+  ]);
+  const planterGeo = mergeGeos([
+    boxGeoC(1.0, 0.46, 1.0, 0, 0.23, 0, 0x8a7a5c),          // stone box
+    boxGeoC(1.04, 0.08, 1.04, 0, 0.46, 0, 0x9a8a6c),        // rim
+    sphC(0.52, 0, 0.62, 0, 0x5d9952, 1, 0.7, 1),            // shrub
+    sphC(0.34, 0.22, 0.74, 0.18, 0x6da85e, 1, 0.8, 1),
+    sphC(0.30, -0.2, 0.72, -0.16, 0x528a48, 1, 0.8, 1),
+  ]);
+  const TYPES = [
+    { geo: trashGeo, w: 0.7, r: 0.34 },
+    { geo: hydrantGeo, w: 0.5, r: 0.26 },
+    { geo: benchGeo, w: 0.35, r: 0.85 },
+    { geo: planterGeo, w: 0.45, r: 0.6 },
+  ];
+  const wsum = TYPES.reduce((a, t) => a + t.w, 0);
+  const buckets = TYPES.map(() => []);
+  const inset = 2.6;
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    const key = i + "," + j;
+    if (PARKS.has(key)) continue;                            // parks already have their own greenery
+    const x0 = blockMin(i), z0 = blockMin(j);
+    const tries = 1 + (crand() < 0.55 ? 1 : 0) + (crand() < 0.25 ? 1 : 0);   // 1–3 props per block
+    for (let n = 0; n < tries; n++) {
+      const edge = (crand() * 4) | 0, t = 4 + crand() * (BLOCK - 8);
+      let x, z, rot;
+      if (edge === 0) { x = x0 + t; z = z0 + inset; rot = 0; }
+      else if (edge === 1) { x = x0 + t; z = z0 + BLOCK - inset; rot = Math.PI; }
+      else if (edge === 2) { x = x0 + inset; z = z0 + t; rot = Math.PI / 2; }
+      else { x = x0 + BLOCK - inset; z = z0 + t; rot = Math.PI / 2; }
+      // pick a type, then reject if it would clip a building / another prop
+      let pickT = crand() * wsum, ti = 0; for (; ti < TYPES.length; ti++) { pickT -= TYPES[ti].w; if (pickT <= 0) break; }
+      const T = TYPES[Math.min(ti, TYPES.length - 1)];
+      if (hitsCollider(x, z, T.r + 0.4)) continue;
+      buckets[TYPES.indexOf(T)].push([x, z, rot]);
+      addCollider(x, z, T.r, T.r);
+    }
+  }
+  const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), s = new THREE.Vector3(1, 1, 1);
+  TYPES.forEach((T, ti) => {
+    const list = buckets[ti]; if (!list.length) return;
+    const im = new THREE.InstancedMesh(T.geo, matProp, list.length);
+    im.castShadow = true; im.receiveShadow = true;
+    list.forEach(([x, z, rot], idx) => { p.set(x, CURB, z); q.setFromAxisAngle(up, rot); m.compose(p, q, s); im.setMatrixAt(idx, m); });
+    scene.add(im);
+  });
+}
+
 // ---------- road centre-line markings (one instanced draw) ----------
 {
   const dash = new THREE.BoxGeometry(0.5, 0.06, 3);
