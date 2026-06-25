@@ -1130,6 +1130,36 @@ let lampMat = null, lampPoolMat = null, lampConeMat = null;
   });
 }
 
+// ---------- ATMs: quick cash-grab robbery points dotted along the sidewalks ----------
+const atms = [];
+{
+  let _as = 0x1234567 >>> 0;
+  const arand = () => { _as = (_as + 0x6D2B79F5) >>> 0; let t = _as; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const bodyG = boxGeoC(0.7, 1.5, 0.45, 0, 0.75, 0, 0x2a2f37);
+  const screenG = boxGeoC(0.5, 0.42, 0.06, 0, 1.05, 0.24, 0x59d6e6);
+  const spots = [];
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    if (PARKS.has(i + "," + j) || arand() < 0.9) continue;          // sparse
+    const x0 = blockMin(i), z0 = blockMin(j), inset = 2.2;
+    const edge = (arand() * 4) | 0, tt = 6 + arand() * (BLOCK - 12);
+    let x, z, rot;
+    if (edge === 0) { x = x0 + tt; z = z0 + inset; rot = Math.PI; }
+    else if (edge === 1) { x = x0 + tt; z = z0 + BLOCK - inset; rot = 0; }
+    else if (edge === 2) { x = x0 + inset; z = z0 + tt; rot = -Math.PI / 2; }
+    else { x = x0 + BLOCK - inset; z = z0 + tt; rot = Math.PI / 2; }
+    if (hitsCollider(x, z, 1.0)) continue;
+    spots.push([x, z, rot]); atms.push({ x, z, cd: 0 });
+  }
+  if (spots.length) {
+    const bIM = new THREE.InstancedMesh(bodyG, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.3 }), spots.length);
+    const sIM = new THREE.InstancedMesh(screenG, new THREE.MeshStandardMaterial({ vertexColors: true, emissive: 0x2aa6c0, emissiveIntensity: 0.6, roughness: 0.4 }), spots.length);
+    bIM.castShadow = true;
+    const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
+    spots.forEach(([x, z, rot], idx) => { p.set(x, CURB, z); q.setFromAxisAngle(up, rot); m.compose(p, q, s); bIM.setMatrixAt(idx, m); sIM.setMatrixAt(idx, m); });
+    scene.add(bIM, sIM);
+  }
+}
+
 // ---------- road centre-line markings (one instanced draw) ----------
 {
   const dash = new THREE.BoxGeometry(0.5, 0.06, 3);
@@ -1419,6 +1449,19 @@ for (let t = 0; t < 200; t++) {
     wp, next: (start + 1) % 4, x: wp[start][0], z: wp[start][1],
     h: 0, speed: rr(7, 11), mesh: makeCar(pick(CAR_COLORS)),
   });
+}
+// armored cash trucks: rare, tanky targets — crack one open for a big score and serious heat.
+// uses a local PRNG so the main seeded stream (NPCs, parked cars) stays byte-for-byte identical.
+{
+  let _ts = 0x51ed2701 >>> 0;
+  const trand = () => { _ts = (_ts + 0x6D2B79F5) >>> 0; let t = _ts; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  for (let a = 0; a < 2; a++) {
+    const i = (trand() * N) | 0, j = (trand() * N) | 0;
+    const x0 = roadC(i) + 4, x1 = roadC(i + 1) - 4, z0 = roadC(j) + 4, z1 = roadC(j + 1) - 4;
+    const wp = [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], st = (trand() * 4) | 0;
+    const mesh = makeCar(0x394049); mesh.scale.set(1.18, 1.4, 1.2);
+    traffic.push({ wp, next: (st + 1) % 4, x: wp[st][0], z: wp[st][1], h: 0, speed: 5 + trand() * 2, mesh, armored: true, hp: 320, loot: 2500 });
+  }
 }
 
 // police cars (spawned by wanted level)
@@ -2911,11 +2954,25 @@ function explodeCar(c) {
   // chain reaction: cars caught in the blast cook off a beat later (never the one you're driving)
   for (const o of traffic) if (!o.dead && o !== driving && o.detonateIn == null && dist2(o.x, o.z, x, z) < 56) o.detonateIn = rr(0.15, 0.55);
   for (const o of police) if (o.active && !o.dead && o !== driving && o.detonateIn == null && dist2(o.x, o.z, x, z) < 56) o.detonateIn = rr(0.2, 0.6);
-  registerCrime(); addChaos(120);
+  if (c.armored) {                                          // cracked the vault — big payout, big heat
+    const got = earn(c.loot || 2000);
+    toast("🏦 ARMORED TRUCK CRACKED  +$" + got); AudioSys.play("cash", 1.0);
+    burst(x, 1.6, z, 30, 2.4, 4.0, 1.3, 0.3, 0.95, 0.4);   // cash spray
+    registerCrime();
+  }
+  registerCrime(); addChaos(c.armored ? 400 : 120);
+}
+function robATM(a) {
+  a.cd = 35;                                                // per-ATM cooldown so you can't farm one
+  const got = earn(60 + (Math.random() * 110 | 0));
+  toast("💸 ATM cracked  +$" + got); AudioSys.play("cash", 0.9); buzz(20);
+  burst(a.x, 1.1, a.z, 14, 1.2, 2.0, 0.7, 0.3, 0.9, 0.45);
+  registerCrime();                                          // robbery pulls a star
 }
 function updateExplosions(dt) {
   for (const c of traffic) if (c.detonateIn != null && !c.dead) { c.detonateIn -= dt; if (c.detonateIn <= 0) explodeCar(c); }
   for (const c of police) if (c.detonateIn != null && c.active && !c.dead) { c.detonateIn -= dt; if (c.detonateIn <= 0) explodeCar(c); }
+  for (const a of atms) if (a.cd > 0) a.cd -= dt;
   if (chaosCD > 0) { chaosCD -= dt; if (chaosCD <= 0 && chaos > 0) { const reward = earn(Math.round(chaos)); toast("💥 RAMPAGE BONUS  +$" + reward); AudioSys.play("cash", 0.8); chaos = 0; } }
 }
 
@@ -3629,6 +3686,9 @@ function doActionA() {
     hero.group.visible = true;
     AudioSys.play("door", 0.8);
   } else {
+    let atm = null, ad = 6.25;                       // rob an ATM if you're standing right at one
+    for (const a of atms) { if (a.cd > 0) continue; const d = dist2(player.x, player.z, a.x, a.z); if (d < ad) { ad = d; atm = a; } }
+    if (atm) { robATM(atm); return; }
     const c = nearestCar();
     if (c) {
       if (c.wp && !c.jacked) {                      // carjacking a street car (traffic cars carry a .wp route)
@@ -4099,7 +4159,7 @@ requestAnimationFrame(frame);
 
 // dev instrumentation: programmatic state/input access for automated smoke runs (?dev=1 tooling)
 globalThis.__palmCity = {
-  state, player, cars, police, traffic, update, beginPlay, advanceDialogue,
+  state, player, cars, police, traffic, atms, update, beginPlay, advanceDialogue,
   forceCrime: () => { if (wanted < 5) wanted++; wantedCD = 14; },
   hurt: n => hurt(n),
   punch: () => doPunch(),
