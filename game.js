@@ -2860,20 +2860,63 @@ function doShoot() {
   for (let s = 0; s < (w.pellets || 1); s++) {
     const sp = (Math.random() - 0.5) * w.spread * 2;
     const ax = Math.sin(player.h + sp), az = Math.cos(player.h + sp);
-    let best = null, bestT = w.range;
+    let best = null, bestT = w.range, bestCar = null;
     for (const n of npcs) {
       const dx = n.x - player.x, dz = n.z - player.z, t = dx * ax + dz * az;
       if (t < 1 || t > bestT) continue;
       if (Math.abs(dx * az - dz * ax) > 1.5) continue;
       bestT = t; best = n;
     }
-    if (best) {
+    const hitCar = c => {                                  // cars are wider targets; nearest hit wins
+      if (c.dead) return;
+      const dx = c.x - player.x, dz = c.z - player.z, t = dx * ax + dz * az;
+      if (t < 1 || t > bestT || Math.abs(dx * az - dz * ax) > 2.0) return;
+      bestT = t; bestCar = c; best = null;
+    };
+    for (const c of traffic) hitCar(c);
+    for (const c of police) if (c.active) hitCar(c);
+    if (bestCar) damageCar(bestCar, 24);
+    else if (best) {
       best.flee = 2.4; best.h = Math.atan2(best.x - player.x, best.z - player.z);
       best.x += ax * 1.3; best.z += az * 1.3;
       burst(best.x, 1.0, best.z, 9, 1.0, 1.5, 0.5, 0.95, 0.3, 0.25);
     }
   }
   registerCrime();   // firing in public draws police heat
+}
+
+// ---------- explosions, chain reactions & a chaos/rampage combo ----------
+let chaos = 0, chaosCD = 0;
+function addChaos(pts) { chaos += pts; chaosCD = 4.5; toast("💥 RAMPAGE  " + chaos); }
+function damageCar(c, dmg) {
+  if (c.dead) return;
+  c.hp = (c.hp == null ? 100 : c.hp) - dmg;
+  burst(c.x, 1.0, c.z, 7, 1.0, 1.2, 0.4, 1.0, 0.72, 0.32);   // sparks / glass
+  if (c.hp <= 0) explodeCar(c);
+}
+function explodeCar(c) {
+  if (c.dead) return;
+  c.dead = true; c.detonateIn = null;
+  const x = c.x, z = c.z;
+  burst(x, 1.3, z, 46, 3.6, 5.0, 0.9, 1.0, 0.55, 0.12);      // fireball
+  burst(x, 1.8, z, 26, 2.6, 6.0, 1.4, 0.28, 0.28, 0.28);     // smoke plume
+  AudioSys.play("door", 1.0); addShake(0.85); flash("#ff7a33", 0.32); buzz([0, 40, 30, 90]);
+  c.mesh.visible = false;
+  if (c.wp) c.jacked = true;                                  // traffic car: stop & remove from the AI
+  if (c.active !== undefined) { c.active = false; c.mesh.position.set(0, -9999, 0); }   // police car
+  for (const n of npcs) { const dd = dist2(n.x, n.z, x, z); if (dd < 110) { n.flee = 3.2; n.h = Math.atan2(n.x - x, n.z - z); n.x += Math.sin(n.h) * 1.6; n.z += Math.cos(n.h) * 1.6; } }
+  const tx = driving ? driving.x : player.x, tz = driving ? driving.z : player.z;
+  const pd = dist2(tx, tz, x, z);
+  if (pd < 72) hurt(Math.round((driving ? 26 : 42) * (1 - Math.sqrt(pd) / 8.5)));
+  // chain reaction: cars caught in the blast cook off a beat later (never the one you're driving)
+  for (const o of traffic) if (!o.dead && o !== driving && o.detonateIn == null && dist2(o.x, o.z, x, z) < 56) o.detonateIn = rr(0.15, 0.55);
+  for (const o of police) if (o.active && !o.dead && o !== driving && o.detonateIn == null && dist2(o.x, o.z, x, z) < 56) o.detonateIn = rr(0.2, 0.6);
+  registerCrime(); addChaos(120);
+}
+function updateExplosions(dt) {
+  for (const c of traffic) if (c.detonateIn != null && !c.dead) { c.detonateIn -= dt; if (c.detonateIn <= 0) explodeCar(c); }
+  for (const c of police) if (c.detonateIn != null && c.active && !c.dead) { c.detonateIn -= dt; if (c.detonateIn <= 0) explodeCar(c); }
+  if (chaosCD > 0) { chaosCD -= dt; if (chaosCD <= 0 && chaos > 0) { const reward = earn(Math.round(chaos)); toast("💥 RAMPAGE BONUS  +$" + reward); AudioSys.play("cash", 0.8); chaos = 0; } }
 }
 
 // ---------- input ----------
@@ -3840,6 +3883,7 @@ function update(dt) {
   updateVigilante(dt);
   updateParamedic(dt);
   updatePolice(dt);
+  updateExplosions(dt);
   achTimer -= dt; if (achTimer <= 0) { achTimer = 1; refreshAch(true); }
   {
     const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
