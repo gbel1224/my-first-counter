@@ -61,6 +61,7 @@ const BLOOM_KEY = "palm_city_bloom";
 let bloomOn = (() => { try { const v = localStorage.getItem(BLOOM_KEY); return v === null ? true : v === "1"; } catch (e) { return true; } })();
 let bloomReady = false, bloomFailed = false, bloomW = 0, bloomH = 0;
 let rtScene, rtB1, rtB2, fsScene, fsCam, fsQuad, brightMat, blurMat, compMat;
+let rtAO, rtAOb, aoMat, aoOn = true;   // depth-based ambient occlusion (rides the bloom offscreen pass)
 renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic highlight roll-off for a premium look
 renderer.toneMappingExposure = 1.3;
 renderer.domElement.id = "scene";   // CSS color-grades the 3D layer (HUD sits above, ungraded)
@@ -242,12 +243,26 @@ const ENV_KEYS = [
   { t: 0.90, sky: new THREE.Color(0xef9b63), top: new THREE.Color(0x8a5e8c), sun: 1.05, hemi: 0.86, far: 660, night: 0.32 },
   { t: 1.00, sky: new THREE.Color(0xf9c071), top: new THREE.Color(0xf0934a), sun: 1.55, hemi: 1.02, far: 720, night: 0.0 },
 ];
+// neutral-daylight alternative ("midday" lighting option): cool blue daytime sky + clearer air,
+// keeping the same dusk/night so the cycle still has variety. selected via the stats-panel toggle.
+const ENV_MIDDAY = [
+  { t: 0.00, sky: new THREE.Color(0xbcd6ec), top: new THREE.Color(0x7fb0e0), sun: 1.85, hemi: 1.12, far: 880, night: 0.0 },
+  { t: 0.50, sky: new THREE.Color(0xbcd6ec), top: new THREE.Color(0x7fb0e0), sun: 1.85, hemi: 1.12, far: 880, night: 0.0 },
+  { t: 0.60, sky: new THREE.Color(0xe6ab78), top: new THREE.Color(0xb0687a), sun: 1.2,  hemi: 0.82, far: 680, night: 0.4 },
+  { t: 0.68, sky: new THREE.Color(0x6a4368), top: new THREE.Color(0x281f40), sun: 0.5,  hemi: 0.55, far: 560, night: 0.85 },
+  { t: 0.82, sky: new THREE.Color(0x2c3354), top: new THREE.Color(0x10142c), sun: 0.2,  hemi: 0.46, far: 560, night: 1.0 },
+  { t: 0.90, sky: new THREE.Color(0x9fb9d8), top: new THREE.Color(0x6a8ec0), sun: 1.15, hemi: 0.88, far: 700, night: 0.32 },
+  { t: 1.00, sky: new THREE.Color(0xbcd6ec), top: new THREE.Color(0x7fb0e0), sun: 1.85, hemi: 1.12, far: 880, night: 0.0 },
+];
+let dayMode = (() => { try { return localStorage.getItem("palm_city_light") === "midday" ? "midday" : "golden"; } catch (e) { return "golden"; } })();
+let gradeSat = dayMode === "midday" ? 0.92 : 1.0;   // saturation multiplier in the final grade (was a hard 1.11)
 const _sky = new THREE.Color(), _top = new THREE.Color(), _sunCol = new THREE.Color();
 function envUpdate() {
+  const KEYS = dayMode === "midday" ? ENV_MIDDAY : ENV_KEYS;
   const t = (simTime / 240) % 1;
-  let a = ENV_KEYS[0], b = ENV_KEYS[ENV_KEYS.length - 1];
-  for (let i = 1; i < ENV_KEYS.length; i++) {
-    if (ENV_KEYS[i].t >= t) { a = ENV_KEYS[i - 1]; b = ENV_KEYS[i]; break; }
+  let a = KEYS[0], b = KEYS[KEYS.length - 1];
+  for (let i = 1; i < KEYS.length; i++) {
+    if (KEYS[i].t >= t) { a = KEYS[i - 1]; b = KEYS[i]; break; }
   }
   const k = b.t === a.t ? 0 : (t - a.t) / (b.t - a.t);
   _sky.lerpColors(a.sky, b.sky, k);
@@ -330,7 +345,7 @@ function speckle(ctx, s, n, colors, r0, r1) {
     }
   }
 }
-const texAsphalt = canvasTex(256, (ctx, s) => {
+const texAsphalt = canvasTex(384, (ctx, s) => {
   ctx.fillStyle = "#46525a"; ctx.fillRect(0, 0, s, s);
   speckle(ctx, s, 260, ["#4d5a62", "#3f4a52", "#525e66"], 1, 3);
   for (let i = 0; i < 5; i++) { ctx.fillStyle = "rgba(28,34,38,.28)"; ctx.fillRect(Math.random() * s, Math.random() * s, 18 + Math.random() * 36, 12 + Math.random() * 26); }  // tar patches
@@ -348,7 +363,7 @@ const texAsphaltNormal = canvasNormalTex(256, (ctx, s) => {
   ctx.strokeStyle = "#5a5a5a"; ctx.lineWidth = 1.4;
   for (let i = 0; i < 6; i++) { ctx.beginPath(); let x = Math.random() * s, y = Math.random() * s; ctx.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (Math.random() - 0.5) * 36; y += (Math.random() - 0.5) * 36; ctx.lineTo(x, y); } ctx.stroke(); }
 }, 1, 30);
-const texSidewalk = canvasTex(256, (ctx, s) => {
+const texSidewalk = canvasTex(384, (ctx, s) => {
   ctx.fillStyle = "#cfc5ae"; ctx.fillRect(0, 0, s, s);
   speckle(ctx, s, 200, ["#d6cdb8", "#c6bca4", "#cabfa9"], 1, 2.5);
   for (let i = 0; i < 3; i++) { ctx.fillStyle = "rgba(150,138,116,.18)"; ctx.beginPath(); ctx.ellipse(Math.random() * s, Math.random() * s, 10 + Math.random() * 16, 8 + Math.random() * 12, 0, 0, 7); ctx.fill(); }  // stains
@@ -1041,6 +1056,77 @@ let lampMat = null, lampPoolMat = null, lampConeMat = null;
   const coneIM = new THREE.InstancedMesh(coneGeo, lampConeMat, spots.length);
   spots.forEach(([x, z], idx) => { m.makeTranslation(x, 0.1, z); coneIM.setMatrixAt(idx, m); });
   coneIM.frustumCulled = false; scene.add(coneIM);
+}
+
+// ---------- street clutter: trash cans, hydrants, benches & planters along the sidewalks ----------
+// a busy, lived-in street reads far more real than empty pavement. placed with a *local* PRNG so the
+// main seeded stream (NPCs, missions, traffic) is byte-for-byte unchanged.
+{
+  let _cs = 0x9e3779b9 >>> 0;
+  const crand = () => { _cs = (_cs + 0x6D2B79F5) >>> 0; let t = _cs; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const matProp = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.05, envMapIntensity: 0.5 });
+  // prop geometries (origin at the base; instanced onto the curb height)
+  const trashGeo = mergeGeos([
+    cylC(0.28, 0.32, 0.92, 0, 0.46, 0, 0x3a4a40),           // bin body
+    cylC(0.31, 0.31, 0.07, 0, 0.95, 0, 0x2a352f),           // lid rim
+    sphC(0.30, 0, 0.99, 0, 0x2a352f, 1, 0.45, 1),           // domed lid
+  ]);
+  const hydrantGeo = mergeGeos([
+    cylC(0.17, 0.2, 0.5, 0, 0.25, 0, 0xb5392b),             // body
+    sphC(0.17, 0, 0.52, 0, 0xb5392b, 1, 0.7, 1),            // dome cap
+    cylC(0.06, 0.06, 0.1, 0, 0.62, 0, 0x922b20),            // top bolt
+    boxGeoC(0.52, 0.13, 0.13, 0, 0.36, 0, 0xc24535),        // side arms
+  ]);
+  const benchGeo = mergeGeos([
+    boxGeoC(1.6, 0.09, 0.5, 0, 0.5, 0, 0x6b4a2e),           // seat
+    boxGeoC(1.6, 0.42, 0.09, 0, 0.74, -0.2, 0x6b4a2e),      // backrest
+    boxGeoC(0.1, 0.5, 0.46, 0.7, 0.25, 0, 0x3a3f47),        // legs
+    boxGeoC(0.1, 0.5, 0.46, -0.7, 0.25, 0, 0x3a3f47),
+  ]);
+  const planterGeo = mergeGeos([
+    boxGeoC(1.0, 0.46, 1.0, 0, 0.23, 0, 0x8a7a5c),          // stone box
+    boxGeoC(1.04, 0.08, 1.04, 0, 0.46, 0, 0x9a8a6c),        // rim
+    sphC(0.52, 0, 0.62, 0, 0x5d9952, 1, 0.7, 1),            // shrub
+    sphC(0.34, 0.22, 0.74, 0.18, 0x6da85e, 1, 0.8, 1),
+    sphC(0.30, -0.2, 0.72, -0.16, 0x528a48, 1, 0.8, 1),
+  ]);
+  const TYPES = [
+    { geo: trashGeo, w: 0.7, r: 0.34 },
+    { geo: hydrantGeo, w: 0.5, r: 0.26 },
+    { geo: benchGeo, w: 0.35, r: 0.85 },
+    { geo: planterGeo, w: 0.45, r: 0.6 },
+  ];
+  const wsum = TYPES.reduce((a, t) => a + t.w, 0);
+  const buckets = TYPES.map(() => []);
+  const inset = 2.6;
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    const key = i + "," + j;
+    if (PARKS.has(key)) continue;                            // parks already have their own greenery
+    const x0 = blockMin(i), z0 = blockMin(j);
+    const tries = 1 + (crand() < 0.55 ? 1 : 0) + (crand() < 0.25 ? 1 : 0);   // 1–3 props per block
+    for (let n = 0; n < tries; n++) {
+      const edge = (crand() * 4) | 0, t = 4 + crand() * (BLOCK - 8);
+      let x, z, rot;
+      if (edge === 0) { x = x0 + t; z = z0 + inset; rot = 0; }
+      else if (edge === 1) { x = x0 + t; z = z0 + BLOCK - inset; rot = Math.PI; }
+      else if (edge === 2) { x = x0 + inset; z = z0 + t; rot = Math.PI / 2; }
+      else { x = x0 + BLOCK - inset; z = z0 + t; rot = Math.PI / 2; }
+      // pick a type, then reject if it would clip a building / another prop
+      let pickT = crand() * wsum, ti = 0; for (; ti < TYPES.length; ti++) { pickT -= TYPES[ti].w; if (pickT <= 0) break; }
+      const T = TYPES[Math.min(ti, TYPES.length - 1)];
+      if (hitsCollider(x, z, T.r + 0.4)) continue;
+      buckets[TYPES.indexOf(T)].push([x, z, rot]);
+      addCollider(x, z, T.r, T.r);
+    }
+  }
+  const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), s = new THREE.Vector3(1, 1, 1);
+  TYPES.forEach((T, ti) => {
+    const list = buckets[ti]; if (!list.length) return;
+    const im = new THREE.InstancedMesh(T.geo, matProp, list.length);
+    im.castShadow = true; im.receiveShadow = true;
+    list.forEach(([x, z, rot], idx) => { p.set(x, CURB, z); q.setFromAxisAngle(up, rot); m.compose(p, q, s); im.setMatrixAt(idx, m); });
+    scene.add(im);
+  });
 }
 
 // ---------- road centre-line markings (one instanced draw) ----------
@@ -3385,9 +3471,29 @@ dom("stclose").textContent = STR.statsClose;
   const wb = dom("stweather");
   wb.textContent = STR.weatherToggle(weatherMode);
   wb.addEventListener("click", () => { weatherMode = (weatherMode + 1) % 3; wb.textContent = STR.weatherToggle(weatherMode); });
+  const lb = dom("stlight");
+  if (lb) {
+    lb.textContent = lightLabel();
+    lb.addEventListener("click", () => { applyDayMode(dayMode === "midday" ? "golden" : "midday", true); lb.textContent = lightLabel(); });
+  }
 }
 dom("streset").addEventListener("click", resetGame);
 dom("streset").textContent = STR.newGame;
+
+// lighting mood toggle: golden-hour (stylised) vs neutral midday (photoreal). persisted like bloom/mute.
+function lightLabel() { return dayMode === "midday" ? "☀️ Midday" : "\u{1F305} Golden hour"; }
+function applyDayMode(mode, refresh) {
+  dayMode = mode === "midday" ? "midday" : "golden";
+  const midday = dayMode === "midday";
+  sun.color.setHex(midday ? 0xfff1da : 0xffd9a0);
+  hemi.color.setHex(midday ? 0xdce8f6 : 0xffe8c4);
+  renderer.toneMappingExposure = midday ? 1.18 : 1.3;
+  gradeSat = midday ? 0.92 : 1.0;
+  if (compMat) compMat.uniforms.uSat.value = gradeSat;
+  try { localStorage.setItem("palm_city_light", dayMode); } catch (e) {}
+  if (refresh) envUpdate();   // refresh sky / fog / sun intensity immediately (runtime toggle only)
+}
+applyDayMode(dayMode, false);   // startup: set lights only; the first frame's envUpdate does the rest
 
 // mute toggle (persisted separately from the save)
 const muteBtn = dom("mute");
@@ -3753,17 +3859,22 @@ function buildBloom() {
   const sz = renderer.getDrawingBufferSize(new THREE.Vector2());
   bloomW = Math.max(2, sz.x); bloomH = Math.max(2, sz.y);
   const hw = Math.max(1, bloomW >> 1), hh = Math.max(1, bloomH >> 1);
-  rtScene = new THREE.WebGLRenderTarget(bloomW, bloomH); rtScene.texture.colorSpace = THREE.LinearSRGBColorSpace;
+  rtScene = new THREE.WebGLRenderTarget(bloomW, bloomH, { depthTexture: new THREE.DepthTexture(bloomW, bloomH) }); rtScene.texture.colorSpace = THREE.LinearSRGBColorSpace;
   rtB1 = new THREE.WebGLRenderTarget(hw, hh); rtB1.texture.colorSpace = THREE.LinearSRGBColorSpace;
   rtB2 = new THREE.WebGLRenderTarget(hw, hh); rtB2.texture.colorSpace = THREE.LinearSRGBColorSpace;
+  rtAO = new THREE.WebGLRenderTarget(hw, hh); rtAO.texture.colorSpace = THREE.LinearSRGBColorSpace;     // half-res AO buffer
+  rtAOb = new THREE.WebGLRenderTarget(hw, hh); rtAOb.texture.colorSpace = THREE.LinearSRGBColorSpace;   // AO blur ping-pong
+  // depth-only SSAO: darken crevices & where objects meet the ground for a grounded, real feel
+  aoMat = new THREE.ShaderMaterial({ uniforms: { tDepth: { value: null }, uRes: { value: new THREE.Vector2() }, uNear: { value: 0.1 }, uFar: { value: 1000 }, uRadius: { value: 0.9 }, uStrength: { value: 1.2 }, uBias: { value: 0.035 } }, vertexShader: BLOOM_VERT,
+    fragmentShader: "uniform sampler2D tDepth; uniform vec2 uRes; uniform float uNear; uniform float uFar; uniform float uRadius; uniform float uStrength; uniform float uBias; varying vec2 vUv; float lin(float d){ float z=d*2.0-1.0; return (2.0*uNear*uFar)/(uFar+uNear - z*(uFar-uNear)); } float h21(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); } void main(){ float dc=texture2D(tDepth,vUv).r; if(dc>=0.9999){ gl_FragColor=vec4(1.0); return; } float cz=lin(dc); float rot=h21(vUv*uRes)*6.2831853; float aspect=uRes.x/uRes.y; float radUV=clamp(uRadius/cz,0.004,0.045); float occ=0.0; for(int i=0;i<8;i++){ float a=float(i)*0.7853981+rot; vec2 dir=vec2(cos(a),sin(a)); dir.x/=aspect; float r=radUV*(0.35+0.65*h21(vUv*uRes+float(i)*1.7)); float sz=lin(texture2D(tDepth,vUv+dir*r).r); float diff=cz-sz; occ+=step(uBias,diff)*(1.0-smoothstep(uRadius*0.6,uRadius*1.6,diff)); } float ao=1.0-(occ/8.0)*uStrength; gl_FragColor=vec4(vec3(clamp(ao,0.0,1.0)),1.0); }" });
   fsScene = new THREE.Scene(); fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   fsQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)); fsScene.add(fsQuad);
   brightMat = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, threshold: { value: 0.7 } }, vertexShader: BLOOM_VERT,
     fragmentShader: "uniform sampler2D tDiffuse; uniform float threshold; varying vec2 vUv; void main(){ vec3 c=texture2D(tDiffuse,vUv).rgb; float l=dot(c,vec3(0.299,0.587,0.114)); gl_FragColor=vec4(c*smoothstep(threshold,threshold+0.18,l),1.0); }" });
   blurMat = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, dir: { value: new THREE.Vector2() } }, vertexShader: BLOOM_VERT,
     fragmentShader: "uniform sampler2D tDiffuse; uniform vec2 dir; varying vec2 vUv; void main(){ vec3 s=texture2D(tDiffuse,vUv).rgb*0.227027; s+=texture2D(tDiffuse,vUv+dir*1.3846).rgb*0.316216; s+=texture2D(tDiffuse,vUv-dir*1.3846).rgb*0.316216; s+=texture2D(tDiffuse,vUv+dir*3.2308).rgb*0.07027; s+=texture2D(tDiffuse,vUv-dir*3.2308).rgb*0.07027; gl_FragColor=vec4(s,1.0); }" });
-  compMat = new THREE.ShaderMaterial({ uniforms: { tScene: { value: null }, tBloom: { value: null }, strength: { value: 1.05 }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(bloomW, bloomH) } }, vertexShader: BLOOM_VERT,
-    fragmentShader: "uniform sampler2D tScene; uniform sampler2D tBloom; uniform float strength; uniform float uTime; uniform vec2 uRes; varying vec2 vUv; vec3 toSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,vec3(0.0)),vec3(0.41666))-0.055, step(0.0031308,c)); } float hash(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); } void main(){ vec2 uv=vUv; vec2 d=uv-0.5; float r2=dot(d,d); float ca=r2*0.004; vec3 sc; sc.r=texture2D(tScene,uv+d*ca).r; sc.g=texture2D(tScene,uv).g; sc.b=texture2D(tScene,uv-d*ca).b; vec3 bl=texture2D(tBloom,uv).rgb; vec3 col=toSRGB(max(sc+bl*strength,0.0)); float luma=dot(col,vec3(0.2126,0.7152,0.0722)); col=mix(vec3(luma),col,1.11); col=(col-0.5)*1.055+0.5; col*=1.0-r2*0.62; float g=hash(uv*uRes+fract(uTime))-0.5; col+=g*0.018; gl_FragColor=vec4(clamp(col,0.0,1.0),1.0); }" });
+  compMat = new THREE.ShaderMaterial({ uniforms: { tScene: { value: null }, tBloom: { value: null }, tAO: { value: null }, uAO: { value: 1 }, strength: { value: 1.05 }, uSat: { value: gradeSat }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(bloomW, bloomH) } }, vertexShader: BLOOM_VERT,
+    fragmentShader: "uniform sampler2D tScene; uniform sampler2D tBloom; uniform sampler2D tAO; uniform float uAO; uniform float strength; uniform float uSat; uniform float uTime; uniform vec2 uRes; varying vec2 vUv; vec3 toSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,vec3(0.0)),vec3(0.41666))-0.055, step(0.0031308,c)); } float hash(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); } void main(){ vec2 uv=vUv; vec2 d=uv-0.5; float r2=dot(d,d); float ca=r2*0.004; vec3 sc; sc.r=texture2D(tScene,uv+d*ca).r; sc.g=texture2D(tScene,uv).g; sc.b=texture2D(tScene,uv-d*ca).b; float ao=texture2D(tAO,uv).r; sc*=mix(1.0,ao,uAO); vec3 bl=texture2D(tBloom,uv).rgb; vec3 col=toSRGB(max(sc+bl*strength,0.0)); float luma=dot(col,vec3(0.2126,0.7152,0.0722)); col=mix(vec3(luma),col,uSat); col=(col-0.5)*1.055+0.5; col*=1.0-r2*0.62; float g=hash(uv*uRes+fract(uTime))-0.5; col+=g*0.018; gl_FragColor=vec4(clamp(col,0.0,1.0),1.0); }" });
   bloomReady = true;
 }
 function blit(mat, target) { fsQuad.material = mat; renderer.setRenderTarget(target || null); renderer.render(fsScene, fsCam); }
@@ -3773,8 +3884,21 @@ function renderBloom() {
     bloomW = Math.max(2, sz.x); bloomH = Math.max(2, sz.y);
     const hw = Math.max(1, bloomW >> 1), hh = Math.max(1, bloomH >> 1);
     rtScene.setSize(bloomW, bloomH); rtB1.setSize(hw, hh); rtB2.setSize(hw, hh);
+    rtAO.setSize(hw, hh); rtAOb.setSize(hw, hh);
   }
   renderer.setRenderTarget(rtScene); renderer.render(scene, camera);
+  // SSAO: compute occlusion from the scene depth, denoise, hand to the composite
+  compMat.uniforms.tAO.value = rtAO.texture;
+  if (aoOn) {
+    aoMat.uniforms.tDepth.value = rtScene.depthTexture;
+    aoMat.uniforms.uNear.value = camera.near; aoMat.uniforms.uFar.value = camera.far;
+    aoMat.uniforms.uRes.value.set(bloomW, bloomH);
+    blit(aoMat, rtAO);
+    const aw = 1 / Math.max(1, bloomW >> 1), ah = 1 / Math.max(1, bloomH >> 1);
+    blurMat.uniforms.tDiffuse.value = rtAO.texture; blurMat.uniforms.dir.value.set(aw, 0); blit(blurMat, rtAOb);
+    blurMat.uniforms.tDiffuse.value = rtAOb.texture; blurMat.uniforms.dir.value.set(0, ah); blit(blurMat, rtAO);
+    compMat.uniforms.uAO.value = 1;
+  } else compMat.uniforms.uAO.value = 0;
   brightMat.uniforms.tDiffuse.value = rtScene.texture; blit(brightMat, rtB1);
   const tw = 1 / Math.max(1, bloomW >> 1), th = 1 / Math.max(1, bloomH >> 1);
   blurMat.uniforms.tDiffuse.value = rtB1.texture; blurMat.uniforms.dir.value.set(tw, 0); blit(blurMat, rtB2);
