@@ -17,7 +17,7 @@ const rr = (a, b) => a + rng() * (b - a);
 const pick = arr => arr[(rng() * arr.length) | 0];
 
 // ---------- city constants ----------
-const N = 32, CELL = 88, ROAD = 18, BLOCK = 70;   // 32x32 city — ~10x the original area (chunked rendering keeps it fast)
+const N = 40, CELL = 88, ROAD = 18, BLOCK = 70;   // 40x40 city (chunked rendering + frustum culling keep it fast)
 const HALF = (N * CELL + ROAD) / 2;
 const roadC = k => -HALF + ROAD / 2 + k * CELL;
 const blockMin = i => roadC(i) + ROAD / 2;
@@ -1440,7 +1440,7 @@ scene.add(rampIM);
 
 // traffic cars on block-ring routes
 const traffic = [];
-for (let t = 0; t < 200; t++) {
+for (let t = 0; t < Math.round(200 * N / 32); t++) {   // traffic scales with the city
   const i = (rng() * N) | 0, j = (rng() * N) | 0;
   const x0 = roadC(i) + 4, x1 = roadC(i + 1) - 4, z0 = roadC(j) + 4, z1 = roadC(j + 1) - 4;
   const wp = [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
@@ -1570,7 +1570,7 @@ for (let i = 0; i < POLICE_N; i++) {
 
 // pedestrians
 const npcs = [];
-for (let t = 0; t < 260; t++) {
+for (let t = 0; t < Math.round(260 * N / 32); t++) {   // pedestrians scale with the city
   const i = (rng() * N) | 0, j = (rng() * N) | 0;
   const w = makeWalker(npcWalkerGeos[(rng() * npcWalkerGeos.length) | 0]);
   w.group.scale.set(rr(0.92, 1.06), rr(0.9, 1.14), rr(0.92, 1.06));   // varied heights & builds
@@ -3741,37 +3741,58 @@ function drawFullMap() {
   const ctx = cv.getContext("2d"), sc = S / (2 * HALF);
   const Wx = x => (x + HALF) * sc, Wz = z => (z + HALF) * sc;
   ctx.clearRect(0, 0, S, S);
-  ctx.fillStyle = "#1b2a22"; ctx.fillRect(0, 0, S, S);
-  ctx.fillStyle = "rgba(40,120,160,.5)"; ctx.fillRect(0, Wz(SEA_Z), S, S - Wz(SEA_Z));          // sea (south)
-  ctx.fillStyle = "#3a444c";                                                                     // roads
-  for (let k = 0; k <= N; k++) { const p = Wx(roadC(k)); ctx.fillRect(p - ROAD * sc / 2, 0, ROAD * sc, S); ctx.fillRect(0, p - ROAD * sc / 2, S, ROAD * sc); }
-  ctx.fillStyle = "#3f6b3f";                                                                     // parks
-  for (const key of PARKS) { const [i, j] = key.split(",").map(Number); ctx.fillRect(Wx(blockMin(i)), Wz(blockMin(j)), BLOCK * sc, BLOCK * sc); }
-  const GF = ["rgba(200,60,60,.20)", "rgba(70,110,210,.20)", "rgba(60,180,90,.20)"], GR = ["rgba(235,90,90,.9)", "rgba(115,155,240,.9)", "rgba(95,220,125,.9)"];
-  ctx.textAlign = "center";
+  // base = the road/ground colour; district blocks paint over it, leaving the road grid showing through
+  ctx.fillStyle = "#dccfa3"; ctx.fillRect(0, 0, S, S);
+  const B = Math.ceil(BLOCK * sc), cen = (N - 1) / 2;
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    const key = i + "," + j, dc = Math.max(Math.abs(i - cen), Math.abs(j - cen));
+    let col;
+    if (PARKS.has(key)) col = key === PLAZA_KEY ? "#c4b485" : "#6fa45e";       // plaza / parks
+    else if (isGhetto(i, j)) col = "#a08c63";                                  // run-down quarter
+    else if (isResid(i, j)) col = "#a7c585";                                   // suburbs
+    else if (dc <= 1.5) col = "#9aa7b5";                                       // downtown
+    else col = "#c6b889";                                                      // mid-city
+    ctx.fillStyle = col; ctx.fillRect(Wx(blockMin(i)) | 0, Wz(blockMin(j)) | 0, B, B);
+  }
+  // gang turf rings
+  const GF = ["rgba(200,60,60,.22)", "rgba(70,110,210,.22)", "rgba(60,180,90,.22)"], GR = ["rgba(220,70,70,.95)", "rgba(95,135,235,.95)", "rgba(80,205,110,.95)"];
+  ctx.textAlign = "center"; ctx.lineWidth = 2;
   GANGS.forEach((G, gi) => {
-    ctx.fillStyle = G.captured ? "rgba(120,200,140,.18)" : GF[gi];
+    ctx.fillStyle = G.captured ? "rgba(120,200,140,.2)" : GF[gi];
     ctx.beginPath(); ctx.arc(Wx(G.x), Wz(G.z), G.r * sc, 0, 7); ctx.fill();
-    ctx.strokeStyle = G.captured ? "rgba(150,230,160,.9)" : GR[gi]; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = "#fff"; ctx.font = "bold " + Math.max(9, S * 0.022 | 0) + "px sans-serif";
-    ctx.fillText((G.captured ? "🚩 " : "") + G.name, Wx(G.x), Wz(G.z) - G.r * sc - 4);
+    ctx.strokeStyle = G.captured ? "rgba(150,230,160,.95)" : GR[gi]; ctx.beginPath(); ctx.arc(Wx(G.x), Wz(G.z), G.r * sc, 0, 7); ctx.stroke();
   });
-  for (const b of BIZ) dot(ctx, b.x, b.z, sc, 4, state.owned[b.id] ? "#9fe6a0" : "#ffd166");      // businesses
-  for (const s of SHOPS) dot(ctx, s.x, s.z, sc, 3.4, "#d06ad0");                                  // shops
-  for (const a of atms) dot(ctx, a.x, a.z, sc, 1.8, "#59d6a0");                                   // ATMs
-  ctx.fillStyle = "#7fd6ff"; ctx.fillRect(Wx(GARAGE.x) - 4, Wz(GARAGE.z) - 4, 8, 8);              // garage
-  for (const hv of helis) dot(ctx, hv.x, hv.z, sc, 4, "#ffffff");                                 // chopper
-  for (const bt of boats) dot(ctx, bt.x, bt.z, sc, 4, "#cfe8ff");                                 // boats
-  ctx.fillStyle = "#bfe0ff"; ctx.textAlign = "left"; ctx.font = "bold " + Math.max(9, S * 0.02 | 0) + "px sans-serif";
-  ctx.fillText("✈ AIRPORT ◄", 4, Wz(0));                                                // airport is west of the grid
-  for (const p of police) if (p.active) dot(ctx, p.x, p.z, sc, 4, "#ff3b3b");                      // police
-  if (jobMarker.visible) dot(ctx, jobMarker.position.x, jobMarker.position.z, sc, 5, "#ffd24a");  // job objective
-  const obj = currentObjective();
-  if (obj.x !== undefined) dot(ctx, obj.x, obj.z, sc, 5, "#ffe24a");                              // mission objective
-  // player arrow
+  const F = Math.max(9, S * 0.02 | 0);
+  // small markers
+  for (const b of BIZ) dot(ctx, b.x, b.z, sc, 3.4, state.owned[b.id] ? "#2f9d5b" : "#d99a2e");
+  for (const s of SHOPS) dot(ctx, s.x, s.z, sc, 2.8, "#a8429a");
+  for (const a of atms) dot(ctx, a.x, a.z, sc, 1.5, "#2a8f64");
+  for (const hv of helis) dot(ctx, hv.x, hv.z, sc, 3.4, "#ffffff");
+  for (const bt of boats) dot(ctx, bt.x, bt.z, sc, 3.4, "#cfe8ff");
+  for (const p of police) if (p.active) dot(ctx, p.x, p.z, sc, 4, "#ff3b3b");
+  if (jobMarker.visible) dot(ctx, jobMarker.position.x, jobMarker.position.z, sc, 5, "#ffd24a");
+  const obj = currentObjective(); if (obj.x !== undefined) dot(ctx, obj.x, obj.z, sc, 5, "#ffe24a");
+  // landmark labels
+  ctx.font = "bold " + F + "px sans-serif"; ctx.fillStyle = "#fff";
+  const lbl = (x, z, t) => ctx.fillText(t, Wx(x), Wz(z) + F * 0.35);
+  lbl(PLAZA.x, PLAZA.z, "🏛"); lbl(GARAGE.x, GARAGE.z, "🚗"); lbl(HOSPITAL.x, HOSPITAL.z, "🏥"); lbl(GAS.x, GAS.z, "⛽");
+  ctx.font = "bold " + Math.max(8, F - 1) + "px sans-serif";
+  GANGS.forEach(G => ctx.fillText((G.captured ? "🚩 " : "") + G.name, Wx(G.x), Wz(G.z) - G.r * sc - 3));
+  // edge hints: airport (west), beach (south)
+  ctx.textAlign = "left"; ctx.fillStyle = "#bfe0ff"; ctx.font = "bold " + F + "px sans-serif";
+  ctx.fillText("✈ AIRPORT ◄", 4, S * 0.5);
+  ctx.textAlign = "center"; ctx.fillStyle = "#cfe0e8"; ctx.fillText("🏖 BEACH ▼", S * 0.5, S - 5);
+  // legend
+  const leg = [["#9aa7b5", "Downtown"], ["#a7c585", "Suburb"], ["#a08c63", "Ghetto"], ["#6fa45e", "Park"]];
+  const lw = F * 6.4, lh = leg.length * (F + 3) + 6;
+  ctx.fillStyle = "rgba(12,14,18,.6)"; ctx.fillRect(3, 3, lw, lh);
+  ctx.textAlign = "left"; ctx.font = Math.max(8, F - 2) + "px sans-serif";
+  leg.forEach((L, i) => { const ly = 7 + i * (F + 3); ctx.fillStyle = L[0]; ctx.fillRect(7, ly, F - 1, F - 1); ctx.fillStyle = "#eee"; ctx.fillText(L[1], 7 + F + 3, ly + F - 2); });
+  // player marker
   const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z, ph = driving ? driving.h : player.h;
   ctx.save(); ctx.translate(Wx(px), Wz(pz)); ctx.rotate(Math.atan2(Math.cos(ph), Math.sin(ph)));
-  ctx.fillStyle = "#ff7a33"; ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-6, 6); ctx.lineTo(-6, -6); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#ff5a1f"; ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-7, 7); ctx.lineTo(-7, -7); ctx.closePath(); ctx.fill(); ctx.stroke();
   ctx.restore();
 }
 
