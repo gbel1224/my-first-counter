@@ -2807,6 +2807,7 @@ function updateParamedic(dt) {
 // ---------- wanted level & police ----------
 let wanted = 0, wantedCD = 0, crimeCD = 0;
 let bustTimer = 0, copsOnYou = false;   // on-foot arrest timer + escape (broke-contact) tracking
+let holdup = null, getaway = 0;         // active store holdup + clean-getaway bonus window
 // ---------- health / damage / respawn ----------
 let health = 100, hurtCD = 0, hitCD = 0, fuel = 100, fuelWarned = false;
 function hurt(amount) {
@@ -2823,7 +2824,7 @@ function wasted() {
   const sp = homeSpawn() || PLAZA;                      // respawn at an owned property, else the plaza
   player.x = sp.x; player.z = sp.z + 12; player.y = CURB; player.speed = 0;
   health = 100; hurtCD = 2; fuel = 100;
-  wanted = 0; wantedCD = 0; crimeCD = 0; bustTimer = 0; copsOnYou = false;
+  wanted = 0; wantedCD = 0; crimeCD = 0; bustTimer = 0; copsOnYou = false; holdup = null; getaway = 0;
   for (const p of police) { p.active = false; p.mesh.position.set(0, -9999, 0); }
   save();
 }
@@ -2844,7 +2845,7 @@ function bust() {
   toast(STR.busted(fine));
   AudioSys.play("door", 1);
   addShake(0.7); buzz([0, 60, 40, 120]); flash("#ff3b3b", 0.42);
-  wanted = 0; wantedCD = 0; crimeCD = 0; bustTimer = 0; copsOnYou = false;
+  wanted = 0; wantedCD = 0; crimeCD = 0; bustTimer = 0; copsOnYou = false; holdup = null; getaway = 0;
   for (const p of police) { p.active = false; p.mesh.position.set(0, -9999, 0); }
   save();
 }
@@ -3052,6 +3053,34 @@ function robATM(a) {
   toast("💸 ATM cracked  +$" + got); AudioSys.play("cash", 0.9); buzz(20);
   burst(a.x, 1.1, a.z, 14, 1.2, 2.0, 0.7, 0.3, 0.9, 0.45);
   registerCrime();                                          // robbery pulls a star
+}
+function startHoldup(sh) {
+  holdup = { sh, t: 3.0 };
+  toast("🔫 HOLDUP! Hold position at the counter...");
+  AudioSys.play("blip", 0.6); buzz(20);
+}
+function updateHoldup(dt) {
+  for (const s of SHOPS) if (s.cd > 0) s.cd -= dt;
+  if (getaway > 0) {
+    getaway -= dt;
+    if (wanted === 0) { const b = earn(800); toast("🏃 CLEAN GETAWAY  +$" + b); AudioSys.play("jingle", 0.9); flash("#9fe6a0", 0.3); getaway = 0; }
+    else if (getaway <= 0) { toast("Lost the getaway bonus"); }
+  }
+  if (!holdup) return;
+  const sh = holdup.sh;
+  if (driving || !armed() || dist2(player.x, player.z, sh.x, sh.z) > 49) { holdup = null; toast("Holdup abandoned"); return; }
+  holdup.t -= dt;
+  if (Math.random() < 0.3) burst(sh.x + rr(-1, 1), 1.3, sh.z + rr(-1, 1), 2, 0.4, 0.6, 0.3, 1, 0.8, 0.4);
+  if (holdup.t <= 0) {
+    const n = (state.holdups = (state.holdups || 0) + 1);
+    const take = earn(400 + n * 150 + (Math.random() * 220 | 0));
+    sh.cd = 120;
+    toast("💰 STORE ROBBED  +$" + take + " — GET AWAY!");
+    AudioSys.play("cash", 1.0); flash("#ffe24a", 0.3); buzz([0, 40, 30, 80]);
+    wanted = Math.min(5, wanted + 2); wantedCD = 14;
+    getaway = 60;
+    holdup = null;
+  }
 }
 function explodeAt(x, z, r) {                                 // an AoE blast (RPG / grenade impact)
   let hitAny = false;
@@ -3897,6 +3926,11 @@ function doActionA() {
     hero.group.visible = true;
     AudioSys.play("door", 0.8);
   } else {
+    if (armed() && !holdup) {                        // armed at a store counter -> hold it up
+      let sh = null, sd = 40;
+      for (const s of SHOPS) { if (s.cd > 0) continue; const d = dist2(player.x, player.z, s.x, s.z); if (d < sd) { sd = d; sh = s; } }
+      if (sh) { startHoldup(sh); return; }
+    }
     let atm = null, ad = 6.25;                       // rob an ATM if you're standing right at one
     for (const a of atms) { if (a.cd > 0) continue; const d = dist2(player.x, player.z, a.x, a.z); if (d < ad) { ad = d; atm = a; } }
     if (atm) { robATM(atm); return; }
@@ -4188,6 +4222,7 @@ function update(dt) {
   updatePolice(dt);
   updateExplosions(dt);
   updateGangs(dt);
+  updateHoldup(dt);
   achTimer -= dt; if (achTimer <= 0) { achTimer = 1; refreshAch(true); }
   {
     const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
@@ -4403,7 +4438,7 @@ requestAnimationFrame(frame);
 
 // dev instrumentation: programmatic state/input access for automated smoke runs (?dev=1 tooling)
 globalThis.__palmCity = {
-  state, player, cars, police, traffic, atms, helis, gangsters, GANGS, update, beginPlay, advanceDialogue,
+  state, player, cars, police, traffic, atms, helis, gangsters, GANGS, SHOPS, update, beginPlay, advanceDialogue,
   forceCrime: () => { if (wanted < 5) wanted++; wantedCD = 14; },
   hurt: n => hurt(n),
   punch: () => doPunch(),
