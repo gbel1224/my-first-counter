@@ -3123,6 +3123,7 @@ const JOBS = [
   { id: "rampage", label: "💥 Rampage", desc: "Wreck 5 cars in 60s" },
   { id: "courier", label: "📦 Courier", desc: "Reach the drop in 55s" },
   { id: "bounty", label: "🎯 Bounty", desc: "Destroy the marked car in 60s" },
+  { id: "takeover", label: "🚩 Turf Takeover", desc: "Wipe out a gang to seize their turf" },
 ];
 function startJob(id) {
   if (job) { toast("Finish your current job first"); return; }
@@ -3138,6 +3139,13 @@ function startJob(id) {
     job = { id, label: "🎯 BOUNTY", t: 60, target: cands[(Math.random() * cands.length) | 0] };
     jobMarker.visible = true;
     toast("🎯 BOUNTY — destroy the marked car!");
+  } else if (id === "takeover") {
+    let gi = -1, bd = Infinity;
+    GANGS.forEach((G, i) => { if (G.captured) return; const d = dist2(player.x, player.z, G.x, G.z); if (d < bd) { bd = d; gi = i; } });
+    if (gi < 0) { toast("You already run every turf in town"); return; }
+    job = { id, label: "🚩 TAKEOVER", t: 180, gang: gi };
+    jobMarker.visible = true; jobMarker.position.set(GANGS[gi].x, 3, GANGS[gi].z);
+    toast("🚩 TAKEOVER — wipe out the " + GANGS[gi].name + "!");
   }
   AudioSys.play("blip", 0.6); closePhone();
 }
@@ -3150,6 +3158,7 @@ function updateJob(dt) {
   if (job.id === "courier") { jobMarker.rotation.y += 2 * dt; if (dist2(px, pz, job.dx, job.dz) < 49) { winJob(700); return; } }
   else if (job.id === "bounty") { if (job.target.dead) { winJob(1200); return; } jobMarker.position.set(job.target.x, 3, job.target.z); jobMarker.rotation.y += 2 * dt; }
   else if (job.id === "rampage") { if (job.prog >= job.goal) { winJob(1600); return; } }
+  else if (job.id === "takeover") { jobMarker.rotation.y += 2 * dt; if (GANGS[job.gang].captured) { winJob(2500); return; } }
   if (job.t <= 0) failJob("⏰ " + job.label + " failed");
 }
 function explodeAt(x, z, r) {                                 // an AoE blast (RPG / grenade impact)
