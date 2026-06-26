@@ -3124,8 +3124,10 @@ const JOBS = [
   { id: "courier", label: "📦 Courier", desc: "Reach the drop in 55s" },
   { id: "bounty", label: "🎯 Bounty", desc: "Destroy the marked car in 60s" },
   { id: "takeover", label: "🚩 Turf Takeover", desc: "Wipe out a gang to seize their turf" },
+  { id: "hire", label: "🤝 Hire Muscle", desc: "$1500 — an armed ally guns down gangsters with you" },
 ];
 function startJob(id) {
+  if (id === "hire") { hireAlly(); closePhone(); return; }   // instant, not a timed job
   if (job) { toast("Finish your current job first"); return; }
   if (id === "rampage") { job = { id, label: "💥 RAMPAGE", t: 60, prog: 0, goal: 5 }; toast("💥 RAMPAGE — wreck 5 cars in 60s!"); }
   else if (id === "courier") {
@@ -3254,6 +3256,46 @@ function updateGangs(dt) {
     g.kneeR.rotation.x = kA * Math.max(0, Math.cos(g.walkPhase));
     g.mesh.position.set(g.x, groundY(g.x, g.z), g.z);
     g.mesh.rotation.y = g.h;
+  }
+}
+// ---------- co-op: hire armed muscle that follows you and guns down gangsters ----------
+const allies = [];
+const allyWalkerGeo = walkerGeos({ shirt: 0x2a7f5a, pants: 0x1a1a1f, skin: 0xe8b08a, hair: 0x2a1c14 });
+function hireAlly() {
+  if (allies.length >= 2) { toast("Your crew is already full"); return; }
+  if (state.money < 1500) { toast(STR.needMore(1500 - Math.floor(state.money))); return; }
+  state.money -= 1500;
+  const w = makeWalker(allyWalkerGeo); scene.add(w.group);
+  allies.push({ mesh: w.group, legL: w.legL, legR: w.legR, armL: w.armL, armR: w.armR, kneeL: w.kneeL, kneeR: w.kneeR,
+    x: player.x + rr(-2, 2), z: player.z - 2, h: player.h, shootCD: 0, walkPhase: 0 });
+  toast("🤝 Muscle hired — they've got your back"); AudioSys.play("cash", 0.8); flash("#9fe6a0", 0.25); save();
+}
+function updateAllies(dt) {
+  const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
+  for (const a of allies) {
+    let tgt = null, td = 36;                                  // nearest hostile gangster
+    for (const g of gangsters) { if (!g.alive || GANGS[g.gang].captured) continue; const d = Math.hypot(g.x - a.x, g.z - a.z); if (d < td) { td = d; tgt = g; } }
+    let moving = false;
+    if (tgt) {
+      a.h = lerpAngle(a.h, Math.atan2(tgt.x - a.x, tgt.z - a.z), 1 - Math.exp(-5 * dt));
+      a.shootCD -= dt;
+      if (a.shootCD <= 0) {
+        a.shootCD = rr(0.5, 1.0);
+        burst(a.x + Math.sin(a.h) * 0.8, 1.3, a.z + Math.cos(a.h) * 0.8, 4, 0.5, 0.5, 0.14, 0.6, 1.0, 0.6);
+        AudioSys.play("blip", 0.35);
+        if (Math.random() < 0.65) damageGangster(tgt, 26);
+      }
+    } else {
+      const dx = px - a.x, dz = pz - a.z, d = Math.hypot(dx, dz) || 1;
+      if (d > 5) { a.h = lerpAngle(a.h, Math.atan2(dx, dz), 1 - Math.exp(-5 * dt)); const sp = Math.min(7.5, d); a.x += Math.sin(a.h) * sp * dt; a.z += Math.cos(a.h) * sp * dt; a.walkPhase += sp * dt * 2.6; moving = true; }
+    }
+    if (dist2(a.x, a.z, px, pz) > 8100) { a.x = px + rr(-3, 3); a.z = pz - 3; }   // catch up if you sped off
+    const sw = moving ? Math.sin(a.walkPhase) * 0.4 : a.legL.rotation.x * 0.85;
+    a.legL.rotation.x = sw; a.legR.rotation.x = -sw; a.armL.rotation.x = -sw * 0.7; a.armR.rotation.x = sw * 0.7;
+    const kA = moving ? 0.95 : 0;
+    a.kneeL.rotation.x = kA * Math.max(0, -Math.cos(a.walkPhase)); a.kneeR.rotation.x = kA * Math.max(0, Math.cos(a.walkPhase));
+    a.mesh.position.set(a.x, groundY(a.x, a.z), a.z);
+    a.mesh.rotation.y = a.h;
   }
 }
 
@@ -4454,6 +4496,7 @@ function update(dt) {
   updatePolice(dt);
   updateExplosions(dt);
   updateGangs(dt);
+  updateAllies(dt);
   updateHoldup(dt);
   updateJob(dt);
   achTimer -= dt; if (achTimer <= 0) { achTimer = 1; refreshAch(true); }
@@ -4672,7 +4715,7 @@ requestAnimationFrame(frame);
 
 // dev instrumentation: programmatic state/input access for automated smoke runs (?dev=1 tooling)
 globalThis.__palmCity = {
-  state, player, cars, police, traffic, atms, helis, boats, gangsters, GANGS, SHOPS, update, beginPlay, advanceDialogue,
+  state, player, cars, police, traffic, atms, helis, boats, gangsters, allies, GANGS, SHOPS, update, beginPlay, advanceDialogue,
   startJob: id => startJob(id),
   openMap: () => openMap(), openWheel: () => openWheel(), openPhone: () => openPhone(),
   forceCrime: () => { if (wanted < 5) wanted++; wantedCD = 14; },
