@@ -2909,6 +2909,9 @@ const WEAPONS = [
   { id: "combat", name: "🟧 Combat Shotgun", price: 9000, rate: 0.5, range: 24, ammo: 64, spread: 0.13, pellets: 8 },
   { id: "sniper", name: "🔭 Sniper Rifle", price: 18000, rate: 0.95, range: 90, ammo: 30, spread: 0.001, pellets: 1 },
   { id: "minigun", name: "🌀 Minigun", price: 40000, rate: 0.05, range: 36, ammo: 400, spread: 0.09, pellets: 1 },
+  // explosive launchers: the shot detonates on impact (reuses the car-explosion system)
+  { id: "grenade", name: "💣 Grenade Launcher", price: 16000, rate: 1.0, range: 34, ammo: 18, spread: 0.01, pellets: 1, explosive: true, blast: 6 },
+  { id: "rpg", name: "🚀 RPG", price: 32000, rate: 1.5, range: 72, ammo: 10, spread: 0, pellets: 1, explosive: true, blast: 8 },
 ];
 const armed = () => state.weapon != null && WEAPONS[state.weapon];
 const ammoOf = w => state.ammo[w.id] || 0;
@@ -2932,6 +2935,15 @@ function doShoot() {
   AudioSys.play("blip", 0.8); buzz(18); addShake(0.15); punchT = 0.18;
   const fx = Math.sin(player.h), fz = Math.cos(player.h);
   burst(player.x + fx * 0.9, 1.42, player.z + fz * 0.9, 5, 0.5, 0.5, 0.16, 1, 0.86, 0.4);   // muzzle flash
+  if (w.explosive) {                                          // launcher: detonate at the first car hit, else at range
+    let impT = w.range, ix = player.x + fx * w.range, iz = player.z + fz * w.range;
+    const probe = c => { const dx = c.x - player.x, dz = c.z - player.z, t = dx * fx + dz * fz; if (t < 1 || t > impT || Math.abs(dx * fz - dz * fx) > 2.4) return; impT = t; ix = c.x; iz = c.z; };
+    for (const c of traffic) if (!c.dead) probe(c);
+    for (const c of police) if (c.active && !c.dead) probe(c);
+    explodeAt(ix, iz, w.blast || 7);
+    registerCrime();
+    return;
+  }
   for (let s = 0; s < (w.pellets || 1); s++) {
     const sp = (Math.random() - 0.5) * w.spread * 2;
     const ax = Math.sin(player.h + sp), az = Math.cos(player.h + sp);
@@ -3001,6 +3013,21 @@ function robATM(a) {
   burst(a.x, 1.1, a.z, 14, 1.2, 2.0, 0.7, 0.3, 0.9, 0.45);
   registerCrime();                                          // robbery pulls a star
 }
+function explodeAt(x, z, r) {                                 // an AoE blast (RPG / grenade impact)
+  let hitAny = false;
+  for (const c of traffic) if (!c.dead && dist2(c.x, c.z, x, z) < r * r) { explodeCar(c); hitAny = true; }
+  for (const c of police) if (c.active && !c.dead && dist2(c.x, c.z, x, z) < r * r) { explodeCar(c); hitAny = true; }
+  if (!hitAny) {                                             // empty ground — still a satisfying boom
+    burst(x, 1.2, z, 38, 3.0, 4.2, 0.85, 1.0, 0.55, 0.14);
+    burst(x, 1.7, z, 20, 2.2, 5.0, 1.3, 0.28, 0.28, 0.28);
+    AudioSys.play("door", 1.0); addShake(0.65); flash("#ff7a33", 0.28);
+    for (const n of npcs) if (dist2(n.x, n.z, x, z) < r * r * 1.6) { n.flee = 3; n.h = Math.atan2(n.x - x, n.z - z); n.x += Math.sin(n.h); n.z += Math.cos(n.h); }
+    const pd = dist2(player.x, player.z, x, z);
+    if (!driving && pd < r * r) hurt(Math.round(36 * (1 - Math.sqrt(pd) / (r + 1))));
+    addChaos(60);
+  }
+  registerCrime();
+}
 function updateExplosions(dt) {
   for (const c of traffic) if (c.detonateIn != null && !c.dead) { c.detonateIn -= dt; if (c.detonateIn <= 0) explodeCar(c); }
   for (const c of police) if (c.detonateIn != null && c.active && !c.dead) { c.detonateIn -= dt; if (c.detonateIn <= 0) explodeCar(c); }
@@ -3016,6 +3043,8 @@ addEventListener("keydown", e => {
   if (e.code === "Enter" || (e.code === "Space" && dlgLines)) { advanceDialogue(); e.preventDefault(); return; }
   if (e.code === "KeyE") actA = true;
   if (e.code === "KeyB") actB = true;
+  if (e.code === "KeyQ") { cycleWeapon(); e.preventDefault(); return; }
+  if (e.code === "Tab") { wheelOpen ? closeWheel() : openWheel(); e.preventDefault(); return; }
   if (e.code === "KeyF") actP = true;
   keys.add(e.code);
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
@@ -3705,6 +3734,41 @@ let photoMode = false;
 function setPhoto(on) { photoMode = on; if (document.body.classList) document.body.classList.toggle("photo", on); }
 dom("photobtn").addEventListener("click", () => { if (state.phase === "play" && !dlgLines && !garageOpen && !statsOpen && !styleOpen && !arcadeOpen) setPhoto(true); });
 dom("photoclose").addEventListener("click", () => setPhoto(false));
+
+// ---------- weapon wheel: switch between owned weapons in-world (built in JS, no markup) ----------
+const ownedWeapons = () => WEAPONS.map((w, i) => ({ w, i })).filter(({ w }) => state.ammo[w.id] !== undefined);
+function cycleWeapon() {
+  const own = ownedWeapons(); if (!own.length) return;
+  let at = own.findIndex(o => o.i === state.weapon);
+  const next = own[(at + 1) % own.length];
+  state.weapon = next.i; AudioSys.play("blip", 0.5); buzz(12);
+  toast(next.w.name + " · " + (state.ammo[next.w.id] || 0)); save();
+}
+let wheelOpen = false;
+const wpnBtn = dom("wpnbtn"), wheelEl = dom("wpnwheel"), wheelCard = dom("wpnwheelcard");
+wpnBtn.textContent = "🔫";
+if (wpnBtn.style) wpnBtn.style.cssText = "position:absolute;right:16px;top:108px;width:50px;height:50px;border-radius:50%;font-size:21px;background:rgba(28,30,38,.72);color:#fff;border:1px solid rgba(255,205,140,.3);z-index:25;";
+if (wheelEl.style) wheelEl.style.cssText = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:70;";
+if (wheelCard.style) wheelCard.style.cssText = "display:flex;flex-wrap:wrap;gap:10px;max-width:360px;justify-content:center;padding:18px;background:rgba(20,22,28,.94);border-radius:18px;border:1px solid rgba(255,205,140,.25);";
+function closeWheel() { wheelOpen = false; wheelEl.style.display = "none"; }
+function openWheel() {
+  if (state.phase !== "play" || dlgLines) return;
+  const own = ownedWeapons();
+  if (!own.length) { toast("No weapons yet — buy one at the 🔫 Ammo Shop"); return; }
+  wheelCard.innerHTML = "";
+  const title = document.createElement("div"); title.textContent = "WEAPONS";
+  title.style.cssText = "width:100%;text-align:center;color:#ffd166;font-weight:700;font-size:13px;letter-spacing:1px;"; wheelCard.appendChild(title);
+  own.forEach(({ w, i }) => {
+    const b = document.createElement("button"); b.className = "pe";
+    b.innerHTML = w.name.replace(/^[^ ]+ /, m => m) + "<br><small style='opacity:.7'>" + (state.ammo[w.id] || 0) + " ammo</small>";
+    b.style.cssText = "width:104px;height:62px;border-radius:12px;font-size:12px;line-height:1.25;color:#fff;background:rgba(40,42,52,.96);border:2px solid " + (i === state.weapon ? "#ffd166" : "rgba(255,255,255,.16)") + ";";
+    b.addEventListener("click", () => { state.weapon = i; save(); AudioSys.play("blip", 0.5); toast(w.name + " equipped"); closeWheel(); });
+    wheelCard.appendChild(b);
+  });
+  wheelOpen = true; wheelEl.style.display = "flex";
+}
+wpnBtn.addEventListener("click", () => wheelOpen ? closeWheel() : openWheel());
+wheelEl.addEventListener("click", e => { if (e.target === wheelEl) closeWheel(); });
 
 // ---------- actions ----------
 function doActionA() {
