@@ -1801,6 +1801,11 @@ const paraMesh = new THREE.Mesh(
   new THREE.SphereGeometry(2.3, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2),
   new THREE.MeshStandardMaterial({ color: 0xff6b3a, side: THREE.DoubleSide, roughness: 0.75, metalness: 0.0 }));
 paraMesh.visible = false; paraMesh.castShadow = true; scene.add(paraMesh);
+// job objective marker (a glowing column), shown during courier/bounty jobs
+const jobMarker = new THREE.Mesh(
+  new THREE.CylinderGeometry(2.2, 2.2, 9, 14, 1, true),
+  new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true, opacity: 0.38, side: THREE.DoubleSide, depthWrite: false }));
+jobMarker.visible = false; scene.add(jobMarker);
 
 // ---------- enterable building interiors (a single furnished room, staged far from the city) ----------
 const INT = { x: 4000, z: 0 };
@@ -2824,6 +2829,7 @@ function updateParamedic(dt) {
 let wanted = 0, wantedCD = 0, crimeCD = 0;
 let bustTimer = 0, copsOnYou = false;   // on-foot arrest timer + escape (broke-contact) tracking
 let holdup = null, getaway = 0;         // active store holdup + clean-getaway bonus window
+let job = null;                         // active on-demand phone job
 // ---------- health / damage / respawn ----------
 let health = 100, hurtCD = 0, hitCD = 0, fuel = 100, fuelWarned = false;
 function hurt(amount) {
@@ -3062,6 +3068,7 @@ function explodeCar(c) {
     registerCrime();
   }
   registerCrime(); addChaos(c.armored ? 400 : 120);
+  if (job && job.id === "rampage") job.prog++;
 }
 function robATM(a) {
   a.cd = 35;                                                // per-ATM cooldown so you can't farm one
@@ -3097,6 +3104,40 @@ function updateHoldup(dt) {
     getaway = 60;
     holdup = null;
   }
+}
+// ---------- phone: on-demand jobs ----------
+const JOBS = [
+  { id: "rampage", label: "💥 Rampage", desc: "Wreck 5 cars in 60s" },
+  { id: "courier", label: "📦 Courier", desc: "Reach the drop in 55s" },
+  { id: "bounty", label: "🎯 Bounty", desc: "Destroy the marked car in 60s" },
+];
+function startJob(id) {
+  if (job) { toast("Finish your current job first"); return; }
+  if (id === "rampage") { job = { id, label: "💥 RAMPAGE", t: 60, prog: 0, goal: 5 }; toast("💥 RAMPAGE — wreck 5 cars in 60s!"); }
+  else if (id === "courier") {
+    const dx = clamp(player.x + rr(-220, 220), -HALF + 20, HALF - 20), dz = clamp(player.z + rr(-220, 220), -HALF + 20, HALF - 20);
+    job = { id, label: "📦 COURIER", t: 55, dx, dz };
+    jobMarker.visible = true; jobMarker.position.set(dx, 3, dz);
+    toast("📦 COURIER — get to the drop!");
+  } else if (id === "bounty") {
+    const cands = traffic.filter(c => !c.dead && !c.armored && !c.jacked);
+    if (!cands.length) { toast("No target on the streets right now"); return; }
+    job = { id, label: "🎯 BOUNTY", t: 60, target: cands[(Math.random() * cands.length) | 0] };
+    jobMarker.visible = true;
+    toast("🎯 BOUNTY — destroy the marked car!");
+  }
+  AudioSys.play("blip", 0.6); closePhone();
+}
+function failJob(msg) { toast(msg || "Job failed"); job = null; jobMarker.visible = false; }
+function winJob(reward) { const got = earn(reward); toast("✅ JOB DONE  +$" + got); AudioSys.play("jingle", 1.0); flash("#9fe6a0", 0.4); buzz([0, 50, 40, 90]); job = null; jobMarker.visible = false; save(); }
+function updateJob(dt) {
+  if (!job) return;
+  job.t -= dt;
+  const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
+  if (job.id === "courier") { jobMarker.rotation.y += 2 * dt; if (dist2(px, pz, job.dx, job.dz) < 49) { winJob(700); return; } }
+  else if (job.id === "bounty") { if (job.target.dead) { winJob(1200); return; } jobMarker.position.set(job.target.x, 3, job.target.z); jobMarker.rotation.y += 2 * dt; }
+  else if (job.id === "rampage") { if (job.prog >= job.goal) { winJob(1600); return; } }
+  if (job.t <= 0) failJob("⏰ " + job.label + " failed");
 }
 function explodeAt(x, z, r) {                                 // an AoE blast (RPG / grenade impact)
   let hitAny = false;
@@ -3195,6 +3236,7 @@ addEventListener("keydown", e => {
   if (e.code === "KeyB") actB = true;
   if (e.code === "KeyQ") { cycleWeapon(); e.preventDefault(); return; }
   if (e.code === "Tab") { wheelOpen ? closeWheel() : openWheel(); e.preventDefault(); return; }
+  if (e.code === "KeyP") { phoneOpen ? closePhone() : openPhone(); e.preventDefault(); return; }
   if (e.code === "KeyF") actP = true;
   keys.add(e.code);
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
@@ -3921,6 +3963,34 @@ function openWheel() {
 wpnBtn.addEventListener("click", () => wheelOpen ? closeWheel() : openWheel());
 wheelEl.addEventListener("click", e => { if (e.target === wheelEl) closeWheel(); });
 
+// ---------- phone: launch on-demand jobs from anywhere ----------
+let phoneOpen = false;
+const phoneBtn = dom("phonebtn"), phoneEl = dom("phone"), phoneCard = dom("phonecard");
+phoneBtn.textContent = "📱";
+if (phoneBtn.style) phoneBtn.style.cssText = "position:absolute;right:16px;top:166px;width:50px;height:50px;border-radius:50%;font-size:21px;background:rgba(28,30,38,.72);color:#fff;border:1px solid rgba(255,205,140,.3);z-index:25;";
+if (phoneEl.style) phoneEl.style.cssText = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:70;";
+if (phoneCard.style) phoneCard.style.cssText = "display:flex;flex-direction:column;gap:9px;width:300px;padding:18px;background:rgba(20,22,28,.95);border-radius:18px;border:1px solid rgba(255,205,140,.25);";
+function closePhone() { phoneOpen = false; phoneEl.style.display = "none"; }
+function openPhone() {
+  if (state.phase !== "play" || dlgLines) return;
+  phoneCard.innerHTML = "";
+  const title = document.createElement("div"); title.textContent = "📱 JOBS";
+  title.style.cssText = "text-align:center;color:#ffd166;font-weight:700;font-size:13px;letter-spacing:1px;margin-bottom:2px;"; phoneCard.appendChild(title);
+  JOBS.forEach(J => {
+    const b = document.createElement("button"); b.className = "pe";
+    b.innerHTML = "<b>" + J.label + "</b><br><small style='opacity:.7'>" + J.desc + "</small>";
+    b.style.cssText = "padding:10px;border-radius:12px;font-size:13px;line-height:1.3;color:#fff;text-align:left;background:rgba(40,42,52,.96);border:1px solid rgba(255,255,255,.16);";
+    b.addEventListener("click", () => startJob(J.id));
+    phoneCard.appendChild(b);
+  });
+  const close = document.createElement("button"); close.className = "pe"; close.textContent = "Close";
+  close.style.cssText = "padding:8px;border-radius:10px;color:#fff;background:rgba(60,42,42,.9);border:none;margin-top:4px;";
+  close.addEventListener("click", closePhone); phoneCard.appendChild(close);
+  phoneOpen = true; phoneEl.style.display = "flex";
+}
+phoneBtn.addEventListener("click", () => phoneOpen ? closePhone() : openPhone());
+phoneEl.addEventListener("click", e => { if (e.target === phoneEl) closePhone(); });
+
 // ---------- actions ----------
 function doActionA() {
   if (para) return;                                // busy under the canopy
@@ -4252,6 +4322,7 @@ function update(dt) {
   updateExplosions(dt);
   updateGangs(dt);
   updateHoldup(dt);
+  updateJob(dt);
   achTimer -= dt; if (achTimer <= 0) { achTimer = 1; refreshAch(true); }
   {
     const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
@@ -4468,6 +4539,7 @@ requestAnimationFrame(frame);
 // dev instrumentation: programmatic state/input access for automated smoke runs (?dev=1 tooling)
 globalThis.__palmCity = {
   state, player, cars, police, traffic, atms, helis, boats, gangsters, GANGS, SHOPS, update, beginPlay, advanceDialogue,
+  startJob: id => startJob(id),
   forceCrime: () => { if (wanted < 5) wanted++; wantedCD = 14; },
   hurt: n => hurt(n),
   punch: () => doPunch(),
@@ -4483,5 +4555,5 @@ globalThis.__palmCity = {
   closeStats: () => closeStats(),
   refreshAch: () => refreshAch(true),
   addXP: n => addXP(n),
-  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen, race: race.stage, rcp: race.cp, stats: statsOpen, health, fuel, tut: tutOpen, lvl: state.lvl, xp: state.xp, lvlMult }),
+  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, jobId: job && job.id, jobProg: job && job.prog, jobT: job && Math.round(job.t), jobDx: job && job.dx, jobDz: job && job.dz, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen, race: race.stage, rcp: race.cp, stats: statsOpen, health, fuel, tut: tutOpen, lvl: state.lvl, xp: state.xp, lvlMult }),
 };
