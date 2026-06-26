@@ -3237,6 +3237,7 @@ addEventListener("keydown", e => {
   if (e.code === "KeyQ") { cycleWeapon(); e.preventDefault(); return; }
   if (e.code === "Tab") { wheelOpen ? closeWheel() : openWheel(); e.preventDefault(); return; }
   if (e.code === "KeyP") { phoneOpen ? closePhone() : openPhone(); e.preventDefault(); return; }
+  if (e.code === "KeyM") { mapOpen ? closeMap() : openMap(); e.preventDefault(); return; }
   if (e.code === "KeyF") actP = true;
   keys.add(e.code);
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
@@ -3601,6 +3602,56 @@ function drawMinimap(t) {
   mapCtx.fillStyle = "#ff7a33";
   mapCtx.beginPath(); mapCtx.moveTo(6, 0); mapCtx.lineTo(-4, 4); mapCtx.lineTo(-4, -4); mapCtx.closePath(); mapCtx.fill();
   mapCtx.restore();
+}
+
+// ---------- full-screen city map ----------
+let mapOpen = false;
+const mapScreen = dom("mapscreen"), mapCanvas = dom("mapcanvas"), mapTitle = dom("maptitle"), mapCloseBtn = dom("mapclose");
+if (mapScreen.style) mapScreen.style.cssText = "position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(8,10,14,.93);z-index:80;";
+if (mapTitle.style) { mapTitle.textContent = "🗺 CITY MAP"; mapTitle.style.cssText = "color:#ffd166;font-weight:700;letter-spacing:2px;font-size:15px;"; }
+if (mapCloseBtn.style) { mapCloseBtn.textContent = "✕ Close"; mapCloseBtn.style.cssText = "padding:9px 16px;border-radius:12px;color:#fff;background:rgba(60,42,42,.92);border:1px solid rgba(255,205,140,.3);font-size:14px;"; }
+if (mapCanvas.style) mapCanvas.style.cssText = "border:1px solid rgba(255,205,140,.25);border-radius:14px;background:#10171a;max-width:92vw;max-height:74vh;";
+function closeMap() { mapOpen = false; mapScreen.style.display = "none"; }
+function openMap() { if (state.phase !== "play" || dlgLines) return; mapOpen = true; mapScreen.style.display = "flex"; drawFullMap(); }
+mapCloseBtn.addEventListener && mapCloseBtn.addEventListener("click", closeMap);
+function dot(ctx, x, z, sc, r, col) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc((x + HALF) * sc, (z + HALF) * sc, r, 0, 7); ctx.fill(); }
+function drawFullMap() {
+  const cv = mapCanvas; if (!cv.getContext) return;
+  const S = Math.max(280, Math.min(innerWidth * 0.9, innerHeight * 0.72)) | 0;
+  if (cv.width !== S) { cv.width = S; cv.height = S; }
+  const ctx = cv.getContext("2d"), sc = S / (2 * HALF);
+  const Wx = x => (x + HALF) * sc, Wz = z => (z + HALF) * sc;
+  ctx.clearRect(0, 0, S, S);
+  ctx.fillStyle = "#1b2a22"; ctx.fillRect(0, 0, S, S);
+  ctx.fillStyle = "rgba(40,120,160,.5)"; ctx.fillRect(0, Wz(SEA_Z), S, S - Wz(SEA_Z));          // sea (south)
+  ctx.fillStyle = "#3a444c";                                                                     // roads
+  for (let k = 0; k <= N; k++) { const p = Wx(roadC(k)); ctx.fillRect(p - ROAD * sc / 2, 0, ROAD * sc, S); ctx.fillRect(0, p - ROAD * sc / 2, S, ROAD * sc); }
+  ctx.fillStyle = "#3f6b3f";                                                                     // parks
+  for (const key of PARKS) { const [i, j] = key.split(",").map(Number); ctx.fillRect(Wx(blockMin(i)), Wz(blockMin(j)), BLOCK * sc, BLOCK * sc); }
+  const GF = ["rgba(200,60,60,.20)", "rgba(70,110,210,.20)", "rgba(60,180,90,.20)"], GR = ["rgba(235,90,90,.9)", "rgba(115,155,240,.9)", "rgba(95,220,125,.9)"];
+  ctx.textAlign = "center";
+  GANGS.forEach((G, gi) => {
+    ctx.fillStyle = G.captured ? "rgba(120,200,140,.18)" : GF[gi];
+    ctx.beginPath(); ctx.arc(Wx(G.x), Wz(G.z), G.r * sc, 0, 7); ctx.fill();
+    ctx.strokeStyle = G.captured ? "rgba(150,230,160,.9)" : GR[gi]; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.font = "bold " + Math.max(9, S * 0.022 | 0) + "px sans-serif";
+    ctx.fillText((G.captured ? "🚩 " : "") + G.name, Wx(G.x), Wz(G.z) - G.r * sc - 4);
+  });
+  for (const b of BIZ) dot(ctx, b.x, b.z, sc, 4, state.owned[b.id] ? "#9fe6a0" : "#ffd166");      // businesses
+  for (const s of SHOPS) dot(ctx, s.x, s.z, sc, 3.4, "#d06ad0");                                  // shops
+  for (const a of atms) dot(ctx, a.x, a.z, sc, 1.8, "#59d6a0");                                   // ATMs
+  ctx.fillStyle = "#7fd6ff"; ctx.fillRect(Wx(GARAGE.x) - 4, Wz(GARAGE.z) - 4, 8, 8);              // garage
+  for (const hv of helis) dot(ctx, hv.x, hv.z, sc, 4, "#ffffff");                                 // chopper
+  for (const bt of boats) dot(ctx, bt.x, bt.z, sc, 4, "#cfe8ff");                                 // boats
+  for (const p of police) if (p.active) dot(ctx, p.x, p.z, sc, 4, "#ff3b3b");                      // police
+  if (jobMarker.visible) dot(ctx, jobMarker.position.x, jobMarker.position.z, sc, 5, "#ffd24a");  // job objective
+  const obj = currentObjective();
+  if (obj.x !== undefined) dot(ctx, obj.x, obj.z, sc, 5, "#ffe24a");                              // mission objective
+  // player arrow
+  const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z, ph = driving ? driving.h : player.h;
+  ctx.save(); ctx.translate(Wx(px), Wz(pz)); ctx.rotate(Math.atan2(Math.cos(ph), Math.sin(ph)));
+  ctx.fillStyle = "#ff7a33"; ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-6, 6); ctx.lineTo(-6, -6); ctx.closePath(); ctx.fill();
+  ctx.restore();
 }
 
 // ---------- confirm dialog (in-game Yes/No; native confirm() is blocked in sandboxed iframes) ----------
@@ -4522,6 +4573,7 @@ function frame(now) {
     while (acc >= STEP) { update(STEP); acc -= STEP; }
     updateHUD();
     drawMinimap(now / 1000);
+    if (mapOpen) drawFullMap();
   } else acc = 0;
   if (state.phase === "play") updateSunShadow();
   renderFrame();
@@ -4550,6 +4602,7 @@ requestAnimationFrame(frame);
 globalThis.__palmCity = {
   state, player, cars, police, traffic, atms, helis, boats, gangsters, GANGS, SHOPS, update, beginPlay, advanceDialogue,
   startJob: id => startJob(id),
+  openMap: () => openMap(), openWheel: () => openWheel(), openPhone: () => openPhone(),
   forceCrime: () => { if (wanted < 5) wanted++; wantedCD = 14; },
   hurt: n => hurt(n),
   punch: () => doPunch(),
