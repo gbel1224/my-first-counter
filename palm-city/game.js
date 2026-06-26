@@ -3544,6 +3544,16 @@ function drawMinimap(t) {
     const [i, j] = key.split(",").map(Number);
     mapCtx.fillRect((blockMin(i) + HALF) * sc, (blockMin(j) + HALF) * sc, BLOCK * sc, BLOCK * sc);
   }
+  // gang turf: tinted circles (gang colour while hostile, green once captured)
+  const GANG_FILL = ["rgba(200,60,60,.20)", "rgba(70,110,210,.20)", "rgba(60,180,90,.20)"];
+  const GANG_RING = ["rgba(235,90,90,.85)", "rgba(115,155,240,.85)", "rgba(95,220,125,.85)"];
+  GANGS.forEach((G, gi) => {
+    const gx = (G.x + HALF) * sc, gz = (G.z + HALF) * sc, gr = G.r * sc;
+    mapCtx.fillStyle = G.captured ? "rgba(120,200,140,.16)" : GANG_FILL[gi];
+    mapCtx.beginPath(); mapCtx.arc(gx, gz, gr, 0, 7); mapCtx.fill();
+    mapCtx.strokeStyle = G.captured ? "rgba(150,230,160,.8)" : GANG_RING[gi];
+    mapCtx.lineWidth = 1.2; mapCtx.beginPath(); mapCtx.arc(gx, gz, gr, 0, 7); mapCtx.stroke();
+  });
   for (const b of BIZ) {
     mapCtx.fillStyle = state.owned[b.id] ? "#9fe6a0" : "#ffd166";
     mapCtx.beginPath(); mapCtx.arc((b.x + HALF) * sc, (b.z + HALF) * sc, 3, 0, 7); mapCtx.fill();
