@@ -1490,6 +1490,22 @@ function makeHeli(x, z) {
 }
 helis.push(makeHeli(PLAZA.x + 22, Rc(3) - 12));
 
+// ---------- boats: drive out across the harbor (board from the south shore) ----------
+const boats = [];
+function makeBoat(x, z) {
+  const g = new THREE.Group();
+  const mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.2, envMapIntensity: 0.9 });
+  const hull = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.85, 5.6), mat(0xeceef2)); hull.position.y = 0.5; hull.castShadow = true; g.add(hull);
+  const bow = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.8, 1.4), mat(0xeceef2)); bow.position.set(0, 0.52, 3.3); g.add(bow);
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.18, 3.6), mat(0xc2c8d0)); deck.position.set(0, 0.96, -0.4); g.add(deck);
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.95, 1.7), mat(0x33536b)); cabin.position.set(0, 1.45, -1.2); g.add(cabin);
+  const glass = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.55, 0.1), mat(0x0e1a22)); glass.position.set(0, 1.62, -0.35); g.add(glass);
+  g.position.set(x, 0.1, z); scene.add(g);
+  return { x, z, h: 0, speed: 0, mesh: g, boat: true };
+}
+boats.push(makeBoat(10, SEA_Z + 7));
+boats.push(makeBoat(-90, SEA_Z + 7));
+
 // police cars (spawned by wanted level)
 const POLICE_N = 5;   // up to 5-star wanted
 const police = [];
@@ -3348,6 +3364,7 @@ function nearestCar() {
   for (const c of cars) if (!c.locked) consider(c, 25);     // your own cars (wider reach)
   for (const t of traffic) if (!t.jacked) consider(t, 16);  // ...or jack any street car nearby
   for (const hv of helis) consider(hv, 26);                 // ...or hop in the chopper
+  for (const bt of boats) consider(bt, 28);                 // ...or take a boat at the shore
   return best;
 }
 function nearestPersonalCar() {
@@ -4026,6 +4043,18 @@ function update(dt) {
       if (c.rotor) c.rotor.rotation.y += 34 * dt;
       if (c.tail) c.tail.rotation.x += 40 * dt;
       if (c.y < 6 && Math.random() < 0.5) emit(c.x + rr(-2, 2), 0.25, c.z + rr(-2, 2), rr(-1, 1), rr(0.2, 0.8), rr(-1, 1), 0.4, 0.62, 0.6, 0.52);   // rotor downwash
+    } else if (c.boat) {
+      // ---- arcade boat: throttle forward, turn scales with speed, stays on the harbour ----
+      c.h -= inp.mx * 1.4 * dt * clamp(Math.abs(c.speed) / 6, 0.25, 1);
+      const accel = Math.max(0, inp.mz) * 15;
+      c.speed += (accel - c.speed * 0.5) * dt;
+      if (braking()) c.speed -= 16 * dt;
+      c.speed = clamp(c.speed, -4, 22);
+      c.x = clamp(c.x + Math.sin(c.h) * c.speed * dt, -HALF - 380, HALF + 380);
+      c.z = clamp(c.z + Math.cos(c.h) * c.speed * dt, SEA_Z - 1, SEA_Z + 560);   // keep it in the water
+      c.mesh.position.set(c.x, 0.1 + Math.sin(simTime * 2 + c.x * 0.1) * 0.12, c.z);   // gentle bob
+      c.mesh.rotation.set(Math.sin(simTime * 1.5) * 0.03, c.h, inp.mx * 0.12);
+      if (Math.abs(c.speed) > 3 && Math.random() < 0.6) emit(c.x - Math.sin(c.h) * 2.4, 0.15, c.z - Math.cos(c.h) * 2.4, rr(-0.5, 0.5), rr(0.1, 0.5), rr(-0.5, 0.5), 0.6, 0.85, 0.9, 0.98);   // wake spray
     } else {
     // throttle / brake — dedicated brake button (or Space) decelerates then reverses
     const brakeAmt = braking() ? 1 : (inp.mz < 0 ? -inp.mz : 0);
@@ -4438,7 +4467,7 @@ requestAnimationFrame(frame);
 
 // dev instrumentation: programmatic state/input access for automated smoke runs (?dev=1 tooling)
 globalThis.__palmCity = {
-  state, player, cars, police, traffic, atms, helis, gangsters, GANGS, SHOPS, update, beginPlay, advanceDialogue,
+  state, player, cars, police, traffic, atms, helis, boats, gangsters, GANGS, SHOPS, update, beginPlay, advanceDialogue,
   forceCrime: () => { if (wanted < 5) wanted++; wantedCD = 14; },
   hurt: n => hurt(n),
   punch: () => doPunch(),
