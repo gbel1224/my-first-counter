@@ -1463,6 +1463,32 @@ for (let t = 0; t < 200; t++) {
     traffic.push({ wp, next: (st + 1) % 4, x: wp[st][0], z: wp[st][1], h: 0, speed: 5 + trand() * 2, mesh, armored: true, hp: 320, loot: 2500 });
   }
 }
+// ---------- helicopter: a flyable chopper (BOOST = up, BRAKE = down, stick = move/turn) ----------
+const helis = [];
+function makeHeli(x, z) {
+  const g = new THREE.Group();
+  const mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.35, envMapIntensity: 0.9 });
+  const dark = mat(0x15171a);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.5, 4.0), mat(0x2b6cb0)); body.position.y = 1.1; body.castShadow = true; g.add(body);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(1.0, 14, 10), mat(0x1f4e79)); nose.scale.set(0.95, 0.85, 1.35); nose.position.set(0, 1.15, 1.9); g.add(nose);
+  const glass = new THREE.Mesh(new THREE.SphereGeometry(0.82, 14, 10), mat(0x0e1418)); glass.scale.set(0.92, 0.78, 1.05); glass.position.set(0, 1.35, 2.05); g.add(glass);
+  const boom = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 3.4), mat(0x2b6cb0)); boom.position.set(0, 1.45, -3.3); g.add(boom);
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.1, 0.7), mat(0x1f4e79)); fin.position.set(0, 2.0, -4.7); g.add(fin);
+  for (const sx of [-0.9, 0.9]) {
+    const skid = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 3.0), dark); skid.position.set(sx, 0.15, 0.1); g.add(skid);
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.55, 0.1), dark); leg.position.set(sx, 0.5, 0.1); g.add(leg);
+  }
+  const rotor = new THREE.Group(); rotor.position.set(0, 2.05, 0.1);
+  rotor.add(new THREE.Mesh(new THREE.BoxGeometry(9.2, 0.06, 0.42), dark));
+  rotor.add(new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.06, 9.2), dark));
+  g.add(rotor);
+  const tail = new THREE.Group(); tail.position.set(0.33, 2.0, -4.8);
+  tail.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.9, 0.2), dark));
+  g.add(tail);
+  g.position.set(x, 0, z); scene.add(g);
+  return { x, z, y: 0, h: Math.PI, speed: 0, mesh: g, rotor, tail, heli: true };
+}
+helis.push(makeHeli(PLAZA.x + 22, Rc(3) - 12));
 
 // police cars (spawned by wanted level)
 const POLICE_N = 5;   // up to 5-star wanted
@@ -1721,7 +1747,13 @@ const nearShop = () => {
   return null;
 };
 const player = { x: PLAZA.x, z: Rc(3) - 12, y: CURB, h: Math.PI, walkPhase: 0, speed: 0 };
-let driving = null;   // car object while driving
+let driving = null;   // car object (or helicopter) while driving/flying
+let para = null;      // non-null while parachuting (after bailing from a chopper midair)
+// parachute canopy (a half-dome), hidden until deployed
+const paraMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(2.3, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+  new THREE.MeshStandardMaterial({ color: 0xff6b3a, side: THREE.DoubleSide, roughness: 0.75, metalness: 0.0 }));
+paraMesh.visible = false; paraMesh.castShadow = true; scene.add(paraMesh);
 
 // ---------- enterable building interiors (a single furnished room, staged far from the city) ----------
 const INT = { x: 4000, z: 0 };
@@ -2973,6 +3005,7 @@ function updateExplosions(dt) {
   for (const c of traffic) if (c.detonateIn != null && !c.dead) { c.detonateIn -= dt; if (c.detonateIn <= 0) explodeCar(c); }
   for (const c of police) if (c.detonateIn != null && c.active && !c.dead) { c.detonateIn -= dt; if (c.detonateIn <= 0) explodeCar(c); }
   for (const a of atms) if (a.cd > 0) a.cd -= dt;
+  for (const hv of helis) if (hv !== driving && hv.y > 0.01) { hv.y = Math.max(0, hv.y - 7 * dt); hv.mesh.position.set(hv.x, hv.y, hv.z); if (hv.rotor) hv.rotor.rotation.y += 18 * dt; }   // abandoned chopper auto-lands
   if (chaosCD > 0) { chaosCD -= dt; if (chaosCD <= 0 && chaos > 0) { const reward = earn(Math.round(chaos)); toast("💥 RAMPAGE BONUS  +$" + reward); AudioSys.play("cash", 0.8); chaos = 0; } }
 }
 
@@ -3151,6 +3184,7 @@ function nearestCar() {
   const consider = (c, range) => { const d = dist2(player.x, player.z, c.x, c.z); if (d < range && d < bd) { bd = d; best = c; } };
   for (const c of cars) if (!c.locked) consider(c, 25);     // your own cars (wider reach)
   for (const t of traffic) if (!t.jacked) consider(t, 16);  // ...or jack any street car nearby
+  for (const hv of helis) consider(hv, 26);                 // ...or hop in the chopper
   return best;
 }
 function nearestPersonalCar() {
@@ -3674,8 +3708,16 @@ dom("photoclose").addEventListener("click", () => setPhoto(false));
 
 // ---------- actions ----------
 function doActionA() {
-  if (driving) {                                   // exit car
+  if (para) return;                                // busy under the canopy
+  if (driving) {                                   // exit car / chopper
     const c = driving;
+    if (c.heli && c.y > 3) {                        // bail out midair -> parachute
+      para = {}; player.x = c.x; player.z = c.z; player.y = c.y; player.speed = 0;
+      driving = null; hero.group.visible = true;
+      paraMesh.visible = true; paraMesh.position.set(player.x, player.y + 2.4, player.z);
+      AudioSys.play("door", 0.6); toast("🪂 Parachute out!");
+      return;
+    }
     const rx = -Math.cos(c.h), rz = Math.sin(c.h);
     let ex = c.x + rx * 2.6, ez = c.z + rz * 2.6;
     if (hitsCollider(ex, ez, 0.5)) { ex = c.x - rx * 2.6; ez = c.z - rz * 2.6; }
@@ -3764,6 +3806,24 @@ function update(dt) {
 
   if (driving) {
     const c = driving;
+    if (c.heli) {
+      // ---- helicopter flight: stick steers/thrusts, BOOST climbs, BRAKE descends ----
+      const dry = fuel <= 0;
+      c.h -= inp.mx * 1.7 * dt;
+      let lift = -1.5;                                              // settles gently with no input
+      if (boosting() && !dry) lift = 16; else if (braking()) lift = -14;
+      c.y = clamp((c.y || 0) + lift * dt, 0, 140);
+      const fwd = dry ? 0 : Math.max(0, inp.mz);
+      c.speed = clamp(c.speed + (fwd * 30 - c.speed) * Math.min(1, 2.5 * dt), 0, 34);
+      c.x = clamp(c.x + Math.sin(c.h) * c.speed * dt, -HALF + 3, HALF - 3);
+      c.z = clamp(c.z + Math.cos(c.h) * c.speed * dt, -HALF + 3, HALF - 3);
+      fuel = Math.max(0, fuel - (1.0 + c.speed * 0.02) * dt);
+      c.mesh.position.set(c.x, c.y, c.z);
+      c.mesh.rotation.set(-c.speed * 0.012, c.h, inp.mx * 0.22);
+      if (c.rotor) c.rotor.rotation.y += 34 * dt;
+      if (c.tail) c.tail.rotation.x += 40 * dt;
+      if (c.y < 6 && Math.random() < 0.5) emit(c.x + rr(-2, 2), 0.25, c.z + rr(-2, 2), rr(-1, 1), rr(0.2, 0.8), rr(-1, 1), 0.4, 0.62, 0.6, 0.52);   // rotor downwash
+    } else {
     // throttle / brake — dedicated brake button (or Space) decelerates then reverses
     const brakeAmt = braking() ? 1 : (inp.mz < 0 ? -inp.mz : 0);
     const dry = fuel <= 0;                                          // out of gas → limp only
@@ -3838,7 +3898,21 @@ function update(dt) {
         }
       }
     }
+    }
     camYaw = lerpAngle(camYaw, c.h, 1 - Math.exp(-3.2 * dt));
+  } else if (para) {
+    // ---- parachuting: slow descent with gentle steering ----
+    player.h -= inp.mx * 1.1 * dt;
+    const mv = Math.max(0, inp.mz) * 6.5;
+    player.x = clamp(player.x + Math.sin(player.h) * mv * dt, -HALF + 3, HALF - 3);
+    player.z = clamp(player.z + Math.cos(player.h) * mv * dt, -HALF + 3, HALF - 3);
+    player.y -= 6.5 * dt;
+    const gy = groundY(player.x, player.z);
+    if (player.y <= gy) { player.y = gy; para = null; paraMesh.visible = false; toast("🪂 Nice landing!"); buzz(20); }
+    hero.group.position.set(player.x, player.y, player.z);
+    hero.group.rotation.y = player.h;
+    paraMesh.position.set(player.x, player.y + 2.4, player.z);
+    camYaw = lerpAngle(camYaw, player.h, 1 - Math.exp(-3 * dt));
   } else {
     // camera-relative walk
     const f = { x: Math.sin(camYaw), z: Math.cos(camYaw) };
@@ -4159,7 +4233,7 @@ requestAnimationFrame(frame);
 
 // dev instrumentation: programmatic state/input access for automated smoke runs (?dev=1 tooling)
 globalThis.__palmCity = {
-  state, player, cars, police, traffic, atms, update, beginPlay, advanceDialogue,
+  state, player, cars, police, traffic, atms, helis, update, beginPlay, advanceDialogue,
   forceCrime: () => { if (wanted < 5) wanted++; wantedCD = 14; },
   hurt: n => hurt(n),
   punch: () => doPunch(),
