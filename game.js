@@ -1519,6 +1519,42 @@ const jpMesh = new THREE.Group();
   jpMesh.position.set(jetpackPickup.x, CURB, jetpackPickup.z); scene.add(jpMesh);
 }
 
+// ---------- airport: a runway, terminal & control tower west of the city, with planes + a chopper ----------
+const planes = [];
+function makePlane(x, z) {
+  const g = new THREE.Group();
+  const mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.45, metalness: 0.4, envMapIntensity: 0.9 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.5, 7, 12), mat(0xe8ecf0)); body.rotation.x = Math.PI / 2; body.position.y = 1.4; body.castShadow = true; g.add(body);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.4, 12), mat(0xdfe4ea)); nose.rotation.x = -Math.PI / 2; nose.position.set(0, 1.4, 3.9); g.add(nose);
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(9.5, 0.2, 1.7), mat(0xced5dd)); wing.position.set(0, 1.4, 0.2); g.add(wing);
+  const tailw = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.16, 0.9), mat(0xced5dd)); tailw.position.set(0, 1.7, -3.1); g.add(tailw);
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.3, 1.0), mat(0x33536b)); fin.position.set(0, 2.3, -3.1); g.add(fin);
+  const glass = new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 8), mat(0x0e1a22)); glass.scale.set(0.9, 0.7, 1.4); glass.position.set(0, 1.75, 1.8); g.add(glass);
+  const prop = new THREE.Group(); prop.position.set(0, 1.4, 4.7);
+  prop.add(new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.6, 0.18), mat(0x15171a)));
+  prop.add(new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.12, 0.18), mat(0x15171a)));
+  g.add(prop);
+  for (const sx of [-1.3, 1.3]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.22, 10), mat(0x161616)); w.rotation.z = Math.PI / 2; w.position.set(sx, 0.4, 0.5); g.add(w); }
+  g.position.set(x, 0, z); scene.add(g);
+  return { x, z, y: 0, h: 0, speed: 0, mesh: g, prop, plane: true };
+}
+const AIRPORT = { x: -HALF - 150, z: 0 };
+{
+  const AP = AIRPORT;
+  const rwMat = new THREE.MeshStandardMaterial({ color: 0x2c3036, roughness: 0.85 });
+  const runway = new THREE.Mesh(new THREE.BoxGeometry(46, 0.3, 520), rwMat); runway.position.set(AP.x, 0.08, 0); runway.receiveShadow = true; scene.add(runway);
+  const dashMat = new THREE.MeshBasicMaterial({ color: 0xf0e6b0 });
+  for (let z = -240; z <= 240; z += 24) { const d = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.02, 9), dashMat); d.position.set(AP.x, 0.24, z); scene.add(d); }
+  const apron = new THREE.Mesh(new THREE.BoxGeometry(64, 0.28, 110), rwMat); apron.position.set(AP.x + 52, 0.07, 30); scene.add(apron);
+  const term = new THREE.Mesh(new THREE.BoxGeometry(40, 12, 26), new THREE.MeshStandardMaterial({ color: 0xb9c2cc, roughness: 0.7 })); term.position.set(AP.x + 82, 6, 40); term.castShadow = term.receiveShadow = true; scene.add(term); addCollider(AP.x + 82, 40, 20, 13);
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(6, 22, 6), new THREE.MeshStandardMaterial({ color: 0xa7b0ba })); tower.position.set(AP.x + 54, 11, 96); tower.castShadow = true; scene.add(tower); addCollider(AP.x + 54, 96, 3, 3);
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(10, 5, 10), new THREE.MeshStandardMaterial({ color: 0x33536b, roughness: 0.4 })); cab.position.set(AP.x + 54, 23, 96); scene.add(cab);
+  const pad = new THREE.Mesh(new THREE.CircleGeometry(8, 24), new THREE.MeshStandardMaterial({ color: 0x24282d, roughness: 0.9 })); pad.rotation.x = -Math.PI / 2; pad.position.set(AP.x + 44, 0.12, -80); scene.add(pad);
+  planes.push(makePlane(AP.x, -170));
+  planes.push(makePlane(AP.x + 13, -130));
+  helis.push(makeHeli(AP.x + 44, -80));
+}
+
 // police cars (spawned by wanted level)
 const POLICE_N = 5;   // up to 5-star wanted
 const police = [];
@@ -3184,6 +3220,7 @@ function updateExplosions(dt) {
   for (const c of police) if (c.detonateIn != null && c.active && !c.dead) { c.detonateIn -= dt; if (c.detonateIn <= 0) explodeCar(c); }
   for (const a of atms) if (a.cd > 0) a.cd -= dt;
   for (const hv of helis) if (hv !== driving && hv.y > 0.01) { hv.y = Math.max(0, hv.y - 7 * dt); hv.mesh.position.set(hv.x, hv.y, hv.z); if (hv.rotor) hv.rotor.rotation.y += 18 * dt; }   // abandoned chopper auto-lands
+  for (const pl of planes) if (pl !== driving && pl.y > 0.01) { pl.y = Math.max(0, pl.y - 9 * dt); pl.mesh.position.set(pl.x, pl.y, pl.z); }   // abandoned plane glides down
   if (chaosCD > 0) { chaosCD -= dt; if (chaosCD <= 0 && chaos > 0) { const reward = earn(Math.round(chaos)); toast("💥 RAMPAGE BONUS  +$" + reward); AudioSys.play("cash", 0.8); chaos = 0; } }
   for (const G of GANGS) if (G.captured) state.money += 4 * dt;   // captured turf pays tribute
   if (state.jetpack) { if (jpMesh.visible) jpMesh.visible = false; }
@@ -3347,6 +3384,7 @@ addEventListener("pointercancel", joyEnd);
 document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
 
 const btnA = dom("btnA"), btnB = dom("btnB"), brakeBtn = dom("brake"), boostBtn = dom("boost"), punchBtn = dom("punch");
+const climbBtn = dom("climbbtn"), diveBtn = dom("divebtn");
 const doorBtn = dom("doorbtn");
 doorBtn.addEventListener("click", () => {
   if (state.phase !== "play" || dlgLines || garageOpen || statsOpen || styleOpen || arcadeOpen) return;
@@ -3358,18 +3396,23 @@ decorBtn.addEventListener("click", () => {
   if (state.phase !== "play" || dlgLines || garageOpen || statsOpen || styleOpen || arcadeOpen) return;
   if (canDecorate()) openStyleShop("decor");
 });
-let brakeHeld = false, boostHeld = false, boostMeter = 1;
+let brakeHeld = false, boostHeld = false, boostMeter = 1, climbHeld = false, diveHeld = false;
 btnA.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actA = true; });
 btnB.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actB = true; bHeld = true; });
 brakeBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); brakeHeld = true; });
 boostBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); boostHeld = true; });
+climbBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); climbHeld = true; });
+diveBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); diveHeld = true; });
 punchBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actP = true; });
-addEventListener("pointerup", () => { bHeld = false; brakeHeld = false; boostHeld = false; });
-addEventListener("pointercancel", () => { bHeld = false; brakeHeld = false; boostHeld = false; });
+addEventListener("pointerup", () => { bHeld = false; brakeHeld = false; boostHeld = false; climbHeld = false; diveHeld = false; });
+addEventListener("pointercancel", () => { bHeld = false; brakeHeld = false; boostHeld = false; climbHeld = false; diveHeld = false; });
 // keyboard nitro (Shift) while driving
 const boosting = () => (boostHeld || keys.has("ShiftLeft") || keys.has("ShiftRight")) && boostMeter > 0.04;   // nitro in a car, lift on a jetpack
 // keyboard handbrake (Space) while driving
 const braking = () => brakeHeld || (!!driving && keys.has("Space") && !dlgLines);
+// aircraft vertical controls: dedicated ▲/▼ buttons, or Shift/Space on keyboard
+const ascendInput = () => climbHeld || boostHeld || keys.has("ShiftLeft") || keys.has("ShiftRight");
+const descendInput = () => diveHeld || brakeHeld || (keys.has("Space") && !dlgLines);
 
 function readInput() {
   let mx = joyX, mz = joyY;
@@ -3480,6 +3523,7 @@ function nearestCar() {
   for (const t of traffic) if (!t.jacked) consider(t, 16);  // ...or jack any street car nearby
   for (const hv of helis) consider(hv, 26);                 // ...or hop in the chopper
   for (const bt of boats) consider(bt, 28);                 // ...or take a boat at the shore
+  for (const pl of planes) consider(pl, 30);                // ...or a plane at the airport
   return best;
 }
 function nearestPersonalCar() {
@@ -3586,8 +3630,11 @@ function updateHUD() {
 
   // brake/boost buttons + speedometer: only while driving · punch: only on foot
   const drive = driving && !dlgLines && !garageOpen && !statsOpen && !styleOpen;
-  brakeBtn.style.display = drive ? "block" : "none";
-  boostBtn.style.display = drive ? "block" : "none";
+  const flying = drive && (driving.heli || driving.plane);   // aircraft use ▲/▼ instead of boost/brake
+  brakeBtn.style.display = (drive && !flying) ? "block" : "none";
+  boostBtn.style.display = (drive && !flying) ? "block" : "none";
+  climbBtn.style.display = flying ? "block" : "none";
+  diveBtn.style.display = flying ? "block" : "none";
   punchBtn.style.display = (!driving && !dlgLines && !garageOpen && !statsOpen && !styleOpen && !arcadeOpen) ? "block" : "none";
   { const w = armed(); punchBtn.textContent = (inside && intTheme === "bowling") ? "🎳 BOWL" : w ? "🔫 " + ammoOf(w) : "PUNCH"; }
   const menus = dlgLines || garageOpen || statsOpen || styleOpen || arcadeOpen;
@@ -3715,6 +3762,8 @@ function drawFullMap() {
   ctx.fillStyle = "#7fd6ff"; ctx.fillRect(Wx(GARAGE.x) - 4, Wz(GARAGE.z) - 4, 8, 8);              // garage
   for (const hv of helis) dot(ctx, hv.x, hv.z, sc, 4, "#ffffff");                                 // chopper
   for (const bt of boats) dot(ctx, bt.x, bt.z, sc, 4, "#cfe8ff");                                 // boats
+  ctx.fillStyle = "#bfe0ff"; ctx.textAlign = "left"; ctx.font = "bold " + Math.max(9, S * 0.02 | 0) + "px sans-serif";
+  ctx.fillText("✈ AIRPORT ◄", 4, Wz(0));                                                // airport is west of the grid
   for (const p of police) if (p.active) dot(ctx, p.x, p.z, sc, 4, "#ff3b3b");                      // police
   if (jobMarker.visible) dot(ctx, jobMarker.position.x, jobMarker.position.z, sc, 5, "#ffd24a");  // job objective
   const obj = currentObjective();
@@ -4153,7 +4202,7 @@ function doActionA() {
   if (para) return;                                // busy under the canopy
   if (driving) {                                   // exit car / chopper
     const c = driving;
-    if (c.heli && c.y > 3) {                        // bail out midair -> parachute
+    if ((c.heli || c.plane) && c.y > 3) {           // bail out midair -> parachute
       para = {}; player.x = c.x; player.z = c.z; player.y = c.y; player.speed = 0;
       driving = null; hero.group.visible = true;
       paraMesh.visible = true; paraMesh.position.set(player.x, player.y + 2.4, player.z);
@@ -4255,22 +4304,38 @@ function update(dt) {
   if (driving) {
     const c = driving;
     if (c.heli) {
-      // ---- helicopter flight: stick steers/thrusts, BOOST climbs, BRAKE descends ----
+      // ---- helicopter: ▲ lifts straight up, ▼ descends, HOVERS when neither held; joystick yaws + tilts to move ----
       const dry = fuel <= 0;
-      c.h -= inp.mx * 1.7 * dt;
-      let lift = -1.5;                                              // settles gently with no input
-      if (boosting() && !dry) lift = 16; else if (braking()) lift = -14;
-      c.y = clamp((c.y || 0) + lift * dt, 0, 140);
-      const fwd = dry ? 0 : Math.max(0, inp.mz);
+      c.h -= inp.mx * 1.7 * dt;                                     // yaw with the stick
+      let lift = 0;                                                // hover (hold altitude) with no input
+      if (ascendInput() && !dry) lift = 17; else if (descendInput()) lift = -15;
+      c.y = clamp((c.y || 0) + lift * dt, 0, 150);
+      const fwd = dry ? 0 : Math.max(0, inp.mz);                    // push the stick forward to fly forward
       c.speed = clamp(c.speed + (fwd * 30 - c.speed) * Math.min(1, 2.5 * dt), 0, 34);
-      c.x = clamp(c.x + Math.sin(c.h) * c.speed * dt, -HALF + 3, HALF - 3);
-      c.z = clamp(c.z + Math.cos(c.h) * c.speed * dt, -HALF + 3, HALF - 3);
-      fuel = Math.max(0, fuel - (1.0 + c.speed * 0.02) * dt);
+      c.x = clamp(c.x + Math.sin(c.h) * c.speed * dt, -HALF - 600, HALF + 600);
+      c.z = clamp(c.z + Math.cos(c.h) * c.speed * dt, -HALF - 600, HALF + 600);
+      fuel = Math.max(0, fuel - (0.9 + c.speed * 0.02) * dt);
       c.mesh.position.set(c.x, c.y, c.z);
-      c.mesh.rotation.set(-c.speed * 0.012, c.h, inp.mx * 0.22);
+      c.mesh.rotation.set(-c.speed * 0.014, c.h, inp.mx * 0.22);    // nose dips when moving, banks in turns
       if (c.rotor) c.rotor.rotation.y += 34 * dt;
       if (c.tail) c.tail.rotation.x += 40 * dt;
       if (c.y < 6 && Math.random() < 0.5) emit(c.x + rr(-2, 2), 0.25, c.z + rr(-2, 2), rr(-1, 1), rr(0.2, 0.8), rr(-1, 1), 0.4, 0.62, 0.6, 0.52);   // rotor downwash
+    } else if (c.plane) {
+      // ---- plane: always thrusting forward; ▲ climbs, ▼ dives, joystick banks/turns ----
+      const dry = fuel <= 0;
+      c.h -= inp.mx * 1.05 * dt * clamp(c.speed / 14, 0.25, 1);     // banked turns, sharper with speed
+      const throttle = dry ? 0 : (1 + Math.max(0, inp.mz));         // cruises, stick forward = faster
+      c.speed = clamp(c.speed + (throttle * 26 - c.speed) * Math.min(1, 1.2 * dt), 0, 60);
+      // needs runway speed before it'll leave the ground
+      let vy = 0;
+      if (c.speed > 16) { if (ascendInput()) vy = 14; else if (descendInput()) vy = -16; else if (c.y > 0.1) vy = -3; }
+      c.y = clamp((c.y || 0) + vy * dt, 0, 170);
+      c.x = clamp(c.x + Math.sin(c.h) * c.speed * dt, -HALF - 600, HALF + 600);
+      c.z = clamp(c.z + Math.cos(c.h) * c.speed * dt, -HALF - 600, HALF + 600);
+      fuel = Math.max(0, fuel - (1.0 + c.speed * 0.02) * dt);
+      c.mesh.position.set(c.x, c.y, c.z);
+      c.mesh.rotation.set(-clamp(vy * 0.03, -0.4, 0.4), c.h, inp.mx * 0.5);   // pitch with climb, roll in turns
+      if (c.prop) c.prop.rotation.z += 50 * dt;
     } else if (c.boat) {
       // ---- arcade boat: throttle forward, turn scales with speed, stays on the harbour ----
       c.h -= inp.mx * 1.4 * dt * clamp(Math.abs(c.speed) / 6, 0.25, 1);
@@ -4715,7 +4780,7 @@ requestAnimationFrame(frame);
 
 // dev instrumentation: programmatic state/input access for automated smoke runs (?dev=1 tooling)
 globalThis.__palmCity = {
-  state, player, cars, police, traffic, atms, helis, boats, gangsters, allies, GANGS, SHOPS, update, beginPlay, advanceDialogue,
+  state, player, cars, police, traffic, atms, helis, boats, planes, gangsters, allies, GANGS, SHOPS, AIRPORT, update, beginPlay, advanceDialogue,
   startJob: id => startJob(id),
   openMap: () => openMap(), openWheel: () => openWheel(), openPhone: () => openPhone(),
   forceCrime: () => { if (wanted < 5) wanted++; wantedCD = 14; },
