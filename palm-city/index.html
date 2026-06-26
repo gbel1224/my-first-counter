@@ -77,6 +77,11 @@
     width:72px; height:72px; background:radial-gradient(circle at 35% 30%,#ffc15e,#ff8a1e); color:#3d2410; font-size:13px; }
   #punch { bottom:calc(126px + env(safe-area-inset-bottom, 0px)); right:calc(116px + env(safe-area-inset-right, 0px));
     width:72px; height:72px; background:radial-gradient(circle at 35% 30%,#ff9a82,#e0604a); color:#fff; font-size:13px; }
+  /* aircraft up/down (shown only while flying a heli/plane) */
+  #climbbtn, #divebtn { right:calc(118px + env(safe-area-inset-right, 0px)); width:78px; height:78px;
+    background:radial-gradient(circle at 35% 30%,#bfe0ff,#6fb0e8); color:#0d2233; font-size:32px; display:none; }
+  #climbbtn { bottom:calc(122px + env(safe-area-inset-bottom, 0px)); }
+  #divebtn { bottom:calc(30px + env(safe-area-inset-bottom, 0px)); }
   #speedo { position:absolute; right:calc(12px + env(safe-area-inset-right, 0px));
     top:calc(150px + env(safe-area-inset-top, 0px)); display:none;
     filter:drop-shadow(0 3px 8px rgba(0,0,0,.4)); }
@@ -292,6 +297,8 @@
   <button id="btnB" class="btn pe"></button>
   <button id="brake" class="btn pe">BRAKE</button>
   <button id="boost" class="btn pe">BOOST</button>
+  <button id="climbbtn" class="btn pe">▲</button>
+  <button id="divebtn" class="btn pe">▼</button>
   <button id="punch" class="btn pe">PUNCH</button>
   <button id="btnA" class="btn pe"></button>
   <button id="doorbtn" class="pe">🚪 ENTER</button>
