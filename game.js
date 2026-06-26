@@ -1517,6 +1517,37 @@ for (let t = 0; t < 260; t++) {
   });
 }
 
+// ---------- gang turf wars: hostile crews hold 3 districts; wipe a turf to capture it ----------
+const GANGS = [
+  { name: "Crimson Kings", x: bc(5), z: bc(5), r: 80, pal: 0, captured: false, kills: 0, need: 8 },
+  { name: "Azure Mob", x: bc(N - 6), z: bc(6), r: 80, pal: 1, captured: false, kills: 0, need: 8 },
+  { name: "Verde Cartel", x: bc(6), z: bc(N - 6), r: 80, pal: 2, captured: false, kills: 0, need: 8 },
+];
+const GANG_PALS = [
+  { shirt: 0x8c2020, pants: 0x1a1a1f, skin: 0xc98f6b, hair: 0x141014 },
+  { shirt: 0x1f3f8c, pants: 0x16181d, skin: 0xe8b08a, hair: 0x20160f },
+  { shirt: 0x1f6b3a, pants: 0x16181d, skin: 0x8d5a3b, hair: 0x100c0a },
+];
+const gangWalkerGeos = GANG_PALS.map(walkerGeos);
+const gangsters = [];
+{
+  let _gs = 0xA53F19C7 >>> 0;
+  const grand = () => { _gs = (_gs + 0x6D2B79F5) >>> 0; let t = _gs; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  GANGS.forEach((G, gi) => {
+    for (let k = 0; k < 7; k++) {
+      const ang = grand() * 6.2832, rad = 8 + grand() * (G.r - 18);
+      const w = makeWalker(gangWalkerGeos[G.pal]); scene.add(w.group);
+      gangsters.push({
+        mesh: w.group, legL: w.legL, legR: w.legR, armL: w.armL, armR: w.armR, kneeL: w.kneeL, kneeR: w.kneeR,
+        gang: gi, hp: 100, alive: true, respawn: 0, shootCD: grand() * 2,
+        x: clamp(G.x + Math.cos(ang) * rad, -HALF + 4, HALF - 4),
+        z: clamp(G.z + Math.sin(ang) * rad, -HALF + 4, HALF - 4),
+        h: grand() * 6.2832, walkPhase: grand() * 6.2832,
+      });
+    }
+  });
+}
+
 // parked cars along the curbs — static, rendered as a single instanced draw call
 {
   const edge = ROAD / 2 - 1.3;                         // sit just inside the road edge, by the curb
@@ -2940,6 +2971,7 @@ function doShoot() {
     const probe = c => { const dx = c.x - player.x, dz = c.z - player.z, t = dx * fx + dz * fz; if (t < 1 || t > impT || Math.abs(dx * fz - dz * fx) > 2.4) return; impT = t; ix = c.x; iz = c.z; };
     for (const c of traffic) if (!c.dead) probe(c);
     for (const c of police) if (c.active && !c.dead) probe(c);
+    for (const g of gangsters) if (g.alive) probe(g);
     explodeAt(ix, iz, w.blast || 7);
     registerCrime();
     return;
@@ -2962,7 +2994,15 @@ function doShoot() {
     };
     for (const c of traffic) hitCar(c);
     for (const c of police) if (c.active) hitCar(c);
-    if (bestCar) damageCar(bestCar, 24);
+    let bestGang = null;
+    for (const g of gangsters) {                          // gangsters take aimed hits too
+      if (!g.alive) continue;
+      const dx = g.x - player.x, dz = g.z - player.z, t = dx * ax + dz * az;
+      if (t < 1 || t > bestT || Math.abs(dx * az - dz * ax) > 1.6) continue;
+      bestT = t; bestGang = g; bestCar = null; best = null;
+    }
+    if (bestGang) damageGangster(bestGang, 34);
+    else if (bestCar) damageCar(bestCar, 24);
     else if (best) {
       best.flee = 2.4; best.h = Math.atan2(best.x - player.x, best.z - player.z);
       best.x += ax * 1.3; best.z += az * 1.3;
@@ -3017,6 +3057,7 @@ function explodeAt(x, z, r) {                                 // an AoE blast (R
   let hitAny = false;
   for (const c of traffic) if (!c.dead && dist2(c.x, c.z, x, z) < r * r) { explodeCar(c); hitAny = true; }
   for (const c of police) if (c.active && !c.dead && dist2(c.x, c.z, x, z) < r * r) { explodeCar(c); hitAny = true; }
+  for (const g of gangsters) if (g.alive && dist2(g.x, g.z, x, z) < r * r) killGangster(g);   // blast catches gangsters
   if (!hitAny) {                                             // empty ground — still a satisfying boom
     burst(x, 1.2, z, 38, 3.0, 4.2, 0.85, 1.0, 0.55, 0.14);
     burst(x, 1.7, z, 20, 2.2, 5.0, 1.3, 0.28, 0.28, 0.28);
@@ -3034,6 +3075,70 @@ function updateExplosions(dt) {
   for (const a of atms) if (a.cd > 0) a.cd -= dt;
   for (const hv of helis) if (hv !== driving && hv.y > 0.01) { hv.y = Math.max(0, hv.y - 7 * dt); hv.mesh.position.set(hv.x, hv.y, hv.z); if (hv.rotor) hv.rotor.rotation.y += 18 * dt; }   // abandoned chopper auto-lands
   if (chaosCD > 0) { chaosCD -= dt; if (chaosCD <= 0 && chaos > 0) { const reward = earn(Math.round(chaos)); toast("💥 RAMPAGE BONUS  +$" + reward); AudioSys.play("cash", 0.8); chaos = 0; } }
+  for (const G of GANGS) if (G.captured) state.money += 4 * dt;   // captured turf pays tribute
+}
+function damageGangster(g, dmg) {
+  if (!g.alive) return;
+  g.hp -= dmg;
+  burst(g.x, 1.0, g.z, 8, 1.0, 1.4, 0.45, 0.95, 0.3, 0.3);
+  if (g.hp <= 0) killGangster(g);
+}
+function killGangster(g) {
+  if (!g.alive) return;
+  g.alive = false; g.respawn = 6; g.mesh.visible = false;
+  burst(g.x, 0.9, g.z, 18, 1.7, 2.1, 0.6, 0.9, 0.3, 0.3); addChaos(40);
+  const G = GANGS[g.gang];
+  if (!G.captured) {
+    G.kills++;
+    if (G.kills >= G.need) captureTurf(g.gang);
+    else toast("🔫 " + G.name + " turf  " + G.kills + "/" + G.need);
+  }
+}
+function captureTurf(gi) {
+  const G = GANGS[gi]; if (G.captured) return;
+  G.captured = true;
+  const reward = earn(3000);
+  toast("🚩 TURF CAPTURED — " + G.name + "  +$" + reward);
+  AudioSys.play("jingle", 1.0); flash("#ffe24a", 0.5); buzz([0, 60, 40, 120]); save();
+}
+function updateGangs(dt) {
+  const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
+  for (const g of gangsters) {
+    const G = GANGS[g.gang];
+    if (!g.alive) {
+      g.respawn -= dt;
+      if (g.respawn <= 0 && !G.captured) {
+        g.x = clamp(G.x + (Math.random() - 0.5) * G.r, -HALF + 4, HALF - 4);
+        g.z = clamp(G.z + (Math.random() - 0.5) * G.r, -HALF + 4, HALF - 4);
+        g.hp = 100; g.alive = true; g.mesh.visible = true;
+      }
+      continue;
+    }
+    const dx = px - g.x, dz = pz - g.z, d = Math.hypot(dx, dz) || 1;
+    const aggro = !G.captured && (d < 48 || dist2(px, pz, G.x, G.z) < G.r * G.r);
+    let moving = false;
+    if (aggro) {
+      g.h = lerpAngle(g.h, Math.atan2(dx, dz), 1 - Math.exp(-4 * dt));
+      if (d > 6) { const sp = 4.2; g.x += Math.sin(g.h) * sp * dt; g.z += Math.cos(g.h) * sp * dt; g.walkPhase += sp * dt * 2.6; moving = true; }
+      if (driving && Math.abs(driving.speed) > 8 && d < 3) { killGangster(g); continue; }   // run them over
+      g.shootCD -= dt;
+      if (g.shootCD <= 0 && d < 36 && !dlgLines) {
+        g.shootCD = rr(0.8, 1.6);
+        burst(g.x + Math.sin(g.h) * 0.8, 1.3, g.z + Math.cos(g.h) * 0.8, 4, 0.5, 0.5, 0.14, 1.0, 0.5, 0.3);
+        AudioSys.play("blip", 0.4);
+        const fast = (driving ? Math.abs(driving.speed) : player.speed) > 6;
+        if (Math.random() < clamp(0.45 - d * 0.009 - (fast ? 0.15 : 0), 0.05, 0.45)) hurt(driving ? 4 : 7);
+      }
+    }
+    const sw = moving ? Math.sin(g.walkPhase) * 0.4 : g.legL.rotation.x * 0.85;
+    g.legL.rotation.x = sw; g.legR.rotation.x = -sw;
+    g.armL.rotation.x = -sw * 0.7; g.armR.rotation.x = sw * 0.7;
+    const kA = moving ? 0.95 : 0;
+    g.kneeL.rotation.x = kA * Math.max(0, -Math.cos(g.walkPhase));
+    g.kneeR.rotation.x = kA * Math.max(0, Math.cos(g.walkPhase));
+    g.mesh.position.set(g.x, groundY(g.x, g.z), g.z);
+    g.mesh.rotation.y = g.h;
+  }
 }
 
 // ---------- input ----------
@@ -4082,6 +4187,7 @@ function update(dt) {
   updateParamedic(dt);
   updatePolice(dt);
   updateExplosions(dt);
+  updateGangs(dt);
   achTimer -= dt; if (achTimer <= 0) { achTimer = 1; refreshAch(true); }
   {
     const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
@@ -4297,7 +4403,7 @@ requestAnimationFrame(frame);
 
 // dev instrumentation: programmatic state/input access for automated smoke runs (?dev=1 tooling)
 globalThis.__palmCity = {
-  state, player, cars, police, traffic, atms, helis, update, beginPlay, advanceDialogue,
+  state, player, cars, police, traffic, atms, helis, gangsters, GANGS, update, beginPlay, advanceDialogue,
   forceCrime: () => { if (wanted < 5) wanted++; wantedCD = 14; },
   hurt: n => hurt(n),
   punch: () => doPunch(),
