@@ -1506,6 +1506,19 @@ function makeBoat(x, z) {
 boats.push(makeBoat(10, SEA_Z + 7));
 boats.push(makeBoat(-90, SEA_Z + 7));
 
+// ---------- jetpack pickup: grab it once, then hold BOOST on foot to fly ----------
+const jetpackPickup = { x: PLAZA.x - 26, z: Rc(3) - 12 };
+const jpMesh = new THREE.Group();
+{
+  const mat = new THREE.MeshStandardMaterial({ color: 0xff7a33, roughness: 0.4, metalness: 0.5, emissive: 0x5a2600, emissiveIntensity: 0.6 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.0, 0.5), mat); body.position.y = 1.1; jpMesh.add(body);
+  const t1 = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 1.0, 8), mat); t1.position.set(-0.46, 1.0, 0); jpMesh.add(t1);
+  const t2 = t1.clone(); t2.position.x = 0.46; jpMesh.add(t2);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.06, 6, 18), new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true, opacity: 0.8 }));
+  ring.rotation.x = Math.PI / 2; ring.position.y = 0.35; jpMesh.add(ring);
+  jpMesh.position.set(jetpackPickup.x, CURB, jetpackPickup.z); scene.add(jpMesh);
+}
+
 // police cars (spawned by wanted level)
 const POLICE_N = 5;   // up to 5-star wanted
 const police = [];
@@ -2279,7 +2292,7 @@ const state = {
 };
 function save() {
   state.maxMoney = Math.max(state.maxMoney || 0, Math.floor(state.money));
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, outfit: state.outfit, haircut: state.haircut, jacket: state.jacket, hat: state.hat, glasses: state.glasses, beard: state.beard, weapon: state.weapon, ammo: state.ammo, decor: state.decor, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, outfit: state.outfit, haircut: state.haircut, jacket: state.jacket, hat: state.hat, glasses: state.glasses, beard: state.beard, weapon: state.weapon, ammo: state.ammo, jetpack: !!state.jetpack, decor: state.decor, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
 }
 function load() {
   try {
@@ -2298,7 +2311,7 @@ function load() {
       state.home = !!d.home; state.house = !!d.house; state.apt = !!d.apt;
       state.outfit = d.outfit == null ? -1 : d.outfit; state.haircut = d.haircut == null ? -1 : d.haircut;
       state.jacket = d.jacket || 0; state.hat = d.hat || 0; state.glasses = d.glasses || 0; state.beard = d.beard || 0;
-      state.weapon = (d.weapon == null ? null : d.weapon); state.ammo = d.ammo || {};
+      state.weapon = (d.weapon == null ? null : d.weapon); state.ammo = d.ammo || {}; state.jetpack = !!d.jetpack;
       if (d.decor) state.decor = Object.assign({}, state.decor, d.decor);
       state.ach = d.ach || [];
       state.xp = d.xp || 0;
@@ -3162,6 +3175,14 @@ function updateExplosions(dt) {
   for (const hv of helis) if (hv !== driving && hv.y > 0.01) { hv.y = Math.max(0, hv.y - 7 * dt); hv.mesh.position.set(hv.x, hv.y, hv.z); if (hv.rotor) hv.rotor.rotation.y += 18 * dt; }   // abandoned chopper auto-lands
   if (chaosCD > 0) { chaosCD -= dt; if (chaosCD <= 0 && chaos > 0) { const reward = earn(Math.round(chaos)); toast("💥 RAMPAGE BONUS  +$" + reward); AudioSys.play("cash", 0.8); chaos = 0; } }
   for (const G of GANGS) if (G.captured) state.money += 4 * dt;   // captured turf pays tribute
+  if (state.jetpack) { if (jpMesh.visible) jpMesh.visible = false; }
+  else {
+    jpMesh.rotation.y += dt; jpMesh.position.y = CURB + Math.sin(simTime * 2) * 0.2;
+    if (!driving && dist2(player.x, player.z, jetpackPickup.x, jetpackPickup.z) < 9) {
+      state.jetpack = true; jpMesh.visible = false;
+      toast("🚀 JETPACK! Hold BOOST to fly"); AudioSys.play("jingle", 1.0); flash("#ffd166", 0.3); buzz(30); save();
+    }
+  }
 }
 function damageGangster(g, dmg) {
   if (!g.alive) return;
@@ -3295,7 +3316,7 @@ punchBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropag
 addEventListener("pointerup", () => { bHeld = false; brakeHeld = false; boostHeld = false; });
 addEventListener("pointercancel", () => { bHeld = false; brakeHeld = false; boostHeld = false; });
 // keyboard nitro (Shift) while driving
-const boosting = () => (boostHeld || (!!driving && (keys.has("ShiftLeft") || keys.has("ShiftRight")))) && boostMeter > 0.04;
+const boosting = () => (boostHeld || keys.has("ShiftLeft") || keys.has("ShiftRight")) && boostMeter > 0.04;   // nitro in a car, lift on a jetpack
 // keyboard handbrake (Space) while driving
 const braking = () => brakeHeld || (!!driving && keys.has("Space") && !dlgLines);
 
@@ -4052,6 +4073,30 @@ function openPhone() {
 phoneBtn.addEventListener("click", () => phoneOpen ? closePhone() : openPhone());
 phoneEl.addEventListener("click", e => { if (e.target === phoneEl) closePhone(); });
 
+// ---------- consolidated HUD menu: one ☰ button replaces the floating 🔫/📱/🗺 buttons ----------
+if (wpnBtn.style) wpnBtn.style.display = "none";
+if (phoneBtn.style) phoneBtn.style.display = "none";
+let menuOpen = false;
+const menuBtn = dom("menubtn"), hudMenu = dom("hudmenu"), hudMenuCard = dom("hudmenucard");
+menuBtn.textContent = "☰";
+if (menuBtn.style) menuBtn.style.cssText = "position:absolute;right:16px;top:108px;width:50px;height:50px;border-radius:50%;font-size:22px;background:rgba(28,30,38,.72);color:#fff;border:1px solid rgba(255,205,140,.3);z-index:25;";
+if (hudMenu.style) hudMenu.style.cssText = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.4);z-index:72;";
+if (hudMenuCard.style) hudMenuCard.style.cssText = "display:flex;flex-direction:column;gap:9px;width:240px;padding:18px;background:rgba(20,22,28,.95);border-radius:18px;border:1px solid rgba(255,205,140,.25);";
+function closeMenu() { menuOpen = false; hudMenu.style.display = "none"; }
+function openMenu() {
+  if (state.phase !== "play" || dlgLines) return;
+  hudMenuCard.innerHTML = "";
+  [["🔫 Weapons", openWheel], ["📱 Jobs", openPhone], ["🗺 Map", openMap]].forEach(([label, fn]) => {
+    const b = document.createElement("button"); b.className = "pe"; b.textContent = label;
+    b.style.cssText = "padding:11px;border-radius:12px;font-size:15px;color:#fff;background:rgba(40,42,52,.96);border:1px solid rgba(255,255,255,.16);";
+    b.addEventListener("click", () => { closeMenu(); fn(); });
+    hudMenuCard.appendChild(b);
+  });
+  menuOpen = true; hudMenu.style.display = "flex";
+}
+menuBtn.addEventListener("click", () => menuOpen ? closeMenu() : openMenu());
+hudMenu.addEventListener("click", e => { if (e.target === hudMenu) closeMenu(); });
+
 // ---------- actions ----------
 function doActionA() {
   if (para) return;                                // busy under the canopy
@@ -4155,6 +4200,7 @@ function update(dt) {
     else if (driving && fuel < 18 && !fuelWarned) { fuelWarned = true; toast(STR.lowFuel); }
     if (fuel > 25) fuelWarned = false; }
 
+  let airMode = false;   // true while parachuting or jetpacking (skips the on-ground player-mesh snap)
   if (driving) {
     const c = driving;
     if (c.heli) {
@@ -4265,6 +4311,7 @@ function update(dt) {
     camYaw = lerpAngle(camYaw, c.h, 1 - Math.exp(-3.2 * dt));
   } else if (para) {
     // ---- parachuting: slow descent with gentle steering ----
+    airMode = true;
     player.h -= inp.mx * 1.1 * dt;
     const mv = Math.max(0, inp.mz) * 6.5;
     player.x = clamp(player.x + Math.sin(player.h) * mv * dt, -HALF + 3, HALF - 3);
@@ -4276,6 +4323,22 @@ function update(dt) {
     hero.group.rotation.y = player.h;
     paraMesh.position.set(player.x, player.y + 2.4, player.z);
     camYaw = lerpAngle(camYaw, player.h, 1 - Math.exp(-3 * dt));
+  } else if (state.jetpack && (boosting() || player.y > groundY(player.x, player.z) + 0.35)) {
+    // ---- jetpack flight: BOOST climbs, stick moves (camera-relative), descend when you let go ----
+    airMode = true;
+    const gy = groundY(player.x, player.z);
+    const f = { x: Math.sin(camYaw), z: Math.cos(camYaw) }, r = { x: -Math.cos(camYaw), z: Math.sin(camYaw) };
+    const wx = f.x * inp.mz + r.x * inp.mx, wz = f.z * inp.mz + r.z * inp.mx;
+    player.x = clamp(player.x + wx * 9 * dt, -HALF + 3, HALF - 3);
+    player.z = clamp(player.z + wz * 9 * dt, -HALF + 3, HALF - 3);
+    player.y = clamp(player.y + (boosting() ? 15 : -11) * dt, gy, 95);
+    if (Math.hypot(wx, wz) > 0.01) player.h = Math.atan2(wx, wz);
+    player.speed = 0;
+    hero.legL.rotation.x = 0.25; hero.legR.rotation.x = 0.25; hero.kneeL.rotation.x = 0.35; hero.kneeR.rotation.x = 0.35;
+    hero.armL.rotation.x = 0.5; hero.armR.rotation.x = 0.5;
+    hero.group.position.set(player.x, player.y, player.z);
+    hero.group.rotation.y = player.h;
+    if (boosting()) emit(player.x, player.y + 0.15, player.z, rr(-0.3, 0.3), rr(-0.9, -0.3), rr(-0.3, 0.3), 0.4, 1.0, 0.7, 0.3);   // thrust
   } else {
     // camera-relative walk
     const f = { x: Math.sin(camYaw), z: Math.cos(camYaw) };
@@ -4401,8 +4464,8 @@ function update(dt) {
 
   if (toastTimer > 0) { toastTimer -= dt; if (toastTimer <= 0) elToast.style.opacity = 0; }
 
-  // player mesh
-  if (!driving) {
+  // player mesh (skipped while airborne — the parachute/jetpack branches pose the hero themselves)
+  if (!driving && !airMode) {
     const gy = groundY(player.x, player.z);
     player.y += (gy - player.y) * Math.min(1, 12 * dt);
     hero.group.position.set(player.x, player.y, player.z);
@@ -4618,5 +4681,5 @@ globalThis.__palmCity = {
   closeStats: () => closeStats(),
   refreshAch: () => refreshAch(true),
   addXP: n => addXP(n),
-  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, jobId: job && job.id, jobProg: job && job.prog, jobT: job && Math.round(job.t), jobDx: job && job.dx, jobDz: job && job.dz, side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen, race: race.stage, rcp: race.cp, stats: statsOpen, health, fuel, tut: tutOpen, lvl: state.lvl, xp: state.xp, lvlMult }),
+  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, jobId: job && job.id, jobProg: job && job.prog, jobT: job && Math.round(job.t), jobDx: job && job.dx, jobDz: job && job.dz, jetpack: !!state.jetpack, jpX: jetpackPickup.x, jpZ: jetpackPickup.z, py: +player.y.toFixed(2), side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen, race: race.stage, rcp: race.cp, stats: statsOpen, health, fuel, tut: tutOpen, lvl: state.lvl, xp: state.xp, lvlMult }),
 };
