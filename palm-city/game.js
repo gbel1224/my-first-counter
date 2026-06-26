@@ -4052,6 +4052,30 @@ function openPhone() {
 phoneBtn.addEventListener("click", () => phoneOpen ? closePhone() : openPhone());
 phoneEl.addEventListener("click", e => { if (e.target === phoneEl) closePhone(); });
 
+// ---------- consolidated HUD menu: one ☰ button replaces the floating 🔫/📱/🗺 buttons ----------
+if (wpnBtn.style) wpnBtn.style.display = "none";
+if (phoneBtn.style) phoneBtn.style.display = "none";
+let menuOpen = false;
+const menuBtn = dom("menubtn"), hudMenu = dom("hudmenu"), hudMenuCard = dom("hudmenucard");
+menuBtn.textContent = "☰";
+if (menuBtn.style) menuBtn.style.cssText = "position:absolute;right:16px;top:108px;width:50px;height:50px;border-radius:50%;font-size:22px;background:rgba(28,30,38,.72);color:#fff;border:1px solid rgba(255,205,140,.3);z-index:25;";
+if (hudMenu.style) hudMenu.style.cssText = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.4);z-index:72;";
+if (hudMenuCard.style) hudMenuCard.style.cssText = "display:flex;flex-direction:column;gap:9px;width:240px;padding:18px;background:rgba(20,22,28,.95);border-radius:18px;border:1px solid rgba(255,205,140,.25);";
+function closeMenu() { menuOpen = false; hudMenu.style.display = "none"; }
+function openMenu() {
+  if (state.phase !== "play" || dlgLines) return;
+  hudMenuCard.innerHTML = "";
+  [["🔫 Weapons", openWheel], ["📱 Jobs", openPhone], ["🗺 Map", openMap]].forEach(([label, fn]) => {
+    const b = document.createElement("button"); b.className = "pe"; b.textContent = label;
+    b.style.cssText = "padding:11px;border-radius:12px;font-size:15px;color:#fff;background:rgba(40,42,52,.96);border:1px solid rgba(255,255,255,.16);";
+    b.addEventListener("click", () => { closeMenu(); fn(); });
+    hudMenuCard.appendChild(b);
+  });
+  menuOpen = true; hudMenu.style.display = "flex";
+}
+menuBtn.addEventListener("click", () => menuOpen ? closeMenu() : openMenu());
+hudMenu.addEventListener("click", e => { if (e.target === hudMenu) closeMenu(); });
+
 // ---------- actions ----------
 function doActionA() {
   if (para) return;                                // busy under the canopy
