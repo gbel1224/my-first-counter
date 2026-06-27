@@ -693,9 +693,12 @@ let buildingMat = null;
     const cen = (N - 1) / 2;
     const dc = Math.max(Math.abs(i - cen), Math.abs(j - cen));  // 0 = dead centre … grows to the city edge
     const downtown = dc <= 1.5;                                 // core 4x4
+    // Camellia-style skyline: a smooth closeness factor that peaks at dead centre and
+    // fades out ~6 blocks away, so towers rise into a tight central cluster of spires.
+    const core = clamp(1 - dc / 6, 0, 1);                       // 1 at centre … 0 at the edge of the core
     const resid = isResid(i, j), slum = isGhetto(i, j);
-    const skip = downtown ? 0.08 : 0.18;                       // fill blocks more densely than before
-    const towerChance = downtown ? 0.92 : 0.55;                // skyscrapers almost everywhere downtown
+    const skip = downtown ? 0.06 : 0.18 - core * 0.08;          // pack the core denser
+    const towerChance = downtown ? 0.94 : 0.55 + core * 0.34;   // skyscrapers cluster toward the centre
     for (const qx of [0, 1]) for (const qz of [0, 1]) {
       if (rng() < skip) continue;
       const x = blockMin(i) + 8 + 13 + qx * 28 + rr(-2, 2);
@@ -709,7 +712,8 @@ let buildingMat = null;
         ghetto.push({ x, z, w, d, h, tint: pick(GHETTO_TINTS) });
         addCollider(x, z, w / 2, d / 2);
       } else if (rng() < towerChance) {                        // glass skyscraper — taller in the core
-        const w = rr(15, 22), d = rr(15, 22), h = downtown ? rr(50, 104) : rr(30, 64);
+        // base height plus a centre-weighted bonus -> a dramatic skyline silhouette peaking downtown
+        const w = rr(15, 22), d = rr(15, 22), h = rr(30, 60) + core * core * rr(55, 120);
         towers.push({ x, z, w, d, h, tint: pick(TOWER_TINTS) });
         addCollider(x, z, w / 2, d / 2);
       } else {                                                 // occasional low / mid-rise infill
@@ -4874,6 +4878,8 @@ requestAnimationFrame(frame);
 
 // dev instrumentation: programmatic state/input access for automated smoke runs (?dev=1 tooling)
 globalThis.__palmCity = {
+  THREE, scene, camera, renderer,
+  freeze: v => { paused = v; }, render: () => renderFrame(),
   state, player, cars, police, traffic, atms, helis, boats, planes, gangsters, allies, npcs, GANGS, SHOPS, AIRPORT, update, beginPlay, advanceDialogue,
   talkTo: () => talkTo(nearestTalkNPC()),
   startJob: id => startJob(id),
