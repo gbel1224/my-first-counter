@@ -2386,6 +2386,7 @@ const state = {
   medals: {},            // best medal tier per circuit id (1 bronze / 2 silver / 3 gold)
   maxMoney: 0,           // high-water cash mark (for the Tycoon achievement)
   bestRampage: 0,        // best-ever banked rampage score (the chase-the-record hook)
+  bossWins: 0,           // times the rival nemesis boss has been toppled
   busts: 0,              // crooks busted (vigilante)
   rescues: 0,            // patients delivered (paramedic)
   home: false,           // owns the central condo (legacy "home" flag)
@@ -2404,7 +2405,7 @@ const state = {
 };
 function save() {
   state.maxMoney = Math.max(state.maxMoney || 0, Math.floor(state.money));
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, bestRampage: state.bestRampage || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, outfit: state.outfit, haircut: state.haircut, jacket: state.jacket, hat: state.hat, glasses: state.glasses, beard: state.beard, weapon: state.weapon, ammo: state.ammo, jetpack: !!state.jetpack, decor: state.decor, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, bestRampage: state.bestRampage || 0, bossWins: state.bossWins || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, outfit: state.outfit, haircut: state.haircut, jacket: state.jacket, hat: state.hat, glasses: state.glasses, beard: state.beard, weapon: state.weapon, ammo: state.ammo, jetpack: !!state.jetpack, decor: state.decor, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
 }
 function load() {
   try {
@@ -2419,6 +2420,7 @@ function load() {
       state.medals = d.medals || {};
       state.maxMoney = d.maxMoney || 0;
       state.bestRampage = d.bestRampage || 0;
+      state.bossWins = d.bossWins || 0;
       state.busts = d.busts || 0;
       state.rescues = d.rescues || 0;
       state.home = !!d.home; state.house = !!d.house; state.apt = !!d.apt;
@@ -2975,6 +2977,10 @@ function wasted() {
   health = 100; hurtCD = 2; fuel = 100;
   wanted = 0; wantedCD = 0; crimeCD = 0; bustTimer = 0; copsOnYou = false; holdup = null; getaway = 0;
   for (const p of police) { p.active = false; p.mesh.position.set(0, -9999, 0); }
+  // shake off the rival's hit-squad on death; if it was the showdown, the boss bows out for now
+  for (const g of nemGoons) if (!g.boss) { g.alive = false; g.mesh.visible = false; }
+  NEM.squadOut = false; NEM.squadCD = Math.max(NEM.squadCD, rr(12, 20));
+  if (NEM.showdown) { NEM.showdown = false; nemBoss.alive = false; nemBoss.mesh.visible = false; showBossBar(false); NEM.grudge = 70; }
   save();
 }
 function heatActive() {
@@ -2986,6 +2992,7 @@ function registerCrime() {
   if (mis && mis.race && mState === "active") return;
   if (crimeCD > 0) { wantedCD = 14; return; }
   crimeCD = 1.5; wantedCD = 14;
+  nemAddGrudge(3);                                      // every fresh crime stokes the rival boss's grudge
   if (wanted < 5) { wanted++; toast(STR.wantedToast(wanted)); }
 }
 function bust() {
@@ -3123,6 +3130,7 @@ function doShoot() {
     for (const c of traffic) if (!c.dead) probe(c);
     for (const c of police) if (c.active && !c.dead) probe(c);
     for (const g of gangsters) if (g.alive) probe(g);
+    for (const g of nemGoons) if (g.alive) probe(g);
     explodeAt(ix, iz, w.blast || 7);
     registerCrime();
     return;
@@ -3152,7 +3160,15 @@ function doShoot() {
       if (t < 1 || t > bestT || Math.abs(dx * az - dz * ax) > 1.6) continue;
       bestT = t; bestGang = g; bestCar = null; best = null;
     }
-    if (bestGang) damageGangster(bestGang, 34);
+    let bestNem = null;
+    for (const g of nemGoons) {                            // the boss's enforcers / the boss himself
+      if (!g.alive) continue;
+      const dx = g.x - player.x, dz = g.z - player.z, t = dx * ax + dz * az;
+      if (t < 1 || t > bestT || Math.abs(dx * az - dz * ax) > (g.boss ? 2.0 : 1.6)) continue;
+      bestT = t; bestNem = g; bestGang = null; bestCar = null; best = null;
+    }
+    if (bestNem) damageNem(bestNem, 34);
+    else if (bestGang) damageGangster(bestGang, 34);
     else if (bestCar) damageCar(bestCar, 24);
     else if (best) {
       best.flee = 2.4; best.h = Math.atan2(best.x - player.x, best.z - player.z);
@@ -3318,6 +3334,7 @@ function explodeAt(x, z, r) {                                 // an AoE blast (R
   for (const c of traffic) if (!c.dead && dist2(c.x, c.z, x, z) < r * r) { explodeCar(c); hitAny = true; }
   for (const c of police) if (c.active && !c.dead && dist2(c.x, c.z, x, z) < r * r) { explodeCar(c); hitAny = true; }
   for (const g of gangsters) if (g.alive && dist2(g.x, g.z, x, z) < r * r) killGangster(g);   // blast catches gangsters
+  for (const g of nemGoons) if (g.alive && dist2(g.x, g.z, x, z) < r * r) damageNem(g, g.boss ? 150 : 999);   // and the boss's crew
   if (!hitAny) {                                             // empty ground — still a satisfying boom
     burst(x, 1.0, z, 20, 1.2, 2.0, 0.15, 1.0, 0.97, 0.75);    // white-hot core pop
     burst(x, 1.2, z, 40, 3.4, 4.4, 0.85, 1.0, 0.55, 0.14);
@@ -3451,6 +3468,112 @@ function updateAllies(dt) {
     a.kneeL.rotation.x = kA * Math.max(0, -Math.cos(a.walkPhase)); a.kneeR.rotation.x = kA * Math.max(0, Math.cos(a.walkPhase));
     a.mesh.position.set(a.x, groundY(a.x, a.z), a.z);
     a.mesh.rotation.y = a.h;
+  }
+}
+
+// ---------- NEMESIS: a rival crime boss who builds a grudge, sends hit-squads, then faces you ----------
+const NEM = { name: 'Vic "The Shark" Moreno', grudge: 0, tier: 0, squadCD: 8, squadOut: false, showdown: false, intro: false, defeated: 0, bossMaxHp: 520 };
+const nemGoons = [];
+let nemBoss = null;
+{
+  const goonGeo = walkerGeos({ shirt: 0x17181c, pants: 0x0d0e11, skin: 0xcf9a72, hair: 0x0c0a08 });   // dark-suited enforcers
+  const bossGeo = walkerGeos({ shirt: 0xe6dcb6, pants: 0x1a1c22, skin: 0xd99c6e, hair: 0x141014 });   // flashy cream suit
+  const mk = boss => {
+    const w = makeWalker(boss ? bossGeo : goonGeo); w.group.visible = false; scene.add(w.group);
+    return { mesh: w.group, legL: w.legL, legR: w.legR, armL: w.armL, armR: w.armR, kneeL: w.kneeL, kneeR: w.kneeR,
+      hp: 0, alive: false, shootCD: 0, x: 0, z: 0, h: 0, walkPhase: 0, boss: !!boss };
+  };
+  for (let i = 0; i < 8; i++) nemGoons.push(mk(false));
+  nemBoss = mk(true); nemBoss.mesh.scale.set(1.14, 1.14, 1.14); nemGoons.push(nemBoss);   // boss shares the array so weapons hit it
+}
+const elBossbar = dom("bossbar"), elBossName = dom("bossname"), elBossHp = dom("bosshp");
+function showBossBar(on) { if (elBossbar) elBossbar.classList.toggle("on", on); if (on && elBossName) elBossName.textContent = "☠ " + NEM.name; }
+function updateBossBar() { if (elBossHp && nemBoss) elBossHp.style.width = Math.max(0, nemBoss.hp / NEM.bossMaxHp * 100) + "%"; }
+function nemSquadAlive() { let n = 0; for (const g of nemGoons) if (g.alive && !g.boss) n++; return n; }
+const NEM_TAUNTS = ["You're starting to annoy me.", "Boys — go remind him whose town this is.", "Still breathing? Won't last.", "I'll bury you myself.", "ENOUGH. Come find me — let's END this."];
+function nemAddGrudge(n) {
+  if (NEM.showdown) return;
+  NEM.grudge = Math.min(100, NEM.grudge + n);
+  if (!NEM.intro && NEM.grudge >= 6) { NEM.intro = true; toast("📱 " + NEM.name + ': "New hustler in MY city? Watch yourself."'); AudioSys.play("blip", 0.5); }
+  const t = Math.floor(NEM.grudge / 20);
+  if (t > NEM.tier) { NEM.tier = t; if (t >= 1 && t < 5) { toast("📱 " + NEM.name + ': "' + NEM_TAUNTS[t - 1] + '"'); AudioSys.play("blip", 0.5); } }
+}
+function spawnNemSquad() {
+  const n = Math.min(2 + NEM.tier, 6);
+  const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
+  let placed = 0;
+  for (const g of nemGoons) {
+    if (g.boss || g.alive || placed >= n) continue;
+    const a = Math.random() * 6.2832, r = 26 + Math.random() * 14;
+    g.x = clamp(px + Math.cos(a) * r, WB.x0, WB.x1); g.z = clamp(pz + Math.sin(a) * r, WB.z0, WB.z1);
+    g.hp = 70; g.alive = true; g.mesh.visible = true; g.shootCD = rr(0.5, 1.5); g.h = Math.atan2(px - g.x, pz - g.z); g.walkPhase = Math.random() * 6.28;
+    placed++;
+  }
+  if (placed) { NEM.squadOut = true; toast("⚠️ " + NEM.name + " sent his crew after you!"); AudioSys.play("blip", 0.6); flash("#ff5a3a", 0.18); buzz([0, 40, 30, 60]); }
+}
+function startNemShowdown() {
+  NEM.showdown = true; NEM.squadOut = false;
+  const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
+  NEM.bossMaxHp = 520 + NEM.defeated * 240;
+  nemBoss.x = clamp(px, WB.x0, WB.x1); nemBoss.z = clamp(pz + 32, WB.z0, WB.z1);
+  nemBoss.hp = NEM.bossMaxHp; nemBoss.alive = true; nemBoss.mesh.visible = true; nemBoss.shootCD = 1.2; nemBoss.h = Math.PI; nemBoss.walkPhase = 0;
+  let guards = 0;
+  for (const g of nemGoons) { if (g.boss || g.alive || guards >= 3) continue; const a = Math.random() * 6.28; g.x = clamp(nemBoss.x + Math.cos(a) * 8, WB.x0, WB.x1); g.z = clamp(nemBoss.z + Math.sin(a) * 8, WB.z0, WB.z1); g.hp = 90; g.alive = true; g.mesh.visible = true; g.shootCD = rr(0.4, 1.2); g.walkPhase = Math.random() * 6.28; guards++; }
+  toast("☠ " + NEM.name + ': "You want this city? COME TAKE IT!"'); AudioSys.play("boom", 0.7); flash("#ff3b1f", 0.34); addShake(1.0); buzz([0, 60, 40, 100]);
+  showBossBar(true); updateBossBar();
+}
+function nemBossDefeated() {
+  NEM.showdown = false; NEM.defeated++;
+  for (const g of nemGoons) { g.alive = false; g.mesh.visible = false; }
+  const reward = earn(5000 + NEM.defeated * 2500);
+  state.bossWins = NEM.defeated;
+  toast("👑 YOU TOOK DOWN " + NEM.name.toUpperCase() + "!  +$" + reward); AudioSys.play("jingle", 1.0); flash("#ffe24a", 0.5); addShake(1.3); freezeFrame(0.16); buzz([0, 80, 60, 140]);
+  showBossBar(false);
+  NEM.grudge = 24; NEM.tier = 1; NEM.intro = true; NEM.squadCD = 30;   // he comes back angrier (NG+)
+  save();
+}
+function damageNem(g, dmg) {
+  if (!g.alive) return;
+  g.hp -= dmg;
+  burst(g.x, 1.0, g.z, g.boss ? 12 : 8, 1.0, 1.4, 0.45, 1.0, g.boss ? 0.5 : 0.3, 0.3);
+  if (g.boss) updateBossBar();
+  if (g.hp <= 0) killNem(g);
+}
+function killNem(g) {
+  if (!g.alive) return;
+  g.alive = false; g.mesh.visible = false;
+  if (g.boss) { burst(g.x, 1.2, g.z, 46, 3.4, 5.0, 0.9, 1.0, 0.55, 0.2); AudioSys.play("boom", 1.0); nemBossDefeated(); return; }
+  burst(g.x, 0.9, g.z, 18, 1.7, 2.1, 0.6, 0.9, 0.3, 0.3); AudioSys.play("blip", 0.5); addShake(0.28); freezeFrame(0.035); addChaos(70);
+  if (NEM.squadOut && nemSquadAlive() === 0) { NEM.squadOut = false; NEM.squadCD = rr(26, 42); const r = earn(300 + NEM.tier * 150); toast("💪 Crew wiped out  +$" + r); AudioSys.play("cash", 0.7); }
+}
+function updateNemesis(dt) {
+  if (state.phase !== "play") return;
+  const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
+  if (!NEM.showdown) {
+    if (NEM.grudge >= 100) startNemShowdown();
+    else { if (NEM.squadCD > 0) NEM.squadCD -= dt; if (!NEM.squadOut && NEM.tier >= 1 && NEM.squadCD <= 0 && !dlgLines) spawnNemSquad(); }
+  }
+  for (const g of nemGoons) {
+    if (!g.alive) continue;
+    const dx = px - g.x, dz = pz - g.z, d = Math.hypot(dx, dz) || 1;
+    g.h = lerpAngle(g.h, Math.atan2(dx, dz), 1 - Math.exp(-4 * dt));
+    let moving = false;
+    const spd = g.boss ? 3.6 : 4.6;
+    if (d > (g.boss ? 8 : 6)) { g.x += Math.sin(g.h) * spd * dt; g.z += Math.cos(g.h) * spd * dt; g.walkPhase += spd * dt * 2.6; moving = true; }
+    if (driving && Math.abs(driving.speed) > 8 && d < 3.2 && !g.boss) { killNem(g); continue; }   // run over goons (boss shrugs it off)
+    g.shootCD -= dt;
+    if (g.shootCD <= 0 && d < 40 && !dlgLines) {
+      g.shootCD = g.boss ? rr(0.5, 1.0) : rr(0.8, 1.7);
+      burst(g.x + Math.sin(g.h) * 0.8, 1.3, g.z + Math.cos(g.h) * 0.8, 4, 0.5, 0.5, 0.14, 1.0, 0.5, 0.3);
+      AudioSys.play("gun", g.boss ? 0.5 : 0.35);
+      const fast = (driving ? Math.abs(driving.speed) : player.speed) > 6;
+      if (Math.random() < clamp((g.boss ? 0.6 : 0.42) - d * 0.008 - (fast ? 0.15 : 0), 0.05, 0.6)) hurt(Math.round((g.boss ? 10 : 7) * (driving ? 0.6 : 1)));
+    }
+    const sw = moving ? Math.sin(g.walkPhase) * 0.4 : g.legL.rotation.x * 0.85;
+    g.legL.rotation.x = sw; g.legR.rotation.x = -sw; g.armL.rotation.x = -sw * 0.7; g.armR.rotation.x = sw * 0.7;
+    const kA = moving ? 0.95 : 0;
+    g.kneeL.rotation.x = kA * Math.max(0, -Math.cos(g.walkPhase)); g.kneeR.rotation.x = kA * Math.max(0, Math.cos(g.walkPhase));
+    g.mesh.position.set(g.x, groundY(g.x, g.z), g.z); g.mesh.rotation.y = g.h;
   }
 }
 
@@ -3997,6 +4120,7 @@ function buildIntro() {
 }
 function beginPlay() {
   if (hasSave) { load(); applyOwnership(); }
+  NEM.defeated = state.bossWins || 0;   // carry the nemesis NG+ difficulty across sessions
   refreshAch(false);           // seed already-earned achievements without re-announcing them
   elIntro.style.display = "none";
   state.phase = "play";
@@ -4122,6 +4246,7 @@ function renderStats() {
     cell(STR.statPalms, palmsGot() + "/" + PALMS.length) +
     cell(STR.statJump, STR.statJumpVal(state.bestJump || 0)) +
     cell("💥 Best Rampage", "$" + (state.bestRampage || 0).toLocaleString()) +
+    cell("☠ Boss Takedowns", "" + (state.bossWins || 0)) +
     cell(STR.statRacesWon, Object.keys(state.races).length + "/" + CIRCUITS.length) +
     "</div>";
   html += '<div class="shead">' + STR.statBestLaps + "</div>";
@@ -4743,6 +4868,7 @@ function update(dt) {
   updateExplosions(dt);
   updateGangs(dt);
   updateAllies(dt);
+  updateNemesis(dt);
   updateHoldup(dt);
   updateJob(dt);
   // ambient banter: now and then a nearby pedestrian says something unprompted
@@ -4986,6 +5112,7 @@ globalThis.__palmCity = {
   THREE, scene, camera, renderer,
   freeze: v => { paused = v; }, render: () => renderFrame(),
   state, player, cars, police, traffic, atms, helis, boats, planes, gangsters, allies, npcs, GANGS, SHOPS, AIRPORT, update, beginPlay, advanceDialogue,
+  NEM, nemGoons, nemBoss: () => nemBoss, addGrudge: n => nemAddGrudge(n),
   talkTo: () => talkTo(nearestTalkNPC()),
   startJob: id => startJob(id),
   openMap: () => openMap(), openWheel: () => openWheel(), openPhone: () => openPhone(),
@@ -5004,5 +5131,5 @@ globalThis.__palmCity = {
   closeStats: () => closeStats(),
   refreshAch: () => refreshAch(true),
   addXP: n => addXP(n),
-  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, jobId: job && job.id, jobProg: job && job.prog, jobT: job && Math.round(job.t), jobDx: job && job.dx, jobDz: job && job.dz, jetpack: !!state.jetpack, jpX: jetpackPickup.x, jpZ: jetpackPickup.z, py: +player.y.toFixed(2), side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen, race: race.stage, rcp: race.cp, stats: statsOpen, health, fuel, tut: tutOpen, lvl: state.lvl, xp: state.xp, lvlMult, chaos, combo, comboMult, bestRampage: state.bestRampage || 0 }),
+  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, jobId: job && job.id, jobProg: job && job.prog, jobT: job && Math.round(job.t), jobDx: job && job.dx, jobDz: job && job.dz, jetpack: !!state.jetpack, jpX: jetpackPickup.x, jpZ: jetpackPickup.z, py: +player.y.toFixed(2), side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen, race: race.stage, rcp: race.cp, stats: statsOpen, health, fuel, tut: tutOpen, lvl: state.lvl, xp: state.xp, lvlMult, chaos, combo, comboMult, bestRampage: state.bestRampage || 0, nemGrudge: NEM.grudge, nemTier: NEM.tier, nemSquadOut: NEM.squadOut, nemShowdown: NEM.showdown, nemSquadAlive: nemSquadAlive(), bossHp: nemBoss ? nemBoss.hp : 0, bossWins: state.bossWins || 0 }),
 };
