@@ -1570,7 +1570,7 @@ for (let i = 0; i < POLICE_N; i++) {
 
 // pedestrians
 const npcs = [];
-for (let t = 0; t < Math.round(260 * N / 32); t++) {   // pedestrians scale with the city
+for (let t = 0; t < Math.round(340 * N / 32); t++) {   // a bigger crowd, scaled with the city
   const i = (rng() * N) | 0, j = (rng() * N) | 0;
   const w = makeWalker(npcWalkerGeos[(rng() * npcWalkerGeos.length) | 0]);
   w.group.scale.set(rr(0.92, 1.06), rr(0.9, 1.14), rr(0.92, 1.06));   // varied heights & builds
@@ -1579,8 +1579,57 @@ for (let t = 0; t < Math.round(260 * N / 32); t++) {   // pedestrians scale with
     mesh: w.group, legL: w.legL, legR: w.legR, armL: w.armL, armR: w.armR, kneeL: w.kneeL, kneeR: w.kneeR,
     x: blockMin(i) + rr(2, BLOCK - 2), z: blockMin(j) + rr(2, BLOCK - 2),
     h: rr(0, Math.PI * 2), speed: rr(1.0, 1.7), timer: rr(2, 6), phase: rr(0, 6), walkPhase: rr(0, 6),
+    mood: (rng() * 3) | 0, talkCD: 0, anger: 0, bubble: null, bubbleT: 0,   // 0 friendly · 1 neutral · 2 rude
   });
 }
+
+// ---------- pedestrian banter: walk up to anyone and talk — GTA-style moods & humour ----------
+const NPC_LINES = {
+  friendly: ["Hey, how's it goin'?", "Lovely day, ain't it?", "Stay outta trouble!", "You're alright, you know that?",
+    "Nice threads!", "Keep your chin up, friend.", "Have a good one!", "Hey, I like your vibe.", "Lookin' sharp today!",
+    "Mornin'! Or afternoon. Whatever.", "You look like you're goin' places.", "Take care out there.", "Bless up.", "Smile, it's free!"],
+  neutral: ["...do I know you?", "Busy day, huh.", "Yeah yeah, keep movin'.", "What's the word?", "Traffic's brutal today.",
+    "I'm late for somethin', probably.", "Could go for a coffee right about now.", "Eh. Could be worse.", "I'm not from around here.",
+    "You seen my bus?", "Weather's doin' a thing.", "You ever just stand here? Me neither."],
+  rude: ["Outta my way, jackass.", "What the hell are you lookin' at?", "Get a job, ya bum.", "You smell like a wet dog.",
+    "Beat it, weirdo.", "Nobody asked, pal.", "Piss off.", "Ugh, it's YOU again.", "Take a hike, clown.",
+    "I've seen roadkill with more class.", "Do us all a favor and disappear.", "Your face is doin' somethin' weird.", "Cry about it."],
+  angry: ["Touch me again and we got PROBLEMS!", "I will END you, pal!", "Back OFF before I lose it!",
+    "You got a death wish or somethin'?!", "That's IT — I'm callin' the cops!", "Keep talkin', see what happens!"],
+  random: ["I once fought a pigeon. I lost.", "My horoscope said 'avoid people like you.'", "The vibes are immaculate today.",
+    "I'm 90% energy drink at this point.", "Do birds even have knees? Think about it.", "I left the stove on. Eh.",
+    "Pretty sure that cloud is followin' me.", "Tax season ruined me, man.", "I named my car. Her name's Brenda.",
+    "Never trust a man with two phones.", "Pineapple belongs on pizza. Fight me.", "I dreamt I could fly, woke up on the bus."],
+};
+const rpick = a => a[(Math.random() * a.length) | 0];
+function npcLine(n) {
+  if (n.anger >= 2) return rpick(NPC_LINES.angry);
+  const pool = n.mood === 0 ? [...NPC_LINES.friendly, ...NPC_LINES.random]
+    : n.mood === 2 ? [...NPC_LINES.rude, ...NPC_LINES.rude, ...NPC_LINES.random]
+      : [...NPC_LINES.neutral, ...NPC_LINES.random, ...NPC_LINES.friendly];
+  return rpick(pool);
+}
+function speak(n, line) {
+  if (n.bubble) { n.mesh.remove(n.bubble); n.bubble.material.map.dispose(); n.bubble.material.dispose(); }
+  const col = n.anger >= 2 ? "rgba(255,206,206,.96)" : n.mood === 0 ? "rgba(214,255,220,.95)" : n.mood === 2 ? "rgba(255,236,210,.95)" : "rgba(255,255,255,.94)";
+  const sp = textSprite(line, "#16181c", col, 7, 1.75, 2.4);
+  n.mesh.add(sp); n.bubble = sp; n.bubbleT = 3.6;
+}
+function talkTo(n) {
+  if (!n || n.talkCD > 0) return;
+  n.talkCD = 0.6;
+  if (n.mood === 2) n.anger = Math.min(3, n.anger + 1);   // poke a rude one and it escalates
+  speak(n, npcLine(n));
+  AudioSys.play("blip", 0.35); buzz(8);
+  if (n.anger >= 2 && Math.random() < 0.5) { n.flee = 2.0; n.h = Math.atan2(n.x - player.x, n.z - player.z); }   // storms off
+}
+function nearestTalkNPC() {
+  if (driving) return null;
+  let best = null, bd = 16;
+  for (const n of npcs) { const d = dist2(player.x, player.z, n.x, n.z); if (d < bd) { bd = d; best = n; } }
+  return best;
+}
+let ambientCD = 5;
 
 // ---------- gang turf wars: hostile crews hold 3 districts; wipe a turf to capture it ----------
 const GANGS = [
@@ -3347,6 +3396,7 @@ addEventListener("keydown", e => {
   if (e.code === "Tab") { wheelOpen ? closeWheel() : openWheel(); e.preventDefault(); return; }
   if (e.code === "KeyP") { phoneOpen ? closePhone() : openPhone(); e.preventDefault(); return; }
   if (e.code === "KeyM") { mapOpen ? closeMap() : openMap(); e.preventDefault(); return; }
+  if (e.code === "KeyT") { talkTo(nearestTalkNPC()); e.preventDefault(); return; }
   if (e.code === "KeyF") actP = true;
   keys.add(e.code);
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
@@ -3389,6 +3439,11 @@ const doorBtn = dom("doorbtn");
 doorBtn.addEventListener("click", () => {
   if (state.phase !== "play" || dlgLines || garageOpen || statsOpen || styleOpen || arcadeOpen) return;
   if (inside) exitBuilding(); else { const e = nearEnterable(); if (e) enterBuilding(e); }
+});
+const talkBtn = dom("talkbtn");
+talkBtn.addEventListener("click", () => {
+  if (state.phase !== "play" || dlgLines || garageOpen || statsOpen || styleOpen || arcadeOpen) return;
+  talkTo(nearestTalkNPC());
 });
 const decorBtn = dom("decorbtn");
 const canDecorate = () => inside && intTheme === "home" && ownsAnyProp();
@@ -3643,6 +3698,7 @@ function updateHUD() {
   if (showDoor) doorBtn.textContent = inside ? "🚪 EXIT" : "🚪 ENTER";
   decorBtn.style.display = (!menus && canDecorate()) ? "block" : "none";
   arcadeBtn.style.display = (!menus && nearCabinet()) ? "block" : "none";
+  talkBtn.style.display = (!menus && !driving && !inside && !!nearestTalkNPC()) ? "block" : "none";
   if (drive) { elSpeedo.style.display = "block"; drawSpeedo(driving.speed, boostMeter, fuel); }
   else if (elSpeedo.style.display !== "none") elSpeedo.style.display = "none";
 
@@ -4525,6 +4581,9 @@ function update(dt) {
   // pedestrians
   for (const n of npcs) {
     n.flee = (n.flee || 0) - dt;
+    if (n.talkCD > 0) n.talkCD -= dt;
+    if (n.anger > 0) n.anger = Math.max(0, n.anger - dt * 0.08);
+    if (n.bubble) { n.bubbleT -= dt; if (n.bubbleT <= 0) { n.mesh.remove(n.bubble); n.bubble.material.map.dispose(); n.bubble.material.dispose(); n.bubble = null; } else if (n.bubbleT < 1) n.bubble.material.opacity = n.bubbleT; }
     if (driving && Math.abs(driving.speed) > 5 && n.flee <= 0 &&
         dist2(n.x, n.z, driving.x, driving.z) < 49) {
       n.flee = 1.3;
@@ -4592,6 +4651,13 @@ function update(dt) {
   updateAllies(dt);
   updateHoldup(dt);
   updateJob(dt);
+  // ambient banter: now and then a nearby pedestrian says something unprompted
+  ambientCD -= dt;
+  if (ambientCD <= 0 && !driving) {
+    ambientCD = 3.5 + Math.random() * 5;
+    const near = npcs.filter(n => !n.bubble && n.talkCD <= 0 && dist2(n.x, n.z, player.x, player.z) < 1300);
+    if (near.length) { const n = near[(Math.random() * near.length) | 0]; speak(n, npcLine(n)); n.talkCD = 4; }
+  }
   achTimer -= dt; if (achTimer <= 0) { achTimer = 1; refreshAch(true); }
   {
     const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
@@ -4808,7 +4874,8 @@ requestAnimationFrame(frame);
 
 // dev instrumentation: programmatic state/input access for automated smoke runs (?dev=1 tooling)
 globalThis.__palmCity = {
-  state, player, cars, police, traffic, atms, helis, boats, planes, gangsters, allies, GANGS, SHOPS, AIRPORT, update, beginPlay, advanceDialogue,
+  state, player, cars, police, traffic, atms, helis, boats, planes, gangsters, allies, npcs, GANGS, SHOPS, AIRPORT, update, beginPlay, advanceDialogue,
+  talkTo: () => talkTo(nearestTalkNPC()),
   startJob: id => startJob(id),
   openMap: () => openMap(), openWheel: () => openWheel(), openPhone: () => openPhone(),
   forceCrime: () => { if (wanted < 5) wanted++; wantedCD = 14; },
