@@ -1562,6 +1562,16 @@ const AIRPORT = { x: -HALF - 150, z: 0 };
   helis.push(makeHeli(AP.x + 44, -80));
 }
 
+// world play-bounds: the drivable/walkable area reaches the actual visible edges — the
+// airport to the west and the beach waterline to the south — instead of an invisible wall
+// at the building grid. Keeps you out of open ocean / off the far west apron.
+const WB = {
+  x0: Math.min(-HALF - 24, AIRPORT.x - 44),   // west: out across the runway/apron
+  x1: HALF + 24,                              // east: a little past the last block
+  z0: -HALF - 24,                             // north: a little past the last block
+  z1: SEA_Z - 5,                              // south: stop right at the water's edge
+};
+
 // police cars (spawned by wanted level)
 const POLICE_N = 5;   // up to 5-star wanted
 const police = [];
@@ -3532,10 +3542,9 @@ function moveWithCollision(o, dx, dz, r) {
     o.z = clamp(o.z + dz, INT.z - 6.3, INT.z + 7.2);
     return;
   }
-  const lim = HALF - 3;
-  let nx = clamp(o.x + dx, -lim, lim);
+  let nx = clamp(o.x + dx, WB.x0, WB.x1);
   if (!hitsCollider(nx, o.z, r)) o.x = nx; else if (driving === o) { o.speed *= -0.25; carHit(o); }
-  let nz = clamp(o.z + dz, -lim, lim);
+  let nz = clamp(o.z + dz, WB.z0, WB.z1);
   if (!hitsCollider(o.x, nz, r)) o.z = nz; else if (driving === o) { o.speed *= -0.25; carHit(o); }
 }
 function carHit(o) {
@@ -4318,7 +4327,7 @@ function doActionA() {
     const rx = -Math.cos(c.h), rz = Math.sin(c.h);
     let ex = c.x + rx * 2.6, ez = c.z + rz * 2.6;
     if (hitsCollider(ex, ez, 0.5)) { ex = c.x - rx * 2.6; ez = c.z - rz * 2.6; }
-    player.x = clamp(ex, -HALF + 3, HALF - 3); player.z = clamp(ez, -HALF + 3, HALF - 3);
+    player.x = clamp(ex, WB.x0, WB.x1); player.z = clamp(ez, WB.z0, WB.z1);
     player.h = c.h;
     c.speed = 0; c.lat = 0;
     driving = null;
@@ -4536,8 +4545,8 @@ function update(dt) {
     airMode = true;
     player.h -= inp.mx * 1.1 * dt;
     const mv = Math.max(0, inp.mz) * 6.5;
-    player.x = clamp(player.x + Math.sin(player.h) * mv * dt, -HALF + 3, HALF - 3);
-    player.z = clamp(player.z + Math.cos(player.h) * mv * dt, -HALF + 3, HALF - 3);
+    player.x = clamp(player.x + Math.sin(player.h) * mv * dt, WB.x0, WB.x1);
+    player.z = clamp(player.z + Math.cos(player.h) * mv * dt, WB.z0, WB.z1);
     player.y -= 6.5 * dt;
     const gy = groundY(player.x, player.z);
     if (player.y <= gy) { player.y = gy; para = null; paraMesh.visible = false; toast("🪂 Nice landing!"); buzz(20); }
@@ -4551,8 +4560,8 @@ function update(dt) {
     const gy = groundY(player.x, player.z);
     const f = { x: Math.sin(camYaw), z: Math.cos(camYaw) }, r = { x: -Math.cos(camYaw), z: Math.sin(camYaw) };
     const wx = f.x * inp.mz + r.x * inp.mx, wz = f.z * inp.mz + r.z * inp.mx;
-    player.x = clamp(player.x + wx * 9 * dt, -HALF + 3, HALF - 3);
-    player.z = clamp(player.z + wz * 9 * dt, -HALF + 3, HALF - 3);
+    player.x = clamp(player.x + wx * 9 * dt, WB.x0, WB.x1);
+    player.z = clamp(player.z + wz * 9 * dt, WB.z0, WB.z1);
     player.y = clamp(player.y + (boosting() ? 15 : -11) * dt, gy, 95);
     if (Math.hypot(wx, wz) > 0.01) player.h = Math.atan2(wx, wz);
     player.speed = 0;
