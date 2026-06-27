@@ -48,7 +48,7 @@ try {
   document.body.innerHTML = "<p style='color:#333;padding:40px;font-size:18px'>" + STR.noWebgl + "</p>";
   throw e;
 }
-const PR_CAP = Math.min(devicePixelRatio || 1, 1.5);   // adaptive-resolution ceiling
+const PR_CAP = Math.min(devicePixelRatio || 1, 2);     // adaptive-resolution ceiling (crisper on hi-DPI screens)
 const PR_FLOOR = Math.min(PR_CAP, 1.0);                 // never blurrier than native 1x — no "Minecraft" look
 let pr = PR_CAP;
 renderer.setPixelRatio(pr);
@@ -5037,7 +5037,9 @@ function buildBloom() {
   const sz = renderer.getDrawingBufferSize(new THREE.Vector2());
   bloomW = Math.max(2, sz.x); bloomH = Math.max(2, sz.y);
   const hw = Math.max(1, bloomW >> 1), hh = Math.max(1, bloomH >> 1);
-  rtScene = new THREE.WebGLRenderTarget(bloomW, bloomH, { depthTexture: new THREE.DepthTexture(bloomW, bloomH) }); rtScene.texture.colorSpace = THREE.LinearSRGBColorSpace;
+  // 4x MSAA on the offscreen scene target — the renderer's antialias flag only smooths the canvas,
+  // not this RT, so without this every in-game edge renders jagged/aliased ("pixelated").
+  rtScene = new THREE.WebGLRenderTarget(bloomW, bloomH, { depthTexture: new THREE.DepthTexture(bloomW, bloomH), samples: 4 }); rtScene.texture.colorSpace = THREE.LinearSRGBColorSpace;
   rtB1 = new THREE.WebGLRenderTarget(hw, hh); rtB1.texture.colorSpace = THREE.LinearSRGBColorSpace;
   rtB2 = new THREE.WebGLRenderTarget(hw, hh); rtB2.texture.colorSpace = THREE.LinearSRGBColorSpace;
   rtAO = new THREE.WebGLRenderTarget(hw, hh); rtAO.texture.colorSpace = THREE.LinearSRGBColorSpace;     // half-res AO buffer
