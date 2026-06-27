@@ -49,7 +49,7 @@ try {
   throw e;
 }
 const PR_CAP = Math.min(devicePixelRatio || 1, 1.5);   // adaptive-resolution ceiling
-const PR_FLOOR = 0.75;                                  // never blurrier than this
+const PR_FLOOR = Math.min(PR_CAP, 1.0);                 // never blurrier than native 1x — no "Minecraft" look
 let pr = PR_CAP;
 renderer.setPixelRatio(pr);
 renderer.setSize(innerWidth, innerHeight);
@@ -4869,7 +4869,7 @@ const devEl = dom("dev");
 const devOn = new URLSearchParams(location.search).has("dev");
 if (devOn) devEl.style.display = "block";
 let frames = 0, fpsAt = performance.now();
-let perfFrames = 0, perfAt = performance.now(), perfWarmup = 3;   // adaptive-resolution monitor
+let perfFrames = 0, perfAt = performance.now(), perfWarmup = 3, lowStreak = 0;   // adaptive-resolution monitor
 
 let arcPrev = 0;
 function frame(now) {
@@ -4897,9 +4897,16 @@ function frame(now) {
     perfFrames = 0; perfAt = now;
     if (perfWarmup > 0) perfWarmup--;
     else if (state.phase === "play") {
+      // Only step down after the framerate is low for TWO consecutive seconds, so a transient
+      // dip (an explosion, a cop swarm) can't permanently ratchet the resolution to the floor.
+      // Recover readily as soon as fps is healthy — no dead-zone where it gets stuck blurry.
       let np = pr;
-      if (fps < 50 && pr > PR_FLOOR) np = Math.max(PR_FLOOR, pr - 0.15);
-      else if (fps > 58 && pr < PR_CAP) np = Math.min(PR_CAP, pr + 0.1);
+      if (fps < 46) {
+        if (++lowStreak >= 2 && pr > PR_FLOOR) { np = Math.max(PR_FLOOR, pr - 0.1); lowStreak = 0; }
+      } else {
+        lowStreak = 0;
+        if (fps > 54 && pr < PR_CAP) np = Math.min(PR_CAP, pr + 0.15);   // climb back to full sharpness
+      }
       if (np !== pr) { pr = np; renderer.setPixelRatio(pr); renderer.setSize(innerWidth, innerHeight); }
     }
   }
