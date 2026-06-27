@@ -4353,6 +4353,9 @@ function doActionA() {
         toast("🚗 Carjacked — floor it!"); buzz(30);
       }
       driving = c; hero.group.visible = false; AudioSys.play("door", 0.8);
+      // one-time take-off tip the first time you ever board each aircraft (saved so it shows once)
+      if (c.heli && !state.flewHeli) { state.flewHeli = true; toast("🚁 Hold ▲ to lift off — then steer with the stick"); save(); }
+      else if (c.plane && !state.flewPlane) { state.flewPlane = true; toast("✈️ Hold forward to build speed, then ▲ to take off — keep your speed up!"); save(); }
     }
   }
 }
