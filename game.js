@@ -4481,12 +4481,14 @@ function cycleWeapon() {
   state.weapon = next.i; AudioSys.play("blip", 0.5); buzz(12);
   toast(next.w.name + " · " + (state.ammo[next.w.id] || 0)); save();
 }
+// restart the spring-in animation on a pop-up card each time it opens
+function popIn(card) { if (!card || !card.classList) return; card.classList.remove("popin"); void card.offsetWidth; card.classList.add("popin"); }
 let wheelOpen = false;
 const wpnBtn = dom("wpnbtn"), wheelEl = dom("wpnwheel"), wheelCard = dom("wpnwheelcard");
 wpnBtn.textContent = "🔫";
 if (wpnBtn.style) wpnBtn.style.cssText = "position:absolute;right:16px;top:108px;width:50px;height:50px;border-radius:50%;font-size:21px;background:rgba(28,30,38,.72);color:#fff;border:1px solid rgba(255,205,140,.3);z-index:25;";
-if (wheelEl.style) wheelEl.style.cssText = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:70;";
-if (wheelCard.style) wheelCard.style.cssText = "display:flex;flex-wrap:wrap;gap:10px;max-width:360px;justify-content:center;padding:18px;background:rgba(20,22,28,.94);border-radius:18px;border:1px solid rgba(255,205,140,.25);";
+if (wheelEl.style) wheelEl.style.cssText = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(10,6,14,.42),rgba(6,3,10,.62));backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:70;";
+if (wheelCard.style) wheelCard.style.cssText = "display:flex;flex-wrap:wrap;gap:10px;max-width:360px;justify-content:center;padding:20px;background:linear-gradient(165deg,rgba(40,32,50,.95),rgba(20,14,24,.96));backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-radius:22px;border:1px solid rgba(255,205,140,.32);box-shadow:0 20px 54px rgba(6,3,10,.62),inset 0 1px 1px rgba(255,255,255,.14);";
 function closeWheel() { wheelOpen = false; wheelEl.style.display = "none"; }
 function openWheel() {
   if (state.phase !== "play" || dlgLines) return;
@@ -4496,13 +4498,13 @@ function openWheel() {
   const title = document.createElement("div"); title.textContent = "WEAPONS";
   title.style.cssText = "width:100%;text-align:center;color:#ffd166;font-weight:700;font-size:13px;letter-spacing:1px;"; wheelCard.appendChild(title);
   own.forEach(({ w, i }) => {
-    const b = document.createElement("button"); b.className = "pe";
+    const b = document.createElement("button"); b.className = "pe popbtn";
     b.innerHTML = w.name.replace(/^[^ ]+ /, m => m) + "<br><small style='opacity:.7'>" + (state.ammo[w.id] || 0) + " ammo</small>";
-    b.style.cssText = "width:104px;height:62px;border-radius:12px;font-size:12px;line-height:1.25;color:#fff;background:rgba(40,42,52,.96);border:2px solid " + (i === state.weapon ? "#ffd166" : "rgba(255,255,255,.16)") + ";";
+    b.style.cssText = "width:104px;height:62px;border-radius:14px;font-size:12px;line-height:1.25;color:#fff;background:linear-gradient(165deg,rgba(58,50,70,.96),rgba(36,30,46,.96));box-shadow:0 3px 9px rgba(0,0,0,.32),inset 0 1px 1px rgba(255,255,255,.12);border:2px solid " + (i === state.weapon ? "#ffd166" : "rgba(255,255,255,.14)") + ";";
     b.addEventListener("click", () => { state.weapon = i; save(); AudioSys.play("blip", 0.5); toast(w.name + " equipped"); closeWheel(); });
     wheelCard.appendChild(b);
   });
-  wheelOpen = true; wheelEl.style.display = "flex";
+  wheelOpen = true; wheelEl.style.display = "flex"; popIn(wheelCard);
 }
 wpnBtn.addEventListener("click", () => wheelOpen ? closeWheel() : openWheel());
 wheelEl.addEventListener("click", e => { if (e.target === wheelEl) closeWheel(); });
@@ -4512,8 +4514,8 @@ let phoneOpen = false;
 const phoneBtn = dom("phonebtn"), phoneEl = dom("phone"), phoneCard = dom("phonecard");
 phoneBtn.textContent = "📱";
 if (phoneBtn.style) phoneBtn.style.cssText = "position:absolute;right:16px;top:166px;width:50px;height:50px;border-radius:50%;font-size:21px;background:rgba(28,30,38,.72);color:#fff;border:1px solid rgba(255,205,140,.3);z-index:25;";
-if (phoneEl.style) phoneEl.style.cssText = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:70;";
-if (phoneCard.style) phoneCard.style.cssText = "display:flex;flex-direction:column;gap:9px;width:300px;padding:18px;background:rgba(20,22,28,.95);border-radius:18px;border:1px solid rgba(255,205,140,.25);";
+if (phoneEl.style) phoneEl.style.cssText = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(10,6,14,.42),rgba(6,3,10,.62));backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:70;";
+if (phoneCard.style) phoneCard.style.cssText = "display:flex;flex-direction:column;gap:9px;width:300px;padding:20px;background:linear-gradient(165deg,rgba(40,32,50,.95),rgba(20,14,24,.96));backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-radius:22px;border:1px solid rgba(255,205,140,.32);box-shadow:0 20px 54px rgba(6,3,10,.62),inset 0 1px 1px rgba(255,255,255,.14);";
 function closePhone() { phoneOpen = false; phoneEl.style.display = "none"; }
 function openPhone() {
   if (state.phase !== "play" || dlgLines) return;
@@ -4521,16 +4523,16 @@ function openPhone() {
   const title = document.createElement("div"); title.textContent = "📱 JOBS";
   title.style.cssText = "text-align:center;color:#ffd166;font-weight:700;font-size:13px;letter-spacing:1px;margin-bottom:2px;"; phoneCard.appendChild(title);
   JOBS.forEach(J => {
-    const b = document.createElement("button"); b.className = "pe";
+    const b = document.createElement("button"); b.className = "pe popbtn";
     b.innerHTML = "<b>" + J.label + "</b><br><small style='opacity:.7'>" + J.desc + "</small>";
-    b.style.cssText = "padding:10px;border-radius:12px;font-size:13px;line-height:1.3;color:#fff;text-align:left;background:rgba(40,42,52,.96);border:1px solid rgba(255,255,255,.16);";
+    b.style.cssText = "padding:12px;border-radius:14px;font-size:13px;line-height:1.3;color:#fff;text-align:left;background:linear-gradient(165deg,rgba(58,50,70,.96),rgba(36,30,46,.96));box-shadow:0 3px 9px rgba(0,0,0,.32),inset 0 1px 1px rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.14);";
     b.addEventListener("click", () => startJob(J.id));
     phoneCard.appendChild(b);
   });
-  const close = document.createElement("button"); close.className = "pe"; close.textContent = "Close";
-  close.style.cssText = "padding:8px;border-radius:10px;color:#fff;background:rgba(60,42,42,.9);border:none;margin-top:4px;";
+  const close = document.createElement("button"); close.className = "pe popbtn"; close.textContent = "Close";
+  close.style.cssText = "padding:9px;border-radius:12px;color:#fff;background:linear-gradient(165deg,rgba(96,52,52,.95),rgba(64,34,34,.95));box-shadow:0 3px 8px rgba(0,0,0,.3);border:1px solid rgba(255,160,140,.2);margin-top:4px;";
   close.addEventListener("click", closePhone); phoneCard.appendChild(close);
-  phoneOpen = true; phoneEl.style.display = "flex";
+  phoneOpen = true; phoneEl.style.display = "flex"; popIn(phoneCard);
 }
 phoneBtn.addEventListener("click", () => phoneOpen ? closePhone() : openPhone());
 phoneEl.addEventListener("click", e => { if (e.target === phoneEl) closePhone(); });
@@ -4541,20 +4543,20 @@ if (phoneBtn.style) phoneBtn.style.display = "none";
 let menuOpen = false;
 const menuBtn = dom("menubtn"), hudMenu = dom("hudmenu"), hudMenuCard = dom("hudmenucard");
 menuBtn.textContent = "☰";
-if (menuBtn.style) menuBtn.style.cssText = "position:absolute;right:16px;top:108px;width:50px;height:50px;border-radius:50%;font-size:22px;background:rgba(28,30,38,.72);color:#fff;border:1px solid rgba(255,205,140,.3);z-index:25;";
-if (hudMenu.style) hudMenu.style.cssText = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.4);z-index:72;";
-if (hudMenuCard.style) hudMenuCard.style.cssText = "display:flex;flex-direction:column;gap:9px;width:240px;padding:18px;background:rgba(20,22,28,.95);border-radius:18px;border:1px solid rgba(255,205,140,.25);";
+if (menuBtn.style) menuBtn.style.cssText = "position:absolute;right:16px;top:108px;width:50px;height:50px;border-radius:50%;font-size:22px;background:linear-gradient(160deg,rgba(50,42,60,.82),rgba(26,18,32,.82));backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#fff;border:1px solid rgba(255,205,140,.34);box-shadow:0 5px 16px rgba(8,4,12,.5),inset 0 1px 1px rgba(255,255,255,.14);z-index:25;";
+if (hudMenu.style) hudMenu.style.cssText = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(10,6,14,.42),rgba(6,3,10,.62));backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:72;";
+if (hudMenuCard.style) hudMenuCard.style.cssText = "display:flex;flex-direction:column;gap:9px;width:240px;padding:20px;background:linear-gradient(165deg,rgba(40,32,50,.95),rgba(20,14,24,.96));backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-radius:22px;border:1px solid rgba(255,205,140,.32);box-shadow:0 20px 54px rgba(6,3,10,.62),inset 0 1px 1px rgba(255,255,255,.14);";
 function closeMenu() { menuOpen = false; hudMenu.style.display = "none"; }
 function openMenu() {
   if (state.phase !== "play" || dlgLines) return;
   hudMenuCard.innerHTML = "";
   [["🔫 Weapons", openWheel], ["📱 Jobs", openPhone], ["🗺 Map", openMap]].forEach(([label, fn]) => {
-    const b = document.createElement("button"); b.className = "pe"; b.textContent = label;
-    b.style.cssText = "padding:11px;border-radius:12px;font-size:15px;color:#fff;background:rgba(40,42,52,.96);border:1px solid rgba(255,255,255,.16);";
+    const b = document.createElement("button"); b.className = "pe popbtn"; b.textContent = label;
+    b.style.cssText = "padding:13px;border-radius:14px;font-size:15px;font-weight:600;color:#fff;background:linear-gradient(165deg,rgba(58,50,70,.96),rgba(36,30,46,.96));box-shadow:0 3px 9px rgba(0,0,0,.32),inset 0 1px 1px rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.14);";
     b.addEventListener("click", () => { closeMenu(); fn(); });
     hudMenuCard.appendChild(b);
   });
-  menuOpen = true; hudMenu.style.display = "flex";
+  menuOpen = true; hudMenu.style.display = "flex"; popIn(hudMenuCard);
 }
 menuBtn.addEventListener("click", () => menuOpen ? closeMenu() : openMenu());
 hudMenu.addEventListener("click", e => { if (e.target === hudMenu) closeMenu(); });
