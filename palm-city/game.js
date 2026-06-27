@@ -2952,7 +2952,7 @@ function hurt(amount) {
 function wasted() {
   const fine = 100 + 60 * wanted;
   state.money = Math.max(0, state.money - fine);
-  toast(STR.wasted(fine)); AudioSys.play("door", 1); flash("#ff3b3b", 0.5); buzz([0, 80, 60, 140]);
+  toast(STR.wasted(fine)); AudioSys.play("boom", 0.8); flash("#ff3b3b", 0.5); buzz([0, 80, 60, 140]);
   addShake(1.0); freezeFrame(0.12);
   if (driving) { driving.speed = 0; driving.lat = 0; driving = null; hero.group.visible = true; }
   const sp = homeSpawn() || PLAZA;                      // respawn at an owned property, else the plaza
@@ -3019,7 +3019,7 @@ function updatePolice(dt) {
       if (p.shootCD <= 0) {
         p.shootCD = rr(0.9, 1.7);
         burst(p.x + Math.sin(p.h) * 1.1, 1.3, p.z + Math.cos(p.h) * 1.1, 4, 0.5, 0.5, 0.14, 1.0, 0.86, 0.4);   // muzzle flash
-        AudioSys.play("blip", 0.55);
+        AudioSys.play("gun", 0.5);
         const fast = (driving ? Math.abs(driving.speed) : player.speed) > 6;
         if (Math.random() < clamp(0.5 - d * 0.009 - (fast ? 0.2 : 0), 0.05, 0.5)) hurt(driving ? 5 : 9);
       }
@@ -3098,7 +3098,7 @@ function doShoot() {
   if (shootCD > 0) return;
   if (ammoOf(w) <= 0) { toast("Out of ammo — restock at the 🔫 Ammo Shop"); AudioSys.play("blip", 0.4); return; }
   shootCD = w.rate; state.ammo[w.id] = ammoOf(w) - 1;
-  AudioSys.play("blip", 0.8); buzz(18); addShake(w.explosive ? 0.3 : 0.15); punchT = 0.18;
+  AudioSys.play("gun", w.explosive ? 1.0 : 0.85); buzz(18); addShake(w.explosive ? 0.3 : 0.15); punchT = 0.18;
   const fx = Math.sin(player.h), fz = Math.cos(player.h);
   burst(player.x + fx * 0.9, 1.42, player.z + fz * 0.9, 8, 0.6, 0.6, 0.16, 1, 0.9, 0.55);   // muzzle flash
   kickCam(-fx * (w.explosive ? 0.34 : 0.14), 0.05, -fz * (w.explosive ? 0.34 : 0.14));      // recoil punch
@@ -3165,7 +3165,7 @@ function explodeCar(c) {
   burst(x, 1.3, z, 54, 4.2, 5.6, 0.9, 1.0, 0.55, 0.12);      // fireball
   burst(x, 1.4, z, 22, 6.0, 1.2, 0.6, 1.0, 0.72, 0.22);      // fast low debris ring
   burst(x, 1.9, z, 28, 2.6, 6.2, 1.5, 0.26, 0.26, 0.26);     // smoke plume
-  AudioSys.play("door", 1.0); addShake(1.15); flash("#ff7a33", 0.42); buzz([0, 40, 30, 90]);
+  AudioSys.play("boom", 1.0); addShake(1.15); flash("#ff7a33", 0.42); buzz([0, 40, 30, 90]);
   freezeFrame(0.05); kickCam(rr(-0.5, 0.5), 0.55, rr(-0.5, 0.5));   // impact freeze + blast kick
   c.mesh.visible = false;
   if (c.wp) c.jacked = true;                                  // traffic car: stop & remove from the AI
@@ -3276,7 +3276,7 @@ function explodeAt(x, z, r) {                                 // an AoE blast (R
     burst(x, 1.2, z, 40, 3.4, 4.4, 0.85, 1.0, 0.55, 0.14);
     burst(x, 1.4, z, 18, 5.4, 1.1, 0.55, 1.0, 0.72, 0.22);    // debris ring
     burst(x, 1.7, z, 22, 2.2, 5.2, 1.4, 0.28, 0.28, 0.28);
-    AudioSys.play("door", 1.0); addShake(0.95); flash("#ff7a33", 0.34);
+    AudioSys.play("boom", 1.0); addShake(0.95); flash("#ff7a33", 0.34);
     freezeFrame(0.045); kickCam(rr(-0.4, 0.4), 0.45, rr(-0.4, 0.4));
     for (const n of npcs) if (dist2(n.x, n.z, x, z) < r * r * 1.6) { n.flee = 3; n.h = Math.atan2(n.x - x, n.z - z); n.x += Math.sin(n.h); n.z += Math.cos(n.h); }
     const pd = dist2(player.x, player.z, x, z);
