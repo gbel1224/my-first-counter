@@ -14,7 +14,7 @@ export const AudioSys = (() => {
   let ctx = null, buffers = {}, musicGain = null, sfxGain = null, engineGain = null;
   let engineSrc = null, ready = false, muted = false, lastHorn = 0;
   let comp = null, musicFilter = null, musicSrc = null, engineFilter = null;
-  let skidGain = null, skidSrc = null, intensityCur = 0;
+  let skidGain = null, skidSrc = null, intensityCur = 0, noiseBuf = null;
 
   async function init() {
     if (ctx) return;
@@ -56,13 +56,48 @@ export const AudioSys = (() => {
       const nb = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
       const nd = nb.getChannelData(0);
       for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+      noiseBuf = nb;   // reused by the synthesized one-shot SFX (gun / boom)
       skidSrc = ctx.createBufferSource(); skidSrc.buffer = nb; skidSrc.loop = true;
       const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 2200; bp.Q.value = 1.1;
       skidGain = ctx.createGain(); skidGain.gain.value = 0;
       skidSrc.connect(bp); bp.connect(skidGain); skidGain.connect(comp); skidSrc.start();
     } catch (e) {}
   }
+  // ---- synthesized one-shot SFX (no audio files needed) ----
+  function noiseSrc(dur) { const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = true; return s; }
+  function gun(vol = 1) {                              // punchy weapon crack: noise transient + low body thump
+    if (!ready || muted || !ctx) return;
+    const t = ctx.currentTime;
+    const s = noiseSrc(); const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 850;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.95 * vol, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0007, t + 0.15);
+    s.connect(hp); hp.connect(g); g.connect(sfxGain); s.start(t); s.stop(t + 0.18);
+    const o = ctx.createOscillator(); o.type = "sine"; o.frequency.setValueAtTime(190, t); o.frequency.exponentialRampToValueAtTime(70, t + 0.08);
+    const og = ctx.createGain(); og.gain.setValueAtTime(0.55 * vol, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+    o.connect(og); og.connect(sfxGain); o.start(t); o.stop(t + 0.13);
+  }
+  function boom(vol = 1) {                             // explosion: down-swept noise rumble + sub thump
+    if (!ready || muted || !ctx) return;
+    const t = ctx.currentTime;
+    const s = noiseSrc(); const lp = ctx.createBiquadFilter(); lp.type = "lowpass";
+    lp.frequency.setValueAtTime(1500, t); lp.frequency.exponentialRampToValueAtTime(120, t + 0.7);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(1.0 * vol, t + 0.012); g.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
+    s.connect(lp); lp.connect(g); g.connect(sfxGain); s.start(t); s.stop(t + 0.9);
+    const o = ctx.createOscillator(); o.type = "sine"; o.frequency.setValueAtTime(115, t); o.frequency.exponentialRampToValueAtTime(34, t + 0.4);
+    const og = ctx.createGain(); og.gain.setValueAtTime(0.95 * vol, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    o.connect(og); og.connect(sfxGain); o.start(t); o.stop(t + 0.55);
+  }
+  function blip(vol = 1) {                             // soft UI tick
+    if (!ready || muted || !ctx) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = "triangle"; o.frequency.setValueAtTime(660, t); o.frequency.exponentialRampToValueAtTime(440, t + 0.07);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35 * vol, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0008, t + 0.1);
+    o.connect(g); g.connect(sfxGain); o.start(t); o.stop(t + 0.12);
+  }
+  const SYNTH = { gun, boom, blip };
   function play(k, vol = 1, rate = 1) {
+    if (SYNTH[k]) { SYNTH[k](vol); return; }           // synthesized SFX (gun/boom/blip) need no file
     if (!ready || muted || !buffers[k]) return;
     const s = ctx.createBufferSource();
     s.buffer = buffers[k];
@@ -104,5 +139,5 @@ export const AudioSys = (() => {
     if (engineGain && m) engineGain.gain.value = 0;
     if (skidGain && m) skidGain.gain.value = 0;
   }
-  return { init, play, horn, engine, intensity, skid, setMuted, get muted() { return muted; } };
+  return { init, play, gun, boom, horn, engine, intensity, skid, setMuted, get muted() { return muted; } };
 })();
