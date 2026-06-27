@@ -151,17 +151,20 @@
   #dtext { font-size:16px; line-height:1.4; margin:4px 0 6px; }
   #dhint { font-size:11px; color:#8fa; text-align:right; opacity:.8; }
 
-  #intro { position:absolute; inset:0; overflow:hidden;
-    display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
-    color:#fff; padding:24px; gap:14px;
+  #intro { position:absolute; inset:0; overflow:hidden; z-index:60;
+    display:flex; flex-direction:column; align-items:center; justify-content:flex-start; text-align:center;
+    color:#fff; padding:max(6vh,40px) 24px 24px; gap:13px;
     background:linear-gradient(180deg,#1e0c33 0%,#52246b 28%,#b5447a 56%,#ff7e46 82%,#ffd589 100%); }
+  /* soft scrim behind the hero so the title/chips/button stay readable over the skyline */
+  #intro .hero::before { content:""; position:absolute; inset:-40px -60px -28px; z-index:-1; border-radius:50%;
+    background:radial-gradient(ellipse 70% 64% at center, rgba(16,6,22,.62) 34%, rgba(16,6,22,0) 74%); }
   #intro .layer { position:absolute; left:0; right:0; pointer-events:none; }
-  #intro .sun { position:absolute; top:33%; left:50%; width:min(46vw,260px); height:min(46vw,260px);
+  #intro .sun { position:absolute; top:27%; left:50%; width:min(46vw,260px); height:min(46vw,260px);
     transform:translate(-50%,-50%); border-radius:50%; z-index:0; pointer-events:none;
     background:radial-gradient(circle,#fff6d2 0%,#ffd368 34%,rgba(255,150,86,.55) 58%,rgba(255,150,86,0) 72%);
     animation:sunpulse 5s ease-in-out infinite; }
   @keyframes sunpulse { 0%,100%{transform:translate(-50%,-50%) scale(1);} 50%{transform:translate(-50%,-50%) scale(1.06);} }
-  #intro .skyline { bottom:25%; height:140px; z-index:2; display:flex; align-items:flex-end; justify-content:center; gap:3px; }
+  #intro .skyline { bottom:18%; height:118px; z-index:1; opacity:.8; display:flex; align-items:flex-end; justify-content:center; gap:3px; }
   #intro .bld { background:#170a27; border-radius:3px 3px 0 0; box-shadow:0 0 22px rgba(150,50,110,.35); position:relative; }
   #intro .bld i { position:absolute; width:3px; height:3px; background:#ffd98a; border-radius:1px; box-shadow:0 0 4px #ffd98a; opacity:.85; }
   #intro .sea { bottom:0; height:25%; z-index:1;
@@ -187,9 +190,13 @@
   #intro button { font-size:20px; font-weight:900; letter-spacing:3px; border:none; border-radius:32px; cursor:pointer;
     padding:15px 56px; color:#3d2410; background:linear-gradient(180deg,#ffe08a,#ffc04d);
     box-shadow:0 8px 26px rgba(255,160,70,.55); animation:btnpulse 1.8s ease-in-out infinite, fadeup .8s .5s both; }
+  #intro button { -webkit-tap-highlight-color:transparent; }
+  #intro button:active { animation-play-state:paused; transform:scale(.95); filter:brightness(1.06); }
   #intro button.secondary { background:transparent; border:2px solid rgba(255,255,255,.7); color:#fff;
     font-size:13px; letter-spacing:2px; padding:9px 24px; box-shadow:none; animation:fadeup .8s .6s both; }
-  #intro .hint { font-size:11px; color:rgba(255,255,255,.72); max-width:440px; z-index:4; animation:fadeup .8s .7s both; }
+  #intro button.secondary:active { transform:scale(.95); filter:brightness(1.1); }
+  #intro .hint { font-size:11px; color:rgba(255,255,255,.78); max-width:440px; z-index:4; animation:fadeup .8s .7s both;
+    text-shadow:0 1px 5px rgba(10,4,16,.9); }
   @keyframes btnpulse { 0%,100% { transform:scale(1); box-shadow:0 8px 26px rgba(255,160,70,.45); }
     50% { transform:scale(1.05); box-shadow:0 10px 32px rgba(255,209,102,.6); } }
   @keyframes pop { from { transform:scale(.9); opacity:0; } to { transform:scale(1); opacity:1; } }
