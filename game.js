@@ -4419,19 +4419,25 @@ function update(dt) {
   if (driving) {
     const c = driving;
     if (c.heli) {
-      // ---- helicopter: ▲ lifts straight up, ▼ descends, HOVERS when neither held; joystick yaws + tilts to move ----
+      // ---- helicopter: ▲ lifts straight up off the ground; only once AIRBORNE does the joystick
+      //      yaw/steer and fly it forward. On the ground it just idles — no car-like sliding. ----
       const dry = fuel <= 0;
-      c.h -= inp.mx * 1.7 * dt;                                     // yaw with the stick
-      let lift = 0;                                                // hover (hold altitude) with no input
-      if (ascendInput() && !dry) lift = 17; else if (descendInput()) lift = -15;
+      const airborne = c.y > 0.6;                                   // clear of the ground?
+      let lift = 0;                                                // hover (hold altitude) when neither held
+      if (ascendInput() && !dry) lift = 17; else if (airborne && descendInput()) lift = -15;
       c.y = clamp((c.y || 0) + lift * dt, 0, 150);
-      const fwd = dry ? 0 : Math.max(0, inp.mz);                    // push the stick forward to fly forward
-      c.speed = clamp(c.speed + (fwd * 30 - c.speed) * Math.min(1, 2.5 * dt), 0, 34);
+      if (airborne) {
+        c.h -= inp.mx * 1.7 * dt;                                   // yaw with the stick (airborne only)
+        const fwd = dry ? 0 : Math.max(0, inp.mz);                  // push the stick forward to fly forward
+        c.speed = clamp(c.speed + (fwd * 30 - c.speed) * Math.min(1, 2.5 * dt), 0, 34);
+      } else {
+        c.speed = Math.max(0, c.speed - c.speed * Math.min(1, 6 * dt));   // grounded: bleed off any speed, don't slide
+      }
       c.x = clamp(c.x + Math.sin(c.h) * c.speed * dt, -HALF - 600, HALF + 600);
       c.z = clamp(c.z + Math.cos(c.h) * c.speed * dt, -HALF - 600, HALF + 600);
       fuel = Math.max(0, fuel - (0.9 + c.speed * 0.02) * dt);
       c.mesh.position.set(c.x, c.y, c.z);
-      c.mesh.rotation.set(-c.speed * 0.014, c.h, inp.mx * 0.22);    // nose dips when moving, banks in turns
+      c.mesh.rotation.set(-c.speed * 0.014, c.h, (airborne ? inp.mx : 0) * 0.22);   // nose dips when moving, banks in turns
       if (c.rotor) c.rotor.rotation.y += 34 * dt;
       if (c.tail) c.tail.rotation.x += 40 * dt;
       if (c.y < 6 && Math.random() < 0.5) emit(c.x + rr(-2, 2), 0.25, c.z + rr(-2, 2), rr(-1, 1), rr(0.2, 0.8), rr(-1, 1), 0.4, 0.62, 0.6, 0.52);   // rotor downwash
