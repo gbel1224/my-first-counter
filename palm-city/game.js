@@ -2195,7 +2195,7 @@ function layStreak(x, z, h) {
 }
 
 // ---------- juice: particles (1 draw call), screen shake, haptics, flash ----------
-const PMAXN = 160;
+const PMAXN = 340;
 const pPos = new Float32Array(PMAXN * 3).fill(-9999);
 const pVel = new Float32Array(PMAXN * 3);
 const pCol = new Float32Array(PMAXN * 3);
@@ -2245,7 +2245,13 @@ function updateParticles(dt) {
   pGeo.attributes.color.needsUpdate = true;
 }
 let shake = 0, colCD = 0, driftCD = 0;
-function addShake(v) { shake = Math.min(1.4, shake + v); }
+function addShake(v) { shake = Math.min(2.0, shake + v); }
+// hit-stop: briefly freeze the sim on big impacts so hits land with weight (classic "impact freeze")
+let hitStop = 0;
+function freezeFrame(s) { hitStop = Math.max(hitStop, s); }
+// directional camera punch (recoil / blast kick) — distinct from the random shake noise
+const camKick = new THREE.Vector3();
+function kickCam(x, y, z) { camKick.x += x; camKick.y += y; camKick.z += z; }
 function buzz(p) { if (navigator.vibrate) { try { navigator.vibrate(p); } catch (e) {} } }
 const elFlash = dom("flash");
 function flash(color, a) { elFlash.style.background = color; elFlash.style.opacity = a; setTimeout(() => { elFlash.style.opacity = 0; }, 60); }
@@ -2947,6 +2953,7 @@ function wasted() {
   const fine = 100 + 60 * wanted;
   state.money = Math.max(0, state.money - fine);
   toast(STR.wasted(fine)); AudioSys.play("door", 1); flash("#ff3b3b", 0.5); buzz([0, 80, 60, 140]);
+  addShake(1.0); freezeFrame(0.12);
   if (driving) { driving.speed = 0; driving.lat = 0; driving = null; hero.group.visible = true; }
   const sp = homeSpawn() || PLAZA;                      // respawn at an owned property, else the plaza
   player.x = sp.x; player.z = sp.z + 12; player.y = CURB; player.speed = 0;
@@ -3091,9 +3098,10 @@ function doShoot() {
   if (shootCD > 0) return;
   if (ammoOf(w) <= 0) { toast("Out of ammo — restock at the 🔫 Ammo Shop"); AudioSys.play("blip", 0.4); return; }
   shootCD = w.rate; state.ammo[w.id] = ammoOf(w) - 1;
-  AudioSys.play("blip", 0.8); buzz(18); addShake(0.15); punchT = 0.18;
+  AudioSys.play("blip", 0.8); buzz(18); addShake(w.explosive ? 0.3 : 0.15); punchT = 0.18;
   const fx = Math.sin(player.h), fz = Math.cos(player.h);
-  burst(player.x + fx * 0.9, 1.42, player.z + fz * 0.9, 5, 0.5, 0.5, 0.16, 1, 0.86, 0.4);   // muzzle flash
+  burst(player.x + fx * 0.9, 1.42, player.z + fz * 0.9, 8, 0.6, 0.6, 0.16, 1, 0.9, 0.55);   // muzzle flash
+  kickCam(-fx * (w.explosive ? 0.34 : 0.14), 0.05, -fz * (w.explosive ? 0.34 : 0.14));      // recoil punch
   if (w.explosive) {                                          // launcher: detonate at the first car hit, else at range
     let impT = w.range, ix = player.x + fx * w.range, iz = player.z + fz * w.range;
     const probe = c => { const dx = c.x - player.x, dz = c.z - player.z, t = dx * fx + dz * fz; if (t < 1 || t > impT || Math.abs(dx * fz - dz * fx) > 2.4) return; impT = t; ix = c.x; iz = c.z; };
@@ -3153,9 +3161,12 @@ function explodeCar(c) {
   if (c.dead) return;
   c.dead = true; c.detonateIn = null;
   const x = c.x, z = c.z;
-  burst(x, 1.3, z, 46, 3.6, 5.0, 0.9, 1.0, 0.55, 0.12);      // fireball
-  burst(x, 1.8, z, 26, 2.6, 6.0, 1.4, 0.28, 0.28, 0.28);     // smoke plume
-  AudioSys.play("door", 1.0); addShake(0.85); flash("#ff7a33", 0.32); buzz([0, 40, 30, 90]);
+  burst(x, 1.0, z, 24, 1.3, 2.2, 0.16, 1.0, 0.97, 0.75);     // white-hot core pop
+  burst(x, 1.3, z, 54, 4.2, 5.6, 0.9, 1.0, 0.55, 0.12);      // fireball
+  burst(x, 1.4, z, 22, 6.0, 1.2, 0.6, 1.0, 0.72, 0.22);      // fast low debris ring
+  burst(x, 1.9, z, 28, 2.6, 6.2, 1.5, 0.26, 0.26, 0.26);     // smoke plume
+  AudioSys.play("door", 1.0); addShake(1.15); flash("#ff7a33", 0.42); buzz([0, 40, 30, 90]);
+  freezeFrame(0.05); kickCam(rr(-0.5, 0.5), 0.55, rr(-0.5, 0.5));   // impact freeze + blast kick
   c.mesh.visible = false;
   if (c.wp) c.jacked = true;                                  // traffic car: stop & remove from the AI
   if (c.active !== undefined) { c.active = false; c.mesh.position.set(0, -9999, 0); }   // police car
@@ -3261,9 +3272,12 @@ function explodeAt(x, z, r) {                                 // an AoE blast (R
   for (const c of police) if (c.active && !c.dead && dist2(c.x, c.z, x, z) < r * r) { explodeCar(c); hitAny = true; }
   for (const g of gangsters) if (g.alive && dist2(g.x, g.z, x, z) < r * r) killGangster(g);   // blast catches gangsters
   if (!hitAny) {                                             // empty ground — still a satisfying boom
-    burst(x, 1.2, z, 38, 3.0, 4.2, 0.85, 1.0, 0.55, 0.14);
-    burst(x, 1.7, z, 20, 2.2, 5.0, 1.3, 0.28, 0.28, 0.28);
-    AudioSys.play("door", 1.0); addShake(0.65); flash("#ff7a33", 0.28);
+    burst(x, 1.0, z, 20, 1.2, 2.0, 0.15, 1.0, 0.97, 0.75);    // white-hot core pop
+    burst(x, 1.2, z, 40, 3.4, 4.4, 0.85, 1.0, 0.55, 0.14);
+    burst(x, 1.4, z, 18, 5.4, 1.1, 0.55, 1.0, 0.72, 0.22);    // debris ring
+    burst(x, 1.7, z, 22, 2.2, 5.2, 1.4, 0.28, 0.28, 0.28);
+    AudioSys.play("door", 1.0); addShake(0.95); flash("#ff7a33", 0.34);
+    freezeFrame(0.045); kickCam(rr(-0.4, 0.4), 0.45, rr(-0.4, 0.4));
     for (const n of npcs) if (dist2(n.x, n.z, x, z) < r * r * 1.6) { n.flee = 3; n.h = Math.atan2(n.x - x, n.z - z); n.x += Math.sin(n.h); n.z += Math.cos(n.h); }
     const pd = dist2(player.x, player.z, x, z);
     if (!driving && pd < r * r) hurt(Math.round(36 * (1 - Math.sqrt(pd) / (r + 1))));
@@ -3298,6 +3312,7 @@ function killGangster(g) {
   if (!g.alive) return;
   g.alive = false; g.respawn = 6; g.mesh.visible = false;
   burst(g.x, 0.9, g.z, 18, 1.7, 2.1, 0.6, 0.9, 0.3, 0.3); addChaos(40);
+  AudioSys.play("blip", 0.5); addShake(0.28); freezeFrame(0.035);   // crisp kill confirm
   const G = GANGS[g.gang];
   if (!G.captured) {
     G.kills++;
@@ -4748,8 +4763,13 @@ function update(dt) {
   // screen shake (impacts, landings, busts, wins)
   if (shake > 0) {
     shake = Math.max(0, shake - dt * 2.4);
-    const s = shake * shake * 0.7;
+    const s = shake * shake * 0.8;
     camera.position.x += rr(-s, s); camera.position.y += rr(-s, s) * 0.5; camera.position.z += rr(-s, s);
+  }
+  // directional camera punch — snap then ease back for a crisp recoil/blast kick
+  if (camKick.lengthSq() > 1e-5) {
+    camera.position.add(camKick);
+    camKick.multiplyScalar(Math.exp(-13 * dt));
   }
   // speed-based FOV for a sense of velocity while driving
   const tgtFov = 64 + (driving ? clamp(Math.abs(driving.speed) / 26, 0, 1) * 13 : 0);
@@ -4846,10 +4866,13 @@ let arcPrev = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   if (paused) { last = now; return; }
-  acc = Math.min(acc + (now - last) / 1000, 0.25);
+  const realDt = (now - last) / 1000;
+  acc = Math.min(acc + realDt, 0.25);
   last = now;
   if (arcadeOpen) { const adt = Math.min(0.05, (now - arcPrev) / 1000 || 0.016); updateArcade(adt); }
   arcPrev = now;
+  // hit-stop: hold the simulation for a few ms on a big impact, then snap back to motion
+  if (hitStop > 0) { hitStop -= realDt; acc = 0; }
   if (state.phase === "play") {
     while (acc >= STEP) { update(STEP); acc -= STEP; }
     updateHUD();
