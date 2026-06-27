@@ -3950,6 +3950,10 @@ function updateHUD() {
 const MAPR = 1980;
 function drawMinimap(t) {
   const S = 132, sc = S / (2 * MAPR);
+  // render into a device-pixel-ratio backing store so the radar stays crisp on hi-DPI screens
+  const dpr = Math.min(devicePixelRatio || 1, 3), buf = Math.round(S * dpr);
+  if (mapCtx.canvas.width !== buf) { mapCtx.canvas.width = mapCtx.canvas.height = buf; }
+  mapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   mapCtx.clearRect(0, 0, S, S);
   mapCtx.fillStyle = "rgba(22,32,26,.85)"; mapCtx.fillRect(0, 0, S, S);
   mapCtx.fillStyle = "#55606a";
@@ -4044,8 +4048,11 @@ function dot(ctx, x, z, sc, r, col) { ctx.fillStyle = col; ctx.beginPath(); ctx.
 function drawFullMap() {
   const cv = mapCanvas; if (!cv.getContext) return;
   const S = Math.max(280, Math.min(innerWidth * 0.9, innerHeight * 0.72)) | 0;
-  if (cv.width !== S) { cv.width = S; cv.height = S; }
+  // hi-DPI backing store so the full map is sharp; CSS sizes the display box to S px
+  const dpr = Math.min(devicePixelRatio || 1, 2), buf = Math.round(S * dpr);
+  if (cv.width !== buf) { cv.width = cv.height = buf; cv.style.width = cv.style.height = S + "px"; }
   const ctx = cv.getContext("2d"), sc = S / (2 * MAPR);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const Wx = x => (x + MAPR) * sc, Wz = z => (z + MAPR) * sc;
   ctx.clearRect(0, 0, S, S);
   // base = the road/ground colour; district blocks paint over it, leaving the road grid showing through
