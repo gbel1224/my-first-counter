@@ -695,7 +695,7 @@ let buildingMat = null;
     const downtown = dc <= 1.5;                                 // core 4x4
     // Camellia-style skyline: a smooth closeness factor that peaks at dead centre and
     // fades out ~6 blocks away, so towers rise into a tight central cluster of spires.
-    const core = clamp(1 - dc / 6, 0, 1);                       // 1 at centre … 0 at the edge of the core
+    const core = clamp(1 - dc / 6.5, 0, 1);                     // 1 at centre … 0 at the edge of the core
     const resid = isResid(i, j), slum = isGhetto(i, j);
     const skip = downtown ? 0.06 : 0.18 - core * 0.08;          // pack the core denser
     const towerChance = downtown ? 0.94 : 0.55 + core * 0.34;   // skyscrapers cluster toward the centre
@@ -712,8 +712,11 @@ let buildingMat = null;
         ghetto.push({ x, z, w, d, h, tint: pick(GHETTO_TINTS) });
         addCollider(x, z, w / 2, d / 2);
       } else if (rng() < towerChance) {                        // glass skyscraper — taller in the core
-        // base height plus a centre-weighted bonus -> a dramatic skyline silhouette peaking downtown
-        const w = rr(15, 22), d = rr(15, 22), h = rr(30, 60) + core * core * rr(55, 120);
+        // base height + a steep centre-weighted bonus, and slimmer footprints toward the core, so
+        // downtown reads as a tight cluster of soaring spires (Camellia City silhouette)
+        const cw = Math.pow(core, 1.5);                          // sharper falloff than a plain gradient
+        const w = rr(14, 21) - core * 5, d = rr(14, 21) - core * 5;
+        const h = rr(26, 50) + cw * rr(150, 240);               // up to ~290m dead-centre, ~26m at the rim
         towers.push({ x, z, w, d, h, tint: pick(TOWER_TINTS) });
         addCollider(x, z, w / 2, d / 2);
       } else {                                                 // occasional low / mid-rise infill
