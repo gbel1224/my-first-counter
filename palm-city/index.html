@@ -194,6 +194,24 @@
     50% { transform:scale(1.05); box-shadow:0 10px 32px rgba(255,209,102,.6); } }
   @keyframes pop { from { transform:scale(.9); opacity:0; } to { transform:scale(1); opacity:1; } }
   .gcard, .scard, .ccard { animation:pop .18s ease-out; }
+  /* unified glass-and-depth treatment for every modal card (garage / stats / style / confirm / tutorial / arcade) */
+  .gcard, .scard, .ccard, .tcard, .acard {
+    background:linear-gradient(165deg,rgba(40,32,50,.95),rgba(20,14,24,.96)) !important;
+    backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+    border:1px solid rgba(255,205,140,.3) !important; border-radius:22px !important;
+    box-shadow:0 22px 56px rgba(6,3,10,.64), inset 0 1px 1px rgba(255,255,255,.13) !important; }
+  /* frosted, dimmed backdrop behind each modal */
+  #garage, #stats, #style, #confirm, #tutorial, #arcade {
+    background:radial-gradient(ellipse at center,rgba(10,6,14,.46),rgba(6,3,10,.66)) !important;
+    backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); }
+  /* tactile springy press on every modal button */
+  .gcard button, .scard button, .ccard button, .tcard button, .acard button {
+    -webkit-tap-highlight-color:transparent; cursor:pointer;
+    transition:transform .1s cubic-bezier(.34,1.7,.5,1), filter .12s ease, box-shadow .12s ease; }
+  .gcard button:active, .scard button:active, .ccard button:active, .tcard button:active, .acard button:active {
+    transform:scale(.94); filter:brightness(1.1); }
+  .syopt, .sytab, #garage .gsw, .xclose {
+    transition:transform .1s cubic-bezier(.34,1.7,.5,1), filter .12s, border-color .15s, background .15s; }
 
   #tutorial { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
     background:rgba(8,10,12,.72); z-index:12; }
