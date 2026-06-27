@@ -2980,7 +2980,7 @@ function wasted() {
   // shake off the rival's hit-squad on death; if it was the showdown, the boss bows out for now
   for (const g of nemGoons) if (!g.boss) { g.alive = false; g.mesh.visible = false; }
   NEM.squadOut = false; NEM.squadCD = Math.max(NEM.squadCD, rr(12, 20));
-  if (NEM.showdown) { NEM.showdown = false; nemBoss.alive = false; nemBoss.mesh.visible = false; showBossBar(false); NEM.grudge = 70; }
+  if (NEM.showdown) { NEM.showdown = false; NEM.flee = false; nemBoss.alive = false; nemBoss.mesh.visible = false; nemCar.active = false; nemCar.mesh.visible = false; showBossBar(false); NEM.grudge = 70; }
   save();
 }
 function heatActive() {
@@ -3131,6 +3131,7 @@ function doShoot() {
     for (const c of police) if (c.active && !c.dead) probe(c);
     for (const g of gangsters) if (g.alive) probe(g);
     for (const g of nemGoons) if (g.alive) probe(g);
+    if (nemCar.active) probe(nemCar);
     explodeAt(ix, iz, w.blast || 7);
     registerCrime();
     return;
@@ -3167,7 +3168,10 @@ function doShoot() {
       if (t < 1 || t > bestT || Math.abs(dx * az - dz * ax) > (g.boss ? 2.0 : 1.6)) continue;
       bestT = t; bestNem = g; bestGang = null; bestCar = null; best = null;
     }
-    if (bestNem) damageNem(bestNem, 34);
+    let hitNemCar = false;
+    if (nemCar.active) { const dx = nemCar.x - player.x, dz = nemCar.z - player.z, t = dx * ax + dz * az; if (t >= 1 && t <= bestT && Math.abs(dx * az - dz * ax) <= 2.4) { hitNemCar = true; bestNem = null; bestGang = null; bestCar = null; best = null; } }
+    if (hitNemCar) damageNemCar(20);
+    else if (bestNem) damageNem(bestNem, 34);
     else if (bestGang) damageGangster(bestGang, 34);
     else if (bestCar) damageCar(bestCar, 24);
     else if (best) {
@@ -3335,6 +3339,7 @@ function explodeAt(x, z, r) {                                 // an AoE blast (R
   for (const c of police) if (c.active && !c.dead && dist2(c.x, c.z, x, z) < r * r) { explodeCar(c); hitAny = true; }
   for (const g of gangsters) if (g.alive && dist2(g.x, g.z, x, z) < r * r) killGangster(g);   // blast catches gangsters
   for (const g of nemGoons) if (g.alive && dist2(g.x, g.z, x, z) < r * r) damageNem(g, g.boss ? 150 : 999);   // and the boss's crew
+  if (nemCar.active && dist2(nemCar.x, nemCar.z, x, z) < r * r) damageNemCar(150);   // blast the getaway car
   if (!hitAny) {                                             // empty ground — still a satisfying boom
     burst(x, 1.0, z, 20, 1.2, 2.0, 0.15, 1.0, 0.97, 0.75);    // white-hot core pop
     burst(x, 1.2, z, 40, 3.4, 4.4, 0.85, 1.0, 0.55, 0.14);
@@ -3472,7 +3477,9 @@ function updateAllies(dt) {
 }
 
 // ---------- NEMESIS: a rival crime boss who builds a grudge, sends hit-squads, then faces you ----------
-const NEM = { name: 'Vic "The Shark" Moreno', grudge: 0, tier: 0, squadCD: 8, squadOut: false, showdown: false, intro: false, defeated: 0, bossMaxHp: 520 };
+const NEM = { name: 'Vic "The Shark" Moreno', grudge: 0, tier: 0, squadCD: 8, squadOut: false, showdown: false, intro: false, defeated: 0, bossMaxHp: 520, flee: false, fleeMaxHp: 0 };
+const nemCar = { mesh: makeCar(0x101216), x: 0, z: 0, h: 0, speed: 0, hp: 0, active: false };
+nemCar.mesh.visible = false; scene.add(nemCar.mesh);
 const nemGoons = [];
 let nemBoss = null;
 {
@@ -3488,7 +3495,11 @@ let nemBoss = null;
 }
 const elBossbar = dom("bossbar"), elBossName = dom("bossname"), elBossHp = dom("bosshp");
 function showBossBar(on) { if (elBossbar) elBossbar.classList.toggle("on", on); if (on && elBossName) elBossName.textContent = "☠ " + NEM.name; }
-function updateBossBar() { if (elBossHp && nemBoss) elBossHp.style.width = Math.max(0, nemBoss.hp / NEM.bossMaxHp * 100) + "%"; }
+function updateBossBar() {
+  if (!elBossHp) return;
+  if (NEM.flee && nemCar.active) elBossHp.style.width = Math.max(0, nemCar.hp / NEM.fleeMaxHp * 100) + "%";
+  else if (nemBoss) elBossHp.style.width = Math.max(0, nemBoss.hp / NEM.bossMaxHp * 100) + "%";
+}
 function nemSquadAlive() { let n = 0; for (const g of nemGoons) if (g.alive && !g.boss) n++; return n; }
 const NEM_TAUNTS = ["You're starting to annoy me.", "Boys — go remind him whose town this is.", "Still breathing? Won't last.", "I'll bury you myself.", "ENOUGH. Come find me — let's END this."];
 function nemAddGrudge(n) {
@@ -3522,8 +3533,27 @@ function startNemShowdown() {
   toast("☠ " + NEM.name + ': "You want this city? COME TAKE IT!"'); AudioSys.play("boom", 0.7); flash("#ff3b1f", 0.34); addShake(1.0); buzz([0, 60, 40, 100]);
   showBossBar(true); updateBossBar();
 }
+function startBossFlee() {                                // boss bails to a getaway car — chase him down
+  NEM.flee = true; nemBoss.alive = false; nemBoss.mesh.visible = false;
+  nemCar.x = nemBoss.x; nemCar.z = nemBoss.z; nemCar.h = nemBoss.h; nemCar.speed = 9; nemCar.active = true;
+  NEM.fleeMaxHp = 240 + NEM.defeated * 120; nemCar.hp = NEM.fleeMaxHp;
+  nemCar.mesh.visible = true; nemCar.mesh.position.set(nemCar.x, 0, nemCar.z); nemCar.mesh.rotation.y = nemCar.h;
+  toast("🚗 " + NEM.name + ': "This ain\'t over!" — HE\'S RUNNING! Chase him down!'); AudioSys.play("horn", 0.7); flash("#ffce4a", 0.2); buzz([0, 40, 30, 60]);
+  updateBossBar();
+}
+function damageNemCar(dmg) {
+  if (!nemCar.active) return;
+  nemCar.hp -= dmg;
+  burst(nemCar.x, 1.0, nemCar.z, 7, 1.0, 1.2, 0.4, 1.0, 0.6, 0.3); updateBossBar();
+  if (nemCar.hp <= 0) {
+    nemCar.active = false; nemCar.mesh.visible = false;
+    burst(nemCar.x, 1.3, nemCar.z, 46, 3.4, 5.0, 0.9, 1.0, 0.55, 0.2); AudioSys.play("boom", 1.0); addShake(1.2); freezeFrame(0.14);
+    nemBossDefeated();
+  }
+}
 function nemBossDefeated() {
-  NEM.showdown = false; NEM.defeated++;
+  NEM.showdown = false; NEM.flee = false; NEM.defeated++;
+  nemCar.active = false; nemCar.mesh.visible = false;
   for (const g of nemGoons) { g.alive = false; g.mesh.visible = false; }
   const reward = earn(5000 + NEM.defeated * 2500);
   state.bossWins = NEM.defeated;
@@ -3536,7 +3566,10 @@ function damageNem(g, dmg) {
   if (!g.alive) return;
   g.hp -= dmg;
   burst(g.x, 1.0, g.z, g.boss ? 12 : 8, 1.0, 1.4, 0.45, 1.0, g.boss ? 0.5 : 0.3, 0.3);
-  if (g.boss) updateBossBar();
+  if (g.boss) {
+    if (NEM.showdown && !NEM.flee && g.hp <= NEM.bossMaxHp * 0.35) { g.hp = NEM.bossMaxHp * 0.35; startBossFlee(); return; }   // bail to the getaway car
+    updateBossBar();
+  }
   if (g.hp <= 0) killNem(g);
 }
 function killNem(g) {
@@ -3552,6 +3585,17 @@ function updateNemesis(dt) {
   if (!NEM.showdown) {
     if (NEM.grudge >= 100) startNemShowdown();
     else { if (NEM.squadCD > 0) NEM.squadCD -= dt; if (!NEM.squadOut && NEM.tier >= 1 && NEM.squadCD <= 0 && !dlgLines) spawnNemSquad(); }
+  }
+  // getaway-car chase: the boss flees, you run him down (ram with a vehicle or shoot the car out)
+  if (NEM.flee && nemCar.active) {
+    const c = nemCar;
+    c.h = lerpAngle(c.h, Math.atan2(c.x - px, c.z - pz), 1 - Math.exp(-2.2 * dt));   // steer away from you
+    c.speed = Math.min(27, c.speed + 11 * dt);
+    c.x = clamp(c.x + Math.sin(c.h) * c.speed * dt, WB.x0, WB.x1);
+    c.z = clamp(c.z + Math.cos(c.h) * c.speed * dt, WB.z0, WB.z1);
+    c.mesh.position.set(c.x, 0, c.z); c.mesh.rotation.y = c.h;
+    if (driving && Math.abs(driving.speed) > 10 && dist2(driving.x, driving.z, c.x, c.z) < 18) { damageNemCar(36); driving.speed *= 0.6; addShake(0.4); }   // ram him
+    if (c.hp < NEM.fleeMaxHp * 0.45 && Math.random() < 0.6) emit(c.x - Math.sin(c.h) * 2.2, 1.0, c.z - Math.cos(c.h) * 2.2, rr(-0.5, 0.5), rr(0.3, 0.8), rr(-0.5, 0.5), 0.8, 0.32, 0.3, 0.3);   // smoke trail when wounded
   }
   for (const g of nemGoons) {
     if (!g.alive) continue;
@@ -3897,26 +3941,29 @@ function updateHUD() {
   if (photoMode) { missionMarker.group.visible = false; sideMarker.group.visible = false; crookMarker.group.visible = false; }
 }
 
+// the maps cover a symmetric window wide enough to include the airport (west) and beach (south),
+// which sit outside the building grid — otherwise the player/markers fall off the map edge there.
+const MAPR = 1980;
 function drawMinimap(t) {
-  const S = 132, sc = S / (2 * HALF);
+  const S = 132, sc = S / (2 * MAPR);
   mapCtx.clearRect(0, 0, S, S);
   mapCtx.fillStyle = "rgba(22,32,26,.85)"; mapCtx.fillRect(0, 0, S, S);
   mapCtx.fillStyle = "#55606a";
   for (let k = 0; k <= N; k++) {
-    const p = (roadC(k) + HALF) * sc - 2;
+    const p = (roadC(k) + MAPR) * sc - 2;
     mapCtx.fillRect(p, 0, 4, S);
     mapCtx.fillRect(0, p, S, 4);
   }
   mapCtx.fillStyle = "#5d9952";
   for (const key of PARKS) {
     const [i, j] = key.split(",").map(Number);
-    mapCtx.fillRect((blockMin(i) + HALF) * sc, (blockMin(j) + HALF) * sc, BLOCK * sc, BLOCK * sc);
+    mapCtx.fillRect((blockMin(i) + MAPR) * sc, (blockMin(j) + MAPR) * sc, BLOCK * sc, BLOCK * sc);
   }
   // gang turf: tinted circles (gang colour while hostile, green once captured)
   const GANG_FILL = ["rgba(200,60,60,.20)", "rgba(70,110,210,.20)", "rgba(60,180,90,.20)"];
   const GANG_RING = ["rgba(235,90,90,.85)", "rgba(115,155,240,.85)", "rgba(95,220,125,.85)"];
   GANGS.forEach((G, gi) => {
-    const gx = (G.x + HALF) * sc, gz = (G.z + HALF) * sc, gr = G.r * sc;
+    const gx = (G.x + MAPR) * sc, gz = (G.z + MAPR) * sc, gr = G.r * sc;
     mapCtx.fillStyle = G.captured ? "rgba(120,200,140,.16)" : GANG_FILL[gi];
     mapCtx.beginPath(); mapCtx.arc(gx, gz, gr, 0, 7); mapCtx.fill();
     mapCtx.strokeStyle = G.captured ? "rgba(150,230,160,.8)" : GANG_RING[gi];
@@ -3924,47 +3971,55 @@ function drawMinimap(t) {
   });
   for (const b of BIZ) {
     mapCtx.fillStyle = state.owned[b.id] ? "#9fe6a0" : "#ffd166";
-    mapCtx.beginPath(); mapCtx.arc((b.x + HALF) * sc, (b.z + HALF) * sc, 3, 0, 7); mapCtx.fill();
+    mapCtx.beginPath(); mapCtx.arc((b.x + MAPR) * sc, (b.z + MAPR) * sc, 3, 0, 7); mapCtx.fill();
   }
   // garage (square) + owned personal cars (cyan dots)
   mapCtx.fillStyle = "#7fd6ff";
-  mapCtx.fillRect((GARAGE.x + HALF) * sc - 3, (GARAGE.z + HALF) * sc - 3, 6, 6);
+  mapCtx.fillRect((GARAGE.x + MAPR) * sc - 3, (GARAGE.z + MAPR) * sc - 3, 6, 6);
   for (const c of cars) if (c.personal && !c.locked) {
-    mapCtx.beginPath(); mapCtx.arc((c.x + HALF) * sc, (c.z + HALF) * sc, 2.5, 0, 7); mapCtx.fill();
+    mapCtx.beginPath(); mapCtx.arc((c.x + MAPR) * sc, (c.z + MAPR) * sc, 2.5, 0, 7); mapCtx.fill();
   }
   // street-race start gates (white, freeplay only)
   if (state.mi >= M.length) {
     mapCtx.fillStyle = "#ffffff";
     for (const C of CIRCUITS)
-      mapCtx.fillRect((C.start.x + HALF) * sc - 2.5, (C.start.z + HALF) * sc - 2.5, 5, 5);
+      mapCtx.fillRect((C.start.x + MAPR) * sc - 2.5, (C.start.z + MAPR) * sc - 2.5, 5, 5);
   }
   mapCtx.fillStyle = "#ffe24a";
   for (let i = 0; i < PALMS.length; i++) {
     if (palmCollected[i]) continue;
-    mapCtx.fillRect((PALMS[i][0] + HALF) * sc - 1, (PALMS[i][1] + HALF) * sc - 1, 2.4, 2.4);
+    mapCtx.fillRect((PALMS[i][0] + MAPR) * sc - 1, (PALMS[i][1] + MAPR) * sc - 1, 2.4, 2.4);
   }
   for (const p of police) if (p.active) {
     mapCtx.fillStyle = "#ff3b3b";
-    mapCtx.beginPath(); mapCtx.arc((p.x + HALF) * sc, (p.z + HALF) * sc, 3, 0, 7); mapCtx.fill();
+    mapCtx.beginPath(); mapCtx.arc((p.x + MAPR) * sc, (p.z + MAPR) * sc, 3, 0, 7); mapCtx.fill();
+  }
+  // airport icon (west) so the now-reachable airfield reads on the radar
+  mapCtx.fillStyle = "#9fbcd6"; mapCtx.font = "8px sans-serif"; mapCtx.textAlign = "center";
+  mapCtx.fillText("✈", (AIRPORT.x + 30 + MAPR) * sc, (AIRPORT.z + MAPR) * sc + 3);
+  // nemesis crew (orange) + the boss (flashing skull-red, bigger) so you can see them coming
+  for (const g of nemGoons) if (g.alive) {
+    if (g.boss) { mapCtx.fillStyle = (t * 4 | 0) % 2 ? "#ff2a2a" : "#ffd0d0"; mapCtx.beginPath(); mapCtx.arc((g.x + MAPR) * sc, (g.z + MAPR) * sc, 5, 0, 7); mapCtx.fill(); }
+    else { mapCtx.fillStyle = "#ff8c3a"; mapCtx.beginPath(); mapCtx.arc((g.x + MAPR) * sc, (g.z + MAPR) * sc, 2.6, 0, 7); mapCtx.fill(); }
   }
   if (crook.active) {   // fleeing crook (flashing)
     mapCtx.fillStyle = (t * 3 | 0) % 2 ? "#ff5b5b" : "#ffffff";
-    mapCtx.beginPath(); mapCtx.arc((crook.x + HALF) * sc, (crook.z + HALF) * sc, 3.5, 0, 7); mapCtx.fill();
+    mapCtx.beginPath(); mapCtx.arc((crook.x + MAPR) * sc, (crook.z + MAPR) * sc, 3.5, 0, 7); mapCtx.fill();
   }
   if (medic.stage !== "idle") {   // paramedic target
     const mt = medic.stage === "pickup" ? medic : HOSPITAL;
     mapCtx.fillStyle = "#44d0ff";
-    mapCtx.beginPath(); mapCtx.arc((mt.x + HALF) * sc, (mt.z + HALF) * sc, 3.5, 0, 7); mapCtx.fill();
+    mapCtx.beginPath(); mapCtx.arc((mt.x + MAPR) * sc, (mt.z + MAPR) * sc, 3.5, 0, 7); mapCtx.fill();
   }
   const obj = currentObjective();
   if (obj.x !== undefined && (t * 2 | 0) % 2 === 0) {
     mapCtx.fillStyle = "#ffd166";
-    mapCtx.beginPath(); mapCtx.arc((obj.x + HALF) * sc, (obj.z + HALF) * sc, 4.5, 0, 7); mapCtx.fill();
+    mapCtx.beginPath(); mapCtx.arc((obj.x + MAPR) * sc, (obj.z + MAPR) * sc, 4.5, 0, 7); mapCtx.fill();
   }
   const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
   const h = driving ? driving.h : player.h;
   mapCtx.save();
-  mapCtx.translate((px + HALF) * sc, (pz + HALF) * sc);
+  mapCtx.translate((px + MAPR) * sc, (pz + MAPR) * sc);
   mapCtx.rotate(Math.atan2(Math.cos(h), Math.sin(h)));
   mapCtx.fillStyle = "#ff7a33";
   mapCtx.beginPath(); mapCtx.moveTo(6, 0); mapCtx.lineTo(-4, 4); mapCtx.lineTo(-4, -4); mapCtx.closePath(); mapCtx.fill();
@@ -3981,13 +4036,13 @@ if (mapCanvas.style) mapCanvas.style.cssText = "border:1px solid rgba(255,205,14
 function closeMap() { mapOpen = false; mapScreen.style.display = "none"; }
 function openMap() { if (state.phase !== "play" || dlgLines) return; mapOpen = true; mapScreen.style.display = "flex"; drawFullMap(); }
 mapCloseBtn.addEventListener && mapCloseBtn.addEventListener("click", closeMap);
-function dot(ctx, x, z, sc, r, col) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc((x + HALF) * sc, (z + HALF) * sc, r, 0, 7); ctx.fill(); }
+function dot(ctx, x, z, sc, r, col) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc((x + MAPR) * sc, (z + MAPR) * sc, r, 0, 7); ctx.fill(); }
 function drawFullMap() {
   const cv = mapCanvas; if (!cv.getContext) return;
   const S = Math.max(280, Math.min(innerWidth * 0.9, innerHeight * 0.72)) | 0;
   if (cv.width !== S) { cv.width = S; cv.height = S; }
-  const ctx = cv.getContext("2d"), sc = S / (2 * HALF);
-  const Wx = x => (x + HALF) * sc, Wz = z => (z + HALF) * sc;
+  const ctx = cv.getContext("2d"), sc = S / (2 * MAPR);
+  const Wx = x => (x + MAPR) * sc, Wz = z => (z + MAPR) * sc;
   ctx.clearRect(0, 0, S, S);
   // base = the road/ground colour; district blocks paint over it, leaving the road grid showing through
   ctx.fillStyle = "#dccfa3"; ctx.fillRect(0, 0, S, S);
@@ -4025,18 +4080,18 @@ function drawFullMap() {
   for (const hv of helis) dot(ctx, hv.x, hv.z, sc, 3.4, "#ffffff");
   for (const bt of boats) dot(ctx, bt.x, bt.z, sc, 3.4, "#cfe8ff");
   for (const p of police) if (p.active) dot(ctx, p.x, p.z, sc, 4, "#ff3b3b");
+  for (const g of nemGoons) if (g.alive) dot(ctx, g.x, g.z, sc, g.boss ? 6 : 3.4, g.boss ? "#ff2a2a" : "#ff8c3a");
   if (jobMarker.visible) dot(ctx, jobMarker.position.x, jobMarker.position.z, sc, 5, "#ffd24a");
   const obj = currentObjective(); if (obj.x !== undefined) dot(ctx, obj.x, obj.z, sc, 5, "#ffe24a");
   // landmark labels
   ctx.font = "bold " + F + "px sans-serif"; ctx.fillStyle = "#fff";
   const lbl = (x, z, t) => ctx.fillText(t, Wx(x), Wz(z) + F * 0.35);
-  lbl(PLAZA.x, PLAZA.z, "🏛"); lbl(GARAGE.x, GARAGE.z, "🚗"); lbl(HOSPITAL.x, HOSPITAL.z, "🏥"); lbl(GAS.x, GAS.z, "⛽");
+  lbl(PLAZA.x, PLAZA.z, "🏛"); lbl(GARAGE.x, GARAGE.z, "🚗"); lbl(HOSPITAL.x, HOSPITAL.z, "🏥"); lbl(GAS.x, GAS.z, "⛽"); lbl(AIRPORT.x + 40, AIRPORT.z, "✈");
   ctx.font = "bold " + Math.max(8, F - 1) + "px sans-serif";
   GANGS.forEach(G => ctx.fillText((G.captured ? "🚩 " : "") + G.name, Wx(G.x), Wz(G.z) - G.r * sc - 3));
-  // edge hints: airport (west), beach (south)
-  ctx.textAlign = "left"; ctx.fillStyle = "#bfe0ff"; ctx.font = "bold " + F + "px sans-serif";
-  ctx.fillText("✈ AIRPORT ◄", 4, S * 0.5);
-  ctx.textAlign = "center"; ctx.fillStyle = "#cfe0e8"; ctx.fillText("🏖 BEACH ▼", S * 0.5, S - 5);
+  // beach label along the south shore (airport now has its own on-map ✈ marker)
+  ctx.textAlign = "center"; ctx.fillStyle = "#cfe0e8"; ctx.font = "bold " + F + "px sans-serif";
+  ctx.fillText("🏖 BEACH", Wx(0), Math.min(S - 5, Wz(SEA_Z - 40)));
   // legend
   const leg = [["#9aa7b5", "Downtown"], ["#a7c585", "Suburb"], ["#a08c63", "Ghetto"], ["#6fa45e", "Park"]];
   const lw = F * 6.4, lh = leg.length * (F + 3) + 6, lx = S - lw - 3, ly0 = S - lh - 3;
@@ -5112,7 +5167,7 @@ globalThis.__palmCity = {
   THREE, scene, camera, renderer,
   freeze: v => { paused = v; }, render: () => renderFrame(),
   state, player, cars, police, traffic, atms, helis, boats, planes, gangsters, allies, npcs, GANGS, SHOPS, AIRPORT, update, beginPlay, advanceDialogue,
-  NEM, nemGoons, nemBoss: () => nemBoss, addGrudge: n => nemAddGrudge(n),
+  NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
   talkTo: () => talkTo(nearestTalkNPC()),
   startJob: id => startJob(id),
   openMap: () => openMap(), openWheel: () => openWheel(), openPhone: () => openPhone(),
@@ -5131,5 +5186,5 @@ globalThis.__palmCity = {
   closeStats: () => closeStats(),
   refreshAch: () => refreshAch(true),
   addXP: n => addXP(n),
-  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, jobId: job && job.id, jobProg: job && job.prog, jobT: job && Math.round(job.t), jobDx: job && job.dx, jobDz: job && job.dz, jetpack: !!state.jetpack, jpX: jetpackPickup.x, jpZ: jetpackPickup.z, py: +player.y.toFixed(2), side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen, race: race.stage, rcp: race.cp, stats: statsOpen, health, fuel, tut: tutOpen, lvl: state.lvl, xp: state.xp, lvlMult, chaos, combo, comboMult, bestRampage: state.bestRampage || 0, nemGrudge: NEM.grudge, nemTier: NEM.tier, nemSquadOut: NEM.squadOut, nemShowdown: NEM.showdown, nemSquadAlive: nemSquadAlive(), bossHp: nemBoss ? nemBoss.hp : 0, bossWins: state.bossWins || 0 }),
+  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, jobId: job && job.id, jobProg: job && job.prog, jobT: job && Math.round(job.t), jobDx: job && job.dx, jobDz: job && job.dz, jetpack: !!state.jetpack, jpX: jetpackPickup.x, jpZ: jetpackPickup.z, py: +player.y.toFixed(2), side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen, race: race.stage, rcp: race.cp, stats: statsOpen, health, fuel, tut: tutOpen, lvl: state.lvl, xp: state.xp, lvlMult, chaos, combo, comboMult, bestRampage: state.bestRampage || 0, nemGrudge: NEM.grudge, nemTier: NEM.tier, nemSquadOut: NEM.squadOut, nemShowdown: NEM.showdown, nemSquadAlive: nemSquadAlive(), bossHp: nemBoss ? nemBoss.hp : 0, nemFlee: NEM.flee, nemCarActive: nemCar.active, nemCarHp: Math.round(nemCar.hp), bossWins: state.bossWins || 0 }),
 };
