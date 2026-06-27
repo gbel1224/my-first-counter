@@ -197,6 +197,11 @@
     background:rgba(30,16,28,.8); color:#ffe9b3; border:1px solid rgba(255,205,140,.45);
     backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); box-shadow:0 6px 20px rgba(20,8,16,.5); }
   #doorbtn:active { transform:translateX(-50%) scale(.95); }
+  #talkbtn { position:absolute; bottom:calc(138px + env(safe-area-inset-bottom,0px)); left:50%; transform:translateX(-50%);
+    display:none; padding:11px 22px; border-radius:26px; font-size:14px; font-weight:800; letter-spacing:1px;
+    background:rgba(20,34,42,.82); color:#d8f0ff; border:1px solid rgba(150,210,255,.5);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); box-shadow:0 6px 20px rgba(8,16,20,.5); }
+  #talkbtn:active { transform:translateX(-50%) scale(.95); }
   #decorbtn { position:absolute; bottom:calc(86px + env(safe-area-inset-bottom,0px)); left:50%; transform:translateX(-50%);
     display:none; padding:11px 22px; border-radius:26px; font-size:14px; font-weight:800; letter-spacing:1px;
     background:rgba(40,20,46,.82); color:#ffe9b3; border:1px solid rgba(220,160,255,.5);
@@ -303,6 +308,7 @@
   <button id="punch" class="btn pe">PUNCH</button>
   <button id="btnA" class="btn pe"></button>
   <button id="doorbtn" class="pe">🚪 ENTER</button>
+  <button id="talkbtn" class="pe">💬 TALK</button>
   <button id="decorbtn" class="pe">🎨 DECORATE</button>
   <button id="arcadebtn" class="pe">🕹 PLAY</button>
   <canvas id="speedo" width="92" height="92"></canvas>
