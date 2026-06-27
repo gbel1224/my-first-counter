@@ -82,10 +82,13 @@ sun.position.set(120, 160, 80);
 scene.add(sun);
 scene.add(sun.target);
 
-// real-time sun shadows (dynamic objects only, to stay mobile-friendly); follows the player
-if (renderer.shadowMap) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; }
+// real-time sun shadows (dynamic objects only, to stay mobile-friendly); follows the player.
+// On phones, shave the shadow cost (a smaller map + cheaper filter) — ~50% less shadow work for a
+// barely-visible difference. Desktop keeps the crisp 3072² PCFSoft shadows.
+const isMobile = (navigator.maxTouchPoints > 0 && Math.min(screen.width, screen.height) < 820) || /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+if (renderer.shadowMap) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = isMobile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap; }
 sun.castShadow = true;
-sun.shadow.mapSize.set(3072, 3072);
+sun.shadow.mapSize.set(isMobile ? 2048 : 3072, isMobile ? 2048 : 3072);
 sun.shadow.camera.near = 8; sun.shadow.camera.far = 560;
 sun.shadow.camera.left = -100; sun.shadow.camera.right = 100;
 sun.shadow.camera.top = 100; sun.shadow.camera.bottom = -100;
