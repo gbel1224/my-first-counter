@@ -3754,6 +3754,13 @@ function drawFullMap() {
     else col = "#c6b889";                                                      // mid-city
     ctx.fillStyle = col; ctx.fillRect(Wx(blockMin(i)) | 0, Wz(blockMin(j)) | 0, B, B);
   }
+  // district name labels
+  ctx.textAlign = "center"; ctx.fillStyle = "rgba(45,45,55,.5)";
+  const DF = Math.max(10, S * 0.026 | 0);
+  ctx.font = "bold " + DF + "px sans-serif";
+  ctx.fillText("DOWNTOWN", Wx(bc(cen)), Wz(bc(cen)));
+  ctx.fillText("SUBURBS", Wx(bc(1)), Wz(bc(1)));
+  ctx.fillText("THE PROJECTS", Wx(bc(1)), Wz(bc(N - 2)));
   // gang turf rings
   const GF = ["rgba(200,60,60,.22)", "rgba(70,110,210,.22)", "rgba(60,180,90,.22)"], GR = ["rgba(220,70,70,.95)", "rgba(95,135,235,.95)", "rgba(80,205,110,.95)"];
   ctx.textAlign = "center"; ctx.lineWidth = 2;
@@ -3784,10 +3791,10 @@ function drawFullMap() {
   ctx.textAlign = "center"; ctx.fillStyle = "#cfe0e8"; ctx.fillText("🏖 BEACH ▼", S * 0.5, S - 5);
   // legend
   const leg = [["#9aa7b5", "Downtown"], ["#a7c585", "Suburb"], ["#a08c63", "Ghetto"], ["#6fa45e", "Park"]];
-  const lw = F * 6.4, lh = leg.length * (F + 3) + 6;
-  ctx.fillStyle = "rgba(12,14,18,.6)"; ctx.fillRect(3, 3, lw, lh);
+  const lw = F * 6.4, lh = leg.length * (F + 3) + 6, lx = S - lw - 3, ly0 = S - lh - 3;
+  ctx.fillStyle = "rgba(12,14,18,.62)"; ctx.fillRect(lx, ly0, lw, lh);
   ctx.textAlign = "left"; ctx.font = Math.max(8, F - 2) + "px sans-serif";
-  leg.forEach((L, i) => { const ly = 7 + i * (F + 3); ctx.fillStyle = L[0]; ctx.fillRect(7, ly, F - 1, F - 1); ctx.fillStyle = "#eee"; ctx.fillText(L[1], 7 + F + 3, ly + F - 2); });
+  leg.forEach((L, i) => { const ly = ly0 + 4 + i * (F + 3); ctx.fillStyle = L[0]; ctx.fillRect(lx + 4, ly, F - 1, F - 1); ctx.fillStyle = "#eee"; ctx.fillText(L[1], lx + 4 + F + 3, ly + F - 2); });
   // player marker
   const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z, ph = driving ? driving.h : player.h;
   ctx.save(); ctx.translate(Wx(px), Wz(pz)); ctx.rotate(Math.atan2(Math.cos(ph), Math.sin(ph)));
@@ -4699,7 +4706,7 @@ function buildBloom() {
   blurMat = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, dir: { value: new THREE.Vector2() } }, vertexShader: BLOOM_VERT,
     fragmentShader: "uniform sampler2D tDiffuse; uniform vec2 dir; varying vec2 vUv; void main(){ vec3 s=texture2D(tDiffuse,vUv).rgb*0.227027; s+=texture2D(tDiffuse,vUv+dir*1.3846).rgb*0.316216; s+=texture2D(tDiffuse,vUv-dir*1.3846).rgb*0.316216; s+=texture2D(tDiffuse,vUv+dir*3.2308).rgb*0.07027; s+=texture2D(tDiffuse,vUv-dir*3.2308).rgb*0.07027; gl_FragColor=vec4(s,1.0); }" });
   compMat = new THREE.ShaderMaterial({ uniforms: { tScene: { value: null }, tBloom: { value: null }, tAO: { value: null }, uAO: { value: 1 }, strength: { value: 1.05 }, uSat: { value: gradeSat }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(bloomW, bloomH) } }, vertexShader: BLOOM_VERT,
-    fragmentShader: "uniform sampler2D tScene; uniform sampler2D tBloom; uniform sampler2D tAO; uniform float uAO; uniform float strength; uniform float uSat; uniform float uTime; uniform vec2 uRes; varying vec2 vUv; vec3 toSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,vec3(0.0)),vec3(0.41666))-0.055, step(0.0031308,c)); } float hash(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); } void main(){ vec2 uv=vUv; vec2 d=uv-0.5; float r2=dot(d,d); vec3 sc=texture2D(tScene,uv).rgb; float ao=texture2D(tAO,uv).r; sc*=mix(1.0,ao,uAO); vec3 bl=texture2D(tBloom,uv).rgb; vec3 col=toSRGB(max(sc+bl*strength,0.0)); float luma=dot(col,vec3(0.2126,0.7152,0.0722)); col=mix(vec3(luma),col,uSat); col=(col-0.5)*1.055+0.5; col*=1.0-r2*0.32; gl_FragColor=vec4(clamp(col,0.0,1.0),1.0); }" });
+    fragmentShader: "uniform sampler2D tScene; uniform sampler2D tBloom; uniform sampler2D tAO; uniform float uAO; uniform float strength; uniform float uSat; uniform float uTime; uniform vec2 uRes; varying vec2 vUv; vec3 toSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,vec3(0.0)),vec3(0.41666))-0.055, step(0.0031308,c)); } float hash(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); } void main(){ vec2 uv=vUv; vec2 d=uv-0.5; float r2=dot(d,d); vec3 sc=texture2D(tScene,uv).rgb; float ao=texture2D(tAO,uv).r; sc*=mix(1.0,ao,uAO); vec3 bl=texture2D(tBloom,uv).rgb; vec3 col=toSRGB(max(sc+bl*strength,0.0)); float luma=dot(col,vec3(0.2126,0.7152,0.0722)); col=mix(vec3(luma),col,uSat); col=(col-0.5)*1.04+0.5; col*=1.0-r2*0.2; gl_FragColor=vec4(clamp(col,0.0,1.0),1.0); }" });
   bloomReady = true;
 }
 function blit(mat, target) { fsQuad.material = mat; renderer.setRenderTarget(target || null); renderer.render(fsScene, fsCam); }
