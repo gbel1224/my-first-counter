@@ -4442,20 +4442,35 @@ function update(dt) {
       if (c.tail) c.tail.rotation.x += 40 * dt;
       if (c.y < 6 && Math.random() < 0.5) emit(c.x + rr(-2, 2), 0.25, c.z + rr(-2, 2), rr(-1, 1), rr(0.2, 0.8), rr(-1, 1), 0.4, 0.62, 0.6, 0.52);   // rotor downwash
     } else if (c.plane) {
-      // ---- plane: always thrusting forward; ▲ climbs, ▼ dives, joystick banks/turns ----
+      // ---- plane: throttle up the runway, then PULL UP (▲) to rotate & take off once fast enough.
+      //      On the ground it only nose-wheel steers (no banking); airborne it banks/pitches and will
+      //      STALL (sink) if you let the speed bleed too low. No taxiing around like a car. ----
       const dry = fuel <= 0;
-      c.h -= inp.mx * 1.05 * dt * clamp(c.speed / 14, 0.25, 1);     // banked turns, sharper with speed
-      const throttle = dry ? 0 : (1 + Math.max(0, inp.mz));         // cruises, stick forward = faster
-      c.speed = clamp(c.speed + (throttle * 26 - c.speed) * Math.min(1, 1.2 * dt), 0, 60);
-      // needs runway speed before it'll leave the ground
+      const TAKEOFF = 16;
+      const airborne = c.y > 0.6;
+      // throttle: stick forward = thrust. Sits still on the ground at idle; a little cruise idle in
+      // the air so it keeps flying without pinning the stick. Brake (▼/Space) to slow down & land.
+      const throttle = dry ? 0 : (airborne ? 0.7 : 0) + Math.max(0, inp.mz);
+      c.speed += (throttle * 30 - c.speed) * Math.min(1, 1.2 * dt);
+      if (braking()) c.speed -= 22 * dt;
+      c.speed = clamp(c.speed, 0, 60);
+      // steering: gentle nose-wheel on the ground (scales from a standstill), full banked turns aloft
+      const turn = airborne ? 1.05 * clamp(c.speed / 14, 0.4, 1) : 0.5 * clamp(c.speed / 10, 0, 1);
+      c.h -= inp.mx * turn * dt;
       let vy = 0;
-      if (c.speed > 16) { if (ascendInput()) vy = 14; else if (descendInput()) vy = -16; else if (c.y > 0.1) vy = -3; }
+      if (airborne) {
+        if (c.speed < TAKEOFF - 2) vy = -9;                        // too slow → lose lift (stall/sink)
+        else if (ascendInput()) vy = 14;                           // climb
+        else if (descendInput()) vy = -16;                         // nose down to descend / land
+      } else if (c.speed > TAKEOFF && ascendInput()) {
+        vy = 12;                                                   // rotate & lift off once up to speed
+      }
       c.y = clamp((c.y || 0) + vy * dt, 0, 170);
       c.x = clamp(c.x + Math.sin(c.h) * c.speed * dt, -HALF - 600, HALF + 600);
       c.z = clamp(c.z + Math.cos(c.h) * c.speed * dt, -HALF - 600, HALF + 600);
       fuel = Math.max(0, fuel - (1.0 + c.speed * 0.02) * dt);
       c.mesh.position.set(c.x, c.y, c.z);
-      c.mesh.rotation.set(-clamp(vy * 0.03, -0.4, 0.4), c.h, inp.mx * 0.5);   // pitch with climb, roll in turns
+      c.mesh.rotation.set(-clamp(vy * 0.03, -0.4, 0.4), c.h, (airborne ? inp.mx : 0) * 0.5);   // pitch w/ climb, bank only aloft
       if (c.prop) c.prop.rotation.z += 50 * dt;
     } else if (c.boat) {
       // ---- arcade boat: throttle forward, turn scales with speed, stays on the harbour ----
