@@ -263,11 +263,15 @@ const ENV_MIDDAY = [
   { t: 1.00, sky: new THREE.Color(0xbcd6ec), top: new THREE.Color(0x7fb0e0), sun: 1.85, hemi: 1.12, far: 880, night: 0.0 },
 ];
 let dayMode = (() => { try { return localStorage.getItem("palm_city_light") === "golden" ? "golden" : "midday"; } catch (e) { return "midday"; } })();   // neutral midday is the default look
+// day/night cycle is OFF by default — the constant tint-shifting reads as the screen "filtering".
+// Locked to a stable bright daytime (DAY_T); re-enable the moving cycle from the settings panel.
+let dayCycle = (() => { try { return localStorage.getItem("palm_city_cycle") === "1"; } catch (e) { return false; } })();
+const DAY_T = 0.25;
 let gradeSat = dayMode === "midday" ? 0.92 : 1.0;   // saturation multiplier in the final grade (was a hard 1.11)
 const _sky = new THREE.Color(), _top = new THREE.Color(), _sunCol = new THREE.Color();
 function envUpdate() {
   const KEYS = dayMode === "midday" ? ENV_MIDDAY : ENV_KEYS;
-  const t = (simTime / 240) % 1;
+  const t = dayCycle ? (simTime / 240) % 1 : DAY_T;   // locked to bright daytime unless the cycle is on
   let a = KEYS[0], b = KEYS[KEYS.length - 1];
   for (let i = 1; i < KEYS.length; i++) {
     if (KEYS[i].t >= t) { a = KEYS[i - 1]; b = KEYS[i]; break; }
@@ -4424,6 +4428,12 @@ dom("stclose").textContent = STR.statsClose;
     const gfxLabel = () => "✨ Graphics: " + (gfxMode === "perf" ? "Performance" : "Quality");
     gx.textContent = gfxLabel();
     gx.addEventListener("click", () => { applyGfx(gfxMode === "perf" ? "quality" : "perf"); gx.textContent = gfxLabel(); toast(gfxMode === "perf" ? "⚡ Performance mode — smoother on slower devices" : "✨ Quality mode — crisp antialiased graphics"); });
+  }
+  const tb = dom("sttime");
+  if (tb) {
+    const timeLabel = () => "🕑 Time: " + (dayCycle ? "Day/Night" : "Always Day");
+    tb.textContent = timeLabel();
+    tb.addEventListener("click", () => { dayCycle = !dayCycle; try { localStorage.setItem("palm_city_cycle", dayCycle ? "1" : "0"); } catch (e) {} tb.textContent = timeLabel(); envUpdate(); toast(dayCycle ? "🌗 Day/night cycle ON" : "☀️ Locked to bright daytime — no more shifting"); });
   }
 }
 // flip resolution ceiling + MSAA and rebuild the offscreen chain so the change takes effect immediately
