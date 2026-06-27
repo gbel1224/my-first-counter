@@ -48,8 +48,12 @@ try {
   document.body.innerHTML = "<p style='color:#333;padding:40px;font-size:18px'>" + STR.noWebgl + "</p>";
   throw e;
 }
-const PR_CAP = Math.min(devicePixelRatio || 1, 2);     // adaptive-resolution ceiling (crisper on hi-DPI screens)
-const PR_FLOOR = Math.min(PR_CAP, 1.0);                 // never blurrier than native 1x — no "Minecraft" look
+// graphics mode (player-toggleable): Quality = crisp + 4x MSAA; Performance = lighter for slower phones
+let gfxMode = (() => { try { return localStorage.getItem("palm_city_gfx") || "quality"; } catch (e) { return "quality"; } })();
+const DPR = devicePixelRatio || 1;
+let PR_CAP = Math.min(DPR, gfxMode === "perf" ? 1.25 : 2);   // adaptive-resolution ceiling
+let PR_FLOOR = Math.min(PR_CAP, 1.0);                  // never blurrier than native 1x — no "Minecraft" look
+let msaaSamples = gfxMode === "perf" ? 0 : 4;          // antialiasing on the offscreen scene buffer
 let pr = PR_CAP;
 renderer.setPixelRatio(pr);
 renderer.setSize(innerWidth, innerHeight);
@@ -4408,6 +4412,23 @@ dom("stclose").textContent = STR.statsClose;
     ab.textContent = aoLabel();
     ab.addEventListener("click", () => { aoOn = !aoOn; try { localStorage.setItem("palm_city_ao", aoOn ? "1" : "0"); } catch (e) {} ab.textContent = aoLabel(); });
   }
+  const gx = dom("stgfx");
+  if (gx) {
+    const gfxLabel = () => "✨ Graphics: " + (gfxMode === "perf" ? "Performance" : "Quality");
+    gx.textContent = gfxLabel();
+    gx.addEventListener("click", () => { applyGfx(gfxMode === "perf" ? "quality" : "perf"); gx.textContent = gfxLabel(); toast(gfxMode === "perf" ? "⚡ Performance mode — smoother on slower devices" : "✨ Quality mode — crisp antialiased graphics"); });
+  }
+}
+// flip resolution ceiling + MSAA and rebuild the offscreen chain so the change takes effect immediately
+function applyGfx(mode) {
+  gfxMode = mode;
+  try { localStorage.setItem("palm_city_gfx", mode); } catch (e) {}
+  PR_CAP = Math.min(DPR, mode === "perf" ? 1.25 : 2);
+  PR_FLOOR = Math.min(PR_CAP, 1.0);
+  msaaSamples = mode === "perf" ? 0 : 4;
+  pr = PR_CAP;
+  renderer.setPixelRatio(pr); renderer.setSize(innerWidth, innerHeight);
+  bloomReady = false;   // buildBloom() rebuilds rtScene with the new sample count next frame
 }
 dom("streset").addEventListener("click", resetGame);
 dom("streset").textContent = STR.newGame;
@@ -5034,12 +5055,13 @@ function update(dt) {
 // ---------- post-processing bloom (beta) ----------
 const BLOOM_VERT = "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }";
 function buildBloom() {
+  if (rtScene) [rtScene, rtB1, rtB2, rtAO, rtAOb].forEach(t => { try { t && t.dispose(); } catch (e) {} });   // free old targets on rebuild (gfx toggle)
   const sz = renderer.getDrawingBufferSize(new THREE.Vector2());
   bloomW = Math.max(2, sz.x); bloomH = Math.max(2, sz.y);
   const hw = Math.max(1, bloomW >> 1), hh = Math.max(1, bloomH >> 1);
-  // 4x MSAA on the offscreen scene target — the renderer's antialias flag only smooths the canvas,
+  // MSAA on the offscreen scene target — the renderer's antialias flag only smooths the canvas,
   // not this RT, so without this every in-game edge renders jagged/aliased ("pixelated").
-  rtScene = new THREE.WebGLRenderTarget(bloomW, bloomH, { depthTexture: new THREE.DepthTexture(bloomW, bloomH), samples: 4 }); rtScene.texture.colorSpace = THREE.LinearSRGBColorSpace;
+  rtScene = new THREE.WebGLRenderTarget(bloomW, bloomH, { depthTexture: new THREE.DepthTexture(bloomW, bloomH), samples: msaaSamples }); rtScene.texture.colorSpace = THREE.LinearSRGBColorSpace;
   rtB1 = new THREE.WebGLRenderTarget(hw, hh); rtB1.texture.colorSpace = THREE.LinearSRGBColorSpace;
   rtB2 = new THREE.WebGLRenderTarget(hw, hh); rtB2.texture.colorSpace = THREE.LinearSRGBColorSpace;
   rtAO = new THREE.WebGLRenderTarget(hw, hh); rtAO.texture.colorSpace = THREE.LinearSRGBColorSpace;     // half-res AO buffer
@@ -5170,6 +5192,7 @@ globalThis.__palmCity = {
   freeze: v => { paused = v; }, render: () => renderFrame(),
   state, player, cars, police, traffic, atms, helis, boats, planes, gangsters, allies, npcs, GANGS, SHOPS, AIRPORT, update, beginPlay, advanceDialogue,
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
+  applyGfx: m => applyGfx(m), gfx: () => ({ mode: gfxMode, prCap: PR_CAP, msaa: msaaSamples, pr: renderer.getPixelRatio() }),
   talkTo: () => talkTo(nearestTalkNPC()),
   startJob: id => startJob(id),
   openMap: () => openMap(), openWheel: () => openWheel(), openPhone: () => openPhone(),
