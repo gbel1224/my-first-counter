@@ -14,7 +14,9 @@ const fire = (t, ev) => { for (const fn of listeners[t] || []) fn(ev); };
 
 function fakeCtx() {
   const noop = () => {};
-  return new Proxy({ measureText: () => ({ width: 10 }) }, {
+  const grad = { addColorStop: noop };
+  const base = { measureText: () => ({ width: 10 }), createLinearGradient: () => grad, createRadialGradient: () => grad, createPattern: () => grad };
+  return new Proxy(base, {
     get: (o, k) => (k in o ? o[k] : (typeof k === "string" ? noop : undefined)),
     set: () => true,
   });
