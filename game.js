@@ -2382,6 +2382,7 @@ const state = {
   races: {},             // best lap per circuit id (seconds)
   medals: {},            // best medal tier per circuit id (1 bronze / 2 silver / 3 gold)
   maxMoney: 0,           // high-water cash mark (for the Tycoon achievement)
+  bestRampage: 0,        // best-ever banked rampage score (the chase-the-record hook)
   busts: 0,              // crooks busted (vigilante)
   rescues: 0,            // patients delivered (paramedic)
   home: false,           // owns the central condo (legacy "home" flag)
@@ -2400,7 +2401,7 @@ const state = {
 };
 function save() {
   state.maxMoney = Math.max(state.maxMoney || 0, Math.floor(state.money));
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, outfit: state.outfit, haircut: state.haircut, jacket: state.jacket, hat: state.hat, glasses: state.glasses, beard: state.beard, weapon: state.weapon, ammo: state.ammo, jetpack: !!state.jetpack, decor: state.decor, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, bestRampage: state.bestRampage || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, outfit: state.outfit, haircut: state.haircut, jacket: state.jacket, hat: state.hat, glasses: state.glasses, beard: state.beard, weapon: state.weapon, ammo: state.ammo, jetpack: !!state.jetpack, decor: state.decor, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
 }
 function load() {
   try {
@@ -2414,6 +2415,7 @@ function load() {
       state.races = d.races || (d.bestRace ? { downtown: d.bestRace } : {});   // migrate single-circuit saves
       state.medals = d.medals || {};
       state.maxMoney = d.maxMoney || 0;
+      state.bestRampage = d.bestRampage || 0;
       state.busts = d.busts || 0;
       state.rescues = d.rescues || 0;
       state.home = !!d.home; state.house = !!d.house; state.apt = !!d.apt;
@@ -3159,8 +3161,40 @@ function doShoot() {
 }
 
 // ---------- explosions, chain reactions & a chaos/rampage combo ----------
-let chaos = 0, chaosCD = 0;
-function addChaos(pts) { chaos += pts; chaosCD = 4.5; toast("💥 RAMPAGE  " + chaos); }
+// rampage combo: each act of mayhem within the window builds a multiplier (x1…x8) and a running
+// score. Let the window lapse and the score banks as cash — beat your best-ever rampage. The
+// "one more run" hook: chain kills/wrecks fast to crank the multiplier before it cools off.
+let chaos = 0, chaosCD = 0, combo = 0, comboMult = 1, comboTierShown = 0;
+const COMBO_WINDOW = 5.0;
+const elCombo = dom("combo"), elComboMult = dom("combomult"), elComboTier = dom("combotier"), elComboFill = dom("combofill"), elComboPts = dom("combopts");
+const COMBO_TIERS = [[1, "RAMPAGE", "💥"], [3, "KILLING SPREE", "🔥"], [5, "UNSTOPPABLE", "⚡"], [7, "LEGENDARY", "👑"]];
+function comboTier() { let t = COMBO_TIERS[0]; for (const c of COMBO_TIERS) if (comboMult >= c[0]) t = c; return t; }
+function addChaos(pts) {
+  combo++;
+  comboMult = Math.min(8, 1 + Math.floor(combo / 3));     // +1x every 3 acts, up to x8
+  chaos += Math.round(pts * comboMult);
+  chaosCD = COMBO_WINDOW;
+  const tier = comboTier();
+  if (elComboMult) {
+    elComboMult.textContent = "x" + comboMult;
+    elComboTier.textContent = tier[2] + " " + tier[1];
+    elComboPts.textContent = chaos.toLocaleString();
+    elCombo.classList.add("on");
+    elCombo.classList.remove("pop"); void elCombo.offsetWidth; elCombo.classList.add("pop");   // restart pop
+  }
+  // celebrate each new tier with a flash + a punchier sound as the streak heats up
+  if (tier[0] > comboTierShown) { comboTierShown = tier[0]; toast(tier[2] + " " + tier[1] + "  x" + comboMult); flash("#ff9a3c", 0.22); AudioSys.play("jingle", 0.5); buzz(20); }
+}
+function bankCombo() {                                     // window lapsed: pay out and chase the record
+  if (chaos <= 0) { resetCombo(); return; }
+  const reward = earn(Math.round(chaos));
+  const prevBest = state.bestRampage || 0;
+  if (chaos > prevBest) { state.bestRampage = Math.round(chaos); toast("🏆 NEW BEST RAMPAGE  +$" + reward); flash("#ffe24a", 0.4); AudioSys.play("jingle", 1.0); buzz([0, 40, 30, 80]); save(); }
+  else { toast("💥 RAMPAGE BANKED  +$" + reward + "  ·  best $" + prevBest.toLocaleString()); AudioSys.play("cash", 0.85); }
+  resetCombo();
+}
+function resetCombo() { chaos = 0; combo = 0; comboMult = 1; comboTierShown = 0; if (elCombo) elCombo.classList.remove("on", "pop"); }
+function drawCombo() { if (elComboFill && chaos > 0) elComboFill.style.width = Math.max(0, Math.min(1, chaosCD / COMBO_WINDOW)) * 100 + "%"; }
 function damageCar(c, dmg) {
   if (c.dead) return;
   c.hp = (c.hp == null ? 100 : c.hp) - dmg;
@@ -3301,7 +3335,7 @@ function updateExplosions(dt) {
   for (const a of atms) if (a.cd > 0) a.cd -= dt;
   for (const hv of helis) if (hv !== driving && hv.y > 0.01) { hv.y = Math.max(0, hv.y - 7 * dt); hv.mesh.position.set(hv.x, hv.y, hv.z); if (hv.rotor) hv.rotor.rotation.y += 18 * dt; }   // abandoned chopper auto-lands
   for (const pl of planes) if (pl !== driving && pl.y > 0.01) { pl.y = Math.max(0, pl.y - 9 * dt); pl.mesh.position.set(pl.x, pl.y, pl.z); }   // abandoned plane glides down
-  if (chaosCD > 0) { chaosCD -= dt; if (chaosCD <= 0 && chaos > 0) { const reward = earn(Math.round(chaos)); toast("💥 RAMPAGE BONUS  +$" + reward); AudioSys.play("cash", 0.8); chaos = 0; } }
+  if (chaosCD > 0) { chaosCD -= dt; if (chaosCD <= 0) bankCombo(); }
   for (const G of GANGS) if (G.captured) state.money += 4 * dt;   // captured turf pays tribute
   if (state.jetpack) { if (jpMesh.visible) jpMesh.visible = false; }
   else {
@@ -3651,6 +3685,7 @@ function currentObjective() {
 }
 
 function updateHUD() {
+  drawCombo();
   const m = Math.floor(state.money);
   if (m !== lastMoneyShown) { elMoney.textContent = STR.money(m); lastMoneyShown = m; }
   const rate = incomeRate();
@@ -4083,6 +4118,7 @@ function renderStats() {
     cell(STR.statCars, ownedCarCount() + "/" + PCARS.length) +
     cell(STR.statPalms, palmsGot() + "/" + PALMS.length) +
     cell(STR.statJump, STR.statJumpVal(state.bestJump || 0)) +
+    cell("💥 Best Rampage", "$" + (state.bestRampage || 0).toLocaleString()) +
     cell(STR.statRacesWon, Object.keys(state.races).length + "/" + CIRCUITS.length) +
     "</div>";
   html += '<div class="shead">' + STR.statBestLaps + "</div>";
@@ -4965,5 +5001,5 @@ globalThis.__palmCity = {
   closeStats: () => closeStats(),
   refreshAch: () => refreshAch(true),
   addXP: n => addXP(n),
-  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, jobId: job && job.id, jobProg: job && job.prog, jobT: job && Math.round(job.t), jobDx: job && job.dx, jobDz: job && job.dz, jetpack: !!state.jetpack, jpX: jetpackPickup.x, jpZ: jetpackPickup.z, py: +player.y.toFixed(2), side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen, race: race.stage, rcp: race.cp, stats: statsOpen, health, fuel, tut: tutOpen, lvl: state.lvl, xp: state.xp, lvlMult }),
+  debug: () => ({ mState, mStep, raceT, dlg: !!dlgLines, driving: !!driving, jobId: job && job.id, jobProg: job && job.prog, jobT: job && Math.round(job.t), jobDx: job && job.dx, jobDz: job && job.dz, jetpack: !!state.jetpack, jpX: jetpackPickup.x, jpZ: jetpackPickup.z, py: +player.y.toFixed(2), side: side.stage, sx: side.x, sz: side.z, tips0: BIZ[0].tips, wanted, palms: palmsGot(), bestJump: state.bestJump || 0, garage: garageOpen, race: race.stage, rcp: race.cp, stats: statsOpen, health, fuel, tut: tutOpen, lvl: state.lvl, xp: state.xp, lvlMult, chaos, combo, comboMult, bestRampage: state.bestRampage || 0 }),
 };

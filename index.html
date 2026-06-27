@@ -65,6 +65,23 @@
     backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
     border:1px solid rgba(255,205,140,.3); box-shadow:0 8px 24px rgba(20,8,16,.5); }
 
+  #combo { position:absolute; left:calc(14px + env(safe-area-inset-left,0px)); top:44%;
+    transform:translateY(-50%) scale(.7); opacity:0; transition:opacity .16s ease, transform .16s ease;
+    pointer-events:none; display:flex; flex-direction:column; align-items:flex-start; gap:3px; z-index:18; }
+  #combo.on { opacity:1; transform:translateY(-50%) scale(1); }
+  #combo.pop #combomult { animation:combopop .26s ease; }
+  #combomult { font-size:42px; font-weight:900; font-style:italic; color:#ffd166; line-height:.95;
+    text-shadow:0 2px 0 rgba(120,40,10,.65), 0 0 20px rgba(255,150,40,.55); }
+  #combotier { font-size:15px; font-weight:900; letter-spacing:1.5px; color:#fff;
+    text-shadow:0 2px 6px rgba(0,0,0,.65); }
+  #combobar { width:128px; height:7px; border-radius:6px; background:rgba(255,255,255,.16);
+    overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.4); }
+  #combobar > i { display:block; height:100%; width:100%;
+    background:linear-gradient(90deg,#ff5b33,#ffd166); }
+  #combopts { font-size:13px; font-weight:800; color:#ffe9b3; text-shadow:0 1px 3px rgba(0,0,0,.6); }
+  body.photo #combo { display:none !important; }
+  @keyframes combopop { 0%{transform:scale(1);} 40%{transform:scale(1.32);} 100%{transform:scale(1);} }
+
   .btn { position:absolute; right:calc(18px + env(safe-area-inset-right, 0px)); width:84px; height:84px;
     border-radius:50%; border:1px solid rgba(255,255,255,.35); color:#1d2a20; font-size:14px; font-weight:900; letter-spacing:.5px;
     box-shadow:0 6px 18px rgba(60,30,0,.4), inset 0 2px 6px rgba(255,255,255,.35); display:none; }
@@ -297,6 +314,7 @@
     <button id="mute" class="pe"></button>
   </div>
   <div id="toast"></div>
+  <div id="combo"><div id="combomult"></div><div id="combotier"></div><div id="combobar"><i id="combofill"></i></div><div id="combopts"></div></div>
   <div id="wanted"></div>
   <div id="health"><i id="healthfill"></i></div>
   <div id="joy"><div id="knob"></div></div>
