@@ -416,15 +416,24 @@ const texArrow = canvasTex(64, (ctx, s) => {
   ctx.beginPath(); ctx.moveTo(cx, s * 0.12); ctx.lineTo(cx - s * 0.22, s * 0.42); ctx.lineTo(cx + s * 0.22, s * 0.42); ctx.closePath(); ctx.fill();  // head
 }, 1, 1);
 const texFacade = canvasTex(256, (ctx, s) => {
-  ctx.fillStyle = "#f5efe2"; ctx.fillRect(0, 0, s, s);
   const band = 44;                                       // street-level storefront band
-  ctx.fillStyle = "#ddd2bd"; ctx.fillRect(0, s - band, s, band);
-  ctx.fillStyle = "#7a6f5c"; ctx.fillRect(s / 2 - 14, s - band + 10, 28, band - 10); // door
+  // wall: soft vertical gradient + fine concrete speckle (deterministic — no rng consumed)
+  const wg = ctx.createLinearGradient(0, 0, 0, s); wg.addColorStop(0, "#f3ecdd"); wg.addColorStop(1, "#dcd0bb");
+  ctx.fillStyle = wg; ctx.fillRect(0, 0, s, s);
+  for (let i = 0; i < 520; i++) { const x = (i * 113) % s, y = (i * 197) % s; ctx.fillStyle = (i & 1) ? "rgba(255,255,255,.045)" : "rgba(86,74,58,.05)"; ctx.fillRect(x, y, 2, 2); }
+  // storefront band with a lintel + big shop windows + a door
+  ctx.fillStyle = "#d2c6af"; ctx.fillRect(0, s - band, s, band);
+  ctx.fillStyle = "#b7aa90"; ctx.fillRect(0, s - band, s, 3);
+  for (let k = 0; k < 4; k++) { const bw = (s - 16) / 4; ctx.fillStyle = "#7e96a8"; ctx.fillRect(8 + k * bw + 3, s - band + 9, bw - 6, band - 20); }
+  ctx.fillStyle = "#6b5a44"; ctx.fillRect(s / 2 - 14, s - band + 8, 28, band - 12);
   const cols = 6, rows = 7, ww = 22, wh = 18;
+  for (let cy = 0; cy < rows; cy++) { const y = 12 + cy * ((s - band - 24) / rows); ctx.fillStyle = "rgba(120,106,84,.32)"; ctx.fillRect(0, y + wh + 3, s, 2); }   // floor ledges
   for (let cx = 0; cx < cols; cx++) for (let cy = 0; cy < rows; cy++) {
     const x = 14 + cx * ((s - 28) / cols) + 4, y = 12 + cy * ((s - band - 24) / rows);
-    ctx.fillStyle = rng() < 0.3 ? "#ffd98a" : "#5e7287";
-    ctx.fillRect(x, y, ww, wh);
+    ctx.fillStyle = "#bdb39c"; ctx.fillRect(x - 2, y - 2, ww + 4, wh + 4);                          // window frame
+    if (rng() < 0.3) { const lg = ctx.createLinearGradient(x, y, x, y + wh); lg.addColorStop(0, "#ffe6ad"); lg.addColorStop(1, "#ffcf86"); ctx.fillStyle = lg; ctx.fillRect(x, y, ww, wh); }   // warm lit pane
+    else { const gg = ctx.createLinearGradient(x, y, x, y + wh); gg.addColorStop(0, "#9ab6cb"); gg.addColorStop(0.55, "#5f7c92"); gg.addColorStop(1, "#6f8a9f"); ctx.fillStyle = gg; ctx.fillRect(x, y, ww, wh);
+      ctx.fillStyle = "rgba(255,255,255,.16)"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + ww * 0.55, y); ctx.lineTo(x, y + wh * 0.55); ctx.closePath(); ctx.fill(); }   // glass + corner reflection
   }
 });
 // night windows: black facade with a random subset of windows lit (used as an emissive map after dark)
@@ -451,11 +460,20 @@ const texFacadeNormal = canvasNormalTex(256, (ctx, s) => {
 });
 // glass-tower facade — a uniform window grid that tiles seamlessly so it can repeat up tall skyscrapers
 const texTower = canvasTex(128, (ctx, s) => {
-  ctx.fillStyle = "#8fa6b8"; ctx.fillRect(0, 0, s, s);     // steel mullion frame
-  const R = 4, cell = s / R, p = cell * 0.16;
+  // brushed-steel curtain wall with a subtle vertical sheen behind the glass mullions
+  const fg = ctx.createLinearGradient(0, 0, s, 0); fg.addColorStop(0, "#8aa1b3"); fg.addColorStop(0.5, "#9cb2c2"); fg.addColorStop(1, "#859caf");
+  ctx.fillStyle = fg; ctx.fillRect(0, 0, s, s);
+  const R = 4, cell = s / R, p = cell * 0.14;
   for (let cy = 0; cy < R; cy++) for (let cx = 0; cx < R; cx++) {
-    ctx.fillStyle = rng() < 0.2 ? "#ffe7b3" : (rng() < 0.5 ? "#5e7891" : "#728da3");
-    ctx.fillRect(cx * cell + p, cy * cell + p, cell - 2 * p, cell - 2 * p);
+    const x = cx * cell + p, y = cy * cell + p, w = cell - 2 * p, hh = cell - 2 * p;
+    let top, bot;
+    if (rng() < 0.2) { top = "#fff0c8"; bot = "#ffd98a"; }            // lit interior
+    else if (rng() < 0.5) { top = "#86a3bf"; bot = "#4f6b84"; }       // cool blue glass
+    else { top = "#93b6c6"; bot = "#5d8092"; }                        // teal glass
+    const g = ctx.createLinearGradient(x, y, x, y + hh); g.addColorStop(0, top); g.addColorStop(1, bot);
+    ctx.fillStyle = g; ctx.fillRect(x, y, w, hh);
+    ctx.fillStyle = "rgba(255,255,255,.14)"; ctx.fillRect(x, y, w, 2);          // glint along the top of each pane
+    ctx.fillStyle = "rgba(20,30,40,.18)"; ctx.fillRect(x, y + hh - 2, w, 2);    // shadow line at the bottom
   }
 }, 2, 7);
 // night version: a random subset of tower windows lit (emissive map after dark)
@@ -1075,6 +1093,40 @@ let lampMat = null, lampPoolMat = null, lampConeMat = null;
   const coneIM = new THREE.InstancedMesh(coneGeo, lampConeMat, spots.length);
   spots.forEach(([x, z], idx) => { m.makeTranslation(x, 0.1, z); coneIM.setMatrixAt(idx, m); });
   coneIM.frustumCulled = false; scene.add(coneIM);
+}
+
+// ---------- traffic lights at every intersection (signal poles whose lamps cycle green → amber → red) ----------
+let trafRed = null, trafAmber = null, trafGreen = null, trafPhase = 0, trafCD = 6.5;
+{
+  // dark pole + arm reaching over the road + a signal housing with a visor
+  const struct = mergeGeos([
+    cylC(0.14, 0.17, 5.2, 0, 2.6, 0, 0x2b2f35),            // pole
+    boxGeoC(0.17, 0.17, 2.6, 0, 5.0, 1.45, 0x2b2f35),      // arm reaching over the road (+z)
+    boxGeoC(0.62, 1.74, 0.56, 0, 4.55, 2.75, 0x14161a),    // signal housing at the arm's end
+    boxGeoC(0.74, 0.15, 0.7, 0, 5.46, 2.79, 0x0e1014),     // visor cap
+  ]);
+  const lampGeo = y => boxGeoC(0.26, 0.26, 0.12, 0, y, 3.05, 0xffffff);   // a lamp on the road-facing side
+  const spots = [];
+  for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) spots.push([roadC(i) - ROAD / 2 - 0.7, roadC(j) - ROAD / 2 - 0.7]);
+  const mm = new THREE.Matrix4();
+  const placeIM = (geo, mat, cast) => { const im = new THREE.InstancedMesh(geo, mat, spots.length); spots.forEach(([x, z], k) => { mm.makeTranslation(x, CURB, z); im.setMatrixAt(k, mm); }); im.frustumCulled = false; if (cast) im.castShadow = true; scene.add(im); return im; };
+  placeIM(struct, new THREE.MeshLambertMaterial({ color: 0x24272d }));
+  const lampMatOf = c => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.14 });
+  trafRed = lampMatOf(0xff3b30); trafAmber = lampMatOf(0xffce3a); trafGreen = lampMatOf(0x46e15a);
+  placeIM(lampGeo(5.0), trafRed);     // red (top)
+  placeIM(lampGeo(4.55), trafAmber);  // amber (middle)
+  placeIM(lampGeo(4.1), trafGreen);   // green (bottom)
+}
+function applyTrafPhase() {
+  if (!trafRed) return;
+  trafRed.opacity = trafPhase === 2 ? 1 : 0.13;
+  trafAmber.opacity = trafPhase === 1 ? 1 : 0.13;
+  trafGreen.opacity = trafPhase === 0 ? 1 : 0.13;
+}
+applyTrafPhase();
+function updateTrafficLights(dt) {
+  trafCD -= dt;
+  if (trafCD <= 0) { trafPhase = (trafPhase + 1) % 3; trafCD = trafPhase === 1 ? 1.6 : 7; applyTrafPhase(); }
 }
 
 // ---------- street clutter: trash cans, hydrants, benches & planters along the sidewalks ----------
@@ -2327,14 +2379,12 @@ function updateHeadBeams(g) {
 
 // ---------- markers ----------
 function makeMarker(color) {
+  // a subtle flat ground ring at the objective (no tall light-beam pillar in the road)
   const g = new THREE.Group();
-  const ring = new THREE.Mesh(new THREE.RingGeometry(2.0, 3.0, 26),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
+  const ring = new THREE.Mesh(new THREE.RingGeometry(1.7, 2.6, 30),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.12;
-  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 26, 10, 1, true),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending }));
-  beam.position.y = 13;
-  g.add(ring, beam);
+  g.add(ring);
   g.visible = false;
   scene.add(g);
   return { group: g, ring };
@@ -4964,6 +5014,7 @@ function update(dt) {
   updateGangs(dt);
   updateAllies(dt);
   updateNemesis(dt);
+  updateTrafficLights(dt);
   updateHoldup(dt);
   updateJob(dt);
   // ambient banter: now and then a nearby pedestrian says something unprompted
