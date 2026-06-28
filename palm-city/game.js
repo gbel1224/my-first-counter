@@ -296,6 +296,7 @@ function envUpdate() {
   setSky(night);
   updateCarLights(night);
   updateHeadBeams(night);
+  updateTrafficBeams(night);
 }
 
 addEventListener("resize", onResize);
@@ -1102,31 +1103,42 @@ const TL_DIM = 0.11;
 {
   // soft round glow sprite so each lit lamp blooms like a real signal lens
   const glowTex = canvasTex(48, (ctx, s) => { const c = s / 2; for (let r = c; r > 0; r--) { ctx.globalAlpha = (1 - r / c) * 0.14; ctx.beginPath(); ctx.arc(c, c, r, 0, 7); ctx.fillStyle = "#fff"; ctx.fill(); } });
-  // pole + a signal head box (lamps sit on the +z = N-S face and the +x = E-W face)
+  // realistic mast-arm signal: a tall pole on the corner, a horizontal arm reaching out over the road,
+  // and a signal head hanging at the end whose lamps face back at the oncoming traffic.
+  const ARM = ROAD / 2 + 2.4;                                       // arm reaches over the road to ~the lane
+  const HX = ARM - 0.2;                                             // head sits at the far end of the arm (+x)
   const struct = mergeGeos([
-    cylC(0.15, 0.18, 5.0, 0, 2.5, 0, 0x2b2f35),
-    boxGeoC(0.72, 1.74, 0.72, 0, 5.9, 0, 0x14161a),       // signal head
-    boxGeoC(0.86, 0.16, 0.86, 0, 6.82, 0, 0x0e1014),      // cap
+    cylC(0.18, 0.22, 6.6, 0, 3.3, 0, 0x2a2e34),                     // pole
+    boxGeoC(ARM, 0.22, 0.22, ARM / 2, 6.45, 0, 0x2a2e34),          // mast arm (+x)
+    boxGeoC(0.46, 1.92, 0.66, HX, 5.45, 0, 0x14161a),              // signal head hanging at the arm's end
+    boxGeoC(0.58, 0.18, 0.78, HX, 6.48, 0, 0x0e1014),              // backplate cap
   ]);
-  const spots = [];
-  for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) spots.push([roadC(i) - ROAD / 2 - 0.7, roadC(j) - ROAD / 2 - 0.7]);
-  const mm = new THREE.Matrix4();
-  const placeIM = (geo, mat) => { const im = new THREE.InstancedMesh(geo, mat, spots.length); spots.forEach(([x, z], k) => { mm.makeTranslation(x, CURB, z); im.setMatrixAt(k, mm); }); im.frustumCulled = false; scene.add(im); return im; };
-  placeIM(struct, new THREE.MeshLambertMaterial({ color: 0x24272d }));
+  const lamp = y => { const g = new THREE.PlaneGeometry(0.4, 0.4); g.rotateY(Math.PI); g.translate(HX, y, -0.36); return g; };   // on the head's -z face, looking south at traffic
+  // place an N-S arm and an E-W arm at the same corner of every intersection (E-W rotated 90°)
+  const nsSpots = [], ewSpots = [];
+  for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
+    const cx = roadC(i) - ROAD / 2, cz = roadC(j) - ROAD / 2;       // corner of the intersection
+    nsSpots.push([cx - 1.0, cz - 1.7]);                            // arm reaches +x over the N-S road, head faces -z
+    ewSpots.push([cx - 1.7, cz - 1.0]);                            // rotated +90°: arm reaches +z over the E-W road, head faces -x
+  }
+  const mm = new THREE.Matrix4(), pv = new THREE.Vector3(), sc1 = new THREE.Vector3(1, 1, 1);
+  const q0 = new THREE.Quaternion(), q90 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+  const placeIM = (geo, mat, spots, q) => { const im = new THREE.InstancedMesh(geo, mat, spots.length); spots.forEach(([x, z], k) => { pv.set(x, CURB, z); mm.compose(pv, q, sc1); im.setMatrixAt(k, mm); }); im.frustumCulled = false; scene.add(im); return im; };
+  const structMat = new THREE.MeshLambertMaterial({ color: 0x23262c });
+  placeIM(struct, structMat, nsSpots, q0);
+  placeIM(struct, structMat, ewSpots, q90);
   const lampMat = c => new THREE.MeshBasicMaterial({ map: glowTex, color: c, transparent: true, opacity: TL_DIM, blending: THREE.AdditiveBlending, depthWrite: false });
-  const nsLamp = y => { const g = new THREE.PlaneGeometry(0.52, 0.52); g.translate(0, y, 0.4); return g; };          // faces +z (N-S)
-  const ewLamp = y => { const g = new THREE.PlaneGeometry(0.52, 0.52); g.rotateY(Math.PI / 2); g.translate(0.4, y, 0); return g; };   // faces +x (E-W)
   nsR = lampMat(0xff3b30); nsA = lampMat(0xffce3a); nsG = lampMat(0x46e15a);
   ewR = lampMat(0xff3b30); ewA = lampMat(0xffce3a); ewG = lampMat(0x46e15a);
-  placeIM(nsLamp(6.36), nsR); placeIM(nsLamp(5.9), nsA); placeIM(nsLamp(5.44), nsG);
-  placeIM(ewLamp(6.36), ewR); placeIM(ewLamp(5.9), ewA); placeIM(ewLamp(5.44), ewG);
-  // coloured spill the active signal casts onto the road (additive ground discs, one per direction)
-  const poolGeo = new THREE.CircleGeometry(4.2, 20); poolGeo.rotateX(-Math.PI / 2);
+  placeIM(lamp(6.0), nsR, nsSpots, q0); placeIM(lamp(5.45), nsA, nsSpots, q0); placeIM(lamp(4.9), nsG, nsSpots, q0);
+  placeIM(lamp(6.0), ewR, ewSpots, q90); placeIM(lamp(5.45), ewA, ewSpots, q90); placeIM(lamp(4.9), ewG, ewSpots, q90);
+  // coloured spill the active signal casts onto the road below each head
+  const poolGeo = new THREE.CircleGeometry(4.0, 20); poolGeo.rotateX(-Math.PI / 2);
   const poolMat = () => new THREE.MeshBasicMaterial({ map: glowTex, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
   nsPool = poolMat(); ewPool = poolMat();
-  const placePool = (mat, dz, dx) => { const im = new THREE.InstancedMesh(poolGeo, mat, spots.length); spots.forEach(([x, z], k) => { mm.makeTranslation(x + dx, 0.08, z + dz); im.setMatrixAt(k, mm); }); im.frustumCulled = false; scene.add(im); return im; };
-  placePool(nsPool, 4.5, 0);   // spill toward the N-S road
-  placePool(ewPool, 0, 4.5);   // spill toward the E-W road
+  const placePool = (mat, spots, dx, dz) => { const im = new THREE.InstancedMesh(poolGeo, mat, spots.length); spots.forEach(([x, z], k) => { mm.makeTranslation(x + dx, 0.08, z + dz); im.setMatrixAt(k, mm); }); im.frustumCulled = false; scene.add(im); return im; };
+  placePool(nsPool, nsSpots, HX, 0);   // under the N-S head
+  placePool(ewPool, ewSpots, 0, HX);   // under the E-W head
 }
 function applyTrafPhase() {
   if (!nsR) return;
@@ -2399,6 +2411,46 @@ function updateHeadBeams(g) {
   const fx = Math.sin(driving.h), fz = Math.cos(driving.h);
   headBeams.position.set(driving.x + fx * 2.6, 0.12, driving.z + fz * 2.6);
   headBeams.rotation.y = driving.h;
+}
+
+// nearby traffic headlight beams at night — a small pool reused for the closest cars, so the
+// night world has real light shafts spilling across the road without a cone per vehicle.
+const TBEAMS = 14, TBEAM_R2 = 9000;
+const trafBeams = new THREE.Group(); trafBeams.visible = false; scene.add(trafBeams);
+{
+  const bGeo = new THREE.ConeGeometry(2.0, 9, 12, 1, true); bGeo.rotateX(-Math.PI / 2); bGeo.translate(0, 0, -9 / 2);
+  for (let i = 0; i < TBEAMS; i++) {
+    const mat = new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+    const g = new THREE.Group(); g.userData.mat = mat; g.visible = false;
+    for (const s of [-1, 1]) { const b = new THREE.Mesh(bGeo, mat); b.position.x = s * 0.6; b.scale.y = 0.15; g.add(b); }
+    trafBeams.add(g);
+  }
+}
+const _tbCand = [];
+function updateTrafficBeams(g) {
+  const on = g > 0.04;
+  trafBeams.visible = on;
+  if (!on) return;
+  const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
+  _tbCand.length = 0;
+  for (const c of LIGHT_CARS) {
+    if (c === driving || c.dead) continue;
+    if (!((c.active === undefined || c.active) && !c.locked)) continue;   // dark showroom cars don't beam
+    const dd = dist2(c.x, c.z, px, pz);
+    if (dd < TBEAM_R2) _tbCand.push([dd, c]);
+  }
+  _tbCand.sort((a, b) => a[0] - b[0]);
+  const op = 0.10 + g * 0.16;
+  for (let i = 0; i < TBEAMS; i++) {
+    const slot = trafBeams.children[i], e = _tbCand[i];
+    if (!e) { slot.visible = false; continue; }
+    const c = e[1];
+    slot.visible = true;
+    slot.userData.mat.opacity = op * clamp(1 - e[0] / TBEAM_R2, 0.2, 1);
+    const fx = Math.sin(c.h), fz = Math.cos(c.h);
+    slot.position.set(c.x + fx * 2.6, (c.mesh ? c.mesh.position.y : 0) + 0.5, c.z + fz * 2.6);
+    slot.rotation.y = c.h;
+  }
 }
 
 // ---------- markers ----------
@@ -4954,18 +5006,30 @@ function update(dt) {
   carGrid.clear();
   for (const t of traffic) { if (t.jacked || t.dead) continue; const k = Math.floor(t.x / 14) + "," + Math.floor(t.z / 14); let a = carGrid.get(k); if (!a) carGrid.set(k, a = []); a.push(t); }
   const tpx = driving ? driving.x : player.x, tpz = driving ? driving.z : player.z;
+  // when you're on a rampage (recent mayhem) or heavily wanted, nearby drivers panic:
+  // they floor it, run red lights and swerve away from you instead of calmly queuing.
+  const mayhem = chaosCD > 0 || wanted >= 2;
   for (const t of traffic) {
     if (t.jacked) continue;   // being driven by the player, or left abandoned after a jack
     const [tx, tz] = t.wp[t.next];
     const dx = tx - t.x, dz = tz - t.z;
     const d = Math.hypot(dx, dz) || 1;
     if (d < 2) { t.next = (t.next + 1) % 4; continue; }
-    const fx = dx / d, fz = dz / d;
-    const near = dist2(t.x, t.z, tpx, tpz) < (driving ? 100 : 22);   // yield close to the player
+    let fx = dx / d, fz = dz / d;
+    const pd = mayhem ? dist2(t.x, t.z, tpx, tpz) : 1e9;
+    const panic = pd < 3600;                                          // within ~60u of the chaos
+    const near = !panic && dist2(t.x, t.z, tpx, tpz) < (driving ? 100 : 22);   // yield close to the player
     // obey the signal: hold on the approach to the intersection if this direction has a red light
     const nsTravel = Math.abs(dz) >= Math.abs(dx);
     const red = nsTravel ? (trafPhase === 2 || trafPhase === 3) : (trafPhase === 0 || trafPhase === 1);
-    const atRed = red && d > 2.6 && d < 11;
+    const atRed = !panic && red && d > 2.6 && d < 11;                 // panicked drivers blow the light
+    // panic swerve: bias the heading away from the player, blended into the road-follow direction
+    if (panic) {
+      const px = t.x - tpx, pz = t.z - tpz, pl = Math.hypot(px, pz) || 1;
+      const w = clamp(1 - pl / 60, 0, 1) * 0.8;
+      fx += px / pl * w; fz += pz / pl * w;
+      const fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl;
+    }
     // car-following: queue behind any car just ahead in the same lane
     let blocked = false;
     const cx0 = Math.floor(t.x / 14), cz0 = Math.floor(t.z / 14);
@@ -4974,16 +5038,17 @@ function update(dt) {
       for (const o of arr) { if (o === t) continue; const ox = o.x - t.x, oz = o.z - t.z; const ahead = ox * fx + oz * fz; if (ahead > 0.3 && ahead < 6.5 && Math.abs(ox * fz - oz * fx) < 2.3) { blocked = true; break; } }
     }
     const stop = near || atRed || blocked;
-    const target = stop ? 0 : t.speed;
+    const target = stop ? 0 : t.speed * (panic ? 1.8 : 1);             // floor it when fleeing
     if (t.v === undefined) t.v = t.speed;
-    t.v += (target - t.v) * Math.min(1, 7 * dt);                       // smooth accelerate / decelerate
-    t.braking = stop && t.v < t.speed * 0.75;                          // -> brake lights
-    t.h = lerpAngle(t.h, Math.atan2(dx, dz), 1 - Math.exp(-6 * dt));
+    t.v += (target - t.v) * Math.min(1, (panic ? 4 : 7) * dt);         // smooth accelerate / decelerate
+    t.braking = !panic && stop && t.v < t.speed * 0.75;               // -> brake lights
+    t.h = lerpAngle(t.h, Math.atan2(fx, fz), 1 - Math.exp(-(panic ? 9 : 6) * dt));
     if (t.v > 0.02) { t.x += fx * t.v * dt; t.z += fz * t.v * dt; }
     t.mesh.position.set(t.x, groundY(t.x, t.z), t.z);
     t.mesh.rotation.y = t.h;
-    // honk when stuck behind a queue / at a red near the player
-    if ((atRed || blocked) && t.v < 1.2) { t.honkCD = (t.honkCD || 0) - dt; if (t.honkCD <= 0 && near && Math.random() < 0.02) { AudioSys.horn(); t.honkCD = rr(2.5, 6); } }
+    // honk: in a panic anyone close leans on it; otherwise only when stuck in a queue near you
+    if (panic && pd < 900) { t.honkCD = (t.honkCD || 0) - dt; if (t.honkCD <= 0 && Math.random() < 0.04) { AudioSys.horn(); t.honkCD = rr(1.2, 3); } }
+    else if ((atRed || blocked) && t.v < 1.2) { t.honkCD = (t.honkCD || 0) - dt; if (t.honkCD <= 0 && near && Math.random() < 0.02) { AudioSys.horn(); t.honkCD = rr(2.5, 6); } }
   }
 
   // pedestrians
@@ -5308,6 +5373,8 @@ globalThis.__palmCity = {
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
   applyGfx: m => applyGfx(m), gfx: () => ({ mode: gfxMode, prCap: PR_CAP, msaa: msaaSamples, pr: renderer.getPixelRatio() }),
   trafPhase: () => trafPhase, setTraf: p => { trafPhase = p; applyTrafPhase(); },
+  setCycle: v => { dayCycle = v; envUpdate(); }, setSimTime: t => { simTime = t; envUpdate(); },
+  nightBeams: () => trafBeams.visible ? trafBeams.children.filter(c => c.visible).length : 0,
   talkTo: () => talkTo(nearestTalkNPC()),
   startJob: id => startJob(id),
   openMap: () => openMap(), openWheel: () => openWheel(), openPhone: () => openPhone(),
