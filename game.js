@@ -2858,18 +2858,17 @@ const medalFor = (C, t) => t <= C.limit * 0.5 ? 3 : t <= C.limit * 0.65 ? 2 : t 
 const goldTime = C => C.limit * 0.5;
 let race = { stage: "idle", ci: -1, cp: 0, t: 0, armed: true };  // idle | active
 {
-  const post = new THREE.BoxGeometry(0.6, 4, 0.6);
-  const matW = new THREE.MeshLambertMaterial({ color: 0xf2f2f2 });
-  const matB = new THREE.MeshLambertMaterial({ color: 0x1c1c1c });
+  // flat checkered start line painted on the road — no overhead gate spanning the street
+  const checkTex = canvasTex(64, (ctx, s) => {
+    const n = 8, c = s / n;
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) { ctx.fillStyle = ((x + y) & 1) ? "#f4f4f4" : "#14141a"; ctx.fillRect(x * c, y * c, c, c); }
+  });
+  const padGeo = new THREE.PlaneGeometry(7, 2.4); padGeo.rotateX(-Math.PI / 2);
+  const padMat = new THREE.MeshLambertMaterial({ map: checkTex, transparent: true, opacity: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
   for (const C of CIRCUITS) {
-    const g = new THREE.Group();
-    const p1 = new THREE.Mesh(post, matW); p1.position.set(-3.4, 2, 0);
-    const p2 = new THREE.Mesh(post, matW); p2.position.set(3.4, 2, 0);
-    const banner = new THREE.Mesh(new THREE.BoxGeometry(7.4, 0.9, 0.3), matB);
-    banner.position.set(0, 4.1, 0);
-    g.add(p1, p2, banner);
-    g.position.set(C.start.x, CURB, C.start.z);
-    scene.add(g);
+    const m = new THREE.Mesh(padGeo, padMat);
+    m.position.set(C.start.x, CURB + 0.05, C.start.z);
+    scene.add(m);
   }
 }
 // build the neon glow cloud at landmark/sign positions (declared near the sky setup)
@@ -2880,7 +2879,7 @@ let race = { stage: "idle", ci: -1, cp: 0, t: 0, armed: true };  // idle | activ
   for (const b of BIZ) { const c = NEON[b.id] || [0.9, 0.8, 0.5]; pts.push([b.x, b.ly + 1, b.z, c[0], c[1], c[2]]); }
   pts.push([PLAZA.x, 3.4, PLAZA.z, 0.7, 0.85, 0.95]);                 // fountain
   pts.push([GARAGE.x, 5, GARAGE.z, 0.4, 0.85, 0.95]);                 // garage sign
-  for (const C of CIRCUITS) pts.push([C.start.x, 4.4, C.start.z, 0.95, 0.95, 0.95]);  // race gates
+  for (const C of CIRCUITS) pts.push([C.start.x, 0.6, C.start.z, 0.9, 0.9, 0.95]);     // race start lines (ground glow)
   for (const lh of lampHeads) pts.push([lh[0], lh[1], lh[2], 0.5, 0.4, 0.18]);         // street-lamp halos
   const gpos = new Float32Array(pts.length * 3);
   glowBase = new Float32Array(pts.length * 3);
