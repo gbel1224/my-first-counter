@@ -46,6 +46,7 @@ globalThis.requestAnimationFrame = () => 0;
 Object.defineProperty(globalThis, "localStorage", { value: { getItem: () => null, setItem: () => {}, removeItem: () => {} }, configurable: true });
 Object.defineProperty(globalThis, "navigator", { value: { getGamepads: () => [] }, configurable: true });
 Object.defineProperty(globalThis, "location", { value: { search: "" }, configurable: true });
+globalThis.__PALM_TEST = true;   // skip the get-in / mount animation so the scripted route stays deterministic
 globalThis.FakeRenderer = class {
   constructor() { this.domElement = fakeEl(); this.info = { render: { calls: 0, triangles: 0 } }; }
   setPixelRatio() {} setSize() {} render() {}
