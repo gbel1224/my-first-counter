@@ -1903,6 +1903,75 @@ const hero = articulatedPerson(HERO_PAL);
 hero.group.traverse(o => { if (o.isMesh) o.castShadow = true; });
 scene.add(hero.group);
 
+// ---------- vehicle entry/exit animation: a door swings open + the player gets in / mounts ----------
+let mount = null;   // { c, mode:'in'|'out', t, dur, ex, ez } while a get-in / get-off plays
+const doorPivot = new THREE.Group();   // hinges at the front edge so the panel swings like a real door
+const doorPanel = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.82, 1.5),
+  new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.6, roughness: 0.28, envMapIntensity: 1.3 }));
+doorPanel.position.z = -0.75; doorPanel.castShadow = true;
+doorPivot.add(doorPanel); doorPivot.visible = false; scene.add(doorPivot);
+const smooth = p => p * p * (3 - 2 * p);
+const lerp = (a, b, t) => a + (b - a) * t;
+function startMount(c, mode, ex, ez) {
+  c.speed = 0; c.lat = 0;
+  if (globalThis.__PALM_TEST) {   // headless determinism runs skip the animation (instant enter/exit, as before)
+    if (mode === "in") { if (!c.bike) hero.group.visible = false; }
+    else { player.x = clamp(ex, WB.x0, WB.x1); player.z = clamp(ez, WB.z0, WB.z1); player.h = c.h; driving = null; hero.group.visible = true; }
+    AudioSys.play("door", 0.85);
+    return;
+  }
+  mount = { c, mode, t: 0, dur: c.bike ? 0.5 : 0.55, ex, ez };
+  hero.group.visible = true;
+  AudioSys.play("door", 0.85);
+}
+function finishMount() {
+  const m = mount; mount = null; doorPivot.visible = false;
+  hero.group.scale.set(1, 1, 1);
+  if (m.mode === "in") { if (!m.c.bike) hero.group.visible = false; }   // tucked inside the car (bike keeps the rider shown)
+  else {                                                                // dismounted — step off and let go of the vehicle
+    player.x = clamp(m.ex, WB.x0, WB.x1); player.z = clamp(m.ez, WB.z0, WB.z1); player.h = m.c.h;
+    driving = null; hero.group.visible = true;
+    hero.group.scale.set(1, 1, 1);
+  }
+}
+function updateMount(dt) {
+  if (!mount) return;
+  const m = mount, c = m.c;
+  if (driving !== c) { mount = null; doorPivot.visible = false; hero.group.scale.set(1, 1, 1); return; }   // vehicle lost mid-animation (e.g. wasted)
+  m.t += dt;
+  const p = clamp(m.t / m.dur, 0, 1), e = smooth(p);
+  const k = m.mode === "in" ? e : 1 - e;            // 0 = outside/standing · 1 = inside/seated
+  const fx = Math.sin(c.h), fz = Math.cos(c.h), sx = Math.cos(c.h), sz = -Math.sin(c.h);   // forward + left-side unit vectors
+  const gy = groundY(c.x, c.z);
+  if (c.bike) {
+    // swing a leg over and settle onto the saddle (reverse to step off)
+    const seatX = c.x - fx * 0.26, seatZ = c.z - fz * 0.26, seatY = gy - 0.04;
+    const standX = c.x + sx * 1.0, standZ = c.z + sz * 1.0;
+    hero.group.position.set(lerp(standX, seatX, k), lerp(gy, seatY, k) + Math.sin(p * Math.PI) * 0.14, lerp(standZ, seatZ, k));
+    hero.group.rotation.set(0.12 * k, c.h, 0);
+    hero.legL.rotation.x = 1.4 * k; hero.legR.rotation.x = 1.4 * k;
+    hero.kneeL.rotation.x = -1.55 * k; hero.kneeR.rotation.x = -1.55 * k;
+    hero.legL.rotation.z = 0.22 * k; hero.legR.rotation.z = -0.22 * k;
+    hero.armL.rotation.x = hero.armR.rotation.x = 1.05 * k;
+  } else {
+    // a door swings open, the player slips into the seat, then it shuts behind them
+    doorPivot.visible = true; doorPanel.material.color.copy(c.mesh.material.color);
+    const open = Math.sin(p * Math.PI);                            // open through the middle, shut by the end
+    const sideX = c.x + sx * 0.95, sideZ = c.z + sz * 0.95;        // driver side
+    doorPivot.position.set(sideX + fx * 0.75, gy + 0.62, sideZ + fz * 0.75);   // hinge at the door's front edge
+    doorPivot.rotation.set(0, c.h - open * 1.05, 0);                            // free edge swings outward, away from the body
+    const outX = c.x + sx * 1.5, outZ = c.z + sz * 1.5;
+    hero.group.position.set(lerp(outX, c.x, k), gy, lerp(outZ, c.z, k));
+    hero.group.rotation.set(0, c.h + (1 - k) * 0.5, 0);            // turn to face into the seat
+    const duck = Math.min(1, k * 1.25);
+    hero.legL.rotation.set(0.7 * duck, 0, 0); hero.legR.rotation.set(0.7 * duck, 0, 0);
+    hero.kneeL.rotation.x = 1.0 * duck; hero.kneeR.rotation.x = 1.0 * duck;
+    hero.armL.rotation.x = hero.armR.rotation.x = 0.4 * duck;
+    hero.group.visible = k < 0.86;                                 // gone inside by the end
+  }
+  if (m.t >= m.dur) finishMount();
+}
+
 // ---------- wardrobe (clothing) + barber (haircuts): change the player's look ----------
 const OUTFITS = [
   { name: "Sunset Tee", shirt: 0xff7a33, pants: 0xf5f0e6 },
@@ -4863,7 +4932,7 @@ hudMenu.addEventListener("click", e => { if (e.target === hudMenu) closeMenu(); 
 
 // ---------- actions ----------
 function doActionA() {
-  if (para) return;                                // busy under the canopy
+  if (para || mount) return;                       // busy under the canopy / mid get-in animation
   if (driving) {                                   // exit car / chopper
     const c = driving;
     if ((c.heli || c.plane) && c.y > 3) {           // bail out midair -> parachute
@@ -4876,6 +4945,8 @@ function doActionA() {
     const rx = -Math.cos(c.h), rz = Math.sin(c.h);
     let ex = c.x + rx * 2.6, ez = c.z + rz * 2.6;
     if (hitsCollider(ex, ez, 0.5)) { ex = c.x - rx * 2.6; ez = c.z - rz * 2.6; }
+    // owned cars + bikes play a get-off / dismount animation; everything else hops out instantly
+    if (!c.heli && !c.plane && !c.boat && !c.wp) { startMount(c, "out", ex, ez); return; }
     player.x = clamp(ex, WB.x0, WB.x1); player.z = clamp(ez, WB.z0, WB.z1);
     player.h = c.h;
     c.speed = 0; c.lat = 0;
@@ -4901,7 +4972,11 @@ function doActionA() {
         registerCrime();                            // jacking draws police heat
         toast("🚗 Carjacked — floor it!"); buzz(30);
       }
-      driving = c; hero.group.visible = false; AudioSys.play("door", 0.8);
+      driving = c;
+      // owned cars + bikes get a get-in / mount animation; aircraft, boats and jacked street cars board instantly
+      if (!c.heli && !c.plane && !c.boat && !c.wp) startMount(c, "in");
+      else hero.group.visible = false;
+      if (!mount) AudioSys.play("door", 0.8);
       // one-time take-off tip the first time you ever board each aircraft (saved so it shows once)
       if (c.heli && !state.flewHeli) { state.flewHeli = true; toast("🚁 Hold ▲ to lift off — then steer with the stick"); save(); }
       else if (c.plane && !state.flewPlane) { state.flewPlane = true; toast("✈️ Hold forward to build speed, then ▲ to take off — keep your speed up!"); save(); }
@@ -4968,7 +5043,7 @@ function update(dt) {
     if (fuel > 25) fuelWarned = false; }
 
   let airMode = false;   // true while parachuting or jetpacking (skips the on-ground player-mesh snap)
-  if (driving) {
+  if (driving && !mount) {   // controls are locked while the get-in / mount animation plays
     const c = driving;
     if (c.heli) {
       // ---- helicopter: ▲ lifts straight up off the ground; only once AIRBORNE does the joystick
@@ -5339,7 +5414,7 @@ function update(dt) {
     if (c.bike) c.mesh.rotation.z = clamp((c.lat || 0) * 0.05, -0.45, 0.45);   // lean into turns
   }
   // motorcycle rider: a bike isn't a car, so keep the real player visible and mount them on the saddle
-  if (driving && driving.bike) {
+  if (driving && driving.bike && !mount) {
     const c = driving, fx = Math.sin(c.h), fz = Math.cos(c.h);
     const gy = groundY(c.x, c.z) + (c.y || 0);
     // body english: tuck forward under boost (+1), shift upright & braced under hard braking (-1)
@@ -5356,6 +5431,7 @@ function update(dt) {
     hero.legL.rotation.z = 0.22; hero.legR.rotation.z = -0.22;             // knees splay around the frame
     hero.armL.rotation.x = hero.armR.rotation.x = 1.05 + L * 0.2;           // reach into the bars on boost, brace straight on the brakes
   }
+  updateMount(dt);   // play any in-progress get-in / mount / dismount animation
 
   // story characters idle bob
   marco.position.y = CURB + Math.abs(Math.sin(simTime * 2.2)) * 0.04;
@@ -5559,6 +5635,7 @@ globalThis.__palmCity = {
   setCycle: v => { dayCycle = v; envUpdate(); }, setSimTime: t => { simTime = t; envUpdate(); },
   nightBeams: () => trafBeams.visible ? trafBeams.children.filter(c => c.visible).length : 0,
   setWanted: n => { wanted = clamp(n, 0, 5); wantedCD = 14; }, chopper: () => chopper, tank: () => tank,
+  mounting: () => !!mount,
   talkTo: () => talkTo(nearestTalkNPC()),
   startJob: id => startJob(id),
   openMap: () => openMap(), openWheel: () => openWheel(), openPhone: () => openPhone(),
