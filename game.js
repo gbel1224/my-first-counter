@@ -3058,7 +3058,10 @@ rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
 const rainSeg = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0xbcd0ee, transparent: true, opacity: 0, fog: false }));
 rainSeg.frustumCulled = false; scene.add(rainSeg);
 const _fogGray = new THREE.Color(0x6b7079);
-let weather = 0, weatherTarget = 0, weatherTimer = 30, weatherMode = 0;   // mode: 0 auto, 1 rain, 2 clear
+// mode: 0 auto · 1 rain · 2 clear. Default CLEAR — the auto-cycle's grey-fog rain washing in and out
+// reads as the screen "filtering" during play. Re-enable rain/auto from the settings panel.
+let weatherMode = (() => { try { const v = localStorage.getItem("palm_city_weather"); return v == null ? 2 : +v; } catch (e) { return 2; } })();
+let weather = 0, weatherTarget = 0, weatherTimer = 30;
 function updateWeather(dt) {
   if (weatherMode === 1) weatherTarget = 1;
   else if (weatherMode === 2) weatherTarget = 0;
@@ -4773,7 +4776,7 @@ dom("stclose").textContent = STR.statsClose;
   bb.addEventListener("click", () => { bloomOn = !bloomOn; bloomFailed = false; try { localStorage.setItem(BLOOM_KEY, bloomOn ? "1" : "0"); } catch (e) {} bb.textContent = STR.bloomToggle(bloomOn); });
   const wb = dom("stweather");
   wb.textContent = STR.weatherToggle(weatherMode);
-  wb.addEventListener("click", () => { weatherMode = (weatherMode + 1) % 3; wb.textContent = STR.weatherToggle(weatherMode); });
+  wb.addEventListener("click", () => { weatherMode = (weatherMode + 1) % 3; try { localStorage.setItem("palm_city_weather", String(weatherMode)); } catch (e) {} wb.textContent = STR.weatherToggle(weatherMode); });
   const lb = dom("stlight");
   if (lb) {
     lb.textContent = lightLabel();
