@@ -768,7 +768,7 @@ let buildingMat = null;
   placed.forEach((b, i) => { if (i % 7 === 0) ENTERABLES.push({ x: b.x, z: b.z, name: "🏢 Lobby", r: Math.pow(Math.max(b.w, b.d) / 2 + 4, 2) }); });
 
   // downtown skyscrapers — reflective glass-tower facade (PBR so the sky env mirrors off the glass)
-  const towerSide = new THREE.MeshStandardMaterial({ map: texTower, metalness: 0.62, roughness: 0.32, envMapIntensity: 1.15, emissive: 0xffffff, emissiveMap: texTowerWin, emissiveIntensity: 0 });
+  const towerSide = new THREE.MeshStandardMaterial({ map: texTower, metalness: 0.85, roughness: 0.16, envMapIntensity: 1.5, emissive: 0xffffff, emissiveMap: texTowerWin, emissiveIntensity: 0 });   // sharper, more mirror-like curtain-wall glass
   specialMats.push(towerSide);
   boxChunks(towers, [towerSide, towerSide, matRoof, matRoof, towerSide, towerSide]);
 
@@ -1417,7 +1417,7 @@ function wheelGeo(r, w, x, y, z, color) {
 const carGeo = mergeGeos([
   boxGeoC(2.0, 0.55, 4.6, 0, 0.72, 0, 0xffffff),          // lower body (white => tintable)
   boxGeoC(1.9, 0.22, 4.2, 0, 1.0, 0, 0xffffff),           // upper body shoulder (tintable, slimmer)
-  boxGeoC(1.7, 0.6, 2.3, 0, 1.32, -0.2, 0x2a3d4d),        // glass cabin
+  boxGeoC(1.7, 0.6, 2.3, 0, 1.32, -0.2, 0x131c27),        // glass cabin (deep tint, reads as glass with the glossy paint)
   wheelGeo(0.44, 0.34, 0.92, 0.42, 1.5, 0x1b1d22),        // round tyres
   wheelGeo(0.44, 0.34, -0.92, 0.42, 1.5, 0x1b1d22),
   wheelGeo(0.44, 0.34, 0.92, 0.42, -1.5, 0x1b1d22),
@@ -1433,7 +1433,7 @@ const carGeo = mergeGeos([
 ]);
 const CAR_COLORS = [0xe8543f, 0x3f7fe8, 0xf0c040, 0x58b368, 0xc25cd6, 0xe8e4da, 0xff8c42];
 function makeCar(color) {
-  const mesh = new THREE.Mesh(carGeo, new THREE.MeshStandardMaterial({ vertexColors: true, color, metalness: 0.55, roughness: 0.32, envMapIntensity: 1.1 }));   // reflective PBR paint
+  const mesh = new THREE.Mesh(carGeo, new THREE.MeshStandardMaterial({ vertexColors: true, color, metalness: 0.6, roughness: 0.22, envMapIntensity: 1.5 }));   // glossy reflective PBR paint + glassy cabin
   mesh.castShadow = true; mesh.receiveShadow = true;
   scene.add(mesh);
   return mesh;
@@ -4955,8 +4955,12 @@ function update(dt) {
     // yield near the player or the player's car
     const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
     const near = dist2(t.x, t.z, px, pz) < (driving ? 100 : 22);
+    // obey the signal: hold on the approach to the intersection if this direction has a red light
+    const nsTravel = Math.abs(dz) >= Math.abs(dx);
+    const red = nsTravel ? (trafPhase === 2 || trafPhase === 3) : (trafPhase === 0 || trafPhase === 1);
+    const atRed = red && d > 2.6 && d < 11;
     t.h = lerpAngle(t.h, Math.atan2(dx, dz), 1 - Math.exp(-6 * dt));
-    if (!near) { t.x += dx / d * t.speed * dt; t.z += dz / d * t.speed * dt; }
+    if (!near && !atRed) { t.x += dx / d * t.speed * dt; t.z += dz / d * t.speed * dt; }
     t.mesh.position.set(t.x, groundY(t.x, t.z), t.z);
     t.mesh.rotation.y = t.h;
   }
@@ -5282,6 +5286,7 @@ globalThis.__palmCity = {
   state, player, cars, police, traffic, atms, helis, boats, planes, gangsters, allies, npcs, GANGS, SHOPS, AIRPORT, update, beginPlay, advanceDialogue,
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
   applyGfx: m => applyGfx(m), gfx: () => ({ mode: gfxMode, prCap: PR_CAP, msaa: msaaSamples, pr: renderer.getPixelRatio() }),
+  trafPhase: () => trafPhase, setTraf: p => { trafPhase = p; applyTrafPhase(); },
   talkTo: () => talkTo(nearestTalkNPC()),
   startJob: id => startJob(id),
   openMap: () => openMap(), openWheel: () => openWheel(), openPhone: () => openPhone(),
