@@ -1951,10 +1951,10 @@ function updateMount(dt) {
     const standX = c.x + sx * 1.0, standZ = c.z + sz * 1.0;
     hero.group.position.set(lerp(standX, seatX, k), lerp(gy, seatY, k) + Math.sin(p * Math.PI) * 0.14, lerp(standZ, seatZ, k));
     hero.group.rotation.set(0.12 * k, c.h, 0);
-    hero.legL.rotation.x = 1.4 * k; hero.legR.rotation.x = 1.4 * k;
-    hero.kneeL.rotation.x = -1.55 * k; hero.kneeR.rotation.x = -1.55 * k;
+    hero.legL.rotation.x = -1.4 * k; hero.legR.rotation.x = -1.4 * k;
+    hero.kneeL.rotation.x = 1.55 * k; hero.kneeR.rotation.x = 1.55 * k;
     hero.legL.rotation.z = 0.22 * k; hero.legR.rotation.z = -0.22 * k;
-    hero.armL.rotation.x = hero.armR.rotation.x = 1.05 * k;
+    hero.armL.rotation.x = hero.armR.rotation.x = -1.05 * k;
   } else {
     // a door swings open, the player slips into the seat, then it shuts behind them
     doorPivot.visible = true; doorPanel.material.color.copy(c.mesh.material.color);
@@ -5432,10 +5432,10 @@ function update(dt) {
     // boost slides the rider forward over the tank; braking throws their weight back on the seat
     hero.group.position.set(c.x - fx * (0.26 - L * 0.16), gy - 0.04 - Math.max(0, L) * 0.03, c.z - fz * (0.26 - L * 0.16));
     hero.group.rotation.set(0.12 + L * 0.36, c.h, c.mesh.rotation.z);       // pitch: hunch low on boost, sit back on the brakes
-    hero.legL.rotation.x = 1.4; hero.legR.rotation.x = 1.4;                 // thighs forward onto the tank
-    hero.kneeL.rotation.x = -1.55; hero.kneeR.rotation.x = -1.55;           // shins tucked down to the pegs
+    hero.legL.rotation.x = -1.4; hero.legR.rotation.x = -1.4;               // thighs forward onto the tank (-x = toward the front)
+    hero.kneeL.rotation.x = 1.55; hero.kneeR.rotation.x = 1.55;             // shins tucked down to the pegs
     hero.legL.rotation.z = 0.22; hero.legR.rotation.z = -0.22;             // knees splay around the frame
-    hero.armL.rotation.x = hero.armR.rotation.x = 1.05 + L * 0.2;           // reach into the bars on boost, brace straight on the brakes
+    hero.armL.rotation.x = hero.armR.rotation.x = -1.05 - L * 0.2;          // hands forward on the bars (-x = forward)
   }
   updateMount(dt);   // play any in-progress get-in / mount / dismount animation
 
