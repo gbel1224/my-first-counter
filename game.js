@@ -1095,38 +1095,57 @@ let lampMat = null, lampPoolMat = null, lampConeMat = null;
   coneIM.frustumCulled = false; scene.add(coneIM);
 }
 
-// ---------- traffic lights at every intersection (signal poles whose lamps cycle green → amber → red) ----------
-let trafRed = null, trafAmber = null, trafGreen = null, trafPhase = 0, trafCD = 6.5;
+// ---------- traffic lights: dual-direction signals (N-S ⟷ E-W alternate) with glowing lamps + road spill ----------
+let trafPhase = 0, trafCD = 6.5;
+let nsR, nsA, nsG, ewR, ewA, ewG, nsPool, ewPool;
+const TL_DIM = 0.11;
 {
-  // dark pole + arm reaching over the road + a signal housing with a visor
+  // soft round glow sprite so each lit lamp blooms like a real signal lens
+  const glowTex = canvasTex(48, (ctx, s) => { const c = s / 2; for (let r = c; r > 0; r--) { ctx.globalAlpha = (1 - r / c) * 0.14; ctx.beginPath(); ctx.arc(c, c, r, 0, 7); ctx.fillStyle = "#fff"; ctx.fill(); } });
+  // pole + a signal head box (lamps sit on the +z = N-S face and the +x = E-W face)
   const struct = mergeGeos([
-    cylC(0.14, 0.17, 5.2, 0, 2.6, 0, 0x2b2f35),            // pole
-    boxGeoC(0.17, 0.17, 2.6, 0, 5.0, 1.45, 0x2b2f35),      // arm reaching over the road (+z)
-    boxGeoC(0.62, 1.74, 0.56, 0, 4.55, 2.75, 0x14161a),    // signal housing at the arm's end
-    boxGeoC(0.74, 0.15, 0.7, 0, 5.46, 2.79, 0x0e1014),     // visor cap
+    cylC(0.15, 0.18, 5.0, 0, 2.5, 0, 0x2b2f35),
+    boxGeoC(0.72, 1.74, 0.72, 0, 5.9, 0, 0x14161a),       // signal head
+    boxGeoC(0.86, 0.16, 0.86, 0, 6.82, 0, 0x0e1014),      // cap
   ]);
-  const lampGeo = y => boxGeoC(0.26, 0.26, 0.12, 0, y, 3.05, 0xffffff);   // a lamp on the road-facing side
   const spots = [];
   for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) spots.push([roadC(i) - ROAD / 2 - 0.7, roadC(j) - ROAD / 2 - 0.7]);
   const mm = new THREE.Matrix4();
-  const placeIM = (geo, mat, cast) => { const im = new THREE.InstancedMesh(geo, mat, spots.length); spots.forEach(([x, z], k) => { mm.makeTranslation(x, CURB, z); im.setMatrixAt(k, mm); }); im.frustumCulled = false; if (cast) im.castShadow = true; scene.add(im); return im; };
+  const placeIM = (geo, mat) => { const im = new THREE.InstancedMesh(geo, mat, spots.length); spots.forEach(([x, z], k) => { mm.makeTranslation(x, CURB, z); im.setMatrixAt(k, mm); }); im.frustumCulled = false; scene.add(im); return im; };
   placeIM(struct, new THREE.MeshLambertMaterial({ color: 0x24272d }));
-  const lampMatOf = c => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.14 });
-  trafRed = lampMatOf(0xff3b30); trafAmber = lampMatOf(0xffce3a); trafGreen = lampMatOf(0x46e15a);
-  placeIM(lampGeo(5.0), trafRed);     // red (top)
-  placeIM(lampGeo(4.55), trafAmber);  // amber (middle)
-  placeIM(lampGeo(4.1), trafGreen);   // green (bottom)
+  const lampMat = c => new THREE.MeshBasicMaterial({ map: glowTex, color: c, transparent: true, opacity: TL_DIM, blending: THREE.AdditiveBlending, depthWrite: false });
+  const nsLamp = y => { const g = new THREE.PlaneGeometry(0.52, 0.52); g.translate(0, y, 0.4); return g; };          // faces +z (N-S)
+  const ewLamp = y => { const g = new THREE.PlaneGeometry(0.52, 0.52); g.rotateY(Math.PI / 2); g.translate(0.4, y, 0); return g; };   // faces +x (E-W)
+  nsR = lampMat(0xff3b30); nsA = lampMat(0xffce3a); nsG = lampMat(0x46e15a);
+  ewR = lampMat(0xff3b30); ewA = lampMat(0xffce3a); ewG = lampMat(0x46e15a);
+  placeIM(nsLamp(6.36), nsR); placeIM(nsLamp(5.9), nsA); placeIM(nsLamp(5.44), nsG);
+  placeIM(ewLamp(6.36), ewR); placeIM(ewLamp(5.9), ewA); placeIM(ewLamp(5.44), ewG);
+  // coloured spill the active signal casts onto the road (additive ground discs, one per direction)
+  const poolGeo = new THREE.CircleGeometry(4.2, 20); poolGeo.rotateX(-Math.PI / 2);
+  const poolMat = () => new THREE.MeshBasicMaterial({ map: glowTex, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+  nsPool = poolMat(); ewPool = poolMat();
+  const placePool = (mat, dz, dx) => { const im = new THREE.InstancedMesh(poolGeo, mat, spots.length); spots.forEach(([x, z], k) => { mm.makeTranslation(x + dx, 0.08, z + dz); im.setMatrixAt(k, mm); }); im.frustumCulled = false; scene.add(im); return im; };
+  placePool(nsPool, 4.5, 0);   // spill toward the N-S road
+  placePool(ewPool, 0, 4.5);   // spill toward the E-W road
 }
 function applyTrafPhase() {
-  if (!trafRed) return;
-  trafRed.opacity = trafPhase === 2 ? 1 : 0.13;
-  trafAmber.opacity = trafPhase === 1 ? 1 : 0.13;
-  trafGreen.opacity = trafPhase === 0 ? 1 : 0.13;
+  if (!nsR) return;
+  // phase: 0 N-S green · 1 N-S amber · 2 E-W green · 3 E-W amber  (the cross street is red meanwhile)
+  nsG.opacity = trafPhase === 0 ? 1 : TL_DIM;
+  nsA.opacity = trafPhase === 1 ? 1 : TL_DIM;
+  nsR.opacity = (trafPhase === 2 || trafPhase === 3) ? 1 : TL_DIM;
+  ewG.opacity = trafPhase === 2 ? 1 : TL_DIM;
+  ewA.opacity = trafPhase === 3 ? 1 : TL_DIM;
+  ewR.opacity = (trafPhase === 0 || trafPhase === 1) ? 1 : TL_DIM;
+  // road spill tinted by whichever colour each direction is showing (subtle by day, reads at dusk)
+  const tint = (mat, g, a) => { mat.color.setHex(g ? 0x46e15a : a ? 0xffce3a : 0xff3b30); mat.opacity = 0.22; };
+  tint(nsPool, trafPhase === 0, trafPhase === 1);
+  tint(ewPool, trafPhase === 2, trafPhase === 3);
 }
 applyTrafPhase();
 function updateTrafficLights(dt) {
   trafCD -= dt;
-  if (trafCD <= 0) { trafPhase = (trafPhase + 1) % 3; trafCD = trafPhase === 1 ? 1.6 : 7; applyTrafPhase(); }
+  if (trafCD <= 0) { trafPhase = (trafPhase + 1) % 4; trafCD = (trafPhase === 1 || trafPhase === 3) ? 1.7 : 6.5; applyTrafPhase(); }
 }
 
 // ---------- street clutter: trash cans, hydrants, benches & planters along the sidewalks ----------
