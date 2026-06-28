@@ -1115,32 +1115,41 @@ const TL_DIM = 0.11;
     boxGeoC(0.46, 1.92, 0.66, HX, 5.45, 0, 0x14161a),              // signal head hanging at the arm's end
     boxGeoC(0.58, 0.18, 0.78, HX, 6.48, 0, 0x0e1014),              // backplate cap
   ]);
-  const lamp = y => { const g = new THREE.PlaneGeometry(0.4, 0.4); g.rotateY(Math.PI); g.translate(HX, y, -0.36); return g; };   // on the head's -z face, looking south at traffic
-  // place an N-S arm and an E-W arm at the same corner of every intersection (E-W rotated 90°)
-  const nsSpots = [], ewSpots = [];
+  const lamp = y => { const g = new THREE.PlaneGeometry(0.4, 0.4); g.rotateY(Math.PI); g.translate(HX, y, -0.36); return g; };   // on the head's -z face, facing the oncoming lane
+  // Like a real 4-way intersection: a signal on EACH approach, mounted on a far-side corner pole
+  // with the mast arm reaching out over that road and the head facing the traffic coming at it.
+  //   N head (q0)   serves +z traffic · S head (q180) serves -z · E head (q90) serves +x · W head (q270) serves -x
+  const G = 11;                                                    // head sits over the road just past the far crosswalk
+  const nSpots = [], sSpots = [], eSpots = [], wSpots = [];        // pole-base positions per approach
   for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
-    const cx = roadC(i) - ROAD / 2, cz = roadC(j) - ROAD / 2;       // corner of the intersection
-    nsSpots.push([cx - 1.0, cz - 1.7]);                            // arm reaches +x over the N-S road, head faces -z
-    ewSpots.push([cx - 1.7, cz - 1.0]);                            // rotated +90°: arm reaches +z over the E-W road, head faces -x
+    const X = roadC(i), Z = roadC(j);
+    nSpots.push([X - HX, Z + G]);                                  // arm reaches +x over the road, head at (X, Z+G)
+    sSpots.push([X + HX, Z - G]);                                  // rotated 180°, head at (X, Z-G)
+    eSpots.push([X + G, Z + HX]);                                  // rotated +90°, head at (X+G, Z)
+    wSpots.push([X - G, Z - HX]);                                  // rotated -90°, head at (X-G, Z)
   }
-  const mm = new THREE.Matrix4(), pv = new THREE.Vector3(), sc1 = new THREE.Vector3(1, 1, 1);
-  const q0 = new THREE.Quaternion(), q90 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+  const mm = new THREE.Matrix4(), pv = new THREE.Vector3(), sc1 = new THREE.Vector3(1, 1, 1), upv = new THREE.Vector3(0, 1, 0);
+  const q0 = new THREE.Quaternion();
+  const q90 = new THREE.Quaternion().setFromAxisAngle(upv, Math.PI / 2);
+  const q180 = new THREE.Quaternion().setFromAxisAngle(upv, Math.PI);
+  const q270 = new THREE.Quaternion().setFromAxisAngle(upv, -Math.PI / 2);
   const placeIM = (geo, mat, spots, q) => { const im = new THREE.InstancedMesh(geo, mat, spots.length); spots.forEach(([x, z], k) => { pv.set(x, CURB, z); mm.compose(pv, q, sc1); im.setMatrixAt(k, mm); }); im.frustumCulled = false; scene.add(im); return im; };
   const structMat = new THREE.MeshLambertMaterial({ color: 0x23262c });
-  placeIM(struct, structMat, nsSpots, q0);
-  placeIM(struct, structMat, ewSpots, q90);
+  placeIM(struct, structMat, nSpots, q0); placeIM(struct, structMat, sSpots, q180);
+  placeIM(struct, structMat, eSpots, q90); placeIM(struct, structMat, wSpots, q270);
   const lampMat = c => new THREE.MeshBasicMaterial({ map: glowTex, color: c, transparent: true, opacity: TL_DIM, blending: THREE.AdditiveBlending, depthWrite: false });
   nsR = lampMat(0xff3b30); nsA = lampMat(0xffce3a); nsG = lampMat(0x46e15a);
   ewR = lampMat(0xff3b30); ewA = lampMat(0xffce3a); ewG = lampMat(0x46e15a);
-  placeIM(lamp(6.0), nsR, nsSpots, q0); placeIM(lamp(5.45), nsA, nsSpots, q0); placeIM(lamp(4.9), nsG, nsSpots, q0);
-  placeIM(lamp(6.0), ewR, ewSpots, q90); placeIM(lamp(5.45), ewA, ewSpots, q90); placeIM(lamp(4.9), ewG, ewSpots, q90);
+  // N-S phase lamps go on the N + S heads; E-W phase lamps on the E + W heads
+  for (const [y, m] of [[6.0, nsR], [5.45, nsA], [4.9, nsG]]) { const g = lamp(y); placeIM(g, m, nSpots, q0); placeIM(g, m, sSpots, q180); }
+  for (const [y, m] of [[6.0, ewR], [5.45, ewA], [4.9, ewG]]) { const g = lamp(y); placeIM(g, m, eSpots, q90); placeIM(g, m, wSpots, q270); }
   // coloured spill the active signal casts onto the road below each head
   const poolGeo = new THREE.CircleGeometry(4.0, 20); poolGeo.rotateX(-Math.PI / 2);
   const poolMat = () => new THREE.MeshBasicMaterial({ map: glowTex, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
   nsPool = poolMat(); ewPool = poolMat();
   const placePool = (mat, spots, dx, dz) => { const im = new THREE.InstancedMesh(poolGeo, mat, spots.length); spots.forEach(([x, z], k) => { mm.makeTranslation(x + dx, 0.08, z + dz); im.setMatrixAt(k, mm); }); im.frustumCulled = false; scene.add(im); return im; };
-  placePool(nsPool, nsSpots, HX, 0);   // under the N-S head
-  placePool(ewPool, ewSpots, 0, HX);   // under the E-W head
+  placePool(nsPool, nSpots, HX, 0); placePool(nsPool, sSpots, -HX, 0);   // under the N + S heads
+  placePool(ewPool, eSpots, 0, -HX); placePool(ewPool, wSpots, 0, HX);   // under the E + W heads
 }
 function applyTrafPhase() {
   if (!nsR) return;
