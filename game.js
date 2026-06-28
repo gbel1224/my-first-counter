@@ -1680,6 +1680,46 @@ for (let i = 0; i < POLICE_N; i++) {
   police.push({ x: 0, z: -9999, h: 0, speed: 0, active: false, mesh, bar });
 }
 
+// ---------- high-heat escalation: a police chopper (4★) and an army tank (5★) ----------
+// Both are singletons summoned when the heat climbs and can only be put down with explosives.
+function makePoliceChopper() {
+  const g = new THREE.Group();
+  const mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.4, envMapIntensity: 0.9 });
+  const dark = mat(0x14161a);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.5, 4.0), mat(0x1b2330)); body.position.y = 1.1; body.castShadow = true; g.add(body);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(1.0, 14, 10), mat(0x12161e)); nose.scale.set(0.95, 0.85, 1.35); nose.position.set(0, 1.15, 1.9); g.add(nose);
+  const boom = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 3.4), mat(0x1b2330)); boom.position.set(0, 1.45, -3.3); g.add(boom);
+  for (const sx of [-0.9, 0.9]) { const skid = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 3.0), dark); skid.position.set(sx, 0.15, 0.1); g.add(skid); }
+  const rotor = new THREE.Group(); rotor.position.set(0, 2.05, 0.1);
+  rotor.add(new THREE.Mesh(new THREE.BoxGeometry(9.2, 0.06, 0.42), dark));
+  rotor.add(new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.06, 9.2), dark));
+  g.add(rotor);
+  // flashing police beacon under the nose
+  const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff2222 }));
+  beacon.position.set(0, 0.3, 1.6); g.add(beacon);
+  // downward spotlight cone sweeping the ground
+  const spot = new THREE.Mesh(new THREE.ConeGeometry(5.5, 1, 18, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xfff6d8, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  g.add(spot);   // positioned each frame
+  g.position.set(0, -9999, 0); scene.add(g);
+  return { x: 0, z: 0, y: 0, h: 0, mesh: g, rotor, beacon, spot, active: false, dead: false, hp: 100, shootCD: 0, leave: false, cd: 0 };
+}
+function makeTank() {
+  const g = new THREE.Group();
+  const mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, metalness: 0.4, envMapIntensity: 0.7 });
+  const green = mat(0x3b4a32), dark = mat(0x20251c);
+  const hull = new THREE.Mesh(new THREE.BoxGeometry(3.0, 1.0, 4.6), green); hull.position.y = 0.95; hull.castShadow = true; g.add(hull);
+  for (const sx of [-1.45, 1.45]) { const tr = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 4.8), dark); tr.position.set(sx, 0.55, 0); g.add(tr); }
+  const turret = new THREE.Group(); turret.position.set(0, 1.55, 0);
+  turret.add(new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.8, 2.4), mat(0x44553a)));
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 3.0, 10), dark);
+  barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0.1, 2.0); turret.add(barrel);
+  g.add(turret);
+  g.position.set(0, -9999, 0); scene.add(g);
+  return { x: 0, z: 0, h: 0, mesh: g, turret, active: false, dead: false, hp: 240, speed: 0, shootCD: 0, cd: 0 };
+}
+const chopper = makePoliceChopper(), tank = makeTank();
+
 // pedestrians
 const npcs = [];
 for (let t = 0; t < Math.round(340 * N / 32); t++) {   // a bigger crowd, scaled with the city
@@ -3110,6 +3150,7 @@ function wasted() {
   health = 100; hurtCD = 2; fuel = 100;
   wanted = 0; wantedCD = 0; crimeCD = 0; bustTimer = 0; copsOnYou = false; holdup = null; getaway = 0;
   for (const p of police) { p.active = false; p.mesh.position.set(0, -9999, 0); }
+  clearChaseUnits();
   // shake off the rival's hit-squad on death; if it was the showdown, the boss bows out for now
   for (const g of nemGoons) if (!g.boss) { g.alive = false; g.mesh.visible = false; }
   NEM.squadOut = false; NEM.squadCD = Math.max(NEM.squadCD, rr(12, 20));
@@ -3136,7 +3177,12 @@ function bust() {
   addShake(0.7); buzz([0, 60, 40, 120]); flash("#ff3b3b", 0.42);
   wanted = 0; wantedCD = 0; crimeCD = 0; bustTimer = 0; copsOnYou = false; holdup = null; getaway = 0;
   for (const p of police) { p.active = false; p.mesh.position.set(0, -9999, 0); }
+  clearChaseUnits();
   save();
+}
+function clearChaseUnits() {
+  chopper.active = false; chopper.dead = false; chopper.cd = 0; chopper.mesh.position.set(0, -9999, 0);
+  tank.active = false; tank.dead = false; tank.cd = 0; tank.mesh.position.set(0, -9999, 0);
 }
 function updatePolice(dt) {
   if (crimeCD > 0) crimeCD -= dt;
@@ -3180,6 +3226,7 @@ function updatePolice(dt) {
       }
     }
   }
+  updateChaseUnits(dt, heat, px, pz);   // chopper at 4★, tank at 5★
   // on-foot arrest: stay cornered by a cop for ~1.1s and you're BUSTED (lose cash, not your life)
   if (grabbing && !driving) { bustTimer += dt; if (bustTimer >= 1.1) { bustTimer = 0; bust(); return; } }
   else bustTimer = Math.max(0, bustTimer - dt * 2);
@@ -3191,6 +3238,109 @@ function updatePolice(dt) {
       wantedCD -= dt * (driving && driving.heatMult ? driving.heatMult : 1);
       if (wantedCD <= 0) { wanted = Math.max(0, wanted - 1); wantedCD = 8; if (wanted === 0) toast(STR.wantedClear); }
     }
+  }
+}
+// a tank shell blast: hurts you and nearby cars, but doesn't add to YOUR heat/combo (the cops did it)
+function explodeShell(x, z) {
+  burst(x, 1.0, z, 16, 1.2, 2.0, 0.15, 1.0, 0.9, 0.6);
+  burst(x, 1.2, z, 30, 3.0, 4.0, 0.8, 1.0, 0.5, 0.15);
+  burst(x, 1.5, z, 16, 2.0, 4.6, 1.2, 0.28, 0.28, 0.28);
+  AudioSys.play("boom", 0.95); addShake(0.7); flash("#ff7a33", 0.3); freezeFrame(0.04);
+  for (const c of traffic) if (!c.dead && dist2(c.x, c.z, x, z) < 36) explodeCar(c);
+  const pd = dist2(player.x, player.z, x, z);
+  if (pd < 49) hurt(driving ? 20 : Math.round(40 * (1 - Math.sqrt(pd) / 8)));
+  for (const n of npcs) if (dist2(n.x, n.z, x, z) < 90) { n.flee = 3; n.h = Math.atan2(n.x - x, n.z - z); }
+}
+function damageChopper(dmg) {
+  if (!chopper.active || chopper.dead) return;
+  chopper.hp -= dmg;
+  burst(chopper.x, chopper.y, chopper.z, 8, 1.4, 1.4, 0.4, 1.0, 0.7, 0.3);
+  if (chopper.hp <= 0) {
+    burst(chopper.x, chopper.y, chopper.z, 34, 2.6, 2.6, 0.9, 1.0, 0.55, 0.15);
+    AudioSys.play("boom", 1.0); addShake(0.85); flash("#ff7a33", 0.34);
+    const r = earn(2500); toast("🚁💥 CHOPPER DOWN  +$" + r); addChaos(120); buzz([0, 60, 40, 120]); save();
+    chopper.active = false; chopper.dead = false; chopper.cd = rr(16, 24); chopper.mesh.position.set(0, -9999, 0);   // a beat before the next one scrambles
+  }
+}
+function damageTank(dmg) {
+  if (!tank.active || tank.dead) return;
+  tank.hp -= dmg;
+  burst(tank.x, 1.4, tank.z, 8, 1.4, 1.4, 0.4, 1.0, 0.7, 0.3);
+  if (tank.hp <= 0) {
+    burst(tank.x, 1.6, tank.z, 40, 3.0, 3.0, 1.0, 1.0, 0.55, 0.15);
+    AudioSys.play("boom", 1.0); addShake(1.0); flash("#ff7a33", 0.4); freezeFrame(0.06);
+    const r = earn(6000); toast("🪖💥 TANK DESTROYED  +$" + r); addChaos(200); buzz([0, 80, 50, 160]); save();
+    tank.active = false; tank.dead = false; tank.cd = rr(22, 32); tank.mesh.position.set(0, -9999, 0);   // reinforcements take a while
+  }
+}
+function updateChaseUnits(dt, heat, px, pz) {
+  // ---- police chopper: summoned at 4★, orbits overhead with a spotlight, can only be downed by explosives ----
+  const ch = chopper;
+  if (ch.cd > 0) ch.cd -= dt;
+  if (heat >= 4 && !ch.active && ch.cd <= 0) {
+    ch.active = true; ch.leave = false; ch.dead = false; ch.hp = 100;
+    const ang = Math.random() * Math.PI * 2;
+    ch.x = px + Math.cos(ang) * 60; ch.z = pz + Math.sin(ang) * 60; ch.y = 36; ch.shootCD = rr(1.5, 3);
+    toast("🚁 Police chopper inbound!"); AudioSys.play("blip", 0.7);
+  }
+  if (ch.active) {
+    ch.leave = heat < 4;
+    const dx = px - ch.x, dz = pz - ch.z, d = Math.hypot(dx, dz) || 1;
+    const want = ch.leave ? 0 : 18, spd = ch.leave ? 26 : 14;
+    ch.x += (dx / d) * clamp(d - want, -spd, spd) * dt * 0.9;
+    ch.z += (dz / d) * clamp(d - want, -spd, spd) * dt * 0.9;
+    if (!ch.leave) { ch.x += (-dz / d) * 6 * dt; ch.z += (dx / d) * 6 * dt; }   // orbit drift
+    const ty = ch.leave ? 78 : 24 + Math.sin(simTime * 1.3) * 1.5;
+    ch.y += (ty - ch.y) * Math.min(1, 1.6 * dt);
+    ch.h = lerpAngle(ch.h, Math.atan2(dx, dz), 1 - Math.exp(-3 * dt));
+    ch.mesh.position.set(ch.x, ch.y, ch.z);
+    ch.mesh.rotation.y = ch.h;
+    ch.rotor.rotation.y += 30 * dt;
+    ch.beacon.visible = (Math.floor(simTime * 5) % 2) === 0;
+    ch.spot.position.set(0, -ch.y / 2, 0); ch.spot.scale.y = ch.y;   // cone reaches from the chopper to the ground
+    if (!ch.leave && !dlgLines && d < 48) {
+      ch.shootCD -= dt;
+      if (ch.shootCD <= 0) {
+        ch.shootCD = rr(1.4, 2.4); AudioSys.play("gun", 0.45);
+        const fast = (driving ? Math.abs(driving.speed) : player.speed) > 6;
+        burst(px + rr(-2, 2), 0.4, pz + rr(-2, 2), 6, 0.6, 0.6, 0.2, 1.0, 0.85, 0.4);
+        if (Math.random() < (fast ? 0.18 : 0.4)) hurt(driving ? 5 : 8);
+      }
+    }
+    if (ch.leave && ch.y > 64) { ch.active = false; ch.mesh.position.set(0, -9999, 0); }
+  }
+  // ---- army tank: summoned at 5★, slow and brutal, lobs explosive shells ----
+  const tk = tank;
+  if (tk.cd > 0) tk.cd -= dt;
+  if (heat >= 5 && !tk.active && tk.cd <= 0) {
+    tk.active = true; tk.dead = false; tk.hp = 240;
+    const ang = Math.random() * Math.PI * 2;
+    tk.x = clamp(px + Math.cos(ang) * 64, WB.x0 + 4, WB.x1 - 4);
+    tk.z = clamp(pz + Math.sin(ang) * 64, WB.z0 + 4, WB.z1 - 4);
+    tk.h = Math.atan2(px - tk.x, pz - tk.z); tk.speed = 0; tk.shootCD = rr(2.5, 4);
+    toast("🪖 ARMY TANK deployed — RUN!"); AudioSys.play("boom", 0.5); buzz([0, 60, 40, 120]);
+  }
+  if (tk.active) {
+    const leave = heat < 5;
+    const dx = px - tk.x, dz = pz - tk.z, d = Math.hypot(dx, dz) || 1;
+    tk.h = lerpAngle(tk.h, Math.atan2(dx, dz), 1 - Math.exp(-1.6 * dt));   // heavy, slow to turn
+    const tgt = (leave || dlgLines) ? 0 : 9;
+    tk.speed += (tgt - tk.speed) * Math.min(1, 1.5 * dt);
+    moveWithCollision(tk, Math.sin(tk.h) * tk.speed * dt, Math.cos(tk.h) * tk.speed * dt, 2.4);
+    tk.mesh.position.set(tk.x, groundY(tk.x, tk.z), tk.z);
+    tk.mesh.rotation.y = tk.h;
+    tk.turret.rotation.y = lerpAngle(tk.turret.rotation.y, Math.atan2(dx, dz) - tk.h, 1 - Math.exp(-2 * dt));
+    if (!leave && !dlgLines && d < 72) {
+      tk.shootCD -= dt;
+      if (tk.shootCD <= 0) {
+        tk.shootCD = rr(3.2, 4.6);
+        AudioSys.play("boom", 0.7); addShake(0.4); kickCam(0, 0.2, 0);
+        burst(tk.x + Math.sin(tk.h) * 3, 1.6, tk.z + Math.cos(tk.h) * 3, 8, 0.8, 0.8, 0.2, 1.0, 0.8, 0.4);
+        const lead = Math.min(1, d / 60);   // a little inaccuracy at range keeps it survivable
+        explodeShell(px + rr(-3, 3) * lead, pz + rr(-3, 3) * lead);
+      }
+    }
+    if (leave && d > 130) { tk.active = false; tk.mesh.position.set(0, -9999, 0); }
   }
 }
 // ---------- melee: punch to fight back / take down crooks on foot ----------
@@ -3265,6 +3415,8 @@ function doShoot() {
     for (const g of gangsters) if (g.alive) probe(g);
     for (const g of nemGoons) if (g.alive) probe(g);
     if (nemCar.active) probe(nemCar);
+    if (chopper.active && !chopper.dead) probe(chopper);
+    if (tank.active && !tank.dead) probe(tank);
     explodeAt(ix, iz, w.blast || 7);
     registerCrime();
     return;
@@ -3473,6 +3625,8 @@ function explodeAt(x, z, r) {                                 // an AoE blast (R
   for (const g of gangsters) if (g.alive && dist2(g.x, g.z, x, z) < r * r) killGangster(g);   // blast catches gangsters
   for (const g of nemGoons) if (g.alive && dist2(g.x, g.z, x, z) < r * r) damageNem(g, g.boss ? 150 : 999);   // and the boss's crew
   if (nemCar.active && dist2(nemCar.x, nemCar.z, x, z) < r * r) damageNemCar(150);   // blast the getaway car
+  if (chopper.active && !chopper.dead && dist2(chopper.x, chopper.z, x, z) < (r + 2) * (r + 2)) { damageChopper(120); hitAny = true; }
+  if (tank.active && !tank.dead && dist2(tank.x, tank.z, x, z) < (r + 2) * (r + 2)) { damageTank(120); hitAny = true; }
   if (!hitAny) {                                             // empty ground — still a satisfying boom
     burst(x, 1.0, z, 20, 1.2, 2.0, 0.15, 1.0, 0.97, 0.75);    // white-hot core pop
     burst(x, 1.2, z, 40, 3.4, 4.4, 0.85, 1.0, 0.55, 0.14);
@@ -5374,6 +5528,7 @@ globalThis.__palmCity = {
   trafPhase: () => trafPhase, setTraf: p => { trafPhase = p; applyTrafPhase(); },
   setCycle: v => { dayCycle = v; envUpdate(); }, setSimTime: t => { simTime = t; envUpdate(); },
   nightBeams: () => trafBeams.visible ? trafBeams.children.filter(c => c.visible).length : 0,
+  setWanted: n => { wanted = clamp(n, 0, 5); wantedCD = 14; }, chopper: () => chopper, tank: () => tank,
   talkTo: () => talkTo(nearestTalkNPC()),
   startJob: id => startJob(id),
   openMap: () => openMap(), openWheel: () => openWheel(), openPhone: () => openPhone(),
