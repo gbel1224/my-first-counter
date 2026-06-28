@@ -1472,8 +1472,7 @@ const bikeGeo = mergeGeos([                              // low, realistic scale
   wheelGeo(0.12, 0.16, 0, 0.32, -0.82, 0xc2c6cc),
   boxGeoC(0.64, 0.08, 0.1, 0, 0.9, 0.6, 0x3a3f47),      // handlebars
   boxGeoC(0.2, 0.14, 0.08, 0, 0.78, 0.78, 0xfff4c4),    // headlight
-  boxGeoC(0.42, 0.5, 0.36, 0, 1.02, -0.16, 0xff7a33),   // seated rider torso
-  boxGeoC(0.26, 0.3, 0.26, 0, 1.4, -0.2, 0xe8b08a),     // rider head
+  // no baked-in rider — the real player model is mounted on top when ridden (see the bike-rider pose)
 ]);
 function makeBike(color) {
   const mesh = new THREE.Mesh(bikeGeo, new THREE.MeshStandardMaterial({ vertexColors: true, color, metalness: 0.6, roughness: 0.3, envMapIntensity: 1.1 }));
@@ -5320,7 +5319,8 @@ function update(dt) {
     const gy = groundY(player.x, player.z);
     player.y += (gy - player.y) * Math.min(1, 12 * dt);
     hero.group.position.set(player.x, player.y, player.z);
-    hero.group.rotation.y = player.h;
+    hero.group.rotation.set(0, player.h, 0);              // clear any pitch/lean left over from riding
+    hero.legL.rotation.z = hero.legR.rotation.z = 0;      // clear the bike-saddle knee splay
     const gait = Math.min(1, player.speed / 4);
     const sw = Math.sin(player.walkPhase) * gait * 0.45;
     hero.legL.rotation.x = sw; hero.legR.rotation.x = -sw;
@@ -5337,6 +5337,18 @@ function update(dt) {
     c.mesh.rotation.y = c.h;
     c.mesh.rotation.x = (c.y > 0) ? clamp(-c.vy * 0.02, -0.5, 0.5) : 0;
     if (c.bike) c.mesh.rotation.z = clamp((c.lat || 0) * 0.05, -0.45, 0.45);   // lean into turns
+  }
+  // motorcycle rider: a bike isn't a car, so keep the real player visible and mount them on the saddle
+  if (driving && driving.bike) {
+    const c = driving, fx = Math.sin(c.h), fz = Math.cos(c.h);
+    const gy = groundY(c.x, c.z) + (c.y || 0);
+    hero.group.visible = true;
+    hero.group.position.set(c.x - fx * 0.26, gy - 0.04, c.z - fz * 0.26);   // seated a touch back on the seat
+    hero.group.rotation.set(0.12, c.h, c.mesh.rotation.z);                  // slight forward crouch + share the bike's lean
+    hero.legL.rotation.x = 1.4; hero.legR.rotation.x = 1.4;                 // thighs forward onto the tank
+    hero.kneeL.rotation.x = -1.55; hero.kneeR.rotation.x = -1.55;           // shins tucked down to the pegs
+    hero.legL.rotation.z = 0.22; hero.legR.rotation.z = -0.22;             // knees splay around the frame
+    hero.armL.rotation.x = 1.05; hero.armR.rotation.x = 1.05;               // hands forward on the bars
   }
 
   // story characters idle bob
