@@ -1529,6 +1529,7 @@ scene.add(rampIM);
 
 // traffic cars on block-ring routes
 const traffic = [];
+const carGrid = new Map();   // per-frame spatial hash of moving cars, for car-following / queueing
 for (let t = 0; t < Math.round(200 * N / 32); t++) {   // traffic scales with the city
   const i = (rng() * N) | 0, j = (rng() * N) | 0;
   const x0 = roadC(i) + 4, x1 = roadC(i + 1) - 4, z0 = roadC(j) + 4, z1 = roadC(j + 1) - 4;
@@ -2363,16 +2364,20 @@ hlPoints.frustumCulled = false; scene.add(hlPoints);
 function updateCarLights(g) {
   let k = 0;
   for (const c of LIGHT_CARS) {
-    const on = (c.active === undefined || c.active) && !c.locked && g > 0.01;   // unowned showroom cars stay dark
+    const active = (c.active === undefined || c.active) && !c.locked;   // unowned showroom cars stay dark
+    const headOn = active && g > 0.01;                                  // headlights: at night
+    const isBraking = active && (c.braking || (c === driving && braking()));
+    const tailG = Math.max(g * 0.7, isBraking ? 1.0 : 0);               // brake lights flare red even by day
+    const tailOn = active && tailG > 0.02;
     const fx = Math.sin(c.h), fz = Math.cos(c.h), rx = Math.cos(c.h), rz = -Math.sin(c.h);
     const cy = (c.mesh ? c.mesh.position.y : 0) + 0.85;
     for (let s = -1; s <= 1; s += 2) {   // headlights (front, warm)
-      hlPos[k * 3] = on ? c.x + fx * 2.4 + rx * 0.6 * s : -9999; hlPos[k * 3 + 1] = cy; hlPos[k * 3 + 2] = c.z + fz * 2.4 + rz * 0.6 * s;
+      hlPos[k * 3] = headOn ? c.x + fx * 2.4 + rx * 0.6 * s : -9999; hlPos[k * 3 + 1] = cy; hlPos[k * 3 + 2] = c.z + fz * 2.4 + rz * 0.6 * s;
       hlCol[k * 3] = 0.95 * g; hlCol[k * 3 + 1] = 0.88 * g; hlCol[k * 3 + 2] = 0.6 * g; k++;
     }
-    for (let s = -1; s <= 1; s += 2) {   // taillights (rear, red)
-      hlPos[k * 3] = on ? c.x - fx * 2.4 + rx * 0.6 * s : -9999; hlPos[k * 3 + 1] = cy; hlPos[k * 3 + 2] = c.z - fz * 2.4 + rz * 0.6 * s;
-      hlCol[k * 3] = 0.75 * g; hlCol[k * 3 + 1] = 0.08 * g; hlCol[k * 3 + 2] = 0.05 * g; k++;
+    for (let s = -1; s <= 1; s += 2) {   // taillights / brake lights (rear, red)
+      hlPos[k * 3] = tailOn ? c.x - fx * 2.4 + rx * 0.6 * s : -9999; hlPos[k * 3 + 1] = cy; hlPos[k * 3 + 2] = c.z - fz * 2.4 + rz * 0.6 * s;
+      hlCol[k * 3] = tailG; hlCol[k * 3 + 1] = tailG * 0.09; hlCol[k * 3 + 2] = tailG * 0.06; k++;
     }
   }
   hlGeo.attributes.position.needsUpdate = true; hlGeo.attributes.color.needsUpdate = true;
@@ -4945,24 +4950,40 @@ function update(dt) {
     }
   }
 
-  // traffic
+  // traffic — obey signals, queue behind cars ahead, smooth start/stop, brake lights & honking
+  carGrid.clear();
+  for (const t of traffic) { if (t.jacked || t.dead) continue; const k = Math.floor(t.x / 14) + "," + Math.floor(t.z / 14); let a = carGrid.get(k); if (!a) carGrid.set(k, a = []); a.push(t); }
+  const tpx = driving ? driving.x : player.x, tpz = driving ? driving.z : player.z;
   for (const t of traffic) {
     if (t.jacked) continue;   // being driven by the player, or left abandoned after a jack
     const [tx, tz] = t.wp[t.next];
     const dx = tx - t.x, dz = tz - t.z;
-    const d = Math.hypot(dx, dz);
+    const d = Math.hypot(dx, dz) || 1;
     if (d < 2) { t.next = (t.next + 1) % 4; continue; }
-    // yield near the player or the player's car
-    const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
-    const near = dist2(t.x, t.z, px, pz) < (driving ? 100 : 22);
+    const fx = dx / d, fz = dz / d;
+    const near = dist2(t.x, t.z, tpx, tpz) < (driving ? 100 : 22);   // yield close to the player
     // obey the signal: hold on the approach to the intersection if this direction has a red light
     const nsTravel = Math.abs(dz) >= Math.abs(dx);
     const red = nsTravel ? (trafPhase === 2 || trafPhase === 3) : (trafPhase === 0 || trafPhase === 1);
     const atRed = red && d > 2.6 && d < 11;
+    // car-following: queue behind any car just ahead in the same lane
+    let blocked = false;
+    const cx0 = Math.floor(t.x / 14), cz0 = Math.floor(t.z / 14);
+    for (let gx = -1; gx <= 1 && !blocked; gx++) for (let gz = -1; gz <= 1 && !blocked; gz++) {
+      const arr = carGrid.get((cx0 + gx) + "," + (cz0 + gz)); if (!arr) continue;
+      for (const o of arr) { if (o === t) continue; const ox = o.x - t.x, oz = o.z - t.z; const ahead = ox * fx + oz * fz; if (ahead > 0.3 && ahead < 6.5 && Math.abs(ox * fz - oz * fx) < 2.3) { blocked = true; break; } }
+    }
+    const stop = near || atRed || blocked;
+    const target = stop ? 0 : t.speed;
+    if (t.v === undefined) t.v = t.speed;
+    t.v += (target - t.v) * Math.min(1, 7 * dt);                       // smooth accelerate / decelerate
+    t.braking = stop && t.v < t.speed * 0.75;                          // -> brake lights
     t.h = lerpAngle(t.h, Math.atan2(dx, dz), 1 - Math.exp(-6 * dt));
-    if (!near && !atRed) { t.x += dx / d * t.speed * dt; t.z += dz / d * t.speed * dt; }
+    if (t.v > 0.02) { t.x += fx * t.v * dt; t.z += fz * t.v * dt; }
     t.mesh.position.set(t.x, groundY(t.x, t.z), t.z);
     t.mesh.rotation.y = t.h;
+    // honk when stuck behind a queue / at a red near the player
+    if ((atRed || blocked) && t.v < 1.2) { t.honkCD = (t.honkCD || 0) - dt; if (t.honkCD <= 0 && near && Math.random() < 0.02) { AudioSys.horn(); t.honkCD = rr(2.5, 6); } }
   }
 
   // pedestrians
