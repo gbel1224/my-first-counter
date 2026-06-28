@@ -291,6 +291,7 @@ function envUpdate() {
   for (const mm of specialMats) mm.emissiveIntensity = night * 1.2;   // business windows too
   if (lampMat) lampMat.emissiveIntensity = night * 2.2;            // street lamps glow after dark
   if (lampPoolMat) lampPoolMat.opacity = night * 0.5;             // ground light pools under lamps
+  if (nsPool) nsPool.opacity = ewPool.opacity = night * 0.4;       // traffic-signal road spill — night only
   if (lampConeMat) lampConeMat.opacity = night * 0.16;            // volumetric light shafts under lamps
   setGlow(night);
   setSky(night);
@@ -631,7 +632,8 @@ scene.add(ground);
 // zebra crosswalks on all four sides of every intersection
 {
   const cwGeo = new THREE.PlaneGeometry(ROAD - 3, 3.4); cwGeo.rotateX(-Math.PI / 2);
-  const cwMat = new THREE.MeshBasicMaterial({ map: texCrosswalk, transparent: true, depthWrite: false });
+  // road paint is a dirty concrete-white (below the bloom threshold) so it reads as markings, not glowing blobs
+  const cwMat = new THREE.MeshBasicMaterial({ map: texCrosswalk, color: 0xafb3ad, transparent: true, depthWrite: false });
   const spots = [];
   for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
     const cx = roadC(i), cz = roadC(j);
@@ -643,14 +645,14 @@ scene.add(ground);
   im.frustumCulled = false; scene.add(im);
   // solid white stop lines just inside each crosswalk
   const slGeo = new THREE.PlaneGeometry(ROAD - 3.5, 0.7); slGeo.rotateX(-Math.PI / 2);
-  const slIM = new THREE.InstancedMesh(slGeo, new THREE.MeshBasicMaterial({ color: 0xeef0ee }), spots.length);
+  const slIM = new THREE.InstancedMesh(slGeo, new THREE.MeshBasicMaterial({ color: 0xafb3ad }), spots.length);
   const sl = [];
   for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) { const cx = roadC(i), cz = roadC(j); sl.push([cx, cz + ROAD / 2 + 0.5, 0], [cx, cz - ROAD / 2 - 0.5, 0], [cx + ROAD / 2 + 0.5, cz, Math.PI / 2], [cx - ROAD / 2 - 0.5, cz, Math.PI / 2]); }
   sl.forEach(([x, z, rot], idx) => { p.set(x, 0.052, z); q.setFromAxisAngle(up, rot); m.compose(p, q, s); slIM.setMatrixAt(idx, m); });
   slIM.frustumCulled = false; scene.add(slIM);
   // lane turn-arrows: one in the right-hand approach lane on each side of every intersection, pointing in
   const arGeo = new THREE.PlaneGeometry(3.2, 5.2); arGeo.rotateX(-Math.PI / 2);
-  const arMat = new THREE.MeshBasicMaterial({ map: texArrow, transparent: true, depthWrite: false });
+  const arMat = new THREE.MeshBasicMaterial({ map: texArrow, color: 0xafb3ad, transparent: true, depthWrite: false });
   const lane = ROAD / 4, back = ROAD / 2 + 8.5;   // right-hand lane offset, distance back from the box
   const ar = [];
   for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
@@ -1149,8 +1151,9 @@ function applyTrafPhase() {
   ewG.opacity = trafPhase === 2 ? 1 : TL_DIM;
   ewA.opacity = trafPhase === 3 ? 1 : TL_DIM;
   ewR.opacity = (trafPhase === 0 || trafPhase === 1) ? 1 : TL_DIM;
-  // road spill tinted by whichever colour each direction is showing (subtle by day, reads at dusk)
-  const tint = (mat, g, a) => { mat.color.setHex(g ? 0x46e15a : a ? 0xffce3a : 0xff3b30); mat.opacity = 0.22; };
+  // road spill tinted by whichever colour each direction is showing — opacity is driven by the
+  // night factor in envUpdate so it only glows after dark (no bright blobs on the road by day)
+  const tint = (mat, g, a) => { mat.color.setHex(g ? 0x46e15a : a ? 0xffce3a : 0xff3b30); };
   tint(nsPool, trafPhase === 0, trafPhase === 1);
   tint(ewPool, trafPhase === 2, trafPhase === 3);
 }
