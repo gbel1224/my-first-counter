@@ -5342,13 +5342,19 @@ function update(dt) {
   if (driving && driving.bike) {
     const c = driving, fx = Math.sin(c.h), fz = Math.cos(c.h);
     const gy = groundY(c.x, c.z) + (c.y || 0);
+    // body english: tuck forward under boost (+1), shift upright & braced under hard braking (-1)
+    const hardBrake = braking() && c.speed > 6;
+    const leanTgt = boosting() ? 1 : (hardBrake ? -0.7 : 0);
+    c.riderLean = (c.riderLean || 0) + (leanTgt - (c.riderLean || 0)) * Math.min(1, 8 * dt);
+    const L = c.riderLean;
     hero.group.visible = true;
-    hero.group.position.set(c.x - fx * 0.26, gy - 0.04, c.z - fz * 0.26);   // seated a touch back on the seat
-    hero.group.rotation.set(0.12, c.h, c.mesh.rotation.z);                  // slight forward crouch + share the bike's lean
+    // boost slides the rider forward over the tank; braking throws their weight back on the seat
+    hero.group.position.set(c.x - fx * (0.26 - L * 0.16), gy - 0.04 - Math.max(0, L) * 0.03, c.z - fz * (0.26 - L * 0.16));
+    hero.group.rotation.set(0.12 + L * 0.36, c.h, c.mesh.rotation.z);       // pitch: hunch low on boost, sit back on the brakes
     hero.legL.rotation.x = 1.4; hero.legR.rotation.x = 1.4;                 // thighs forward onto the tank
     hero.kneeL.rotation.x = -1.55; hero.kneeR.rotation.x = -1.55;           // shins tucked down to the pegs
     hero.legL.rotation.z = 0.22; hero.legR.rotation.z = -0.22;             // knees splay around the frame
-    hero.armL.rotation.x = 1.05; hero.armR.rotation.x = 1.05;               // hands forward on the bars
+    hero.armL.rotation.x = hero.armR.rotation.x = 1.05 + L * 0.2;           // reach into the bars on boost, brace straight on the brakes
   }
 
   // story characters idle bob
