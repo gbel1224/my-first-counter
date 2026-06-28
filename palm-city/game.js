@@ -267,6 +267,7 @@ let dayMode = (() => { try { return localStorage.getItem("palm_city_light") === 
 // Locked to a stable bright daytime (DAY_T); re-enable the moving cycle from the settings panel.
 let dayCycle = (() => { try { return localStorage.getItem("palm_city_cycle") === "1"; } catch (e) { return false; } })();
 const DAY_T = 0.25;
+let gNight = 0;   // current night factor (0 bright day … 1 deep night), shared across systems
 let gradeSat = dayMode === "midday" ? 0.92 : 1.0;   // saturation multiplier in the final grade (was a hard 1.11)
 const _sky = new THREE.Color(), _top = new THREE.Color(), _sunCol = new THREE.Color();
 function envUpdate() {
@@ -286,6 +287,7 @@ function envUpdate() {
   skyUniforms.horizonColor.value.copy(_sky);
   skyUniforms.topColor.value.copy(_top.lerpColors(a.top, b.top, k));
   const night = a.night + (b.night - a.night) * k;
+  gNight = night;                                               // shared so other systems (e.g. the chopper searchlight) can dim by day
   palmIM.material.emissiveIntensity = 1 + night * 1.7;          // Golden Palms glow at night
   if (buildingMat) buildingMat.emissiveIntensity = night * 1.2;    // windows light up after dark
   for (const mm of specialMats) mm.emissiveIntensity = night * 1.2;   // business windows too
@@ -3378,6 +3380,7 @@ function updateChaseUnits(dt, heat, px, pz) {
     ch.rotor.rotation.y += 30 * dt;
     ch.beacon.visible = (Math.floor(simTime * 5) % 2) === 0;
     ch.spot.position.set(0, -ch.y / 2, 0); ch.spot.scale.y = ch.y;   // cone reaches from the chopper to the ground
+    ch.spot.material.opacity = 0.04 + gNight * 0.22;                 // barely there by day, a real searchlight after dark
     if (!ch.leave && !dlgLines && d < 48) {
       ch.shootCD -= dt;
       if (ch.shootCD <= 0) {
