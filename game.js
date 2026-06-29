@@ -1763,23 +1763,23 @@ for (let t = 0; t < Math.round(340 * N / 32); t++) {   // a bigger crowd, scaled
       mood: (lp() * 3) | 0, talkCD: 0, anger: 0, bubble: null, bubbleT: 0, ambient: !!ambient,
     });
   };
-  for (let t = 0; t < Math.round(150 * N / 32); t++) {   // street crowd scattered across the grid
+  for (let t = 0; t < Math.round(100 * N / 32); t++) {   // street crowd scattered across the grid
     const i = (lp() * N) | 0, j = (lp() * N) | 0;
     spawnNPC(blockMin(i) + lrr(2, BLOCK - 2), blockMin(j) + lrr(2, BLOCK - 2));
   }
   // sidewalk crowd: hug the block edges right along the roads (what you see while driving/walking)
-  for (let t = 0; t < Math.round(360 * N / 32); t++) {
+  for (let t = 0; t < Math.round(150 * N / 32); t++) {
     const i = (lp() * N) | 0, j = (lp() * N) | 0, m0 = blockMin(i), n0 = blockMin(j), a = lp() * BLOCK;
     const edge = (lp() * 4) | 0;
     const x = edge === 2 ? m0 + 1.6 : edge === 3 ? m0 + BLOCK - 1.6 : m0 + a;
     const z = edge === 0 ? n0 + 1.6 : edge === 1 ? n0 + BLOCK - 1.6 : n0 + a;
     spawnNPC(x, z);
   }
-  for (let t = 0; t < 220; t++) spawnNPC(lrr(-HALF + 20, HALF - 20), SEA_Z - lrr(30, 78));   // beach + waterfront
-  for (let t = 0; t < 110; t++) spawnNPC(PLAZA.x + lrr(-34, 34), PLAZA.z + lrr(-34, 34));      // plaza gathering
+  for (let t = 0; t < 120; t++) spawnNPC(lrr(-HALF + 20, HALF - 20), SEA_Z - lrr(30, 78));   // beach + waterfront
+  for (let t = 0; t < 70; t++) spawnNPC(PLAZA.x + lrr(-34, 34), PLAZA.z + lrr(-34, 34));       // plaza gathering
   // ambient pool: these recycle to stay near the player (see the update loop), so the streets are
   // populated EVERYWHERE you go — the static crowd above is too thin to cover a map this big alone.
-  for (let t = 0; t < 300; t++) spawnNPC(lrr(-HALF, HALF), lrr(-HALF, HALF), true);
+  for (let t = 0; t < 95; t++) spawnNPC(lrr(-HALF, HALF), lrr(-HALF, HALF), true);
 }
 // dedicated PRNG for crowd wandering — deterministic (reproducible) but separate from the seeded
 // city/economy stream, so the crowd is purely cosmetic and never shifts gameplay outcomes
