@@ -827,10 +827,13 @@ let buildingMat = null;
 // ---------- beach district (south of the city, on the open ground beyond the grid) ----------
 const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigger) grid
 {
+  // sand: tile uniformly (square ~11u tiles) across the long, shallow beach plane. The old 16x7 repeat
+  // stretched the grain ~20x horizontally, which read as wood planks instead of sand.
+  const sandPlaneW = 2 * HALF + 200, sandTile = 11;
   const sandTex = canvasTex(128, (ctx, s) => {
     ctx.fillStyle = "#e7d3a2"; ctx.fillRect(0, 0, s, s);
     speckle(ctx, s, 520, ["#dec88e", "#efe1b6", "#d4ba80", "#ecd8a0"], 1, 3);
-  }, 16, 7);
+  }, Math.round(sandPlaneW / sandTile), Math.round(78 / sandTile));
   const seaTex = oceanTex = canvasTex(128, (ctx, s) => {
     ctx.fillStyle = "#2f8fb6"; ctx.fillRect(0, 0, s, s);
     for (let i = 0; i < 30; i++) { ctx.strokeStyle = i % 2 ? "rgba(150,210,235,.5)" : "rgba(25,105,140,.5)"; ctx.lineWidth = 2; const y = rng() * s; ctx.beginPath(); ctx.moveTo(0, y); ctx.bezierCurveTo(s / 3, y + 5, 2 * s / 3, y - 5, s, y); ctx.stroke(); }
