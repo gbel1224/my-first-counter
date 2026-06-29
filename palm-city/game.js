@@ -1753,22 +1753,33 @@ for (let t = 0; t < Math.round(340 * N / 32); t++) {   // a bigger crowd, scaled
 {
   const lp = mulberry32(0x9E3779B1);
   const lrr = (a, b) => a + lp() * (b - a);
-  const spawnNPC = (x, z) => {
+  const spawnNPC = (x, z, ambient) => {
     const w = makeWalker(npcWalkerGeos[(lp() * npcWalkerGeos.length) | 0]);
     w.group.scale.set(lrr(0.92, 1.06), lrr(0.9, 1.14), lrr(0.92, 1.06));
     scene.add(w.group);
     npcs.push({
       mesh: w.group, legL: w.legL, legR: w.legR, armL: w.armL, armR: w.armR, kneeL: w.kneeL, kneeR: w.kneeR,
       x, z, h: lrr(0, Math.PI * 2), speed: lrr(1.0, 1.7), timer: lrr(2, 6), phase: lrr(0, 6), walkPhase: lrr(0, 6),
-      mood: (lp() * 3) | 0, talkCD: 0, anger: 0, bubble: null, bubbleT: 0,
+      mood: (lp() * 3) | 0, talkCD: 0, anger: 0, bubble: null, bubbleT: 0, ambient: !!ambient,
     });
   };
-  for (let t = 0; t < Math.round(150 * N / 32); t++) {   // denser street crowd across the grid
+  for (let t = 0; t < Math.round(150 * N / 32); t++) {   // street crowd scattered across the grid
     const i = (lp() * N) | 0, j = (lp() * N) | 0;
     spawnNPC(blockMin(i) + lrr(2, BLOCK - 2), blockMin(j) + lrr(2, BLOCK - 2));
   }
-  for (let t = 0; t < 120; t++) spawnNPC(lrr(-HALF + 20, HALF - 20), SEA_Z - lrr(30, 72));   // beach + waterfront
-  for (let t = 0; t < 55; t++) spawnNPC(PLAZA.x + lrr(-32, 32), PLAZA.z + lrr(-32, 32));       // plaza gathering
+  // sidewalk crowd: hug the block edges right along the roads (what you see while driving/walking)
+  for (let t = 0; t < Math.round(360 * N / 32); t++) {
+    const i = (lp() * N) | 0, j = (lp() * N) | 0, m0 = blockMin(i), n0 = blockMin(j), a = lp() * BLOCK;
+    const edge = (lp() * 4) | 0;
+    const x = edge === 2 ? m0 + 1.6 : edge === 3 ? m0 + BLOCK - 1.6 : m0 + a;
+    const z = edge === 0 ? n0 + 1.6 : edge === 1 ? n0 + BLOCK - 1.6 : n0 + a;
+    spawnNPC(x, z);
+  }
+  for (let t = 0; t < 220; t++) spawnNPC(lrr(-HALF + 20, HALF - 20), SEA_Z - lrr(30, 78));   // beach + waterfront
+  for (let t = 0; t < 110; t++) spawnNPC(PLAZA.x + lrr(-34, 34), PLAZA.z + lrr(-34, 34));      // plaza gathering
+  // ambient pool: these recycle to stay near the player (see the update loop), so the streets are
+  // populated EVERYWHERE you go — the static crowd above is too thin to cover a map this big alone.
+  for (let t = 0; t < 300; t++) spawnNPC(lrr(-HALF, HALF), lrr(-HALF, HALF), true);
 }
 // dedicated PRNG for crowd wandering — deterministic (reproducible) but separate from the seeded
 // city/economy stream, so the crowd is purely cosmetic and never shifts gameplay outcomes
@@ -5325,13 +5336,27 @@ function update(dt) {
   // pedestrians
   const npcFx = driving ? driving.x : player.x, npcFz = driving ? driving.z : player.z;
   for (const n of npcs) {
-    // only the crowd near you fully simulates — distant pedestrians freeze, so the city can be packed cheaply.
-    // (still place a frozen NPC's mesh once, so far-spawned pedestrians aren't stuck at the origin.)
-    if (dist2(n.x, n.z, npcFx, npcFz) > 26000) {
-      if (!n.placed) { n.mesh.position.set(n.x, groundY(n.x, n.z), n.z); n.mesh.rotation.y = n.h; n.placed = true; }
+    // ambient pedestrians recycle to stay around you, so the streets are lively wherever you roam.
+    // Snap each onto the SIDEWALK of a nearby road so they actually line the streets you see,
+    // rather than scattering into block interiors / behind buildings where they're wasted.
+    if (n.ambient && dist2(n.x, n.z, npcFx, npcFz) > 90000) {
+      const ang = npcRng() * Math.PI * 2, rad = 70 + npcRng() * 190;
+      let rx = npcFx + Math.cos(ang) * rad, rz = npcFz + Math.sin(ang) * rad;
+      const side = npcRng() < 0.5 ? -1 : 1, off = ROAD / 2 + 1.4 + npcRng() * 2.5;
+      if (npcRng() < 0.5) rx = roadC(Math.round((rx + HALF - ROAD / 2) / CELL)) + side * off;   // sidewalk along a N-S road
+      else rz = roadC(Math.round((rz + HALF - ROAD / 2) / CELL)) + side * off;                   // sidewalk along an E-W road
+      n.x = clamp(rx, -HALF + 6, HALF - 6); n.z = clamp(rz, -HALF + 6, SEA_Z - 12);
+      n.h = npcRng() * Math.PI * 2; n.flee = 0; n.placed = false;
+    }
+    // tiered LOD so the city can be packed without cost: only the crowd near you (<~160u) fully
+    // simulates; the mid ring (<~470u) renders but freezes; everything beyond that is hidden outright.
+    const d2 = dist2(n.x, n.z, npcFx, npcFz);
+    if (d2 > 26000) {
+      n.mesh.visible = d2 < 220000;   // render out to ~470u so streets read as busy into the distance
+      if (n.mesh.visible && !n.placed) { n.mesh.position.set(n.x, groundY(n.x, n.z), n.z); n.mesh.rotation.y = n.h; n.placed = true; }
       continue;
     }
-    n.placed = true;
+    n.mesh.visible = true; n.placed = true;
     n.flee = (n.flee || 0) - dt;
     if (n.talkCD > 0) n.talkCD -= dt;
     if (n.anger > 0) n.anger = Math.max(0, n.anger - dt * 0.08);
