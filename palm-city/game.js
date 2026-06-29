@@ -5373,13 +5373,42 @@ function update(dt) {
       registerCrime();
     }
     n.timer -= dt;
-    // NPC wandering uses Math.random (not the seeded stream) so the crowd is purely cosmetic and never affects game determinism
-    if (n.timer <= 0 && n.flee <= 0) { n.timer = 2 + npcRng() * 4; n.h += (npcRng() - 0.5) * 2.8; }
+    if (n.crossCD > 0) n.crossCD -= dt;
+    // crossing the street like IRL: only near an intersection, and walk the crosswalk to the far side.
+    const ix = roadC(Math.round((n.x + HALF - ROAD / 2) / CELL));   // nearest N-S road / intersection x
+    const iz = roadC(Math.round((n.z + HALF - ROAD / 2) / CELL));   // nearest E-W road / intersection z
+    if (!n.cross && n.flee <= 0 && (n.crossCD || 0) <= 0 && Math.abs(n.x) < HALF && Math.abs(n.z) < HALF &&
+        Math.abs(n.x - ix) < ROAD / 2 + 9 && Math.abs(n.z - iz) < ROAD / 2 + 9 && npcRng() < 0.006) {
+      const sx = n.x >= ix ? 1 : -1, sz = n.z >= iz ? 1 : -1, CW = ROAD / 2 + 2.0, FAR = ROAD / 2 + 3.5;
+      // step to the opposite kerb along a crosswalk (one coord stays on the crosswalk lane)
+      n.cross = npcRng() < 0.5 ? { x: ix + sx * CW, z: iz - sz * FAR } : { x: ix - sx * FAR, z: iz + sz * CW };
+      n.crossT = 5;
+    }
+    // NPC wandering uses Math.random... (npcRng) so the crowd is purely cosmetic and never affects game determinism
+    if (n.cross) {
+      n.crossT -= dt;
+      const cdx = n.cross.x - n.x, cdz = n.cross.z - n.z;
+      if (cdx * cdx + cdz * cdz < 2.2 || n.crossT <= 0) { n.cross = null; n.crossCD = 9 + npcRng() * 16; }
+      else n.h = Math.atan2(cdx, cdz);
+    } else if (n.timer <= 0 && n.flee <= 0) { n.timer = 2 + npcRng() * 4; n.h += (npcRng() - 0.5) * 2.8; }
     const ox = n.x, oz = n.z;
     const sp = n.flee > 0 ? 3.8 : n.speed;
     moveWithCollision(n, Math.sin(n.h) * sp * dt, Math.cos(n.h) * sp * dt, 0.4);
-    const moved = Math.abs(n.x - ox) + Math.abs(n.z - oz);
-    if (moved < sp * dt * 0.3) n.h += Math.PI + (npcRng() - 0.5);
+    let moved = Math.abs(n.x - ox) + Math.abs(n.z - oz);
+    if (!n.cross && moved < sp * dt * 0.3) n.h += Math.PI + (npcRng() - 0.5);
+    // keep pedestrians on the sidewalk: ease them out of any roadway so they don't wander into traffic.
+    // (skipped while crossing at a crosswalk, and while fleeing — a panicking bystander can bolt across.)
+    if (!n.cross && n.flee <= 0 && Math.abs(n.x) < HALF && Math.abs(n.z) < HALF) {
+      const EDGE = ROAD / 2 + 1.7;
+      const dx = n.x - ix, dz = n.z - iz;   // distance from nearest road centres (computed above)
+      const inX = Math.abs(dx) < EDGE, inZ = Math.abs(dz) < EDGE;
+      if (inX && (!inZ || Math.abs(dx) >= Math.abs(dz))) {
+        const s = dx >= 0 ? 1 : -1; n.x += s * Math.min(EDGE - Math.abs(dx), sp * dt * 2.2 + 0.04); n.h = Math.atan2(s, 0);
+      } else if (inZ) {
+        const s = dz >= 0 ? 1 : -1; n.z += s * Math.min(EDGE - Math.abs(dz), sp * dt * 2.2 + 0.04); n.h = Math.atan2(0, s);
+      }
+      moved = Math.abs(n.x - ox) + Math.abs(n.z - oz);
+    }
     // stride: advance the walk cycle with speed, swing legs & arms in opposition, bob with each step
     const stepping = moved > sp * dt * 0.3;
     n.walkPhase += sp * dt * 2.6;
