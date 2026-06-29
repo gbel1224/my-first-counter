@@ -607,6 +607,7 @@ const matVC = new THREE.MeshLambertMaterial({ vertexColors: true });
 const matPerson = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0.0, envMapIntensity: 0.55 });
 let roadMat = null, sidewalkMat = null;   // exposed so rain can make the floor wet
 let oceanTex = null;   // exposed so the sea can drift/shimmer
+let seaNormTex = null; // animated ripple normals so the surface catches the sun
 let foamMat = null;    // shoreline foam (pulses like waves)
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 1700, 2 * HALF + 1700),
   // polygon-offset the base grass back in the depth buffer so the road/sidewalk/sand decals laid just
@@ -837,10 +838,22 @@ const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigg
     ctx.fillStyle = "#e7d3a2"; ctx.fillRect(0, 0, s, s);
     speckle(ctx, s, 520, ["#dec88e", "#efe1b6", "#d4ba80", "#ecd8a0"], 1, 3);
   }, Math.round(sandPlaneW / sandTile), Math.round(sandD / sandTile));
+  // base sea tint is light; the per-vertex shore→deep gradient (below) tints it to ocean colour, and the
+  // wave streaks add subtle light/dark surface variation. (keeps exactly 30 rng() calls — determinism.)
   const seaTex = oceanTex = canvasTex(128, (ctx, s) => {
-    ctx.fillStyle = "#2f8fb6"; ctx.fillRect(0, 0, s, s);
-    for (let i = 0; i < 30; i++) { ctx.strokeStyle = i % 2 ? "rgba(150,210,235,.5)" : "rgba(25,105,140,.5)"; ctx.lineWidth = 2; const y = rng() * s; ctx.beginPath(); ctx.moveTo(0, y); ctx.bezierCurveTo(s / 3, y + 5, 2 * s / 3, y - 5, s, y); ctx.stroke(); }
+    ctx.fillStyle = "#dfeef3"; ctx.fillRect(0, 0, s, s);
+    for (let i = 0; i < 30; i++) { ctx.strokeStyle = i % 2 ? "rgba(255,255,255,.5)" : "rgba(120,165,185,.45)"; ctx.lineWidth = 1.5; const y = rng() * s; ctx.beginPath(); ctx.moveTo(0, y); ctx.bezierCurveTo(s / 3, y + 5, 2 * s / 3, y - 5, s, y); ctx.stroke(); }
   }, 26, 26);
+  // rippled wave normals (own PRNG, so it doesn't touch the seeded city/economy stream)
+  const seaRng = mulberry32(0x5EA00D);
+  seaNormTex = canvasNormalTex(128, (ctx, s) => {
+    for (let i = 0; i < 80; i++) {
+      const x = seaRng() * s, y = seaRng() * s, r = 5 + seaRng() * 13, up = seaRng() < 0.5;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, up ? "#ffffff" : "#202020"); g.addColorStop(1, "rgba(128,128,128,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+    }
+  }, 34, 34);
   // court markings: U(=x in world) is the LENGTH (baskets at the two x-ends), V(=z) is the width.
   const courtTex = canvasTex(256, (ctx, s) => {
     ctx.fillStyle = "#3f6f54"; ctx.fillRect(0, 0, s, s);            // green sport surface
@@ -858,9 +871,20 @@ const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigg
   sand.rotation.x = -Math.PI / 2; sand.position.set(10, 0.06, SEA_Z - sandD / 2 + 12);
   sand.renderOrder = 1;
   scene.add(sand);
-  // ocean
-  const sea = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 900, 600),
-    new THREE.MeshStandardMaterial({ map: seaTex, transparent: true, opacity: 0.92, roughness: 0.14, metalness: 0.0, envMapIntensity: 1.1 }));
+  // opaque seabed under the (transparent) water so you see deep blue through it, not the grass below.
+  // depth-offset so it wins over the base grass plane the same way the sand does.
+  const seabed = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 900, 600),
+    new THREE.MeshLambertMaterial({ color: 0x0d4061, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -12 }));
+  seabed.rotation.x = -Math.PI / 2; seabed.position.set(10, 0.02, SEA_Z + 295); seabed.renderOrder = 1;
+  scene.add(seabed);
+  // ocean: a rippled, reflective surface that shades from turquoise at the shore to deep blue offshore
+  const seaGeo = new THREE.PlaneGeometry(2 * HALF + 900, 600, 12, 12);
+  { const pos = seaGeo.attributes.position, cols = [], shore = new THREE.Color(0x35b8cf), deep = new THREE.Color(0x0a4a73);
+    for (let i = 0; i < pos.count; i++) { const t = clamp((300 - pos.getY(i)) / 600, 0, 1); const c = shore.clone().lerp(deep, t * t); cols.push(c.r, c.g, c.b); }
+    seaGeo.setAttribute("color", new THREE.Float32BufferAttribute(cols, 3)); }
+  const sea = new THREE.Mesh(seaGeo,
+    new THREE.MeshStandardMaterial({ map: seaTex, normalMap: seaNormTex, normalScale: new THREE.Vector2(0.55, 0.55),
+      vertexColors: true, transparent: true, opacity: 0.95, roughness: 0.11, metalness: 0.0, envMapIntensity: 1.7 }));
   sea.rotation.x = -Math.PI / 2; sea.position.set(10, 0.03, SEA_Z + 295);
   scene.add(sea);
   // shoreline foam band where the water meets the sand
@@ -5076,6 +5100,7 @@ const SPRINT_RAMP = 2.5;   // seconds of holding sprint to reach top running spe
 function update(dt) {
   simTime += dt;
   if (oceanTex) { oceanTex.offset.x += dt * 0.006; oceanTex.offset.y += dt * 0.011; }   // drifting water
+  if (seaNormTex) { seaNormTex.offset.x -= dt * 0.022; seaNormTex.offset.y += dt * 0.017; }   // ripples crossing the surface
   if (foamMat) foamMat.opacity = 0.5 + Math.sin(simTime * 1.4) * 0.28;                   // waves washing the shore
   const inp = (dlgLines || garageOpen || statsOpen || tutOpen || styleOpen || arcadeOpen) ? { mx: 0, mz: 0, mag: 0 } : readInput();
   const a = actA, b = actB, pn = actP; actA = false; actB = false; actP = false;
