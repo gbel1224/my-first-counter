@@ -1747,6 +1747,32 @@ for (let t = 0; t < Math.round(340 * N / 32); t++) {   // a bigger crowd, scaled
     mood: (rng() * 3) | 0, talkCD: 0, anger: 0, bubble: null, bubbleT: 0,   // 0 friendly · 1 neutral · 2 rude
   });
 }
+// Extra crowds so the world feels alive everywhere — a denser street crowd plus people on the beach,
+// the waterfront and the central plaza. Uses its OWN PRNG so the seeded city/economy stays byte-identical,
+// and the update loop distance-culls them, so a packed city stays cheap.
+{
+  const lp = mulberry32(0x9E3779B1);
+  const lrr = (a, b) => a + lp() * (b - a);
+  const spawnNPC = (x, z) => {
+    const w = makeWalker(npcWalkerGeos[(lp() * npcWalkerGeos.length) | 0]);
+    w.group.scale.set(lrr(0.92, 1.06), lrr(0.9, 1.14), lrr(0.92, 1.06));
+    scene.add(w.group);
+    npcs.push({
+      mesh: w.group, legL: w.legL, legR: w.legR, armL: w.armL, armR: w.armR, kneeL: w.kneeL, kneeR: w.kneeR,
+      x, z, h: lrr(0, Math.PI * 2), speed: lrr(1.0, 1.7), timer: lrr(2, 6), phase: lrr(0, 6), walkPhase: lrr(0, 6),
+      mood: (lp() * 3) | 0, talkCD: 0, anger: 0, bubble: null, bubbleT: 0,
+    });
+  };
+  for (let t = 0; t < Math.round(150 * N / 32); t++) {   // denser street crowd across the grid
+    const i = (lp() * N) | 0, j = (lp() * N) | 0;
+    spawnNPC(blockMin(i) + lrr(2, BLOCK - 2), blockMin(j) + lrr(2, BLOCK - 2));
+  }
+  for (let t = 0; t < 120; t++) spawnNPC(lrr(-HALF + 20, HALF - 20), SEA_Z - lrr(30, 72));   // beach + waterfront
+  for (let t = 0; t < 55; t++) spawnNPC(PLAZA.x + lrr(-32, 32), PLAZA.z + lrr(-32, 32));       // plaza gathering
+}
+// dedicated PRNG for crowd wandering — deterministic (reproducible) but separate from the seeded
+// city/economy stream, so the crowd is purely cosmetic and never shifts gameplay outcomes
+const npcRng = mulberry32(0x51ED5EED);
 
 // ---------- pedestrian banter: walk up to anyone and talk — GTA-style moods & humour ----------
 const NPC_LINES = {
@@ -5297,7 +5323,15 @@ function update(dt) {
   }
 
   // pedestrians
+  const npcFx = driving ? driving.x : player.x, npcFz = driving ? driving.z : player.z;
   for (const n of npcs) {
+    // only the crowd near you fully simulates — distant pedestrians freeze, so the city can be packed cheaply.
+    // (still place a frozen NPC's mesh once, so far-spawned pedestrians aren't stuck at the origin.)
+    if (dist2(n.x, n.z, npcFx, npcFz) > 26000) {
+      if (!n.placed) { n.mesh.position.set(n.x, groundY(n.x, n.z), n.z); n.mesh.rotation.y = n.h; n.placed = true; }
+      continue;
+    }
+    n.placed = true;
     n.flee = (n.flee || 0) - dt;
     if (n.talkCD > 0) n.talkCD -= dt;
     if (n.anger > 0) n.anger = Math.max(0, n.anger - dt * 0.08);
@@ -5314,12 +5348,13 @@ function update(dt) {
       registerCrime();
     }
     n.timer -= dt;
-    if (n.timer <= 0 && n.flee <= 0) { n.timer = rr(2, 6); n.h += rr(-1.4, 1.4); }
+    // NPC wandering uses Math.random (not the seeded stream) so the crowd is purely cosmetic and never affects game determinism
+    if (n.timer <= 0 && n.flee <= 0) { n.timer = 2 + npcRng() * 4; n.h += (npcRng() - 0.5) * 2.8; }
     const ox = n.x, oz = n.z;
     const sp = n.flee > 0 ? 3.8 : n.speed;
     moveWithCollision(n, Math.sin(n.h) * sp * dt, Math.cos(n.h) * sp * dt, 0.4);
     const moved = Math.abs(n.x - ox) + Math.abs(n.z - oz);
-    if (moved < sp * dt * 0.3) n.h += Math.PI + rr(-0.5, 0.5);
+    if (moved < sp * dt * 0.3) n.h += Math.PI + (npcRng() - 0.5);
     // stride: advance the walk cycle with speed, swing legs & arms in opposition, bob with each step
     const stepping = moved > sp * dt * 0.3;
     n.walkPhase += sp * dt * 2.6;
