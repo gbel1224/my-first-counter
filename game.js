@@ -838,14 +838,15 @@ const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigg
     ctx.fillStyle = "#2f8fb6"; ctx.fillRect(0, 0, s, s);
     for (let i = 0; i < 30; i++) { ctx.strokeStyle = i % 2 ? "rgba(150,210,235,.5)" : "rgba(25,105,140,.5)"; ctx.lineWidth = 2; const y = rng() * s; ctx.beginPath(); ctx.moveTo(0, y); ctx.bezierCurveTo(s / 3, y + 5, 2 * s / 3, y - 5, s, y); ctx.stroke(); }
   }, 26, 26);
+  // court markings: U(=x in world) is the LENGTH (baskets at the two x-ends), V(=z) is the width.
   const courtTex = canvasTex(256, (ctx, s) => {
     ctx.fillStyle = "#3f6f54"; ctx.fillRect(0, 0, s, s);            // green sport surface
     ctx.strokeStyle = "#f0ede0"; ctx.lineWidth = 4;
     ctx.strokeRect(8, 8, s - 16, s - 16);
-    ctx.beginPath(); ctx.moveTo(s / 2, 8); ctx.lineTo(s / 2, s - 8); ctx.stroke();
-    ctx.beginPath(); ctx.arc(s / 2, s / 2, 34, 0, Math.PI * 2); ctx.stroke();
-    ctx.beginPath(); ctx.arc(s / 2, 8, 52, 0, Math.PI); ctx.stroke();
-    ctx.beginPath(); ctx.arc(s / 2, s - 8, 52, Math.PI, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(s / 2, 8); ctx.lineTo(s / 2, s - 8); ctx.stroke();    // half-court line (across the width)
+    ctx.beginPath(); ctx.arc(s / 2, s / 2, 34, 0, Math.PI * 2); ctx.stroke();          // centre circle
+    ctx.beginPath(); ctx.arc(8, s / 2, 52, -Math.PI / 2, Math.PI / 2); ctx.stroke();   // free-throw key under the LEFT basket
+    ctx.beginPath(); ctx.arc(s - 8, s / 2, 52, Math.PI / 2, Math.PI * 1.5); ctx.stroke();   // and the RIGHT basket
   });
 
   // sand strip along the shore, with grass behind it blending to the city
@@ -898,15 +899,17 @@ const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigg
   const courtX = 150, courtZ = SEA_Z - 60;
   const court = new THREE.Mesh(new THREE.PlaneGeometry(30, 18), new THREE.MeshLambertMaterial({ map: courtTex }));
   court.rotation.x = -Math.PI / 2; court.position.set(courtX, 0.05, courtZ); scene.add(court);
-  function hoop(x, z, faceZ) {
+  // face = direction toward centre court (in +x/-x): the pole sits on the baseline, the backboard hangs
+  // in front of it and the rim extends further toward the court — all along the court's long (x) axis.
+  function hoop(x, z, face) {
     const grp = new THREE.Group();
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 3.6, 8), new THREE.MeshLambertMaterial({ color: 0x5a5f66 })); pole.position.y = 1.8;
-    const board = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.2, 0.1), new THREE.MeshLambertMaterial({ color: 0xf2f0e8 })); board.position.set(0, 3.3, faceZ * 0.45);
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.06, 6, 16), new THREE.MeshLambertMaterial({ color: 0xff6a2e })); rim.rotation.x = Math.PI / 2; rim.position.set(0, 3.1, faceZ * 0.95);
+    const board = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.2, 1.8), new THREE.MeshLambertMaterial({ color: 0xf2f0e8 })); board.position.set(face * 0.45, 3.3, 0);   // thin face toward the court, 1.8 wide across z
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.06, 6, 16), new THREE.MeshLambertMaterial({ color: 0xff6a2e })); rim.rotation.x = Math.PI / 2; rim.position.set(face * 0.95, 3.1, 0);   // horizontal ring out over the court
     grp.add(pole, board, rim); grp.position.set(x, 0.05, z); scene.add(grp);
     addCollider(x, z, 0.4, 0.4);
   }
-  hoop(courtX - 13, courtZ, 1); hoop(courtX + 13, courtZ, -1);
+  hoop(courtX - 13, courtZ, 1); hoop(courtX + 13, courtZ, -1);   // left faces +x, right faces -x (both toward centre)
 }
 
 // special buildings + labels — facade + lit-window textures (tinted by the accent colour),
