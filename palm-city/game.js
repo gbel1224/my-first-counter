@@ -609,6 +609,8 @@ let roadMat = null, sidewalkMat = null;   // exposed so rain can make the floor 
 let oceanTex = null;   // exposed so the sea can drift/shimmer
 let foamMat = null;    // shoreline foam (pulses like waves)
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 1700, 2 * HALF + 1700),
+  // polygon-offset the base grass back in the depth buffer so the road/sidewalk/sand decals laid just
+  // above it always win — otherwise they z-fight at grazing angles (e.g. grass bleeding onto the beach).
   new THREE.MeshLambertMaterial({ color: 0x9aab72 }));
 ground.geometry.rotateX(-Math.PI / 2);
 ground.receiveShadow = true;
@@ -827,13 +829,14 @@ let buildingMat = null;
 // ---------- beach district (south of the city, on the open ground beyond the grid) ----------
 const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigger) grid
 {
-  // sand: tile uniformly (square ~11u tiles) across the long, shallow beach plane. The old 16x7 repeat
-  // stretched the grain ~20x horizontally, which read as wood planks instead of sand.
-  const sandPlaneW = 2 * HALF + 200, sandTile = 11;
+  // sand: tile uniformly (square ~11u tiles) across the beach plane. The old 16x7 repeat stretched the
+  // grain ~20x horizontally (looked like planks). The plane reaches from the beachfront road down to the
+  // waterline so the whole beach is sand — no grass showing between the city and the shore.
+  const sandPlaneW = 2 * HALF + 200, sandTile = 11, sandD = 92;
   const sandTex = canvasTex(128, (ctx, s) => {
     ctx.fillStyle = "#e7d3a2"; ctx.fillRect(0, 0, s, s);
     speckle(ctx, s, 520, ["#dec88e", "#efe1b6", "#d4ba80", "#ecd8a0"], 1, 3);
-  }, Math.round(sandPlaneW / sandTile), Math.round(78 / sandTile));
+  }, Math.round(sandPlaneW / sandTile), Math.round(sandD / sandTile));
   const seaTex = oceanTex = canvasTex(128, (ctx, s) => {
     ctx.fillStyle = "#2f8fb6"; ctx.fillRect(0, 0, s, s);
     for (let i = 0; i < 30; i++) { ctx.strokeStyle = i % 2 ? "rgba(150,210,235,.5)" : "rgba(25,105,140,.5)"; ctx.lineWidth = 2; const y = rng() * s; ctx.beginPath(); ctx.moveTo(0, y); ctx.bezierCurveTo(s / 3, y + 5, 2 * s / 3, y - 5, s, y); ctx.stroke(); }
@@ -849,10 +852,11 @@ const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigg
     ctx.beginPath(); ctx.arc(s - 8, s / 2, 52, Math.PI / 2, Math.PI * 1.5); ctx.stroke();   // and the RIGHT basket
   });
 
-  // sand strip along the shore, with grass behind it blending to the city
-  const sandW = 2 * HALF + 200, sand = new THREE.Mesh(new THREE.PlaneGeometry(sandW, 78, 1, 1),
-    new THREE.MeshLambertMaterial({ map: sandTex }));
-  sand.rotation.x = -Math.PI / 2; sand.position.set(10, 0.04, SEA_Z - 39);
+  // sand reaches from the beachfront road (city edge) down to the waterline — the whole beach is sand
+  const sand = new THREE.Mesh(new THREE.PlaneGeometry(sandPlaneW, sandD, 1, 1),
+    new THREE.MeshLambertMaterial({ map: sandTex, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -16 }));
+  sand.rotation.x = -Math.PI / 2; sand.position.set(10, 0.06, SEA_Z - sandD / 2 + 12);
+  sand.renderOrder = 1;
   scene.add(sand);
   // ocean
   const sea = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 900, 600),
@@ -861,8 +865,8 @@ const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigg
   scene.add(sea);
   // shoreline foam band where the water meets the sand
   const foamTex = canvasTex(128, (ctx, s) => { ctx.clearRect(0, 0, s, s); for (let i = 0; i < 90; i++) { ctx.fillStyle = "rgba(255,255,255," + (0.3 + Math.random() * 0.5) + ")"; ctx.beginPath(); ctx.arc(Math.random() * s, s * 0.5 + (Math.random() - 0.5) * s * 0.7, 2 + Math.random() * 6, 0, 7); ctx.fill(); } }, 60, 1);
-  const foam = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 200, 7), new THREE.MeshBasicMaterial({ map: foamTex, transparent: true, depthWrite: false }));
-  foam.rotation.x = -Math.PI / 2; foam.position.set(10, 0.05, SEA_Z - 1);
+  const foam = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 200, 7), new THREE.MeshBasicMaterial({ map: foamTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -32 }));
+  foam.rotation.x = -Math.PI / 2; foam.position.set(10, 0.08, SEA_Z - 1); foam.renderOrder = 2;
   scene.add(foam); foamMat = foam.material;
 
   // beach palms (compact instanced clump: leaning trunks + frond crowns)
@@ -897,8 +901,8 @@ const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigg
 
   // beachfront basketball court with two hoops
   const courtX = 150, courtZ = SEA_Z - 60;
-  const court = new THREE.Mesh(new THREE.PlaneGeometry(30, 18), new THREE.MeshLambertMaterial({ map: courtTex }));
-  court.rotation.x = -Math.PI / 2; court.position.set(courtX, 0.05, courtZ); scene.add(court);
+  const court = new THREE.Mesh(new THREE.PlaneGeometry(30, 18), new THREE.MeshLambertMaterial({ map: courtTex, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -32 }));
+  court.rotation.x = -Math.PI / 2; court.position.set(courtX, 0.09, courtZ); court.renderOrder = 2; scene.add(court);
   // face = direction toward centre court (in +x/-x): the pole sits on the baseline, the backboard hangs
   // in front of it and the rim extends further toward the court — all along the court's long (x) axis.
   function hoop(x, z, face) {
