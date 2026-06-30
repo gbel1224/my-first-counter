@@ -99,7 +99,11 @@ sun.shadow.camera.top = 100; sun.shadow.camera.bottom = -100;
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.35;
 const _sunDir = new THREE.Vector3(0.45, 0.8, 0.4).normalize();   // current key-light direction (set by the cycle)
 function updateSunShadow() {
-  const tx = driving ? driving.x : player.x, tz = driving ? driving.z : player.z;
+  // snap the shadow frustum to whole-texel steps so its texels stay put in the world as the player
+  // moves — otherwise sub-texel drift makes every shadow edge crawl/shimmer during fast movement.
+  const texel = (sun.shadow.camera.right - sun.shadow.camera.left) / sun.shadow.mapSize.x;
+  const rx = driving ? driving.x : player.x, rz = driving ? driving.z : player.z;
+  const tx = Math.round(rx / texel) * texel, tz = Math.round(rz / texel) * texel;
   sun.target.position.set(tx, 0, tz);                 // keep the shadow frustum centred on the action
   sun.position.set(tx + _sunDir.x * 240, _sunDir.y * 240, tz + _sunDir.z * 240);
 }
@@ -613,15 +617,16 @@ let seaWave = null;    // {geo} segmented ocean surface, gently rising/falling e
 let seaGlitter = null; // {uniforms} additive sun-glitter twinkle field on the water
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 1700, 2 * HALF + 1700),
   // polygon-offset the base grass back in the depth buffer so the road/sidewalk/sand decals laid just
-  // above it always win — otherwise they z-fight at grazing angles (e.g. grass bleeding onto the beach).
-  new THREE.MeshLambertMaterial({ color: 0x9aab72 }));
+  // above it always win — otherwise they z-fight at grazing angles (e.g. grass bleeding onto the beach,
+  // or road paint flickering as you drive past at speed).
+  new THREE.MeshLambertMaterial({ color: 0x9aab72, polygonOffset: true, polygonOffsetFactor: 1.5, polygonOffsetUnits: 3 }));
 ground.geometry.rotateX(-Math.PI / 2);
 ground.receiveShadow = true;
 scene.add(ground);
 
 // roads: two merged meshes (all vertical, all horizontal)
 {
-  const matRoad = roadMat = new THREE.MeshStandardMaterial({ map: texAsphalt, normalMap: texAsphaltNormal, roughness: 0.62, metalness: 0.0, envMapIntensity: 0.55 });
+  const matRoad = roadMat = new THREE.MeshStandardMaterial({ map: texAsphalt, normalMap: texAsphaltNormal, roughness: 0.62, metalness: 0.0, envMapIntensity: 0.55, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
   matRoad.normalScale.set(0.7, 0.7);
   const vGeos = [], hGeos = [];
   for (let k = 0; k <= N; k++) {
@@ -640,7 +645,7 @@ scene.add(ground);
 {
   const cwGeo = new THREE.PlaneGeometry(ROAD - 3, 3.4); cwGeo.rotateX(-Math.PI / 2);
   // road paint is a dirty concrete-white (below the bloom threshold) so it reads as markings, not glowing blobs
-  const cwMat = new THREE.MeshBasicMaterial({ map: texCrosswalk, color: 0xafb3ad, transparent: true, depthWrite: false });
+  const cwMat = new THREE.MeshBasicMaterial({ map: texCrosswalk, color: 0xafb3ad, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 });
   const spots = [];
   for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
     const cx = roadC(i), cz = roadC(j);
@@ -652,14 +657,14 @@ scene.add(ground);
   im.frustumCulled = false; scene.add(im);
   // solid white stop lines just inside each crosswalk
   const slGeo = new THREE.PlaneGeometry(ROAD - 3.5, 0.7); slGeo.rotateX(-Math.PI / 2);
-  const slIM = new THREE.InstancedMesh(slGeo, new THREE.MeshBasicMaterial({ color: 0xafb3ad }), spots.length);
+  const slIM = new THREE.InstancedMesh(slGeo, new THREE.MeshBasicMaterial({ color: 0xafb3ad, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 }), spots.length);
   const sl = [];
   for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) { const cx = roadC(i), cz = roadC(j); sl.push([cx, cz + ROAD / 2 + 0.5, 0], [cx, cz - ROAD / 2 - 0.5, 0], [cx + ROAD / 2 + 0.5, cz, Math.PI / 2], [cx - ROAD / 2 - 0.5, cz, Math.PI / 2]); }
   sl.forEach(([x, z, rot], idx) => { p.set(x, 0.052, z); q.setFromAxisAngle(up, rot); m.compose(p, q, s); slIM.setMatrixAt(idx, m); });
   slIM.frustumCulled = false; scene.add(slIM);
   // lane turn-arrows: one in the right-hand approach lane on each side of every intersection, pointing in
   const arGeo = new THREE.PlaneGeometry(3.2, 5.2); arGeo.rotateX(-Math.PI / 2);
-  const arMat = new THREE.MeshBasicMaterial({ map: texArrow, color: 0xafb3ad, transparent: true, depthWrite: false });
+  const arMat = new THREE.MeshBasicMaterial({ map: texArrow, color: 0xafb3ad, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 });
   const lane = ROAD / 4, back = ROAD / 2 + 8.5;   // right-hand lane offset, distance back from the box
   const ar = [];
   for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
