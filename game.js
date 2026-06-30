@@ -911,12 +911,17 @@ const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigg
     gGeo.setAttribute("position", new THREE.BufferAttribute(gpos, 3));
     gGeo.setAttribute("aphase", new THREE.BufferAttribute(gph, 1));
     const gMat = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 }, uSize: { value: 26 } },
+      uniforms: { uTime: { value: 0 }, uSize: { value: 26 }, uSun: { value: new THREE.Vector2(0.75, 0.66) }, uCam: { value: new THREE.Vector2() } },
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      vertexShader: `attribute float aphase; uniform float uTime; uniform float uSize; varying float vTw;
+      // glitter blazes along the line from the camera toward the sun's azimuth (the real glitter path),
+      // and only faintly twinkles elsewhere — like sunlight skipping across the swell.
+      vertexShader: `attribute float aphase; uniform float uTime; uniform float uSize; uniform vec2 uSun; uniform vec2 uCam; varying float vTw;
         void main(){ vec4 mv = modelViewMatrix * vec4(position,1.0);
-          float tw = sin(uTime*3.2 + aphase)*0.5+0.5; tw = pow(tw, 4.0); vTw = tw;
-          gl_PointSize = min(uSize * (0.25 + tw) * (300.0 / max(-mv.z, 1.0)), 9.0);
+          float tw = sin(uTime*3.2 + aphase)*0.5+0.5; tw = pow(tw, 4.0);
+          vec2 toP = normalize(position.xz - uCam);
+          float path = smoothstep(0.45, 0.92, dot(toP, uSun));   // 1 along the sun reflection path
+          vTw = tw * (0.12 + path);
+          gl_PointSize = min(uSize * (0.25 + tw) * (0.4 + path) * (300.0 / max(-mv.z, 1.0)), 9.0);
           gl_Position = projectionMatrix * mv; }`,
       fragmentShader: `varying float vTw; void main(){ vec2 d = gl_PointCoord - vec2(0.5);
           float r = length(d); if(r > 0.5) discard;
@@ -5149,7 +5154,14 @@ function update(dt) {
     }
     p.needsUpdate = true; seaWave.geo.computeVertexNormals();
   }
-  if (seaGlitter) seaGlitter.uniforms.uTime.value = simTime;                              // sun-glitter twinkle
+  if (seaGlitter) { const u = seaGlitter.uniforms; u.uTime.value = simTime;               // sun-glitter twinkle
+    u.uCam.value.set(camera.position.x, camera.position.z);
+    u.uSun.value.set(_sunDir.x, _sunDir.z).normalize(); }
+  for (const bt of boats) {   // idle boats ride the swell: gentle bob + roll (the driven one bobs in its own block)
+    if (bt === driving) continue;
+    bt.mesh.position.y = 0.1 + Math.sin(simTime * 1.1 + bt.x * 0.15) * 0.08 + Math.sin(simTime * 0.7 + bt.z * 0.1) * 0.05;
+    bt.mesh.rotation.set(Math.sin(simTime * 0.9 + bt.x * 0.2) * 0.025, bt.h, Math.sin(simTime * 1.3 + bt.z * 0.2) * 0.03);
+  }
   const inp = (dlgLines || garageOpen || statsOpen || tutOpen || styleOpen || arcadeOpen) ? { mx: 0, mz: 0, mag: 0 } : readInput();
   const a = actA, b = actB, pn = actP; actA = false; actB = false; actP = false;
   if (a && !dlgLines && !garageOpen && !statsOpen && !tutOpen && !styleOpen && !arcadeOpen) doActionA();
