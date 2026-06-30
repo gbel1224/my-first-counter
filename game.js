@@ -609,6 +609,8 @@ let roadMat = null, sidewalkMat = null;   // exposed so rain can make the floor 
 let oceanTex = null;   // exposed so the sea can drift/shimmer
 let seaNormTex = null; // animated ripple normals so the surface catches the sun
 let foamMat = null;    // shoreline foam (pulses like waves)
+let seaWave = null;    // {geo} segmented ocean surface, gently rising/falling each frame
+let seaGlitter = null; // {uniforms} additive sun-glitter twinkle field on the water
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 1700, 2 * HALF + 1700),
   // polygon-offset the base grass back in the depth buffer so the road/sidewalk/sand decals laid just
   // above it always win — otherwise they z-fight at grazing angles (e.g. grass bleeding onto the beach).
@@ -887,11 +889,44 @@ const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigg
       vertexColors: true, transparent: true, opacity: 0.95, roughness: 0.11, metalness: 0.0, envMapIntensity: 1.7 }));
   sea.rotation.x = -Math.PI / 2; sea.position.set(10, 0.03, SEA_Z + 295);
   scene.add(sea);
+  seaWave = { geo: seaGeo };   // animated per-frame (local z = world height) for gentle swell
   // shoreline foam band where the water meets the sand
   const foamTex = canvasTex(128, (ctx, s) => { ctx.clearRect(0, 0, s, s); for (let i = 0; i < 90; i++) { ctx.fillStyle = "rgba(255,255,255," + (0.3 + Math.random() * 0.5) + ")"; ctx.beginPath(); ctx.arc(Math.random() * s, s * 0.5 + (Math.random() - 0.5) * s * 0.7, 2 + Math.random() * 6, 0, 7); ctx.fill(); } }, 60, 1);
   const foam = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 200, 7), new THREE.MeshBasicMaterial({ map: foamTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -32 }));
   foam.rotation.x = -Math.PI / 2; foam.position.set(10, 0.08, SEA_Z - 1); foam.renderOrder = 2;
   scene.add(foam); foamMat = foam.material;
+
+  // sun-glitter: a field of tiny additive specks just above the water that twinkle independently,
+  // reading as sunlight sparkling off the swell. Own PRNG so the seeded city stream is untouched.
+  {
+    const glN = 900, glRng = mulberry32(0x6111E7);
+    const gpos = new Float32Array(glN * 3), gph = new Float32Array(glN);
+    for (let i = 0; i < glN; i++) {
+      gpos[i * 3] = 10 + (glRng() * 2 - 1) * (HALF + 280);
+      gpos[i * 3 + 1] = 0.45;                              // sit just above the surface
+      gpos[i * 3 + 2] = SEA_Z + 5 + glRng() * glRng() * 430;  // biased toward the shoreline
+      gph[i] = glRng() * Math.PI * 2;
+    }
+    const gGeo = new THREE.BufferGeometry();
+    gGeo.setAttribute("position", new THREE.BufferAttribute(gpos, 3));
+    gGeo.setAttribute("aphase", new THREE.BufferAttribute(gph, 1));
+    const gMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 }, uSize: { value: 26 } },
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      vertexShader: `attribute float aphase; uniform float uTime; uniform float uSize; varying float vTw;
+        void main(){ vec4 mv = modelViewMatrix * vec4(position,1.0);
+          float tw = sin(uTime*3.2 + aphase)*0.5+0.5; tw = pow(tw, 4.0); vTw = tw;
+          gl_PointSize = min(uSize * (0.25 + tw) * (300.0 / max(-mv.z, 1.0)), 9.0);
+          gl_Position = projectionMatrix * mv; }`,
+      fragmentShader: `varying float vTw; void main(){ vec2 d = gl_PointCoord - vec2(0.5);
+          float r = length(d); if(r > 0.5) discard;
+          gl_FragColor = vec4(vec3(1.0,0.96,0.82), (1.0 - r*2.0) * vTw); }`
+    });
+    const glitter = new THREE.Points(gGeo, gMat);
+    glitter.renderOrder = 3; glitter.frustumCulled = false;
+    scene.add(glitter);
+    seaGlitter = gMat;
+  }
 
   // beach palms (compact instanced clump: leaning trunks + frond crowns)
   const pspots = [];
@@ -5102,6 +5137,19 @@ function update(dt) {
   if (oceanTex) { oceanTex.offset.x += dt * 0.006; oceanTex.offset.y += dt * 0.011; }   // drifting water
   if (seaNormTex) { seaNormTex.offset.x -= dt * 0.022; seaNormTex.offset.y += dt * 0.017; }   // ripples crossing the surface
   if (foamMat) foamMat.opacity = 0.5 + Math.sin(simTime * 1.4) * 0.28;                   // waves washing the shore
+  if (seaWave) {   // gentle swell: displace each surface vertex's local z (= world height) by crossing sine waves
+    const p = seaWave.geo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i);
+      const shore = clamp((300 - y) / 200, 0, 1);   // taper to flat at the waterline so it never dips under the sand
+      const h = Math.sin(x * 0.012 + simTime * 0.9) * 1.0
+              + Math.sin(y * 0.018 - simTime * 1.25) * 0.7
+              + Math.sin((x + y) * 0.02 + simTime * 0.6) * 0.45;
+      p.setZ(i, h * shore);
+    }
+    p.needsUpdate = true; seaWave.geo.computeVertexNormals();
+  }
+  if (seaGlitter) seaGlitter.uniforms.uTime.value = simTime;                              // sun-glitter twinkle
   const inp = (dlgLines || garageOpen || statsOpen || tutOpen || styleOpen || arcadeOpen) ? { mx: 0, mz: 0, mag: 0 } : readInput();
   const a = actA, b = actB, pn = actP; actA = false; actB = false; actP = false;
   if (a && !dlgLines && !garageOpen && !statsOpen && !tutOpen && !styleOpen && !arcadeOpen) doActionA();
