@@ -3671,15 +3671,22 @@ function updateChaseUnits(dt, heat, px, pz) {
   }
 }
 // ---------- melee: punch to fight back / take down crooks on foot ----------
-let actP = false, punchCD = 0, punchT = 0;
+let actP = false, punchCD = 0, punchT = 0, gunKickT = 0, kickT = 0, comboStep = 0, comboT = 0, hostileNear = false;
 function doPunch() {
   if (driving) return;
   if (inside) { if (intTheme === "bowling") doBowl(); return; }   // BOWL inside the alley; no fists indoors
   if (armed()) { doShoot(); return; }              // fire if a weapon is equipped, else throw a punch
   if (punchCD > 0) return;
-  punchCD = 0.45; punchT = 0.26; AudioSys.play("door", 0.4); buzz(15);
+  // 3-hit combo: jab, jab, then a heavier finishing kick — landing hits inside the window advances it,
+  // letting the window lapse resets back to the opening jab
+  comboStep = comboT > 0 ? (comboStep + 1) % 3 : 0;
+  comboT = 0.9;
+  const isKick = comboStep === 2;
+  punchCD = isKick ? 0.6 : 0.42; punchT = isKick ? 0 : 0.24; kickT = isKick ? 0.34 : 0;
+  AudioSys.play("door", isKick ? 0.55 : 0.4); buzz(isKick ? 22 : 15);
   const fx = Math.sin(player.h), fz = Math.cos(player.h);
-  const hx = player.x + fx * 1.4, hz = player.z + fz * 1.4;
+  const reach = isKick ? 1.7 : 1.4;
+  const hx = player.x + fx * reach, hz = player.z + fz * reach;
   if (crook.active && dist2(player.x, player.z, crook.x, crook.z) < 10) {   // bust a crook on foot
     const reward = 400 + (state.busts || 0) * 50;
     const got = earn(reward); state.busts = (state.busts || 0) + 1;
@@ -3687,25 +3694,121 @@ function doPunch() {
     burst(crook.x, 0.7, crook.z, 16, 2, 2.2, 0.6, 0.95, 0.5, 0.2); addShake(0.3);
     crook.active = false; crook.cd = rr(35, 60); save(); return;
   }
-  let best = null, bd = 6;
+  let best = null, bd = isKick ? 7.5 : 6;
   for (const n of npcs) { if (n.ragdoll) continue; const d = dist2(hx, hz, n.x, n.z); if (d < bd) { bd = d; best = n; } }
   if (best) {
     best.flee = 1.6; const dh = Math.atan2(best.x - player.x, best.z - player.z); best.h = dh;
-    burst(best.x, 1.0, best.z, 6, 0.8, 1.2, 0.4, 0.95, 0.85, 0.6); addShake(0.12);
-    // getting punched maxes out how riled up they are (the same anger meter that escalates from being
-    // rude to on the talk system) — the angrier (and ruder to start) they are, the better the odds they
-    // square up and swing back instead of just running. A couple of rounds of that is enough for anyone.
+    burst(best.x, 1.0, best.z, isKick ? 10 : 6, isKick ? 1.3 : 0.8, isKick ? 1.7 : 1.2, 0.4, 0.95, 0.85, 0.6);
+    addShake(isKick ? 0.22 : 0.12);
+    // getting hit maxes out how riled up they are (the same anger meter that escalates from being rude
+    // on the talk system) — the angrier (and ruder to start) they are, the better the odds they square
+    // up and swing back instead of running. A solid kick knocks more of that fight out of them than a
+    // jab does, and a couple of rounds of either is enough for anyone.
     best.anger = 3;
     best.fightRounds = best.fighting ? (best.fightRounds || 0) + 1 : 0;
-    const baseFight = best.mood === 2 ? 0.55 : best.mood === 0 ? 0.15 : 0.32;
-    best.postFight = (best.fightRounds < 2 && ragRng() < baseFight) ? "fight" : "flee";
+    const baseFight = (best.mood === 2 ? 0.55 : best.mood === 0 ? 0.15 : 0.32) - (isKick ? 0.18 : 0);
+    best.postFight = (best.fightRounds < 2 && ragRng() < Math.max(0.05, baseFight)) ? "fight" : "flee";
     best.fighting = false;   // paused during the stagger — resolved once they climb back up, below
     // knocked clean off their feet — a brief stagger ragdoll, then they climb back up and either
     // square up to fight back or bolt, decided by postFight above
+    const lo = isKick ? 3.2 : 2, hi = isKick ? 5 : 3.4;
     best.ragdoll = spawnRagdoll(
       { group: best.mesh, legL: best.legL, legR: best.legR, armL: best.armL, armR: best.armR, kneeL: best.kneeL, kneeR: best.kneeR },
       best.x, groundY(best.x, best.z), best.z, dh,
-      { vx: Math.sin(dh) * rrand(2, 3.4), vy: rrand(2, 3.4), vz: Math.cos(dh) * rrand(2, 3.4) }, "stagger", { npc: best });
+      { vx: Math.sin(dh) * rrand(lo, hi), vy: rrand(lo, hi), vz: Math.cos(dh) * rrand(lo, hi) }, "stagger", { npc: best });
+  }
+}
+
+// ---------- projectiles: bullets get a fast visible tracer, rockets/grenades get a REAL flight ----------
+// previously every shot resolved instantly regardless of range — a rocket fired at something 70 units
+// away detonated on the spot, which read as broken. Bullets keep their hit resolved instantly (the
+// target's state can't get weird mid-flight that way) but now draw an actual tracer flying to the
+// impact point; rockets/grenades are the real fix — they fly there and the blast only fires on arrival.
+const projDir = new THREE.Vector3(), UP_Y = new THREE.Vector3(0, 1, 0);
+const BULLET_SPEED = 150, ROCKET_SPEED = 42, GRENADE_SPEED = 30;
+const PROJ_POOL = 28;
+const bulletGeo = new THREE.CylinderGeometry(0.02, 0.03, 0.5, 5);
+const bulletMat = new THREE.MeshBasicMaterial({ color: 0xfff2c0 });
+const rocketBodyMat = new THREE.MeshStandardMaterial({ color: 0x3a3f47, roughness: 0.5, metalness: 0.3 });
+const rocketNoseMat = new THREE.MeshStandardMaterial({ color: 0xd94a2e, roughness: 0.4, emissive: 0x220900 });
+function makeRocketMesh() {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.6, 8), rocketBodyMat));
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.22, 8), rocketNoseMat); nose.position.y = 0.41; g.add(nose);
+  for (let i = 0; i < 4; i++) {
+    const f = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.16, 0.14), rocketBodyMat);
+    f.position.set(Math.sin(i * Math.PI / 2) * 0.11, -0.24, Math.cos(i * Math.PI / 2) * 0.11);
+    g.add(f);
+  }
+  return g;
+}
+const grenadeGeo = new THREE.SphereGeometry(0.09, 8, 6), grenadeMat = new THREE.MeshStandardMaterial({ color: 0x3f4a2e, roughness: 0.6 });
+const projPool = [];
+for (let i = 0; i < PROJ_POOL; i++) {
+  const bullet = new THREE.Mesh(bulletGeo, bulletMat); bullet.visible = false; scene.add(bullet);
+  const rocket = makeRocketMesh(); rocket.visible = false; scene.add(rocket);
+  const grenade = new THREE.Mesh(grenadeGeo, grenadeMat); grenade.visible = false; scene.add(grenade);
+  projPool.push({ bullet, rocket, grenade, active: false, kind: null, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, tx: 0, ty: 0, tz: 0, life: 0, trailCD: 0, onArrive: null });
+}
+let projCursor = 0;
+function projMesh(p) { return p.kind === "rocket" ? p.rocket : p.kind === "grenade" ? p.grenade : p.bullet; }
+function fireProjectile(kind, x, y, z, tx, ty, tz, onArrive) {
+  const p = projPool[projCursor]; projCursor = (projCursor + 1) % PROJ_POOL;
+  if (p.active) projMesh(p).visible = false;                 // pool exhausted (shouldn't happen) — steal the oldest
+  ty = ty != null ? ty : y;
+  const dx = tx - x, dy = ty - y, dz = tz - z, dist = Math.hypot(dx, dy, dz) || 1;
+  const speed = kind === "rocket" ? ROCKET_SPEED : kind === "grenade" ? GRENADE_SPEED : BULLET_SPEED;
+  p.active = true; p.kind = kind; p.x = x; p.y = y; p.z = z; p.tx = tx; p.ty = ty; p.tz = tz;
+  p.vx = dx / dist * speed; p.vy = dy / dist * speed; p.vz = dz / dist * speed;
+  p.life = dist / speed + 0.15; p.trailCD = 0; p.onArrive = onArrive || null;
+  const mesh = projMesh(p);
+  mesh.visible = true; mesh.position.set(x, y, z);
+  if (kind !== "grenade") { projDir.set(p.vx, p.vy, p.vz).normalize(); mesh.quaternion.setFromUnitVectors(UP_Y, projDir); }
+}
+function updateProjectiles(dt) {
+  for (const p of projPool) {
+    if (!p.active) continue;
+    p.life -= dt;
+    if (p.kind === "grenade") p.vy -= 9 * dt;                 // gentle lob arc
+    p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+    const mesh = projMesh(p);
+    mesh.position.set(p.x, p.y, p.z);
+    if (p.kind !== "grenade") { projDir.set(p.vx, p.vy, p.vz).normalize(); mesh.quaternion.setFromUnitVectors(UP_Y, projDir); }
+    if (p.kind === "rocket") {
+      p.trailCD -= dt;
+      if (p.trailCD <= 0) { p.trailCD = 0.025; emit(p.x, p.y, p.z, rr(-0.15, 0.15), rr(-0.1, 0.2), rr(-0.15, 0.15), 0.5, 0.32, 0.32, 0.32); }
+    }
+    const dx2 = p.tx - p.x, dy2 = p.ty - p.y, dz2 = p.tz - p.z;
+    if (dx2 * dx2 + dy2 * dy2 + dz2 * dz2 < (p.kind === "bullet" ? 1.0 : 2.25) || p.life <= 0) {
+      mesh.visible = false; p.active = false;
+      if (p.onArrive) p.onArrive();
+    }
+  }
+}
+// bright soft muzzle flash (a real additive glow, not just particles) — pooled since rapid-fire
+// weapons can loose several shots before the last flash has faded
+const flashTex = canvasTex(48, (ctx, s) => { const c = s / 2; const g = ctx.createRadialGradient(c, c, 0, c, c, c); g.addColorStop(0, "#fff8e0"); g.addColorStop(0.4, "#ffcf7a"); g.addColorStop(1, "rgba(255,140,40,0)"); ctx.fillStyle = g; ctx.fillRect(0, 0, s, s); });
+const FLASH_POOL = 6;
+const flashPool = [];
+for (let i = 0; i < FLASH_POOL; i++) {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+  sp.visible = false; scene.add(sp);
+  flashPool.push({ sprite: sp, life: 0 });
+}
+let flashCursor = 0;
+function muzzleFlash(x, y, z, big) {
+  const f = flashPool[flashCursor]; flashCursor = (flashCursor + 1) % FLASH_POOL;
+  f.sprite.position.set(x, y, z); f.sprite.visible = true; f.sprite.material.opacity = 1;
+  f.sprite.scale.set(big ? 1.3 : 0.65, big ? 1.3 : 0.65, 1);
+  f.life = 0.07;
+  burst(x, y, z, big ? 14 : 8, big ? 0.9 : 0.6, big ? 0.9 : 0.6, big ? 0.22 : 0.16, 1, big ? 0.6 : 0.9, big ? 0.3 : 0.55);
+}
+function updateFlashes(dt) {
+  for (const f of flashPool) {
+    if (f.life <= 0) continue;
+    f.life -= dt;
+    f.sprite.material.opacity = clamp(f.life / 0.07, 0, 1);
+    if (f.life <= 0) f.sprite.visible = false;
   }
 }
 
@@ -3745,9 +3848,11 @@ function doShoot() {
   shootCD = w.rate; state.ammo[w.id] = ammoOf(w) - 1;
   AudioSys.play("gun", w.explosive ? 1.0 : 0.85); buzz(18); addShake(w.explosive ? 0.3 : 0.15); punchT = 0.18;
   const fx = Math.sin(player.h), fz = Math.cos(player.h);
-  burst(player.x + fx * 0.9, 1.42, player.z + fz * 0.9, 8, 0.6, 0.6, 0.16, 1, 0.9, 0.55);   // muzzle flash
+  const mx = player.x + fx * 0.9, mz = player.z + fz * 0.9, my = 1.42;   // muzzle position
+  muzzleFlash(mx, my, mz, w.explosive);
   kickCam(-fx * (w.explosive ? 0.34 : 0.14), 0.05, -fz * (w.explosive ? 0.34 : 0.14));      // recoil punch
-  if (w.explosive) {                                          // launcher: detonate at the first car hit, else at range
+  gunKickT = 0.14;                                                      // extra arm snap-back, layered onto the aim pose
+  if (w.explosive) {                                          // launcher: aim at the first car hit, else at range
     let impT = w.range, ix = player.x + fx * w.range, iz = player.z + fz * w.range;
     const probe = c => { const dx = c.x - player.x, dz = c.z - player.z, t = dx * fx + dz * fz; if (t < 1 || t > impT || Math.abs(dx * fz - dz * fx) > 2.4) return; impT = t; ix = c.x; iz = c.z; };
     for (const c of traffic) if (!c.dead) probe(c);
@@ -3757,7 +3862,9 @@ function doShoot() {
     if (nemCar.active) probe(nemCar);
     if (chopper.active && !chopper.dead) probe(chopper);
     if (tank.active && !tank.dead) probe(tank);
-    explodeAt(ix, iz, w.blast || 7);
+    // real flight time: the blast only goes off once the rocket/grenade actually arrives, so a shot
+    // fired at something 70 units away doesn't detonate on your own feet the instant you pull the trigger
+    fireProjectile(w.id === "grenade" ? "grenade" : "rocket", mx, my, mz, ix, 0.6, iz, () => explodeAt(ix, iz, w.blast || 7));
     registerCrime();
     return;
   }
@@ -3796,10 +3903,13 @@ function doShoot() {
     }
     let hitNemCar = false;
     if (nemCar.active) { const dx = nemCar.x - player.x, dz = nemCar.z - player.z, t = dx * ax + dz * az; if (t >= 1 && t <= bestT && Math.abs(dx * az - dz * ax) <= 2.4) { hitNemCar = true; bestNem = null; bestGang = null; bestCar = null; best = null; } }
-    if (hitNemCar) damageNemCar(20);
-    else if (bestNem) damageNem(bestNem, 34, { vx: ax * rrand(2.5, 4.5), vy: rrand(2.5, 4.5), vz: az * rrand(2.5, 4.5) });
-    else if (bestGang) damageGangster(bestGang, 34, { vx: ax * rrand(2.5, 4.5), vy: rrand(2.5, 4.5), vz: az * rrand(2.5, 4.5) });
-    else if (bestCar) damageCar(bestCar, 24);
+    // the hit itself resolves instantly (so a fast-moving target's state can't get weird mid-flight) —
+    // the bullet tracer fired below is a fast cosmetic flourish flying out to wherever it landed
+    let impX = player.x + ax * w.range, impZ = player.z + az * w.range, impY = my;
+    if (hitNemCar) { damageNemCar(20); impX = nemCar.x; impZ = nemCar.z; impY = 1.0; }
+    else if (bestNem) { damageNem(bestNem, 34, { vx: ax * rrand(2.5, 4.5), vy: rrand(2.5, 4.5), vz: az * rrand(2.5, 4.5) }); impX = bestNem.x; impZ = bestNem.z; impY = 1.0; }
+    else if (bestGang) { damageGangster(bestGang, 34, { vx: ax * rrand(2.5, 4.5), vy: rrand(2.5, 4.5), vz: az * rrand(2.5, 4.5) }); impX = bestGang.x; impZ = bestGang.z; impY = 1.0; }
+    else if (bestCar) { damageCar(bestCar, 24); impX = bestCar.x; impZ = bestCar.z; impY = 1.0; }
     else if (best) {   // civilians go down in one hit — a sharp directional ragdoll, then gone for good
       burst(best.x, 1.0, best.z, 9, 1.0, 1.5, 0.5, 0.95, 0.3, 0.25);
       spawnRagdoll(
@@ -3807,7 +3917,9 @@ function doShoot() {
         best.x, groundY(best.x, best.z), best.z, best.h,
         { vx: ax * rrand(2.5, 4.5), vy: rrand(2.5, 4.5), vz: az * rrand(2.5, 4.5) }, "corpse");
       const idx = npcs.indexOf(best); if (idx >= 0) npcs.splice(idx, 1);
+      impX = best.x; impZ = best.z; impY = 1.0;
     }
+    fireProjectile("bullet", mx, my, mz, impX, impY, impZ);
   }
   registerCrime();   // firing in public draws police heat
 }
@@ -3853,15 +3965,39 @@ function damageCar(c, dmg) {
   burst(c.x, 1.0, c.z, 7, 1.0, 1.2, 0.4, 1.0, 0.72, 0.32);   // sparks / glass
   if (c.hp <= 0) explodeCar(c);
 }
+// ---------- chaos physics: explosions fling whatever's already loose even further ----------
+// a blast doesn't just hit fresh targets — any body still mid-tumble from an earlier hit, or a trash
+// can somebody already kicked over, gets caught in the shockwave too and sent flying again. Scales
+// with the rampage combo multiplier, so a hot streak makes the whole street noticeably more violent.
+function shockwave(x, z, radius, force) {
+  for (const r of ragdolls) {
+    const dx = r.x - x, dz = r.z - z, d2 = dx * dx + dz * dz;
+    if (d2 > radius * radius || d2 < 0.02) continue;
+    const d = Math.sqrt(d2), falloff = 1 - d / radius;
+    r.vx += dx / d * force * falloff; r.vz += dz / d * force * falloff; r.vy += force * 0.55 * falloff;
+    r.wx += rrand(-3, 3) * falloff; r.wy += rrand(-2, 2) * falloff; r.wz += rrand(-3, 3) * falloff;
+    if (r.mode === "settled" || r.mode === "getup") { r.mode = "tumble"; r.settleT = 0; }   // knocked right back into a tumble
+  }
+  for (const p of knockableProps) {   // any prop already knocked loose (mid-tumble OR settled) can get flung again
+    if (!p.active) continue;
+    const dx = p.x - x, dz = p.z - z, d2 = dx * dx + dz * dz;
+    if (d2 > radius * radius || d2 < 0.02) continue;
+    const d = Math.sqrt(d2), falloff = 1 - d / radius;
+    p.vx += dx / d * force * falloff; p.vz += dz / d * force * falloff; p.vy += force * 0.4 * falloff;
+    if (!activeProps.includes(p)) activeProps.push(p);   // wake a settled one back up
+  }
+}
 function explodeCar(c) {
   if (c.dead) return;
   c.dead = true; c.detonateIn = null;
   const x = c.x, z = c.z;
+  const cs = 1 + (comboMult - 1) * 0.1;   // chaos scale — a hot rampage streak makes the blast hit harder
   burst(x, 1.0, z, 24, 1.3, 2.2, 0.16, 1.0, 0.97, 0.75);     // white-hot core pop
   burst(x, 1.3, z, 54, 4.2, 5.6, 0.9, 1.0, 0.55, 0.12);      // fireball
   burst(x, 1.4, z, 22, 6.0, 1.2, 0.6, 1.0, 0.72, 0.22);      // fast low debris ring
   burst(x, 1.9, z, 28, 2.6, 6.2, 1.5, 0.26, 0.26, 0.26);     // smoke plume
-  AudioSys.play("boom", 1.0); addShake(1.15); flash("#ff7a33", 0.42); buzz([0, 40, 30, 90]);
+  shockwave(x, z, 16 * cs, 5 + comboMult * 1.3);
+  AudioSys.play("boom", 1.0); addShake(1.15 * cs); flash("#ff7a33", 0.42); buzz([0, 40, 30, 90]);
   freezeFrame(0.05); kickCam(rr(-0.5, 0.5), 0.55, rr(-0.5, 0.5));   // impact freeze + blast kick
   c.mesh.visible = false;
   if (c.wp) c.jacked = true;                                  // traffic car: stop & remove from the AI
@@ -3968,6 +4104,7 @@ function blastImpulse(gx, gz, x, z, lo, hi) {                 // outward-from-bl
 }
 function explodeAt(x, z, r) {                                 // an AoE blast (RPG / grenade impact)
   let hitAny = false;
+  shockwave(x, z, r * 1.8, 5 + comboMult * 1.3);   // catches anything already loose nearby, chaos-scaled
   for (const c of traffic) if (!c.dead && dist2(c.x, c.z, x, z) < r * r) { explodeCar(c); hitAny = true; }
   for (const c of police) if (c.active && !c.dead && dist2(c.x, c.z, x, z) < r * r) { explodeCar(c); hitAny = true; }
   for (const g of gangsters) if (g.alive && dist2(g.x, g.z, x, z) < r * r) killGangster(g, blastImpulse(g.x, g.z, x, z, 4, 7));   // blast catches gangsters
@@ -3976,11 +4113,12 @@ function explodeAt(x, z, r) {                                 // an AoE blast (R
   if (chopper.active && !chopper.dead && dist2(chopper.x, chopper.z, x, z) < (r + 2) * (r + 2)) { damageChopper(120); hitAny = true; }
   if (tank.active && !tank.dead && dist2(tank.x, tank.z, x, z) < (r + 2) * (r + 2)) { damageTank(120); hitAny = true; }
   if (!hitAny) {                                             // empty ground — still a satisfying boom
+    const cs = 1 + (comboMult - 1) * 0.1;
     burst(x, 1.0, z, 20, 1.2, 2.0, 0.15, 1.0, 0.97, 0.75);    // white-hot core pop
     burst(x, 1.2, z, 40, 3.4, 4.4, 0.85, 1.0, 0.55, 0.14);
     burst(x, 1.4, z, 18, 5.4, 1.1, 0.55, 1.0, 0.72, 0.22);    // debris ring
     burst(x, 1.7, z, 22, 2.2, 5.2, 1.4, 0.28, 0.28, 0.28);
-    AudioSys.play("boom", 1.0); addShake(0.95); flash("#ff7a33", 0.34);
+    AudioSys.play("boom", 1.0); addShake(0.95 * cs); flash("#ff7a33", 0.34);
     freezeFrame(0.045); kickCam(rr(-0.4, 0.4), 0.45, rr(-0.4, 0.4));
     const npcKills = [];
     for (const n of npcs) {
@@ -4341,7 +4479,7 @@ addEventListener("pointerup", joyEnd);
 addEventListener("pointercancel", joyEnd);
 document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
 
-const btnA = dom("btnA"), btnB = dom("btnB"), brakeBtn = dom("brake"), boostBtn = dom("boost"), punchBtn = dom("punch");
+const btnA = dom("btnA"), btnB = dom("btnB"), brakeBtn = dom("brake"), boostBtn = dom("boost"), punchBtn = dom("punch"), fireBtn = dom("fireBtn");
 const climbBtn = dom("climbbtn"), diveBtn = dom("divebtn");
 const doorBtn = dom("doorbtn");
 doorBtn.addEventListener("click", () => {
@@ -4367,6 +4505,7 @@ boostBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropag
 climbBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); climbHeld = true; });
 diveBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); diveHeld = true; });
 punchBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actP = true; });
+fireBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actP = true; });
 addEventListener("pointerup", () => { bHeld = false; brakeHeld = false; boostHeld = false; climbHeld = false; diveHeld = false; });
 addEventListener("pointercancel", () => { bHeld = false; brakeHeld = false; boostHeld = false; climbHeld = false; diveHeld = false; });
 // keyboard nitro (Shift) while driving
@@ -4657,6 +4796,8 @@ function updateHUD() {
   diveBtn.style.display = flying ? "block" : "none";
   punchBtn.style.display = (!driving && !dlgLines && !garageOpen && !statsOpen && !styleOpen && !arcadeOpen) ? "block" : "none";
   { const w = armed(); punchBtn.textContent = (inside && intTheme === "bowling") ? "🎳 BOWL" : w ? "🔫 " + ammoOf(w) : "PUNCH"; }
+  // dedicated FIRE control only appears once a weapon's actually drawn (not indoors bowling, not driving)
+  { const w = armed(); fireBtn.style.display = (w && !inside && !driving && !dlgLines && !garageOpen && !statsOpen && !styleOpen && !arcadeOpen) ? "block" : "none"; if (w) fireBtn.textContent = "🔥 " + ammoOf(w); }
   const menus = dlgLines || garageOpen || statsOpen || styleOpen || arcadeOpen;
   const showDoor = !menus && (inside || !!nearEnterable());
   doorBtn.style.display = showDoor ? "block" : "none";
@@ -4674,89 +4815,116 @@ function updateHUD() {
 // which sit outside the building grid — otherwise the player/markers fall off the map edge there.
 const MAPR = 1980;
 function drawMinimap(t) {
-  const S = 132, sc = S / (2 * MAPR);
+  const S = 132, VIEWR = 300, sc = S / (2 * VIEWR);
   // render into a device-pixel-ratio backing store so the radar stays crisp on hi-DPI screens
   const dpr = Math.min(devicePixelRatio || 1, 3), buf = Math.round(S * dpr);
   if (mapCtx.canvas.width !== buf) { mapCtx.canvas.width = mapCtx.canvas.height = buf; }
   mapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   mapCtx.clearRect(0, 0, S, S);
-  mapCtx.fillStyle = "rgba(22,32,26,.85)"; mapCtx.fillRect(0, 0, S, S);
-  mapCtx.fillStyle = "#55606a";
+  const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
+  const py = driving ? (driving.y || 0) : player.y, h = driving ? driving.h : player.h;
+  // north-up, player-centred + zoomed local window (like a phone nav app) so nearby streets
+  // actually read at radar size, instead of the whole city being squeezed into a few px
+  const wx = x => (x - px + VIEWR) * sc, wz = z => (z - pz + VIEWR) * sc;
+  // Google-Maps-style light theme: warm off-white land, soft sand + water band along the beach south
+  // of the grid, bordered white roads (a darker under-stroke + a lighter fill reads as a paved shoulder
+  // even at radar size), muted park green — legible in daylight and at a glance, unlike a dark radar.
+  mapCtx.fillStyle = "#eef0ea"; mapCtx.fillRect(0, 0, S, S);
+  const seaTop = wz(HALF);
+  mapCtx.fillStyle = "#f3e4b8"; mapCtx.fillRect(0, seaTop, S, wz(SEA_Z) - seaTop);               // beach sand
+  mapCtx.fillStyle = "#aed4e8"; mapCtx.fillRect(0, wz(SEA_Z), S, S);                             // ocean
+  mapCtx.strokeStyle = "#d7cfba"; mapCtx.lineWidth = 6;
   for (let k = 0; k <= N; k++) {
-    const p = (roadC(k) + MAPR) * sc - 2;
-    mapCtx.fillRect(p, 0, 4, S);
-    mapCtx.fillRect(0, p, S, 4);
+    const rc = roadC(k), p = wx(rc), q = wz(rc);
+    mapCtx.beginPath(); mapCtx.moveTo(p, 0); mapCtx.lineTo(p, S); mapCtx.stroke();
+    mapCtx.beginPath(); mapCtx.moveTo(0, q); mapCtx.lineTo(S, q); mapCtx.stroke();
   }
-  mapCtx.fillStyle = "#5d9952";
+  mapCtx.strokeStyle = "#ffffff"; mapCtx.lineWidth = 3.4;
+  for (let k = 0; k <= N; k++) {
+    const rc = roadC(k), p = wx(rc), q = wz(rc);
+    mapCtx.beginPath(); mapCtx.moveTo(p, 0); mapCtx.lineTo(p, S); mapCtx.stroke();
+    mapCtx.beginPath(); mapCtx.moveTo(0, q); mapCtx.lineTo(S, q); mapCtx.stroke();
+  }
+  mapCtx.fillStyle = "#c8e6ba";
   for (const key of PARKS) {
     const [i, j] = key.split(",").map(Number);
-    mapCtx.fillRect((blockMin(i) + MAPR) * sc, (blockMin(j) + MAPR) * sc, BLOCK * sc, BLOCK * sc);
+    mapCtx.fillRect(wx(blockMin(i)), wz(blockMin(j)), BLOCK * sc, BLOCK * sc);
   }
   // gang turf: tinted circles (gang colour while hostile, green once captured)
-  const GANG_FILL = ["rgba(200,60,60,.20)", "rgba(70,110,210,.20)", "rgba(60,180,90,.20)"];
-  const GANG_RING = ["rgba(235,90,90,.85)", "rgba(115,155,240,.85)", "rgba(95,220,125,.85)"];
+  const GANG_FILL = ["rgba(210,60,60,.22)", "rgba(60,110,220,.22)", "rgba(50,170,90,.22)"];
+  const GANG_RING = ["rgba(200,50,50,.85)", "rgba(50,100,210,.85)", "rgba(40,150,80,.85)"];
   GANGS.forEach((G, gi) => {
-    const gx = (G.x + MAPR) * sc, gz = (G.z + MAPR) * sc, gr = G.r * sc;
-    mapCtx.fillStyle = G.captured ? "rgba(120,200,140,.16)" : GANG_FILL[gi];
+    const gx = wx(G.x), gz = wz(G.z), gr = G.r * sc;
+    mapCtx.fillStyle = G.captured ? "rgba(60,170,90,.18)" : GANG_FILL[gi];
     mapCtx.beginPath(); mapCtx.arc(gx, gz, gr, 0, 7); mapCtx.fill();
-    mapCtx.strokeStyle = G.captured ? "rgba(150,230,160,.8)" : GANG_RING[gi];
+    mapCtx.strokeStyle = G.captured ? "rgba(50,150,80,.8)" : GANG_RING[gi];
     mapCtx.lineWidth = 1.2; mapCtx.beginPath(); mapCtx.arc(gx, gz, gr, 0, 7); mapCtx.stroke();
   });
   for (const b of BIZ) {
-    mapCtx.fillStyle = state.owned[b.id] ? "#9fe6a0" : "#ffd166";
-    mapCtx.beginPath(); mapCtx.arc((b.x + MAPR) * sc, (b.z + MAPR) * sc, 3, 0, 7); mapCtx.fill();
+    mapCtx.fillStyle = state.owned[b.id] ? "#34a853" : "#f4b400";
+    mapCtx.beginPath(); mapCtx.arc(wx(b.x), wz(b.z), 3, 0, 7); mapCtx.fill();
+    mapCtx.strokeStyle = "#fff"; mapCtx.lineWidth = 0.8; mapCtx.stroke();
   }
-  // garage (square) + owned personal cars (cyan dots)
-  mapCtx.fillStyle = "#7fd6ff";
-  mapCtx.fillRect((GARAGE.x + MAPR) * sc - 3, (GARAGE.z + MAPR) * sc - 3, 6, 6);
+  // garage (square) + owned personal cars (blue dots)
+  mapCtx.fillStyle = "#1a73e8";
+  mapCtx.fillRect(wx(GARAGE.x) - 3, wz(GARAGE.z) - 3, 6, 6);
   for (const c of cars) if (c.personal && !c.locked) {
-    mapCtx.beginPath(); mapCtx.arc((c.x + MAPR) * sc, (c.z + MAPR) * sc, 2.5, 0, 7); mapCtx.fill();
+    mapCtx.fillStyle = "#1a73e8";
+    mapCtx.beginPath(); mapCtx.arc(wx(c.x), wz(c.z), 2.5, 0, 7); mapCtx.fill();
   }
-  // street-race start gates (white, freeplay only)
+  // street-race start gates (freeplay only)
   if (state.mi >= M.length) {
-    mapCtx.fillStyle = "#ffffff";
+    mapCtx.fillStyle = "#5f6368";
     for (const C of CIRCUITS)
-      mapCtx.fillRect((C.start.x + MAPR) * sc - 2.5, (C.start.z + MAPR) * sc - 2.5, 5, 5);
+      mapCtx.fillRect(wx(C.start.x) - 2.5, wz(C.start.z) - 2.5, 5, 5);
   }
-  mapCtx.fillStyle = "#ffe24a";
+  mapCtx.fillStyle = "#f9a825";
   for (let i = 0; i < PALMS.length; i++) {
     if (palmCollected[i]) continue;
-    mapCtx.fillRect((PALMS[i][0] + MAPR) * sc - 1, (PALMS[i][1] + MAPR) * sc - 1, 2.4, 2.4);
+    mapCtx.fillRect(wx(PALMS[i][0]) - 1, wz(PALMS[i][1]) - 1, 2.4, 2.4);
   }
   for (const p of police) if (p.active) {
-    mapCtx.fillStyle = "#ff3b3b";
-    mapCtx.beginPath(); mapCtx.arc((p.x + MAPR) * sc, (p.z + MAPR) * sc, 3, 0, 7); mapCtx.fill();
+    mapCtx.fillStyle = "#ea4335";
+    mapCtx.beginPath(); mapCtx.arc(wx(p.x), wz(p.z), 3, 0, 7); mapCtx.fill();
   }
   // airport icon (west) so the now-reachable airfield reads on the radar
-  mapCtx.fillStyle = "#9fbcd6"; mapCtx.font = "8px sans-serif"; mapCtx.textAlign = "center";
-  mapCtx.fillText("✈", (AIRPORT.x + 30 + MAPR) * sc, (AIRPORT.z + MAPR) * sc + 3);
+  mapCtx.fillStyle = "#5f6368"; mapCtx.font = "8px sans-serif"; mapCtx.textAlign = "center";
+  mapCtx.fillText("✈", wx(AIRPORT.x + 30), wz(AIRPORT.z) + 3);
   // nemesis crew (orange) + the boss (flashing skull-red, bigger) so you can see them coming
   for (const g of nemGoons) if (g.alive) {
-    if (g.boss) { mapCtx.fillStyle = (t * 4 | 0) % 2 ? "#ff2a2a" : "#ffd0d0"; mapCtx.beginPath(); mapCtx.arc((g.x + MAPR) * sc, (g.z + MAPR) * sc, 5, 0, 7); mapCtx.fill(); }
-    else { mapCtx.fillStyle = "#ff8c3a"; mapCtx.beginPath(); mapCtx.arc((g.x + MAPR) * sc, (g.z + MAPR) * sc, 2.6, 0, 7); mapCtx.fill(); }
+    if (g.boss) { mapCtx.fillStyle = (t * 4 | 0) % 2 ? "#d50000" : "#ff8a80"; mapCtx.beginPath(); mapCtx.arc(wx(g.x), wz(g.z), 5, 0, 7); mapCtx.fill(); }
+    else { mapCtx.fillStyle = "#ff8c3a"; mapCtx.beginPath(); mapCtx.arc(wx(g.x), wz(g.z), 2.6, 0, 7); mapCtx.fill(); }
   }
   if (crook.active) {   // fleeing crook (flashing)
-    mapCtx.fillStyle = (t * 3 | 0) % 2 ? "#ff5b5b" : "#ffffff";
-    mapCtx.beginPath(); mapCtx.arc((crook.x + MAPR) * sc, (crook.z + MAPR) * sc, 3.5, 0, 7); mapCtx.fill();
+    mapCtx.fillStyle = (t * 3 | 0) % 2 ? "#ff5b5b" : "#5f6368";
+    mapCtx.beginPath(); mapCtx.arc(wx(crook.x), wz(crook.z), 3.5, 0, 7); mapCtx.fill();
   }
   if (medic.stage !== "idle") {   // paramedic target
     const mt = medic.stage === "pickup" ? medic : HOSPITAL;
-    mapCtx.fillStyle = "#44d0ff";
-    mapCtx.beginPath(); mapCtx.arc((mt.x + MAPR) * sc, (mt.z + MAPR) * sc, 3.5, 0, 7); mapCtx.fill();
+    mapCtx.fillStyle = "#00acc1";
+    mapCtx.beginPath(); mapCtx.arc(wx(mt.x), wz(mt.z), 3.5, 0, 7); mapCtx.fill();
   }
   const obj = currentObjective();
   if (obj.x !== undefined && (t * 2 | 0) % 2 === 0) {
-    mapCtx.fillStyle = "#ffd166";
-    mapCtx.beginPath(); mapCtx.arc((obj.x + MAPR) * sc, (obj.z + MAPR) * sc, 4.5, 0, 7); mapCtx.fill();
+    mapCtx.fillStyle = "#f4b400";
+    mapCtx.beginPath(); mapCtx.arc(wx(obj.x), wz(obj.z), 4.5, 0, 7); mapCtx.fill();
   }
-  const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
-  const h = driving ? driving.h : player.h;
+  const mpx = S / 2, mpz = S / 2;
+  if (py > 4) {   // airborne: a growing ring under the blue dot reads as altitude, like a radar contact
+    mapCtx.strokeStyle = "rgba(26,115,232,.45)"; mapCtx.lineWidth = 1.2;
+    mapCtx.beginPath(); mapCtx.arc(mpx, mpz, clamp(py * 0.035, 3, 11), 0, 7); mapCtx.stroke();
+  }
+  // "you are here" halo + heading cone, in the same blue Google Maps uses for the current-location dot
+  const pulse = 0.5 + Math.sin(t * 3) * 0.15;
+  mapCtx.fillStyle = "rgba(26,115,232,.16)"; mapCtx.beginPath(); mapCtx.arc(mpx, mpz, 11 * pulse + 6, 0, 7); mapCtx.fill();
   mapCtx.save();
-  mapCtx.translate((px + MAPR) * sc, (pz + MAPR) * sc);
+  mapCtx.translate(mpx, mpz);
   mapCtx.rotate(Math.atan2(Math.cos(h), Math.sin(h)));
-  mapCtx.fillStyle = "#ff7a33";
-  mapCtx.beginPath(); mapCtx.moveTo(6, 0); mapCtx.lineTo(-4, 4); mapCtx.lineTo(-4, -4); mapCtx.closePath(); mapCtx.fill();
+  mapCtx.fillStyle = "rgba(26,115,232,.5)";
+  mapCtx.beginPath(); mapCtx.moveTo(9, 0); mapCtx.lineTo(-3, 6); mapCtx.lineTo(-3, -6); mapCtx.closePath(); mapCtx.fill();   // heading cone
   mapCtx.restore();
+  mapCtx.fillStyle = "#ffffff"; mapCtx.beginPath(); mapCtx.arc(mpx, mpz, 5, 0, 7); mapCtx.fill();
+  mapCtx.fillStyle = "#1a73e8"; mapCtx.beginPath(); mapCtx.arc(mpx, mpz, 3.6, 0, 7); mapCtx.fill();
 }
 
 // ---------- full-screen city map ----------
@@ -5685,6 +5853,7 @@ function update(dt) {
 
   // pedestrians
   const npcFx = driving ? driving.x : player.x, npcFz = driving ? driving.z : player.z;
+  hostileNear = false;
   for (const n of npcs) {
     if (n.ragdoll) continue;   // knocked down — fully owned by updateRagdolls() until they climb back up
     // ambient pedestrians recycle to stay around you, so the streets are lively wherever you roam.
@@ -5728,25 +5897,45 @@ function update(dt) {
       continue;
     }
     if (n.fighting) {
-      // squared up after a stagger: charge the player and throw punches back until they either back
-      // off, hop in a car, or land enough follow-up hits to finally send this one running instead.
+      // squared up after a stagger: charge the player and throw hands until they either back off, hop
+      // in a car, or land enough follow-up hits to finally send this one running instead.
       if (driving || dist2(n.x, n.z, player.x, player.z) > 1600) { n.fighting = false; }
       else {
+        // this NPC's own fighting personality, rolled once and kept for good — completely different
+        // reach, speed, timing, favorite move and guard height from the next pedestrian you rough up
+        if (!n.style) n.style = {
+          reach: rrand(1.5, 2.1), speed: rrand(2.6, 4.3), swingLo: rrand(0.5, 1.0), swingHi: rrand(1.0, 1.7),
+          swingDur: rrand(0.22, 0.4), hitChance: rrand(0.26, 0.5), weave: rrand(0.08, 0.55), weaveRate: rrand(1.4, 3.6),
+          kicker: ragRng() < 0.32, guard: rrand(0.12, 0.34),
+        };
+        const st = n.style;
         const dx = player.x - n.x, dz = player.z - n.z, d = Math.hypot(dx, dz) || 1;
         n.h = Math.atan2(dx, dz);
-        if (d > 1.6) { moveWithCollision(n, dx / d * 3.4 * dt, dz / d * 3.4 * dt, 0.4); n.walkPhase += 3.4 * dt * 2.6; }
+        if (d < 8) hostileNear = true;
+        if (d > st.reach) {
+          const wob = Math.sin(simTime * st.weaveRate + n.walkPhase) * st.weave;   // side-to-side juke, not a beeline
+          moveWithCollision(n, (dx / d - dz / d * wob) * st.speed * dt, (dz / d + dx / d * wob) * st.speed * dt, 0.4);
+          n.walkPhase += st.speed * dt * 2.6;
+        }
         n.fightCD = (n.fightCD || 0) - dt;
-        if (d <= 1.9 && n.fightCD <= 0) {
-          n.fightCD = rrand(0.7, 1.3); n.swingT = 0.28;
-          AudioSys.play("door", 0.35); buzz(8);
-          if (ragRng() < 0.4) { hurt(Math.round(rrand(3, 7))); addShake(0.15); flash("#ff3b3b", 0.12); }
+        if (d <= st.reach + 0.3 && n.fightCD <= 0) {
+          n.fightCD = rrand(st.swingLo, st.swingHi); n.swingT = st.swingDur;
+          AudioSys.play("door", st.kicker ? 0.5 : 0.35); buzz(st.kicker ? 12 : 8);
+          if (ragRng() < st.hitChance) { hurt(Math.round(rrand(3, 7))); addShake(0.15); flash("#ff3b3b", 0.12); }
         }
         n.swingT = (n.swingT || 0) - dt;
-        n.armR.rotation.x = n.swingT > 0 ? -1.4 : Math.sin(n.walkPhase) * 0.2;
-        n.armL.rotation.x = Math.sin(n.walkPhase) * -0.2;
-        const kAmp2 = d > 1.6 ? 0.9 : 0;
-        n.legL.rotation.x = Math.sin(n.walkPhase) * 0.35; n.legR.rotation.x = -Math.sin(n.walkPhase) * 0.35;
-        n.kneeL.rotation.x = kAmp2 * Math.max(0, -Math.cos(n.walkPhase)); n.kneeR.rotation.x = kAmp2 * Math.max(0, Math.cos(n.walkPhase));
+        const swinging = n.swingT > 0;
+        const legSwing = Math.sin(n.walkPhase) * 0.35;
+        n.legL.rotation.x = legSwing; n.legR.rotation.x = -legSwing;
+        n.kneeL.rotation.x = Math.max(0, -Math.cos(n.walkPhase)) * 0.9;
+        n.kneeR.rotation.x = Math.max(0, Math.cos(n.walkPhase)) * 0.9;
+        if (st.kicker && swinging) {   // this one fights with kicks — overrides the leg swing when landing one
+          n.legR.rotation.x = -1.25; n.kneeR.rotation.x = 0.8;
+          n.armR.rotation.x = -0.35; n.armL.rotation.x = -0.35;
+        } else {
+          n.armR.rotation.x = swinging ? -1.4 : -st.guard - Math.abs(Math.sin(n.walkPhase * 0.5)) * 0.12;
+          n.armL.rotation.x = -st.guard * 0.8 + Math.sin(n.walkPhase) * -0.2;
+        }
         n.mesh.position.set(n.x, groundY(n.x, n.z), n.z);
         n.mesh.rotation.y = n.h;
         continue;
@@ -5808,6 +5997,8 @@ function update(dt) {
   for (let i = npcs.length - 1; i >= 0; i--) if (npcs[i]._dead) npcs.splice(i, 1);   // remove anyone killed this frame
   updateRagdolls(dt);
   updatePropPhysics(dt);
+  updateProjectiles(dt);
+  updateFlashes(dt);
 
   // income + missions
   state.money += incomeRate() / 60 * dt;
@@ -5881,7 +6072,20 @@ function update(dt) {
     const kAmp = gait * 1.0;   // knees flex as each shin swings through (never hyperextend)
     hero.kneeL.rotation.x = kAmp * Math.max(0, -Math.cos(player.walkPhase));
     hero.kneeR.rotation.x = kAmp * Math.max(0, Math.cos(player.walkPhase));
-    if (punchT > 0) hero.armR.rotation.x = -1.5;   // forward jab during a punch
+    if (armed()) {   // two-handed aim pose whenever a weapon's drawn, with a sharp recoil snap per shot
+      const kick = gunKickT > 0 ? (gunKickT / 0.14) * 0.32 : 0;
+      hero.armR.rotation.x = -1.15 - kick; hero.armR.rotation.z = -0.12;
+      hero.armL.rotation.x = -1.05 - kick * 0.6; hero.armL.rotation.z = 0.22;
+    } else if (kickT > 0) {   // combo finisher: a real front kick, not just another punch
+      const k = Math.sin(clamp(kickT / 0.34, 0, 1) * Math.PI);
+      hero.legR.rotation.x = -1.35 * k; hero.kneeR.rotation.x = 0.85 * k;
+      hero.legL.rotation.x = 0.18 * k; hero.armL.rotation.x = -0.5 * k; hero.armR.rotation.x = -0.25 * k;
+    } else if (punchT > 0) hero.armR.rotation.x = -1.5;   // forward jab during a punch
+    else if (gait < 0.15 && hostileNear) {   // fighting stance: guard up whenever trouble's nearby and you're not mid-swing
+      hero.armL.rotation.x = -0.72; hero.armR.rotation.x = -0.78; hero.armL.rotation.z = 0.17; hero.armR.rotation.z = -0.17;
+      hero.legL.rotation.z = 0.05; hero.legR.rotation.z = -0.05;
+    }
+    gunKickT = Math.max(0, gunKickT - dt); kickT = Math.max(0, kickT - dt); comboT = Math.max(0, comboT - dt);
   }
   for (const c of cars) {
     if (c === driving) continue;   // the driven vehicle syncs & leans itself, right in its control branch
@@ -6111,7 +6315,8 @@ globalThis.__palmCity = {
   ragdolls, doPunch: () => doPunch(), explodeAt: (x, z, r) => explodeAt(x, z, r), wasted: () => wasted(),
   forceDrive: c => { driving = c; if (c) { c.speed = c.speed || 0; hero.group.visible = false; } else hero.group.visible = true },
   hero, debugInput: () => ({ fuel, dry: fuel <= 0, dlgLines: !!dlgLines, braking: braking(), inp: readInput(), keys: [...keys] }),
-  knockableProps, activeProps, moveObj: (o, dx, dz, r) => moveWithCollision(o, dx, dz, r),
+  knockableProps, activeProps, moveObj: (o, dx, dz, r) => moveWithCollision(o, dx, dz, r), projPool,
+  combatDebug: () => ({ comboStep, comboT, kickT, punchT, hostileNear }),
   health: () => health,
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
   applyGfx: m => applyGfx(m), gfx: () => ({ mode: gfxMode, prCap: PR_CAP, msaa: msaaSamples, pr: renderer.getPixelRatio() }),
