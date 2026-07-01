@@ -3433,7 +3433,11 @@ function updateRagdolls(dt) {
       if (k >= 1) {
         r.group.rotation.set(0, r.ry, 0);
         for (const k of RAG_LIMBS) r[k].rotation.x = 0;
-        if (r.npc) { r.npc.ragdoll = null; r.npc.x = r.x; r.npc.z = r.z; r.npc.h = r.ry; r.npc.flee = 0.4; r.npc.timer = 0.6; }
+        if (r.npc) {
+          r.npc.ragdoll = null; r.npc.x = r.x; r.npc.z = r.z; r.npc.h = r.ry;
+          if (r.npc.postFight === "fight") { r.npc.fighting = true; r.npc.flee = 0; r.npc.fightCD = 0.35; }
+          else { r.npc.fighting = false; r.npc.flee = rrand(3, 5); r.npc.timer = 0.6; }
+        }
         ragdolls.splice(i, 1);
       }
     } else if (r.mode === "fade") {                              // corpse: settle a beat, then sink away
@@ -3688,7 +3692,16 @@ function doPunch() {
   if (best) {
     best.flee = 1.6; const dh = Math.atan2(best.x - player.x, best.z - player.z); best.h = dh;
     burst(best.x, 1.0, best.z, 6, 0.8, 1.2, 0.4, 0.95, 0.85, 0.6); addShake(0.12);
-    // knocked clean off their feet — a brief stagger ragdoll, then they climb back up and carry on
+    // getting punched maxes out how riled up they are (the same anger meter that escalates from being
+    // rude to on the talk system) — the angrier (and ruder to start) they are, the better the odds they
+    // square up and swing back instead of just running. A couple of rounds of that is enough for anyone.
+    best.anger = 3;
+    best.fightRounds = best.fighting ? (best.fightRounds || 0) + 1 : 0;
+    const baseFight = best.mood === 2 ? 0.55 : best.mood === 0 ? 0.15 : 0.32;
+    best.postFight = (best.fightRounds < 2 && ragRng() < baseFight) ? "fight" : "flee";
+    best.fighting = false;   // paused during the stagger — resolved once they climb back up, below
+    // knocked clean off their feet — a brief stagger ragdoll, then they climb back up and either
+    // square up to fight back or bolt, decided by postFight above
     best.ragdoll = spawnRagdoll(
       { group: best.mesh, legL: best.legL, legR: best.legR, armL: best.armL, armR: best.armR, kneeL: best.kneeL, kneeR: best.kneeR },
       best.x, groundY(best.x, best.z), best.z, dh,
@@ -5714,6 +5727,31 @@ function update(dt) {
       n._dead = true;
       continue;
     }
+    if (n.fighting) {
+      // squared up after a stagger: charge the player and throw punches back until they either back
+      // off, hop in a car, or land enough follow-up hits to finally send this one running instead.
+      if (driving || dist2(n.x, n.z, player.x, player.z) > 1600) { n.fighting = false; }
+      else {
+        const dx = player.x - n.x, dz = player.z - n.z, d = Math.hypot(dx, dz) || 1;
+        n.h = Math.atan2(dx, dz);
+        if (d > 1.6) { moveWithCollision(n, dx / d * 3.4 * dt, dz / d * 3.4 * dt, 0.4); n.walkPhase += 3.4 * dt * 2.6; }
+        n.fightCD = (n.fightCD || 0) - dt;
+        if (d <= 1.9 && n.fightCD <= 0) {
+          n.fightCD = rrand(0.7, 1.3); n.swingT = 0.28;
+          AudioSys.play("door", 0.35); buzz(8);
+          if (ragRng() < 0.4) { hurt(Math.round(rrand(3, 7))); addShake(0.15); flash("#ff3b3b", 0.12); }
+        }
+        n.swingT = (n.swingT || 0) - dt;
+        n.armR.rotation.x = n.swingT > 0 ? -1.4 : Math.sin(n.walkPhase) * 0.2;
+        n.armL.rotation.x = Math.sin(n.walkPhase) * -0.2;
+        const kAmp2 = d > 1.6 ? 0.9 : 0;
+        n.legL.rotation.x = Math.sin(n.walkPhase) * 0.35; n.legR.rotation.x = -Math.sin(n.walkPhase) * 0.35;
+        n.kneeL.rotation.x = kAmp2 * Math.max(0, -Math.cos(n.walkPhase)); n.kneeR.rotation.x = kAmp2 * Math.max(0, Math.cos(n.walkPhase));
+        n.mesh.position.set(n.x, groundY(n.x, n.z), n.z);
+        n.mesh.rotation.y = n.h;
+        continue;
+      }
+    }
     n.timer -= dt;
     if (n.crossCD > 0) n.crossCD -= dt;
     // crossing the street like IRL: only near an intersection, and walk the crosswalk to the far side.
@@ -6074,6 +6112,7 @@ globalThis.__palmCity = {
   forceDrive: c => { driving = c; if (c) { c.speed = c.speed || 0; hero.group.visible = false; } else hero.group.visible = true },
   hero, debugInput: () => ({ fuel, dry: fuel <= 0, dlgLines: !!dlgLines, braking: braking(), inp: readInput(), keys: [...keys] }),
   knockableProps, activeProps, moveObj: (o, dx, dz, r) => moveWithCollision(o, dx, dz, r),
+  health: () => health,
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
   applyGfx: m => applyGfx(m), gfx: () => ({ mode: gfxMode, prCap: PR_CAP, msaa: msaaSamples, pr: renderer.getPixelRatio() }),
   trafPhase: () => trafPhase, setTraf: p => { trafPhase = p; applyTrafPhase(); },
