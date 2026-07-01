@@ -599,7 +599,15 @@ const addCollider = (x, z, hw, hd) => {
     for (let cj = colCell(b.z0); cj <= colCell(b.z1); cj++) {
       const k = ci + "," + cj; let a = colGrid.get(k); if (!a) colGrid.set(k, a = []); a.push(b);
     }
+  return b;
 };
+const disableCollider = b => { b.x0 = b.x1 = b.z0 = b.z1 = 1e9; };   // degenerate box — never hits again, cheaper than unlinking from every grid cell
+// prop-physics bookkeeping (declared here since street clutter registers into it at world-build time,
+// before the rest of the prop-physics module below has run) — see "prop physics" further down.
+const knockableProps = [];
+const colliderToProp = new Map();
+const activeProps = [];
+const propEuler = new THREE.Euler();
 // coarse render chunks so the big-city instanced meshes get frustum-culled per region
 const CHUNKW = 4 * CELL;
 const chunkKey = (x, z) => Math.floor((x + HALF) / CHUNKW) + "," + Math.floor((z + HALF) / CHUNKW);
@@ -1297,8 +1305,8 @@ function updateTrafficLights(dt) {
     sphC(0.30, -0.2, 0.72, -0.16, 0x528a48, 1, 0.8, 1),
   ]);
   const TYPES = [
-    { geo: trashGeo, w: 0.7, r: 0.34 },
-    { geo: hydrantGeo, w: 0.5, r: 0.26 },
+    { geo: trashGeo, w: 0.7, r: 0.34, knockable: true },
+    { geo: hydrantGeo, w: 0.5, r: 0.26, knockable: true },
     { geo: benchGeo, w: 0.35, r: 0.85 },
     { geo: planterGeo, w: 0.45, r: 0.6 },
   ];
@@ -1321,8 +1329,8 @@ function updateTrafficLights(dt) {
       let pickT = crand() * wsum, ti = 0; for (; ti < TYPES.length; ti++) { pickT -= TYPES[ti].w; if (pickT <= 0) break; }
       const T = TYPES[Math.min(ti, TYPES.length - 1)];
       if (hitsCollider(x, z, T.r + 0.4)) continue;
-      buckets[TYPES.indexOf(T)].push([x, z, rot]);
-      addCollider(x, z, T.r, T.r);
+      const b = addCollider(x, z, T.r, T.r);
+      buckets[TYPES.indexOf(T)].push([x, z, rot, b]);
     }
   }
   const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), s = new THREE.Vector3(1, 1, 1);
@@ -1330,7 +1338,12 @@ function updateTrafficLights(dt) {
     const list = buckets[ti]; if (!list.length) return;
     const im = new THREE.InstancedMesh(T.geo, matProp, list.length);
     im.castShadow = true; im.receiveShadow = true;
-    list.forEach(([x, z, rot], idx) => { p.set(x, CURB, z); q.setFromAxisAngle(up, rot); m.compose(p, q, s); im.setMatrixAt(idx, m); });
+    list.forEach(([x, z, rot, b], idx) => {
+      p.set(x, CURB, z); q.setFromAxisAngle(up, rot); m.compose(p, q, s); im.setMatrixAt(idx, m);
+      // knockable street furniture: register with the prop-physics system so a hard enough bump sends
+      // it tumbling (see "prop physics" below) — trash cans & hydrants only, benches/planters stay put.
+      if (T.knockable) registerKnockable(im, idx, x, CURB, z, rot, b);
+    });
     scene.add(im);
   });
 }
@@ -4373,19 +4386,20 @@ function readInput() {
 let gpHeld = false, gpHeldB = false;
 
 // ---------- movement / collision ----------
-function hitsCollider(x, z, r) {
-  for (let ci = colCell(x - r); ci <= colCell(x + r); ci++)
+function findCollider(x, z, r) {                          // like hitsCollider, but hands back which box (so we
+  for (let ci = colCell(x - r); ci <= colCell(x + r); ci++)   // can tell whether it's a knockable prop)
     for (let cj = colCell(z - r); cj <= colCell(z + r); cj++) {
       const arr = colGrid.get(ci + "," + cj); if (!arr) continue;
       for (let i = 0; i < arr.length; i++) {
         const b = arr[i];
         const cx = clamp(x, b.x0, b.x1), cz = clamp(z, b.z0, b.z1);
         const dx = x - cx, dz = z - cz;
-        if (dx * dx + dz * dz < r * r) return true;
+        if (dx * dx + dz * dz < r * r) return b;
       }
     }
-  return false;
+  return null;
 }
+function hitsCollider(x, z, r) { return findCollider(x, z, r) !== null; }
 function moveWithCollision(o, dx, dz, r) {
   if (inside && o === player) {                          // confined to the interior room
     o.x = clamp(o.x + dx, INT.x - 9.3, INT.x + 9.3);
@@ -4393,9 +4407,65 @@ function moveWithCollision(o, dx, dz, r) {
     return;
   }
   let nx = clamp(o.x + dx, WB.x0, WB.x1);
-  if (!hitsCollider(nx, o.z, r)) o.x = nx; else if (driving === o) { o.speed *= -0.25; carHit(o); }
+  let hit = findCollider(nx, o.z, r);
+  if (!hit) o.x = nx; else { tryKnockProp(hit, o); if (driving === o) { o.speed *= -0.25; carHit(o); } }
   let nz = clamp(o.z + dz, WB.z0, WB.z1);
-  if (!hitsCollider(o.x, nz, r)) o.z = nz; else if (driving === o) { o.speed *= -0.25; carHit(o); }
+  hit = findCollider(o.x, nz, r);
+  if (!hit) o.z = nz; else { tryKnockProp(hit, o); if (driving === o) { o.speed *= -0.25; carHit(o); } }
+}
+
+// ---------- prop physics: trash cans & hydrants tumble when bumped hard enough ----------
+// they're InstancedMesh (one draw call for the whole city), so a "knocked" instance isn't a separate
+// Object3D — it's an entry in this list whose matrix we recompute and push into the instance buffer
+// every frame, same tumble/settle approach as the ragdoll (gravity, ground bounce, spin, friction),
+// just without limbs. Once it settles, we stop simulating it and leave the final matrix in place.
+function registerKnockable(im, idx, x, y, z, rot, collider) {
+  const p = { im, idx, x, y, z, rx: 0, ry: rot, rz: 0, vx: 0, vy: 0, vz: 0, wx: 0, wy: 0, wz: 0, collider, active: false };
+  knockableProps.push(p);
+  colliderToProp.set(collider, p);
+}
+function knockProp(p, impulse) {
+  if (p.active) return;
+  disableCollider(p.collider);      // a toppled trash can shouldn't keep blocking foot/car traffic
+  p.active = true;
+  p.vx = impulse.vx; p.vy = impulse.vy; p.vz = impulse.vz;
+  p.wx = rrand(-6, 6); p.wy = rrand(-3, 3); p.wz = rrand(-6, 6);
+  activeProps.push(p);
+}
+function tryKnockProp(collider, mover) {
+  const p = colliderToProp.get(collider);
+  if (!p || p.active) return;
+  const spd = Math.abs(mover.speed || 0);
+  if (spd < 1.4) return;                                  // a gentle bump shouldn't send it flying
+  const h = mover.h != null ? mover.h : Math.atan2(mover.x - p.x, mover.z - p.z);
+  const kick = clamp(spd * 0.32, 1.2, 8);
+  knockProp(p, { vx: Math.sin(h) * kick, vy: kick * 0.4 + 1.2, vz: Math.cos(h) * kick });
+}
+function updatePropPhysics(dt) {
+  for (let i = activeProps.length - 1; i >= 0; i--) {
+    const p = activeProps[i];
+    p.vy -= RAG_G * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+    const gy = groundY(p.x, p.z) + 0.05;
+    let grounded = false;
+    if (p.y <= gy) {
+      p.y = gy; grounded = true;
+      p.vy = p.vy < -0.6 ? -p.vy * 0.3 : 0;
+      const fr = Math.exp(-2.6 * dt);                       // rolls a bit further than a body would
+      p.vx *= fr; p.vz *= fr;
+      p.wx *= Math.exp(-2.2 * dt); p.wy *= Math.exp(-2.2 * dt); p.wz *= Math.exp(-2.2 * dt);
+    } else {
+      p.vx *= Math.exp(-0.2 * dt); p.vz *= Math.exp(-0.2 * dt);
+    }
+    p.rx += p.wx * dt; p.ry += p.wy * dt; p.rz += p.wz * dt;
+    tmpP.set(p.x, p.y, p.z);
+    tmpQ.setFromEuler(propEuler.set(p.rx, p.ry, p.rz));
+    tmpM.compose(tmpP, tmpQ, tmpS);
+    p.im.setMatrixAt(p.idx, tmpM);
+    p.im.instanceMatrix.needsUpdate = true;
+    const slow = p.vx * p.vx + p.vy * p.vy + p.vz * p.vz < 0.03 && p.wx * p.wx + p.wy * p.wy + p.wz * p.wz < 0.08;
+    if (grounded && slow) activeProps.splice(i, 1);         // done tumbling — leave it lying where it stopped
+  }
 }
 function carHit(o) {
   if (colCD > 0) return;
@@ -5486,6 +5556,16 @@ function update(dt) {
         }
       }
     }
+    // weight transfer: lean into turns off the lateral drift, dive under braking, squat under accel —
+    // and sync the mesh directly (heli/plane/boat already do this themselves; giving cars/bikes the same
+    // means a JACKED street car actually moves on screen instead of freezing at the spot you jacked it,
+    // since it isn't in the `cars[]` array the old shared sync loop relied on).
+    c.mesh.position.set(c.x, groundY(c.x, c.z) + (c.y || 0), c.z);
+    c.mesh.rotation.y = c.h;
+    const pitchTgt = c.y > 0 ? 0 : clamp(brakeAmt * 0.16 - (accel > 0 ? inp.mz : 0) * 0.06, -0.06, 0.18);
+    c.pitch = (c.pitch || 0) + (pitchTgt - (c.pitch || 0)) * Math.min(1, 7 * dt);
+    c.mesh.rotation.x = c.y > 0 ? clamp(-c.vy * 0.02, -0.4, 0.4) : c.pitch;
+    c.mesh.rotation.z = c.bike ? clamp((c.lat || 0) * 0.05, -0.45, 0.45) : clamp((c.lat || 0) * 0.03, -0.22, 0.22);
     }
     camYaw = lerpAngle(camYaw, c.h, 1 - Math.exp(-3.2 * dt));
   } else if (para) {
@@ -5689,6 +5769,7 @@ function update(dt) {
   }
   for (let i = npcs.length - 1; i >= 0; i--) if (npcs[i]._dead) npcs.splice(i, 1);   // remove anyone killed this frame
   updateRagdolls(dt);
+  updatePropPhysics(dt);
 
   // income + missions
   state.money += incomeRate() / 60 * dt;
@@ -5765,7 +5846,8 @@ function update(dt) {
     if (punchT > 0) hero.armR.rotation.x = -1.5;   // forward jab during a punch
   }
   for (const c of cars) {
-    if (c !== driving && c.y > 0) { c.vy -= 30 * dt; c.y = Math.max(0, c.y + c.vy * dt); if (c.y === 0) c.vy = 0; }
+    if (c === driving) continue;   // the driven vehicle syncs & leans itself, right in its control branch
+    if (c.y > 0) { c.vy -= 30 * dt; c.y = Math.max(0, c.y + c.vy * dt); if (c.y === 0) c.vy = 0; }
     const gy = groundY(c.x, c.z);
     c.mesh.position.set(c.x, gy + (c.y || 0), c.z);
     c.mesh.rotation.y = c.h;
@@ -5990,7 +6072,8 @@ globalThis.__palmCity = {
   state, player, cars, police, traffic, atms, helis, boats, planes, gangsters, allies, npcs, GANGS, SHOPS, AIRPORT, update, beginPlay, advanceDialogue,
   ragdolls, doPunch: () => doPunch(), explodeAt: (x, z, r) => explodeAt(x, z, r), wasted: () => wasted(),
   forceDrive: c => { driving = c; if (c) { c.speed = c.speed || 0; hero.group.visible = false; } else hero.group.visible = true },
-  hero,
+  hero, debugInput: () => ({ fuel, dry: fuel <= 0, dlgLines: !!dlgLines, braking: braking(), inp: readInput(), keys: [...keys] }),
+  knockableProps, activeProps, moveObj: (o, dx, dz, r) => moveWithCollision(o, dx, dz, r),
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
   applyGfx: m => applyGfx(m), gfx: () => ({ mode: gfxMode, prCap: PR_CAP, msaa: msaaSamples, pr: renderer.getPixelRatio() }),
   trafPhase: () => trafPhase, setTraf: p => { trafPhase = p; applyTrafPhase(); },
