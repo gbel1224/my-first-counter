@@ -617,10 +617,13 @@ let seaWave = null;    // {geo} segmented ocean surface, gently rising/falling e
 let seaGlitter = null; // {uniforms} additive sun-glitter twinkle field on the water
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(2 * HALF + 1700, 2 * HALF + 1700),
   // polygon-offset the base grass back in the depth buffer so the road/sidewalk/sand decals laid just
-  // above it always win — otherwise they z-fight at grazing angles (e.g. grass bleeding onto the beach,
-  // or road paint flickering as you drive past at speed).
-  new THREE.MeshLambertMaterial({ color: 0x9aab72, polygonOffset: true, polygonOffsetFactor: 1.5, polygonOffsetUnits: 3 }));
+  // above it always win — but at grazing angles far from the camera, GPU polygon offset alone isn't
+  // reliable (the depth-slope term it scales by swings during rotation), so it still z-fights and
+  // flickers hard while turning. A real, physical drop is angle-independent and settles it for good;
+  // nothing depends on this mesh's exact height, since gameplay ground height comes from groundY().
+  new THREE.MeshLambertMaterial({ color: 0x9aab72, polygonOffset: true, polygonOffsetFactor: 4, polygonOffsetUnits: 16 }));
 ground.geometry.rotateX(-Math.PI / 2);
+ground.position.y = -0.3;
 ground.receiveShadow = true;
 scene.add(ground);
 
@@ -698,7 +701,13 @@ const GAS = { x: Rc(2) + 7, z: Rc(3) - 7 };   // roadside fuel station (west-cen
 
 // curb slabs: paved + grass, instanced
 {
-  const slab = new THREE.BoxGeometry(BLOCK, CURB * 2, BLOCK);
+  // the block footprint (BLOCK) exactly equals the gap between blocks (CELL - ROAD), so the slab's edge
+  // and the road's edge land on the exact same seam with zero margin — a classic silhouette/edge flicker
+  // at grazing angles (worst near the green curb slabs, where the color contrast against asphalt makes it
+  // obvious). Overlap the slab a hair into the road on every side; its top (CURB) sits well above the road
+  // surface, so the overlap always and unambiguously wins, like a real curb overlapping the road edge.
+  const SEAM = 0.4;
+  const slab = new THREE.BoxGeometry(BLOCK + SEAM * 2, CURB * 2, BLOCK + SEAM * 2);
   const paved = [], grass = [];
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++)
     ((isResid(i, j) || (PARKS.has(i + "," + j) && i + "," + j !== PLAZA_KEY)) ? grass : paved).push([bc(i), bc(j)]);
@@ -831,7 +840,9 @@ let buildingMat = null;
 // outer ground gets a tiling grass texture so the outskirts aren't a flat colour
 {
   const g = texGrass.clone(); g.needsUpdate = true; const gr = Math.round((2 * HALF + 1700) / 30); g.repeat.set(gr, gr);
-  ground.material = new THREE.MeshLambertMaterial({ map: g });
+  // keep the depth bias from the ground's original material — this full material swap was silently
+  // dropping it, un-doing the fix that keeps roads/sidewalks/sand from z-fighting the grass beneath them.
+  ground.material = new THREE.MeshLambertMaterial({ map: g, polygonOffset: true, polygonOffsetFactor: 4, polygonOffsetUnits: 16 });
 }
 
 // ---------- beach district (south of the city, on the open ground beyond the grid) ----------
