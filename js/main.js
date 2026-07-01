@@ -7,7 +7,11 @@
 import { setState, getState, ageUp } from "./state.js";
 import * as store from "./storage.js";
 import { startCreator } from "./characterCreator.js";
-import { showScreen, renderDashboard, toast } from "./ui.js";
+import {
+  showScreen, renderDashboard, toast,
+  openCareerPanel, openEducationPanel,
+} from "./ui.js";
+import * as career from "./career.js";
 
 /* ---------- Start menu ---------- */
 
@@ -54,6 +58,7 @@ function newLife() {
 function continueLife() {
   const s = store.load();
   if (!s) { toast("No save found", "bad"); return; }
+  career.ensureCareerFields(s); // backfill fields for older saves
   setState(s);
   enterGame();
 }
@@ -70,7 +75,8 @@ function enterGame() {
 function onAgeUp() {
   const s = getState();
   if (!s || !s.character.alive) return;
-  const result = ageUp();
+  ageUp();
+  career.applyYear(s); // education progress + income for the new year
   store.save(s);
   renderDashboard();
 
@@ -78,6 +84,46 @@ function onAgeUp() {
   if (!c.alive) {
     toast(`${c.firstName} has died at age ${c.age}`, "bad");
   }
+}
+
+/* ---------- Activity panels ---------- */
+
+function openCareer() {
+  const s = getState();
+  if (!s || !s.character.alive) return;
+  openCareerPanel({
+    apply: (jobId) => {
+      const r = career.applyForJob(s, jobId);
+      toast(r.msg, r.ok ? "good" : "bad");
+      store.save(s);
+      renderDashboard();
+    },
+    quit: () => {
+      const r = career.quitJob(s);
+      toast(r.msg, r.ok ? "good" : "bad");
+      store.save(s);
+      renderDashboard();
+    },
+  });
+}
+
+function openEducation() {
+  const s = getState();
+  if (!s || !s.character.alive) return;
+  openEducationPanel({
+    enroll: () => {
+      const r = career.enrollUniversity(s);
+      toast(r.msg, r.ok ? "good" : "bad");
+      store.save(s);
+      renderDashboard();
+    },
+    drop: () => {
+      const r = career.dropOut(s);
+      toast(r.msg, r.ok ? "good" : "bad");
+      store.save(s);
+      renderDashboard();
+    },
+  });
 }
 
 function saveNow() {
@@ -101,6 +147,8 @@ function init() {
   document.getElementById("continueBtn").onclick = continueLife;
 
   document.getElementById("ageUpBtn").onclick = onAgeUp;
+  document.getElementById("careerActBtn").onclick = openCareer;
+  document.getElementById("educationActBtn").onclick = openEducation;
   document.getElementById("saveBtn").onclick = saveNow;
   document.getElementById("menuBtn").onclick = quitToMenu;
 

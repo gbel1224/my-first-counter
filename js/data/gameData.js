@@ -103,3 +103,50 @@ export const LIFE_EVENTS = [
   { minAge: 14, maxAge: 20, type: "event", text: "You picked up a new hobby you love.", stats: { happiness: 5, smarts: 2 } },
   { minAge: 16, maxAge: 22, type: "good", text: "A small side gig earned you some cash.", money: 120, stats: { happiness: 2 } },
 ];
+
+/* ---------- Education ---------- */
+
+/* Credential ranks used to gate jobs. Ordering matters. */
+export const EDUCATION_RANK = { none: 0, highschool: 1, university: 2 };
+
+export const EDUCATION_LABEL = {
+  none: "No diploma",
+  highschool: "High School Diploma",
+  university: "University Degree",
+};
+
+export const UNIVERSITY = {
+  years: 4,          // years to graduate
+  tuitionPerYear: 8000,
+  smartsPerYear: 5,  // studying makes you smarter
+};
+
+/* ---------- Jobs ----------
+   tier: entry (no diploma) | skilled (needs HS) | professional (needs degree)
+   pay is annual; applied on each Age Up while employed. */
+export const JOBS = [
+  // Entry level — no diploma required
+  { id: "babysitter",   title: "Babysitter",        icon: "🧸", tier: "entry", minAge: 14, edu: "none",       smarts: 0,  pay: 12000 },
+  { id: "fastfood",     title: "Fast Food Worker",  icon: "🍔", tier: "entry", minAge: 16, edu: "none",       smarts: 0,  pay: 19000 },
+  { id: "grocery",      title: "Grocery Clerk",     icon: "🛒", tier: "entry", minAge: 16, edu: "none",       smarts: 0,  pay: 22000 },
+  { id: "delivery",     title: "Delivery Driver",   icon: "🚚", tier: "entry", minAge: 18, edu: "none",       smarts: 10, pay: 28000 },
+
+  // Skilled — high school diploma
+  { id: "office",       title: "Office Assistant",  icon: "🗂️", tier: "skilled", minAge: 18, edu: "highschool", smarts: 35, pay: 36000 },
+  { id: "retailmgr",    title: "Retail Manager",    icon: "🏬", tier: "skilled", minAge: 20, edu: "highschool", smarts: 40, pay: 45000 },
+  { id: "electrician",  title: "Electrician",       icon: "🔌", tier: "skilled", minAge: 20, edu: "highschool", smarts: 45, pay: 52000 },
+  { id: "police",       title: "Police Officer",    icon: "👮", tier: "skilled", minAge: 21, edu: "highschool", smarts: 45, pay: 58000 },
+
+  // Professional — university degree
+  { id: "teacher",      title: "Teacher",           icon: "🍎", tier: "professional", minAge: 22, edu: "university", smarts: 55, pay: 54000 },
+  { id: "accountant",   title: "Accountant",        icon: "📊", tier: "professional", minAge: 22, edu: "university", smarts: 60, pay: 68000 },
+  { id: "developer",    title: "Software Developer",icon: "💻", tier: "professional", minAge: 22, edu: "university", smarts: 65, pay: 92000 },
+  { id: "lawyer",       title: "Lawyer",            icon: "⚖️", tier: "professional", minAge: 24, edu: "university", smarts: 75, pay: 125000 },
+  { id: "doctor",       title: "Doctor",            icon: "🩺", tier: "professional", minAge: 26, edu: "university", smarts: 82, pay: 175000 },
+];
+
+export const TIER_LABEL = {
+  entry: "Entry level",
+  skilled: "Requires High School",
+  professional: "Requires Degree",
+};

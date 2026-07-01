@@ -327,6 +327,56 @@ select:focus {
 .hint { font-size: 0.85rem; color: var(--text-faint); }
 .divider { height: 1px; background: var(--border-soft); margin: 1rem 0; border: 0; }
 
+/* ---------- Activity buttons ---------- */
+
+.activities { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.6rem; }
+.activity-btn {
+  font: inherit; font-weight: 700; cursor: pointer;
+  background: var(--bg-1); color: var(--text);
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 0.85rem 0.6rem; display: grid; gap: 0.25rem; justify-items: center;
+  transition: all 0.15s ease;
+}
+.activity-btn:hover:not(:disabled) { border-color: var(--primary); transform: translateY(-2px); }
+.activity-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.activity-btn .ico { font-size: 1.5rem; }
+
+/* ---------- Modal ---------- */
+
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(5, 8, 18, 0.66);
+  backdrop-filter: blur(4px);
+  display: grid; place-items: center; padding: 1rem;
+  animation: fade 0.2s ease;
+}
+.modal {
+  width: min(560px, 100%);
+  max-height: 86vh; display: flex; flex-direction: column;
+  animation: fade 0.25s ease;
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.8rem; }
+.modal-head h3 { margin: 0; font-size: 1.2rem; }
+.modal-close {
+  font: inherit; cursor: pointer; border: none; background: var(--surface-2);
+  color: var(--text); width: 34px; height: 34px; border-radius: 9px; font-size: 1rem;
+}
+.modal-close:hover { background: var(--border); }
+.modal-body { overflow-y: auto; padding-right: 0.3rem; }
+
+.panel-note {
+  background: var(--bg-1); border: 1px solid var(--border-soft);
+  border-radius: 10px; padding: 0.7rem 0.85rem; margin: 0 0 0.8rem;
+}
+.panel-note.good { border-left: 3px solid var(--accent); }
+
+.job-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.8rem;
+  background: var(--bg-1); border: 1px solid var(--border-soft);
+  border-radius: 10px; padding: 0.65rem 0.8rem; margin-bottom: 0.5rem;
+}
+.job-row .job-title { font-weight: 700; }
+
 .stepper { display: flex; align-items: center; gap: 0.4rem; justify-content: center; margin-bottom: 1.2rem; }
 .step-dot {
   width: 30px; height: 6px; border-radius: 999px; background: var(--border);
