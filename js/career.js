@@ -6,6 +6,7 @@
    ============================================================ */
 
 import { addLog, clamp, randInt } from "./state.js";
+import { canAfford, spend } from "./banking.js";
 import {
   JOBS, EDUCATION_RANK, EDUCATION_LABEL, UNIVERSITY,
 } from "./data/gameData.js";
@@ -53,8 +54,8 @@ export function enrollUniversity(state) {
   if (!canEnrollUniversity(state)) {
     return { ok: false, msg: "You can't enroll right now." };
   }
-  if (c.money < UNIVERSITY.tuitionPerYear) {
-    return { ok: false, msg: `You need at least ${UNIVERSITY.tuitionPerYear.toLocaleString()} for the first year's tuition.` };
+  if (!canAfford(c, UNIVERSITY.tuitionPerYear)) {
+    return { ok: false, msg: `You need at least ${UNIVERSITY.tuitionPerYear.toLocaleString()} for the first year's tuition — try a student loan.` };
   }
   c.education.enrolled = true;
   c.education.collegeYears = 0;
@@ -125,13 +126,13 @@ function processEducation(c) {
 
   // Progress through university if enrolled.
   if (edu.enrolled) {
-    if (c.money < UNIVERSITY.tuitionPerYear) {
+    if (!canAfford(c, UNIVERSITY.tuitionPerYear)) {
       edu.enrolled = false;
       edu.collegeYears = 0;
       addLog("bad", "You couldn't afford tuition and had to drop out of university.");
       return;
     }
-    c.money -= UNIVERSITY.tuitionPerYear;
+    spend({ character: c }, UNIVERSITY.tuitionPerYear);
     c.stats.smarts = clamp(c.stats.smarts + UNIVERSITY.smartsPerYear);
     edu.collegeYears += 1;
 

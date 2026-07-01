@@ -157,6 +157,7 @@ body {
 .field > label { font-weight: 600; color: var(--text-dim); font-size: 0.92rem; }
 
 input[type="text"],
+input[type="number"],
 select {
   font: inherit;
   color: var(--text);
@@ -167,6 +168,7 @@ select {
   width: 100%;
 }
 input[type="text"]:focus,
+input[type="number"]:focus,
 select:focus {
   outline: none;
   border-color: var(--primary);
@@ -376,6 +378,19 @@ select:focus {
   border-radius: 10px; padding: 0.65rem 0.8rem; margin-bottom: 0.5rem;
 }
 .job-row .job-title { font-weight: 700; }
+
+/* ---------- Banking panel ---------- */
+
+.bank-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.bank-stat {
+  background: var(--bg-1); border: 1px solid var(--border-soft);
+  border-radius: 10px; padding: 0.6rem 0.75rem; display: grid; gap: 0.15rem;
+}
+.bank-stat span { color: var(--text-dim); font-size: 0.82rem; }
+.bank-stat strong { font-size: 1.05rem; }
+
+.amount-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.amount-row input { flex: 1 1 120px; }
 
 .stepper { display: flex; align-items: center; gap: 0.4rem; justify-content: center; margin-bottom: 1.2rem; }
 .step-dot {

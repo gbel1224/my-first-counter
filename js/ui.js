@@ -8,6 +8,9 @@ import { BACKGROUNDS, TIER_LABEL, UNIVERSITY } from "./data/gameData.js";
 import {
   availableJobs, educationLabel, canEnrollUniversity,
 } from "./career.js";
+import {
+  creditLabel, netWorth, totalDebt, maxLoanAmount, loanInterestRate,
+} from "./banking.js";
 
 /* ---------- Screen manager ---------- */
 
@@ -88,7 +91,10 @@ export function renderDashboard() {
   const eduChip = c.education && c.education.enrolled
     ? `<span class="pill" style="cursor:default">🎓 University (Yr ${c.education.collegeYears + 1})</span>`
     : `<span class="pill" style="cursor:default">🎓 ${educationLabel(c.education ? c.education.level : "none")}</span>`;
-  document.getElementById("dashCareer").innerHTML = `${jobChip} ${eduChip}`;
+  const creditChip = c.bank
+    ? `<span class="pill" style="cursor:default">💳 ${creditLabel(c.bank.creditScore)} (${c.bank.creditScore})</span>`
+    : "";
+  document.getElementById("dashCareer").innerHTML = `${jobChip} ${eduChip} ${creditChip}`;
 
   // Traits + background chip line
   const traitChips = c.traits.length
@@ -210,11 +216,16 @@ export function openEducationPanel(actions) {
         Tuition is ${formatMoney(UNIVERSITY.tuitionPerYear, c.countryCode)}/yr, paid each Age Up.</p>
         <button class="btn danger" data-drop>Drop Out</button>`;
     } else if (canEnrollUniversity(s)) {
+      const fullCost = UNIVERSITY.tuitionPerYear * UNIVERSITY.years;
       html += `
         <p class="hint">A university degree unlocks professional careers (doctor, lawyer, developer…)
         and raises your smarts. It takes ${UNIVERSITY.years} years at
         ${formatMoney(UNIVERSITY.tuitionPerYear, c.countryCode)}/yr.</p>
-        <button class="btn accent" data-enroll>🎓 Enroll in University</button>`;
+        <div class="btn-row">
+          <button class="btn accent" data-enroll>🎓 Enroll (pay tuition)</button>
+          <button class="btn" data-studentloan>💳 Enroll with Student Loan</button>
+        </div>
+        <p class="hint mt">A student loan covers the full ${formatMoney(fullCost, c.countryCode)} degree so you can study now and pay later.</p>`;
     } else if (edu.level === "university") {
       html += `<p class="hint">You've earned your degree. Every professional path is open to you.</p>`;
     } else if (c.age < 18) {
@@ -226,9 +237,71 @@ export function openEducationPanel(actions) {
     body.innerHTML = html;
     const enroll = body.querySelector("[data-enroll]");
     if (enroll) enroll.onclick = () => { actions.enroll(); render(body); };
+    const loanEnroll = body.querySelector("[data-studentloan]");
+    if (loanEnroll) loanEnroll.onclick = () => { actions.enrollWithLoan(); render(body); };
     const drop = body.querySelector("[data-drop]");
     if (drop) drop.onclick = () => { actions.drop(); render(body); };
   };
 
   openModal("🎓 Education", "", render);
+}
+
+/* ---------- Banking panel ---------- */
+
+export function openBankingPanel(actions) {
+  const s = getState();
+  const c = s.character;
+
+  const render = (body) => {
+    const b = c.bank;
+    const rate = loanInterestRate(b.creditScore);
+    const max = maxLoanAmount(c);
+
+    const loanRows = b.loans.length
+      ? b.loans.map((l) => `
+          <div class="job-row">
+            <div>
+              <div class="job-title">${l.purpose}</div>
+              <div class="hint">Balance ${formatMoney(l.balance, c.countryCode)} · ${(l.rate * 100).toFixed(1)}% APR · min ${formatMoney(l.minPayment, c.countryCode)}/yr</div>
+            </div>
+            <button class="btn" data-repay="${l.id}">Repay</button>
+          </div>`).join("")
+      : `<p class="hint">No active loans.</p>`;
+
+    body.innerHTML = `
+      <div class="bank-grid">
+        <div class="bank-stat"><span>Cash</span><strong>${formatMoney(c.money, c.countryCode)}</strong></div>
+        <div class="bank-stat"><span>Savings</span><strong>${formatMoney(b.savings, c.countryCode)}</strong></div>
+        <div class="bank-stat"><span>Credit</span><strong>${b.creditScore} · ${creditLabel(b.creditScore)}</strong></div>
+        <div class="bank-stat"><span>Net Worth</span><strong>${formatMoney(netWorth(c), c.countryCode)}</strong></div>
+      </div>
+
+      <p class="section-title mt">Savings (earns 3%/yr)</p>
+      <div class="amount-row">
+        <input type="number" id="saveAmt" min="1" placeholder="Amount" />
+        <button class="btn" data-deposit>Deposit</button>
+        <button class="btn ghost" data-withdraw>Withdraw</button>
+      </div>
+
+      <p class="section-title mt">Loans</p>
+      ${loanRows}
+
+      <p class="hint mt">Borrow up to <strong>${formatMoney(max, c.countryCode)}</strong> at ${(rate * 100).toFixed(1)}% APR (based on your credit &amp; income).</p>
+      <div class="amount-row">
+        <input type="number" id="loanAmt" min="1" placeholder="Amount" />
+        <button class="btn gold" data-borrow ${max <= 0 ? "disabled" : ""}>Borrow</button>
+      </div>
+    `;
+
+    const amt = (id) => Math.floor(Number(body.querySelector(id).value));
+    body.querySelector("[data-deposit]").onclick = () => { actions.deposit(amt("#saveAmt")); render(body); };
+    body.querySelector("[data-withdraw]").onclick = () => { actions.withdraw(amt("#saveAmt")); render(body); };
+    const borrow = body.querySelector("[data-borrow]");
+    if (borrow) borrow.onclick = () => { actions.borrow(amt("#loanAmt")); render(body); };
+    body.querySelectorAll("[data-repay]").forEach((btn) => {
+      btn.onclick = () => { actions.repay(btn.dataset.repay); render(body); };
+    });
+  };
+
+  openModal("🏦 Bank", "", render);
 }

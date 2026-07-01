@@ -57,6 +57,7 @@ export function createCharacter({ firstName, lastName, gender, avatar, countryCo
       money: startMoney,
       education: { level: "none", enrolled: false, collegeYears: 0 },
       job: null,
+      bank: { savings: 0, loans: [], creditScore: 600 },
     },
     log: [
       {

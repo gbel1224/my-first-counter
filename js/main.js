@@ -9,9 +9,11 @@ import * as store from "./storage.js";
 import { startCreator } from "./characterCreator.js";
 import {
   showScreen, renderDashboard, toast,
-  openCareerPanel, openEducationPanel,
+  openCareerPanel, openEducationPanel, openBankingPanel,
 } from "./ui.js";
 import * as career from "./career.js";
+import * as bank from "./banking.js";
+import { UNIVERSITY } from "./data/gameData.js";
 
 /* ---------- Start menu ---------- */
 
@@ -59,6 +61,7 @@ function continueLife() {
   const s = store.load();
   if (!s) { toast("No save found", "bad"); return; }
   career.ensureCareerFields(s); // backfill fields for older saves
+  bank.ensureBankFields(s);
   setState(s);
   enterGame();
 }
@@ -77,6 +80,7 @@ function onAgeUp() {
   if (!s || !s.character.alive) return;
   ageUp();
   career.applyYear(s); // education progress + income for the new year
+  bank.applyYear(s);   // savings interest, loan payments, credit drift
   store.save(s);
   renderDashboard();
 
@@ -117,12 +121,39 @@ function openEducation() {
       store.save(s);
       renderDashboard();
     },
+    enrollWithLoan: () => {
+      // Take a student loan covering the full degree, then enroll.
+      const cost = UNIVERSITY.tuitionPerYear * UNIVERSITY.years;
+      const loanRes = bank.takeLoan(s, cost, "Student Loan", true);
+      if (!loanRes.ok) { toast(loanRes.msg, "bad"); return; }
+      const r = career.enrollUniversity(s);
+      toast(r.ok ? "Student loan funded — enrolled!" : r.msg, r.ok ? "good" : "bad");
+      store.save(s);
+      renderDashboard();
+    },
     drop: () => {
       const r = career.dropOut(s);
       toast(r.msg, r.ok ? "good" : "bad");
       store.save(s);
       renderDashboard();
     },
+  });
+}
+
+function openBanking() {
+  const s = getState();
+  if (!s || !s.character.alive) return;
+  const act = (fn) => (...args) => {
+    const r = fn(...args);
+    toast(r.msg, r.ok ? "good" : "bad");
+    store.save(s);
+    renderDashboard();
+  };
+  openBankingPanel({
+    deposit: act((amt) => bank.deposit(s, amt)),
+    withdraw: act((amt) => bank.withdraw(s, amt)),
+    borrow: act((amt) => bank.takeLoan(s, amt)),
+    repay: act((loanId) => bank.repayLoan(s, loanId)),
   });
 }
 
@@ -149,6 +180,7 @@ function init() {
   document.getElementById("ageUpBtn").onclick = onAgeUp;
   document.getElementById("careerActBtn").onclick = openCareer;
   document.getElementById("educationActBtn").onclick = openEducation;
+  document.getElementById("bankActBtn").onclick = openBanking;
   document.getElementById("saveBtn").onclick = saveNow;
   document.getElementById("menuBtn").onclick = quitToMenu;
 
