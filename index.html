@@ -1,358 +1,84 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Math Adventure for Kids</title>
-    <style>
-        :root {
-            --bg: #eef8ff;
-            --card: #ffffff;
-            --text: #233142;
-            --primary: #3b82f6;
-            --accent: #14b8a6;
-            --good: #16a34a;
-            --bad: #dc2626;
-            --muted: #6b7280;
-        }
-
-        * { box-sizing: border-box; }
-
-        body {
-            margin: 0;
-            min-height: 100vh;
-            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(160deg, #dbeafe 0%, var(--bg) 100%);
-            color: var(--text);
-            display: grid;
-            place-items: center;
-            padding: 1rem;
-        }
-
-        .app {
-            width: min(720px, 100%);
-            background: var(--card);
-            border-radius: 18px;
-            box-shadow: 0 12px 30px rgba(37, 99, 235, 0.16);
-            overflow: hidden;
-        }
-
-        .header {
-            background: linear-gradient(120deg, var(--primary), #7c3aed);
-            color: #fff;
-            padding: 1.2rem 1.5rem;
-        }
-
-        .header h1 {
-            margin: 0;
-            font-size: clamp(1.3rem, 2.4vw, 1.8rem);
-        }
-
-        .header p {
-            margin: 0.4rem 0 0;
-            opacity: 0.92;
-            font-size: 0.95rem;
-        }
-
-        .content {
-            padding: 1.25rem;
-            display: grid;
-            gap: 1rem;
-        }
-
-        .controls,
-        .stats,
-        .challenge,
-        .feedback {
-            background: #f8fbff;
-            border: 1px solid #d7e8ff;
-            border-radius: 12px;
-            padding: 1rem;
-        }
-
-        .controls {
-            display: grid;
-            gap: 0.8rem;
-            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-            align-items: end;
-        }
-
-        label {
-            display: grid;
-            gap: 0.35rem;
-            font-weight: 600;
-            color: #334155;
-            font-size: 0.95rem;
-        }
-
-        select,
-        input[type="number"],
-        button {
-            font: inherit;
-            border-radius: 10px;
-            border: 1px solid #cbd5e1;
-            padding: 0.6rem 0.75rem;
-            background: #fff;
-        }
-
-        button {
-            border: none;
-            background: var(--primary);
-            color: white;
-            cursor: pointer;
-            font-weight: 700;
-            transition: transform 0.12s ease, opacity 0.2s;
-        }
-
-        button:hover { opacity: 0.92; }
-        button:active { transform: scale(0.98); }
-
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 0.6rem;
-            text-align: center;
-        }
-
-        .stat {
-            background: white;
-            border-radius: 10px;
-            border: 1px solid #dbe5f1;
-            padding: 0.7rem;
-        }
-
-        .stat strong {
-            display: block;
-            font-size: 1.35rem;
-            color: #1d4ed8;
-        }
-
-        .challenge h2 {
-            margin: 0 0 0.6rem;
-            font-size: 1.1rem;
-            color: #1e3a8a;
-        }
-
-        .problem {
-            font-size: clamp(1.5rem, 4.5vw, 2.3rem);
-            font-weight: 800;
-            text-align: center;
-            margin: 0.25rem 0 1rem;
-        }
-
-        .answer-row {
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 0.6rem;
-        }
-
-        #answer {
-            text-align: center;
-            font-size: 1.2rem;
-            font-weight: 700;
-        }
-
-        .feedback {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.6rem;
-            flex-wrap: wrap;
-        }
-
-        #message {
-            margin: 0;
-            font-weight: 700;
-        }
-
-        .good { color: var(--good); }
-        .bad { color: var(--bad); }
-        .muted { color: var(--muted); }
-
-        @media (max-width: 520px) {
-            .answer-row { grid-template-columns: 1fr; }
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Life Simulator</title>
+  <meta name="description" content="Life Simulator — build a life from nothing. A browser life sim." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8C%B1%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-    <main class="app" aria-label="Math practice app for kids">
-        <header class="header">
-            <h1>🌟 Math Adventure</h1>
-            <p>Solve fun challenges, build your streak, and become a math hero!</p>
-        </header>
+  <div class="app">
 
-        <section class="content">
-            <section class="controls" aria-label="game controls">
-                <label>
-                    Operation
-                    <select id="operation">
-                        <option value="add">Addition (+)</option>
-                        <option value="subtract">Subtraction (−)</option>
-                        <option value="multiply">Multiplication (×)</option>
-                    </select>
-                </label>
+    <!-- ===================== START MENU ===================== -->
+    <section id="screen-start" class="screen active">
+      <div class="brand">
+        <h1>Life Simulator</h1>
+        <p>Start with nothing. Build a life. Write your story.</p>
+      </div>
 
-                <label>
-                    Difficulty
-                    <select id="difficulty">
-                        <option value="easy">Easy (1–10)</option>
-                        <option value="medium">Medium (1–20)</option>
-                        <option value="hard">Hard (1–50)</option>
-                    </select>
-                </label>
+      <div class="card">
+        <div class="btn-row" style="flex-direction:column">
+          <button class="btn lg block" id="newLifeBtn">✨ New Life</button>
+          <button class="btn lg block ghost" id="continueBtn">▶️ Continue</button>
+        </div>
+        <p class="hint center mt" id="saveInfo">No saved life yet — start a new one!</p>
+      </div>
 
-                <button id="newGameBtn" type="button">Start New Game</button>
-            </section>
+      <div class="card">
+        <p class="section-title">How to play</p>
+        <p class="muted" style="margin:0">
+          Create your character, then live year by year. Every choice and every
+          random event shapes who you become. Jobs, money, relationships, and
+          much more are on the way — this is just the beginning.
+        </p>
+      </div>
+    </section>
 
-            <section class="stats" aria-label="scoreboard">
-                <div class="stat">Score <strong id="score">0</strong></div>
-                <div class="stat">Streak <strong id="streak">0</strong></div>
-                <div class="stat">Question <strong id="questionCount">1</strong></div>
-            </section>
+    <!-- ===================== CHARACTER CREATOR ===================== -->
+    <!-- Rendered dynamically by characterCreator.js -->
+    <section id="screen-create" class="screen"></section>
 
-            <section class="challenge" aria-live="polite">
-                <h2>Your Challenge</h2>
-                <p id="problem" class="problem">3 + 4 = ?</p>
-                <div class="answer-row">
-                    <input id="answer" type="number" placeholder="Type your answer" autocomplete="off" />
-                    <button id="checkBtn" type="button">Check Answer</button>
-                </div>
-            </section>
+    <!-- ===================== GAME DASHBOARD ===================== -->
+    <section id="screen-game" class="screen">
+      <div class="card">
+        <div class="topbar">
+          <div class="who">
+            <div class="avatar" id="dashAvatar">🧑</div>
+            <div>
+              <h2 id="dashName">—</h2>
+              <div class="sub" id="dashSub">—</div>
+            </div>
+          </div>
+          <div class="money" id="dashMoney">$0</div>
+        </div>
+        <div class="row mt" id="dashTraits" style="flex-wrap:wrap;gap:0.4rem"></div>
+      </div>
 
-            <section class="feedback">
-                <p id="message" class="muted">Pick settings and solve your first problem!</p>
-                <button id="nextBtn" type="button">Next Question</button>
-            </section>
-        </section>
-    </main>
+      <div class="card">
+        <p class="section-title">Stats</p>
+        <div id="dashStats"></div>
+      </div>
 
-    <script>
-        const operationEl = document.getElementById('operation');
-        const difficultyEl = document.getElementById('difficulty');
-        const newGameBtn = document.getElementById('newGameBtn');
-        const checkBtn = document.getElementById('checkBtn');
-        const nextBtn = document.getElementById('nextBtn');
-        const problemEl = document.getElementById('problem');
-        const answerEl = document.getElementById('answer');
-        const messageEl = document.getElementById('message');
-        const scoreEl = document.getElementById('score');
-        const streakEl = document.getElementById('streak');
-        const questionCountEl = document.getElementById('questionCount');
+      <div class="card">
+        <div class="btn-row">
+          <button class="btn accent lg" id="ageUpBtn" style="flex:1">🎂 Age Up (+1 Year)</button>
+        </div>
+        <div class="btn-row mt">
+          <button class="btn ghost" id="saveBtn">💾 Save</button>
+          <button class="btn ghost" id="menuBtn">🏠 Menu</button>
+        </div>
+      </div>
 
-        const ranges = {
-            easy: 10,
-            medium: 20,
-            hard: 50
-        };
+      <div class="card">
+        <p class="section-title">Life Story</p>
+        <div class="log" id="dashLog"></div>
+      </div>
+    </section>
 
-        let game = {
-            score: 0,
-            streak: 0,
-            questionCount: 1,
-            currentAnswer: 0,
-            answeredCurrent: false
-        };
+  </div>
 
-        function randomNumber(max) {
-            return Math.floor(Math.random() * max) + 1;
-        }
-
-        function generateQuestion() {
-            const max = ranges[difficultyEl.value];
-            const a = randomNumber(max);
-            const b = randomNumber(max);
-            const op = operationEl.value;
-            let text = '';
-
-            if (op === 'add') {
-                game.currentAnswer = a + b;
-                text = `${a} + ${b} = ?`;
-            } else if (op === 'subtract') {
-                const larger = Math.max(a, b);
-                const smaller = Math.min(a, b);
-                game.currentAnswer = larger - smaller;
-                text = `${larger} − ${smaller} = ?`;
-            } else {
-                game.currentAnswer = a * b;
-                text = `${a} × ${b} = ?`;
-            }
-
-            game.answeredCurrent = false;
-            problemEl.textContent = text;
-            answerEl.value = '';
-            answerEl.focus();
-            setMessage('Solve this one!', 'muted');
-            refreshStats();
-        }
-
-        function setMessage(text, tone) {
-            messageEl.textContent = text;
-            messageEl.className = tone;
-        }
-
-        function refreshStats() {
-            scoreEl.textContent = game.score;
-            streakEl.textContent = game.streak;
-            questionCountEl.textContent = game.questionCount;
-        }
-
-        function checkAnswer() {
-            if (game.answeredCurrent) {
-                setMessage('You already answered. Press Next Question!', 'muted');
-                return;
-            }
-
-            const userAnswer = Number(answerEl.value);
-            if (answerEl.value.trim() === '' || Number.isNaN(userAnswer)) {
-                setMessage('Please enter a number first 😊', 'bad');
-                return;
-            }
-
-            game.answeredCurrent = true;
-
-            if (userAnswer === game.currentAnswer) {
-                game.score += 10;
-                game.streak += 1;
-                setMessage('✅ Awesome! That is correct!', 'good');
-            } else {
-                game.streak = 0;
-                setMessage(`❌ Nice try! Correct answer: ${game.currentAnswer}`, 'bad');
-            }
-
-            refreshStats();
-        }
-
-        function nextQuestion() {
-            game.questionCount += 1;
-            generateQuestion();
-        }
-
-        function startNewGame() {
-            game = {
-                score: 0,
-                streak: 0,
-                questionCount: 1,
-                currentAnswer: 0,
-                answeredCurrent: false
-            };
-            generateQuestion();
-            setMessage('New game started. You can do it! 💪', 'good');
-        }
-
-        checkBtn.addEventListener('click', checkAnswer);
-        nextBtn.addEventListener('click', nextQuestion);
-        newGameBtn.addEventListener('click', startNewGame);
-
-        answerEl.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter') {
-                checkAnswer();
-            }
-        });
-
-        operationEl.addEventListener('change', startNewGame);
-        difficultyEl.addEventListener('change', startNewGame);
-
-        startNewGame();
-    </script>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>
