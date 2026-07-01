@@ -3343,6 +3343,96 @@ let wanted = 0, wantedCD = 0, crimeCD = 0;
 let bustTimer = 0, copsOnYou = false;   // on-foot arrest timer + escape (broke-contact) tracking
 let holdup = null, getaway = 0;         // active store holdup + clean-getaway bonus window
 let job = null;                         // active on-demand phone job
+// ---------- ragdoll physics ----------
+// lightweight spring/tumble ragdoll (no physics engine, no rigid-body constraints): the character's
+// root free-falls under gravity and bounces/settles on the ground, while every limb joint gets its own
+// damped spring pulling it toward a relaxed pose. Cheap enough to run several at once, and reads as
+// "a body actually falling" for deaths, car hits, explosions and punch knockdowns. Reuses the SAME
+// mesh/rig the character was already using (no cloning, except the player who needs their real rig
+// free to respawn immediately). Own PRNG so combat variety never touches the seeded city/economy stream.
+const ragRng = mulberry32(0xBA6D011E);
+const rrand = (a, b) => a + ragRng() * (b - a);
+const ragdolls = [];
+const RAG_G = 22;                                    // gravity (u/s^2) — a bit punchier than real-world, reads better at speed
+const RAG_REST = { legL: 0.35, legR: 0.35, armL: -0.55, armR: -0.55, kneeL: 0.7, kneeR: 0.7 };   // relaxed "sprawled" pose
+const RAG_LIMBS = ["legL", "legR", "armL", "armR", "kneeL", "kneeR"];
+function spawnRagdoll(parts, x, y, z, heading, impulse, kind, opts) {
+  opts = opts || {};
+  const r = {
+    group: parts.group, legL: parts.legL, legR: parts.legR, armL: parts.armL, armR: parts.armR, kneeL: parts.kneeL, kneeR: parts.kneeR,
+    x, y: y + 0.02, z,
+    vx: impulse.vx || 0, vy: impulse.vy || 0, vz: impulse.vz || 0,
+    rx: 0, ry: heading || 0, rz: 0,
+    wx: rrand(-2.6, 2.6), wy: rrand(-1.6, 1.6), wz: rrand(-2.6, 2.6),
+    limbW: { legL: rrand(-4, 4), legR: rrand(-4, 4), armL: rrand(-5, 5), armR: rrand(-5, 5), kneeL: rrand(-3, 3), kneeR: rrand(-3, 3) },
+    t: 0, settleT: 0, mode: "tumble", fadeT: 0, getupT: 0, kind: kind, npc: opts.npc || null,
+  };
+  const kick = clamp(Math.hypot(r.vx, r.vy, r.vz) * 0.35, 0.4, 3.2);   // harder hits flail harder
+  r.wx *= kick; r.wy *= kick; r.wz *= kick;
+  for (const k of RAG_LIMBS) r.limbW[k] *= kick;
+  ragdolls.push(r);
+  return r;
+}
+function updateRagdolls(dt) {
+  for (let i = ragdolls.length - 1; i >= 0; i--) {
+    const r = ragdolls[i];
+    r.t += dt;
+    if (r.mode === "tumble" || r.mode === "settled") {
+      r.vy -= RAG_G * dt;
+      r.x += r.vx * dt; r.y += r.vy * dt; r.z += r.vz * dt;
+      const gy = groundY(r.x, r.z) + 0.06;
+      let grounded = false;
+      if (r.y <= gy) {
+        r.y = gy; grounded = true;
+        r.vy = r.vy < -0.6 ? -r.vy * 0.26 : 0;                 // small bounce, dies out fast
+        const fr = Math.exp(-7 * dt);
+        r.vx *= fr; r.vz *= fr;
+        r.wx *= Math.exp(-6 * dt); r.wy *= Math.exp(-6 * dt); r.wz *= Math.exp(-6 * dt);
+      } else {
+        r.vx *= Math.exp(-0.25 * dt); r.vz *= Math.exp(-0.25 * dt);   // light air drag
+      }
+      r.rx += r.wx * dt; r.ry += r.wy * dt; r.rz += r.wz * dt;
+      r.wx *= Math.exp(-1.4 * dt); r.wy *= Math.exp(-1.4 * dt); r.wz *= Math.exp(-1.4 * dt);
+      for (const k of RAG_LIMBS) {
+        const part = r[k], rest = RAG_REST[k];
+        const spring = -(part.rotation.x - rest) * 10;
+        r.limbW[k] = (r.limbW[k] + spring * dt) * Math.exp(-3.4 * dt);
+        part.rotation.x = clamp(part.rotation.x + r.limbW[k] * dt, -2.2, 2.2);
+      }
+      r.group.position.set(r.x, r.y, r.z);
+      r.group.rotation.set(r.rx, r.ry, r.rz);
+      const slow = r.vx * r.vx + r.vy * r.vy + r.vz * r.vz < 0.04 && r.wx * r.wx + r.wy * r.wy + r.wz * r.wz < 0.3;
+      r.settleT = (grounded && slow) ? r.settleT + dt : 0;
+      if (r.mode === "tumble" && r.settleT > 0.18) r.mode = "settled";
+      if (r.mode === "settled") {
+        if (r.kind === "stagger") { if (r.settleT > 0.85) { r.mode = "getup"; r.getupT = 0; } }
+        else if (r.t > 3.2) { r.mode = "fade"; r.fadeT = 0; }
+      }
+    } else if (r.mode === "getup") {                            // punch knockdown: climb back to your feet
+      r.getupT += dt;
+      const T = 0.55, k = clamp(r.getupT / T, 0, 1), ease = 1 - Math.pow(1 - k, 2);
+      r.rx *= (1 - ease); r.rz *= (1 - ease);
+      const gy = groundY(r.x, r.z);
+      r.y = gy + (r.y - gy) * (1 - ease);
+      r.group.position.set(r.x, gy, r.z);
+      r.group.rotation.set(r.rx, r.ry, r.rz);
+      for (const k of RAG_LIMBS) r[k].rotation.x *= (1 - ease);
+      if (k >= 1) {
+        r.group.rotation.set(0, r.ry, 0);
+        for (const k of RAG_LIMBS) r[k].rotation.x = 0;
+        if (r.npc) { r.npc.ragdoll = null; r.npc.x = r.x; r.npc.z = r.z; r.npc.h = r.ry; r.npc.flee = 0.4; r.npc.timer = 0.6; }
+        ragdolls.splice(i, 1);
+      }
+    } else if (r.mode === "fade") {                              // corpse: settle a beat, then sink away
+      r.fadeT += dt;
+      const T = 0.9, k = clamp(1 - r.fadeT / T, 0.001, 1);
+      r.group.scale.setScalar(k);
+      r.group.position.y = r.y - (1 - k) * 0.5;
+      if (r.fadeT >= T) { scene.remove(r.group); ragdolls.splice(i, 1); }
+    }
+  }
+}
+
 // ---------- health / damage / respawn ----------
 let health = 100, hurtCD = 0, hitCD = 0, fuel = 100, fuelWarned = false;
 function hurt(amount) {
@@ -3356,6 +3446,13 @@ function wasted() {
   state.money = Math.max(0, state.money - fine);
   toast(STR.wasted(fine)); AudioSys.play("boom", 0.8); flash("#ff3b3b", 0.5); buzz([0, 80, 60, 140]);
   addShake(1.0); freezeFrame(0.12);
+  if (!driving) {   // leave a tumbling corpse at the death spot (a throwaway clone — the real hero rig
+    const corpse = articulatedPerson(HERO_PAL);          // teleports to respawn immediately below, unaffected)
+    scene.add(corpse.group);
+    const bh = player.h + Math.PI;
+    spawnRagdoll(corpse, player.x, player.y, player.z, player.h,
+      { vx: Math.sin(bh) * rrand(0.6, 1.8), vy: rrand(3, 5.5), vz: Math.cos(bh) * rrand(0.6, 1.8) }, "corpse");
+  }
   if (driving) { driving.speed = 0; driving.lat = 0; driving = null; hero.group.visible = true; }
   const sp = homeSpawn() || PLAZA;                      // respawn at an owned property, else the plaza
   player.x = sp.x; player.z = sp.z + 12; player.y = CURB; player.speed = 0;
@@ -3364,9 +3461,9 @@ function wasted() {
   for (const p of police) { p.active = false; p.mesh.position.set(0, -9999, 0); }
   clearChaseUnits();
   // shake off the rival's hit-squad on death; if it was the showdown, the boss bows out for now
-  for (const g of nemGoons) if (!g.boss) { g.alive = false; g.mesh.visible = false; }
+  for (const g of nemGoons) if (!g.boss) { g.alive = false; if (g.mesh) g.mesh.visible = false; }
   NEM.squadOut = false; NEM.squadCD = Math.max(NEM.squadCD, rr(12, 20));
-  if (NEM.showdown) { NEM.showdown = false; NEM.flee = false; nemBoss.alive = false; nemBoss.mesh.visible = false; nemCar.active = false; nemCar.mesh.visible = false; showBossBar(false); NEM.grudge = 70; }
+  if (NEM.showdown) { NEM.showdown = false; NEM.flee = false; nemBoss.alive = false; if (nemBoss.mesh) nemBoss.mesh.visible = false; nemCar.active = false; nemCar.mesh.visible = false; showBossBar(false); NEM.grudge = 70; }
   save();
 }
 function heatActive() {
@@ -3574,11 +3671,15 @@ function doPunch() {
     crook.active = false; crook.cd = rr(35, 60); save(); return;
   }
   let best = null, bd = 6;
-  for (const n of npcs) { const d = dist2(hx, hz, n.x, n.z); if (d < bd) { bd = d; best = n; } }
+  for (const n of npcs) { if (n.ragdoll) continue; const d = dist2(hx, hz, n.x, n.z); if (d < bd) { bd = d; best = n; } }
   if (best) {
-    best.flee = 1.6; best.h = Math.atan2(best.x - player.x, best.z - player.z);
-    best.x += Math.sin(best.h) * 0.7; best.z += Math.cos(best.h) * 0.7;
+    best.flee = 1.6; const dh = Math.atan2(best.x - player.x, best.z - player.z); best.h = dh;
     burst(best.x, 1.0, best.z, 6, 0.8, 1.2, 0.4, 0.95, 0.85, 0.6); addShake(0.12);
+    // knocked clean off their feet — a brief stagger ragdoll, then they climb back up and carry on
+    best.ragdoll = spawnRagdoll(
+      { group: best.mesh, legL: best.legL, legR: best.legR, armL: best.armL, armR: best.armR, kneeL: best.kneeL, kneeR: best.kneeR },
+      best.x, groundY(best.x, best.z), best.z, dh,
+      { vx: Math.sin(dh) * rrand(2, 3.4), vy: rrand(2, 3.4), vz: Math.cos(dh) * rrand(2, 3.4) }, "stagger", { npc: best });
   }
 }
 
@@ -3639,6 +3740,7 @@ function doShoot() {
     const ax = Math.sin(player.h + sp), az = Math.cos(player.h + sp);
     let best = null, bestT = w.range, bestCar = null;
     for (const n of npcs) {
+      if (n.ragdoll) continue;
       const dx = n.x - player.x, dz = n.z - player.z, t = dx * ax + dz * az;
       if (t < 1 || t > bestT) continue;
       if (Math.abs(dx * az - dz * ax) > 1.5) continue;
@@ -3669,13 +3771,16 @@ function doShoot() {
     let hitNemCar = false;
     if (nemCar.active) { const dx = nemCar.x - player.x, dz = nemCar.z - player.z, t = dx * ax + dz * az; if (t >= 1 && t <= bestT && Math.abs(dx * az - dz * ax) <= 2.4) { hitNemCar = true; bestNem = null; bestGang = null; bestCar = null; best = null; } }
     if (hitNemCar) damageNemCar(20);
-    else if (bestNem) damageNem(bestNem, 34);
-    else if (bestGang) damageGangster(bestGang, 34);
+    else if (bestNem) damageNem(bestNem, 34, { vx: ax * rrand(2.5, 4.5), vy: rrand(2.5, 4.5), vz: az * rrand(2.5, 4.5) });
+    else if (bestGang) damageGangster(bestGang, 34, { vx: ax * rrand(2.5, 4.5), vy: rrand(2.5, 4.5), vz: az * rrand(2.5, 4.5) });
     else if (bestCar) damageCar(bestCar, 24);
-    else if (best) {
-      best.flee = 2.4; best.h = Math.atan2(best.x - player.x, best.z - player.z);
-      best.x += ax * 1.3; best.z += az * 1.3;
+    else if (best) {   // civilians go down in one hit — a sharp directional ragdoll, then gone for good
       burst(best.x, 1.0, best.z, 9, 1.0, 1.5, 0.5, 0.95, 0.3, 0.25);
+      spawnRagdoll(
+        { group: best.mesh, legL: best.legL, legR: best.legR, armL: best.armL, armR: best.armR, kneeL: best.kneeL, kneeR: best.kneeR },
+        best.x, groundY(best.x, best.z), best.z, best.h,
+        { vx: ax * rrand(2.5, 4.5), vy: rrand(2.5, 4.5), vz: az * rrand(2.5, 4.5) }, "corpse");
+      const idx = npcs.indexOf(best); if (idx >= 0) npcs.splice(idx, 1);
     }
   }
   registerCrime();   // firing in public draws police heat
@@ -3831,12 +3936,16 @@ function updateJob(dt) {
   else if (job.id === "takeover") { jobMarker.rotation.y += 2 * dt; if (GANGS[job.gang].captured) { winJob(2500); return; } }
   if (job.t <= 0) failJob("⏰ " + job.label + " failed");
 }
+function blastImpulse(gx, gz, x, z, lo, hi) {                 // outward-from-blast direction, scaled to a launch speed
+  const dx = gx - x, dz = gz - z, d = Math.hypot(dx, dz) || 1;
+  return { vx: dx / d * rrand(lo, hi), vy: rrand(lo, hi), vz: dz / d * rrand(lo, hi) };
+}
 function explodeAt(x, z, r) {                                 // an AoE blast (RPG / grenade impact)
   let hitAny = false;
   for (const c of traffic) if (!c.dead && dist2(c.x, c.z, x, z) < r * r) { explodeCar(c); hitAny = true; }
   for (const c of police) if (c.active && !c.dead && dist2(c.x, c.z, x, z) < r * r) { explodeCar(c); hitAny = true; }
-  for (const g of gangsters) if (g.alive && dist2(g.x, g.z, x, z) < r * r) killGangster(g);   // blast catches gangsters
-  for (const g of nemGoons) if (g.alive && dist2(g.x, g.z, x, z) < r * r) damageNem(g, g.boss ? 150 : 999);   // and the boss's crew
+  for (const g of gangsters) if (g.alive && dist2(g.x, g.z, x, z) < r * r) killGangster(g, blastImpulse(g.x, g.z, x, z, 4, 7));   // blast catches gangsters
+  for (const g of nemGoons) if (g.alive && dist2(g.x, g.z, x, z) < r * r) damageNem(g, g.boss ? 150 : 999, blastImpulse(g.x, g.z, x, z, 4, 7));   // and the boss's crew
   if (nemCar.active && dist2(nemCar.x, nemCar.z, x, z) < r * r) damageNemCar(150);   // blast the getaway car
   if (chopper.active && !chopper.dead && dist2(chopper.x, chopper.z, x, z) < (r + 2) * (r + 2)) { damageChopper(120); hitAny = true; }
   if (tank.active && !tank.dead && dist2(tank.x, tank.z, x, z) < (r + 2) * (r + 2)) { damageTank(120); hitAny = true; }
@@ -3847,7 +3956,17 @@ function explodeAt(x, z, r) {                                 // an AoE blast (R
     burst(x, 1.7, z, 22, 2.2, 5.2, 1.4, 0.28, 0.28, 0.28);
     AudioSys.play("boom", 1.0); addShake(0.95); flash("#ff7a33", 0.34);
     freezeFrame(0.045); kickCam(rr(-0.4, 0.4), 0.45, rr(-0.4, 0.4));
-    for (const n of npcs) if (dist2(n.x, n.z, x, z) < r * r * 1.6) { n.flee = 3; n.h = Math.atan2(n.x - x, n.z - z); n.x += Math.sin(n.h); n.z += Math.cos(n.h); }
+    const npcKills = [];
+    for (const n of npcs) {
+      const dd = dist2(n.x, n.z, x, z);
+      if (dd > r * r * 1.6 || n.ragdoll) continue;
+      if (dd < r * r * 0.7) {                                // caught in the inner blast radius — doesn't get up
+        npcKills.push(n);
+        spawnRagdoll({ group: n.mesh, legL: n.legL, legR: n.legR, armL: n.armL, armR: n.armR, kneeL: n.kneeL, kneeR: n.kneeR },
+          n.x, groundY(n.x, n.z), n.z, n.h, blastImpulse(n.x, n.z, x, z, 4.5, 7.5), "corpse");
+      } else { n.flee = 3; n.h = Math.atan2(n.x - x, n.z - z); n.x += Math.sin(n.h); n.z += Math.cos(n.h); }
+    }
+    for (const n of npcKills) { const idx = npcs.indexOf(n); if (idx >= 0) npcs.splice(idx, 1); }
     const pd = dist2(player.x, player.z, x, z);
     if (!driving && pd < r * r) hurt(Math.round(36 * (1 - Math.sqrt(pd) / (r + 1))));
     addChaos(60);
@@ -3871,15 +3990,20 @@ function updateExplosions(dt) {
     }
   }
 }
-function damageGangster(g, dmg) {
+function damageGangster(g, dmg, impulse) {
   if (!g.alive) return;
   g.hp -= dmg;
   burst(g.x, 1.0, g.z, 8, 1.0, 1.4, 0.45, 0.95, 0.3, 0.3);
-  if (g.hp <= 0) killGangster(g);
+  if (g.hp <= 0) killGangster(g, impulse);
 }
-function killGangster(g) {
+function killGangster(g, impulse) {
   if (!g.alive) return;
-  g.alive = false; g.respawn = 6; g.mesh.visible = false;
+  g.alive = false; g.respawn = 6;
+  // hand the mesh/rig off to the ragdoll system — it now owns the fall; a fresh one is built on respawn
+  spawnRagdoll({ group: g.mesh, legL: g.legL, legR: g.legR, armL: g.armL, armR: g.armR, kneeL: g.kneeL, kneeR: g.kneeR },
+    g.x, groundY(g.x, g.z), g.z, g.h,
+    impulse || { vx: rrand(-1.5, 1.5), vy: rrand(2.5, 4), vz: rrand(-1.5, 1.5) }, "corpse");
+  g.mesh = null;
   burst(g.x, 0.9, g.z, 18, 1.7, 2.1, 0.6, 0.9, 0.3, 0.3); addChaos(40);
   AudioSys.play("blip", 0.5); addShake(0.28); freezeFrame(0.035);   // crisp kill confirm
   const G = GANGS[g.gang];
@@ -3905,7 +4029,9 @@ function updateGangs(dt) {
       if (g.respawn <= 0 && !G.captured) {
         g.x = clamp(G.x + (Math.random() - 0.5) * G.r, -HALF + 4, HALF - 4);
         g.z = clamp(G.z + (Math.random() - 0.5) * G.r, -HALF + 4, HALF - 4);
-        g.hp = 100; g.alive = true; g.mesh.visible = true;
+        g.hp = 100; g.alive = true;
+        if (!g.mesh) { const w = makeWalker(gangWalkerGeos[G.pal]); scene.add(w.group); g.mesh = w.group; g.legL = w.legL; g.legR = w.legR; g.armL = w.armL; g.armR = w.armR; g.kneeL = w.kneeL; g.kneeR = w.kneeR; }
+        g.mesh.visible = true;
       }
       continue;
     }
@@ -3915,7 +4041,10 @@ function updateGangs(dt) {
     if (aggro) {
       g.h = lerpAngle(g.h, Math.atan2(dx, dz), 1 - Math.exp(-4 * dt));
       if (d > 6) { const sp = 4.2; g.x += Math.sin(g.h) * sp * dt; g.z += Math.cos(g.h) * sp * dt; g.walkPhase += sp * dt * 2.6; moving = true; }
-      if (driving && Math.abs(driving.speed) > 8 && d < 3) { killGangster(g); continue; }   // run them over
+      if (driving && Math.abs(driving.speed) > 8 && d < 3) {   // run them over — sent flying in the direction you were driving
+        killGangster(g, { vx: Math.sin(driving.h) * rrand(3.5, 6), vy: rrand(3.5, 6.5), vz: Math.cos(driving.h) * rrand(3.5, 6) });
+        continue;
+      }
       g.shootCD -= dt;
       if (g.shootCD <= 0 && d < 36 && !dlgLines) {
         g.shootCD = rr(0.8, 1.6);
@@ -3988,7 +4117,7 @@ let nemBoss = null;
   const mk = boss => {
     const w = makeWalker(boss ? bossGeo : goonGeo); w.group.visible = false; scene.add(w.group);
     return { mesh: w.group, legL: w.legL, legR: w.legR, armL: w.armL, armR: w.armR, kneeL: w.kneeL, kneeR: w.kneeR,
-      hp: 0, alive: false, shootCD: 0, x: 0, z: 0, h: 0, walkPhase: 0, boss: !!boss };
+      hp: 0, alive: false, shootCD: 0, x: 0, z: 0, h: 0, walkPhase: 0, boss: !!boss, geo: boss ? bossGeo : goonGeo, scale: boss ? 1.14 : 1 };
   };
   for (let i = 0; i < 8; i++) nemGoons.push(mk(false));
   nemBoss = mk(true); nemBoss.mesh.scale.set(1.14, 1.14, 1.14); nemGoons.push(nemBoss);   // boss shares the array so weapons hit it
@@ -4017,7 +4146,9 @@ function spawnNemSquad() {
     if (g.boss || g.alive || placed >= n) continue;
     const a = Math.random() * 6.2832, r = 26 + Math.random() * 14;
     g.x = clamp(px + Math.cos(a) * r, WB.x0, WB.x1); g.z = clamp(pz + Math.sin(a) * r, WB.z0, WB.z1);
-    g.hp = 70; g.alive = true; g.mesh.visible = true; g.shootCD = rr(0.5, 1.5); g.h = Math.atan2(px - g.x, pz - g.z); g.walkPhase = Math.random() * 6.28;
+    g.hp = 70; g.alive = true;
+    if (!g.mesh) { const w = makeWalker(g.geo); scene.add(w.group); g.mesh = w.group; g.legL = w.legL; g.legR = w.legR; g.armL = w.armL; g.armR = w.armR; g.kneeL = w.kneeL; g.kneeR = w.kneeR; }
+    g.mesh.visible = true; g.shootCD = rr(0.5, 1.5); g.h = Math.atan2(px - g.x, pz - g.z); g.walkPhase = Math.random() * 6.28;
     placed++;
   }
   if (placed) { NEM.squadOut = true; toast("⚠️ " + NEM.name + " sent his crew after you!"); AudioSys.play("blip", 0.6); flash("#ff5a3a", 0.18); buzz([0, 40, 30, 60]); }
@@ -4027,9 +4158,17 @@ function startNemShowdown() {
   const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
   NEM.bossMaxHp = 520 + NEM.defeated * 240;
   nemBoss.x = clamp(px, WB.x0, WB.x1); nemBoss.z = clamp(pz + 32, WB.z0, WB.z1);
-  nemBoss.hp = NEM.bossMaxHp; nemBoss.alive = true; nemBoss.mesh.visible = true; nemBoss.shootCD = 1.2; nemBoss.h = Math.PI; nemBoss.walkPhase = 0;
+  nemBoss.hp = NEM.bossMaxHp; nemBoss.alive = true;
+  if (!nemBoss.mesh) { const w = makeWalker(nemBoss.geo); w.group.scale.setScalar(nemBoss.scale); scene.add(w.group); nemBoss.mesh = w.group; nemBoss.legL = w.legL; nemBoss.legR = w.legR; nemBoss.armL = w.armL; nemBoss.armR = w.armR; nemBoss.kneeL = w.kneeL; nemBoss.kneeR = w.kneeR; }
+  nemBoss.mesh.visible = true; nemBoss.shootCD = 1.2; nemBoss.h = Math.PI; nemBoss.walkPhase = 0;
   let guards = 0;
-  for (const g of nemGoons) { if (g.boss || g.alive || guards >= 3) continue; const a = Math.random() * 6.28; g.x = clamp(nemBoss.x + Math.cos(a) * 8, WB.x0, WB.x1); g.z = clamp(nemBoss.z + Math.sin(a) * 8, WB.z0, WB.z1); g.hp = 90; g.alive = true; g.mesh.visible = true; g.shootCD = rr(0.4, 1.2); g.walkPhase = Math.random() * 6.28; guards++; }
+  for (const g of nemGoons) {
+    if (g.boss || g.alive || guards >= 3) continue;
+    const a = Math.random() * 6.28; g.x = clamp(nemBoss.x + Math.cos(a) * 8, WB.x0, WB.x1); g.z = clamp(nemBoss.z + Math.sin(a) * 8, WB.z0, WB.z1);
+    g.hp = 90; g.alive = true;
+    if (!g.mesh) { const w = makeWalker(g.geo); scene.add(w.group); g.mesh = w.group; g.legL = w.legL; g.legR = w.legR; g.armL = w.armL; g.armR = w.armR; g.kneeL = w.kneeL; g.kneeR = w.kneeR; }
+    g.mesh.visible = true; g.shootCD = rr(0.4, 1.2); g.walkPhase = Math.random() * 6.28; guards++;
+  }
   toast("☠ " + NEM.name + ': "You want this city? COME TAKE IT!"'); AudioSys.play("boom", 0.7); flash("#ff3b1f", 0.34); addShake(1.0); buzz([0, 60, 40, 100]);
   showBossBar(true); updateBossBar();
 }
@@ -4054,7 +4193,7 @@ function damageNemCar(dmg) {
 function nemBossDefeated() {
   NEM.showdown = false; NEM.flee = false; NEM.defeated++;
   nemCar.active = false; nemCar.mesh.visible = false;
-  for (const g of nemGoons) { g.alive = false; g.mesh.visible = false; }
+  for (const g of nemGoons) { g.alive = false; if (g.mesh) g.mesh.visible = false; }
   const reward = earn(5000 + NEM.defeated * 2500);
   state.bossWins = NEM.defeated;
   toast("👑 YOU TOOK DOWN " + NEM.name.toUpperCase() + "!  +$" + reward); AudioSys.play("jingle", 1.0); flash("#ffe24a", 0.5); addShake(1.3); freezeFrame(0.16); buzz([0, 80, 60, 140]);
@@ -4062,7 +4201,7 @@ function nemBossDefeated() {
   NEM.grudge = 24; NEM.tier = 1; NEM.intro = true; NEM.squadCD = 30;   // he comes back angrier (NG+)
   save();
 }
-function damageNem(g, dmg) {
+function damageNem(g, dmg, impulse) {
   if (!g.alive) return;
   g.hp -= dmg;
   burst(g.x, 1.0, g.z, g.boss ? 12 : 8, 1.0, 1.4, 0.45, 1.0, g.boss ? 0.5 : 0.3, 0.3);
@@ -4070,11 +4209,15 @@ function damageNem(g, dmg) {
     if (NEM.showdown && !NEM.flee && g.hp <= NEM.bossMaxHp * 0.35) { g.hp = NEM.bossMaxHp * 0.35; startBossFlee(); return; }   // bail to the getaway car
     updateBossBar();
   }
-  if (g.hp <= 0) killNem(g);
+  if (g.hp <= 0) killNem(g, impulse);
 }
-function killNem(g) {
+function killNem(g, impulse) {
   if (!g.alive) return;
-  g.alive = false; g.mesh.visible = false;
+  g.alive = false;
+  spawnRagdoll({ group: g.mesh, legL: g.legL, legR: g.legR, armL: g.armL, armR: g.armR, kneeL: g.kneeL, kneeR: g.kneeR },
+    g.x, groundY(g.x, g.z), g.z, g.h,
+    impulse || { vx: rrand(-1.5, 1.5), vy: rrand(2.5, 4), vz: rrand(-1.5, 1.5) }, "corpse");
+  g.mesh = null;
   if (g.boss) { burst(g.x, 1.2, g.z, 46, 3.4, 5.0, 0.9, 1.0, 0.55, 0.2); AudioSys.play("boom", 1.0); nemBossDefeated(); return; }
   burst(g.x, 0.9, g.z, 18, 1.7, 2.1, 0.6, 0.9, 0.3, 0.3); AudioSys.play("blip", 0.5); addShake(0.28); freezeFrame(0.035); addChaos(70);
   if (NEM.squadOut && nemSquadAlive() === 0) { NEM.squadOut = false; NEM.squadCD = rr(26, 42); const r = earn(300 + NEM.tier * 150); toast("💪 Crew wiped out  +$" + r); AudioSys.play("cash", 0.7); }
@@ -4104,7 +4247,10 @@ function updateNemesis(dt) {
     let moving = false;
     const spd = g.boss ? 3.6 : 4.6;
     if (d > (g.boss ? 8 : 6)) { g.x += Math.sin(g.h) * spd * dt; g.z += Math.cos(g.h) * spd * dt; g.walkPhase += spd * dt * 2.6; moving = true; }
-    if (driving && Math.abs(driving.speed) > 8 && d < 3.2 && !g.boss) { killNem(g); continue; }   // run over goons (boss shrugs it off)
+    if (driving && Math.abs(driving.speed) > 8 && d < 3.2 && !g.boss) {   // run over goons (boss shrugs it off)
+      killNem(g, { vx: Math.sin(driving.h) * rrand(3.5, 6), vy: rrand(3.5, 6.5), vz: Math.cos(driving.h) * rrand(3.5, 6) });
+      continue;
+    }
     g.shootCD -= dt;
     if (g.shootCD <= 0 && d < 40 && !dlgLines) {
       g.shootCD = g.boss ? rr(0.5, 1.0) : rr(0.8, 1.7);
@@ -5447,6 +5593,7 @@ function update(dt) {
   // pedestrians
   const npcFx = driving ? driving.x : player.x, npcFz = driving ? driving.z : player.z;
   for (const n of npcs) {
+    if (n.ragdoll) continue;   // knocked down — fully owned by updateRagdolls() until they climb back up
     // ambient pedestrians recycle to stay around you, so the streets are lively wherever you roam.
     // Snap each onto the SIDEWALK of a nearby road so they actually line the streets you see,
     // rather than scattering into block interiors / behind buildings where they're wasted.
@@ -5478,10 +5625,14 @@ function update(dt) {
       n.h = Math.atan2(n.x - driving.x, n.z - driving.z);
     }
     if (driving && Math.abs(driving.speed) > 8 && dist2(n.x, n.z, driving.x, driving.z) < 9) {
-      n.flee = 1.6;
-      n.h = Math.atan2(n.x - driving.x, n.z - driving.z);
-      n.x += Math.sin(n.h) * 1.1; n.z += Math.cos(n.h) * 1.1;
+      const dh = driving.h;   // hit hard enough to kill — sent flying in the direction you were driving
+      spawnRagdoll({ group: n.mesh, legL: n.legL, legR: n.legR, armL: n.armL, armR: n.armR, kneeL: n.kneeL, kneeR: n.kneeR },
+        n.x, groundY(n.x, n.z), n.z, n.h,
+        { vx: Math.sin(dh) * rrand(3.5, 6), vy: rrand(3.5, 6.5), vz: Math.cos(dh) * rrand(3.5, 6) }, "corpse");
+      burst(n.x, 1.0, n.z, 10, 1.2, 1.8, 0.5, 0.4, 0.2, 0.15); addShake(0.22);
       registerCrime();
+      n._dead = true;
+      continue;
     }
     n.timer -= dt;
     if (n.crossCD > 0) n.crossCD -= dt;
@@ -5536,6 +5687,8 @@ function update(dt) {
     n.mesh.rotation.y = n.h;
     n.mesh.rotation.z = stepping ? Math.sin(n.walkPhase) * 0.025 : 0;
   }
+  for (let i = npcs.length - 1; i >= 0; i--) if (npcs[i]._dead) npcs.splice(i, 1);   // remove anyone killed this frame
+  updateRagdolls(dt);
 
   // income + missions
   state.money += incomeRate() / 60 * dt;
@@ -5835,6 +5988,9 @@ globalThis.__palmCity = {
   THREE, scene, camera, renderer,
   freeze: v => { paused = v; }, render: () => renderFrame(),
   state, player, cars, police, traffic, atms, helis, boats, planes, gangsters, allies, npcs, GANGS, SHOPS, AIRPORT, update, beginPlay, advanceDialogue,
+  ragdolls, doPunch: () => doPunch(), explodeAt: (x, z, r) => explodeAt(x, z, r), wasted: () => wasted(),
+  forceDrive: c => { driving = c; if (c) { c.speed = c.speed || 0; hero.group.visible = false; } else hero.group.visible = true },
+  hero,
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
   applyGfx: m => applyGfx(m), gfx: () => ({ mode: gfxMode, prCap: PR_CAP, msaa: msaaSamples, pr: renderer.getPixelRatio() }),
   trafPhase: () => trafPhase, setTraf: p => { trafPhase = p; applyTrafPhase(); },
