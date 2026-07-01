@@ -3671,7 +3671,7 @@ function updateChaseUnits(dt, heat, px, pz) {
   }
 }
 // ---------- melee: punch to fight back / take down crooks on foot ----------
-let actP = false, punchCD = 0, punchT = 0, gunKickT = 0, kickT = 0, comboStep = 0, comboT = 0, hostileNear = false;
+let actP = false, punchCD = 0, punchT = 0, gunKickT = 0, kickT = 0, comboStep = 0, comboT = 0, hostileNear = false, punchBufferT = 0;
 function doPunch() {
   if (driving) return;
   if (inside) { if (intTheme === "bowling") doBowl(); return; }   // BOWL inside the alley; no fists indoors
@@ -5579,10 +5579,18 @@ function update(dt) {
   const a = actA, b = actB, pn = actP; actA = false; actB = false; actP = false;
   if (a && !dlgLines && !garageOpen && !statsOpen && !tutOpen && !styleOpen && !arcadeOpen) doActionA();
   if (b && !dlgLines && !garageOpen && !statsOpen && !tutOpen && !styleOpen && !arcadeOpen) doActionB();
-  if (pn && !dlgLines && !garageOpen && !statsOpen && !tutOpen && !styleOpen && !arcadeOpen) doPunch();
+  if (pn && !dlgLines && !garageOpen && !statsOpen && !tutOpen && !styleOpen && !arcadeOpen) {
+    // a melee swing thrown mid-recovery (e.g. right after the combo's slower finishing kick) used to be
+    // dropped in total silence — buffer it briefly instead so it fires the instant the cooldown clears,
+    // like any other combo-driven action game, rather than eating the input.
+    if (!driving && !inside && !armed() && punchCD > 0) punchBufferT = 0.25;
+    else doPunch();
+  }
+  if (punchBufferT > 0 && !driving && !inside && !armed() && punchCD <= 0) { punchBufferT = 0; doPunch(); }
   // health regen + combat cooldowns
   if (hitCD > 0) hitCD -= dt;
   if (punchCD > 0) punchCD -= dt;
+  if (punchBufferT > 0) punchBufferT -= dt;
   if (shootCD > 0) shootCD -= dt;
   if (punchT > 0) punchT -= dt;
   if (inside && intTheme === "bowling") updateBowling(dt);
@@ -6316,7 +6324,8 @@ globalThis.__palmCity = {
   forceDrive: c => { driving = c; if (c) { c.speed = c.speed || 0; hero.group.visible = false; } else hero.group.visible = true },
   hero, debugInput: () => ({ fuel, dry: fuel <= 0, dlgLines: !!dlgLines, braking: braking(), inp: readInput(), keys: [...keys] }),
   knockableProps, activeProps, moveObj: (o, dx, dz, r) => moveWithCollision(o, dx, dz, r), projPool,
-  combatDebug: () => ({ comboStep, comboT, kickT, punchT, hostileNear }),
+  combatDebug: () => ({ comboStep, comboT, kickT, punchT, hostileNear, punchBufferT, punchCD }),
+  pressPunch: () => { actP = true; },
   health: () => health,
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
   applyGfx: m => applyGfx(m), gfx: () => ({ mode: gfxMode, prCap: PR_CAP, msaa: msaaSamples, pr: renderer.getPixelRatio() }),
