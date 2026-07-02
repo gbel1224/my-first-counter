@@ -8,6 +8,8 @@ import { setAnisotropy, canvasTex, canvasNormalTex, speckle, buildWorldTextures 
 import { matPerson, personGeo, articulatedPerson, walkerGeos, makeWalker, HERO_PAL, NPC_PALS, npcGeos, npcWalkerGeos } from "./characters.js";
 import { initRagdolls, ragRng, rrand, ragdolls, RAG_G, spawnRagdoll, updateRagdolls } from "./ragdoll.js";
 import { initVehicles, wheelGeo, carGeo, bikeGeo, CAR_COLORS, makeCar, makeBike, makeHeli, makeBoat, makePlane } from "./vehicles.js";
+import { initProjectiles, projPool, fireProjectile, updateProjectiles, muzzleFlash, updateFlashes } from "./projectiles.js";
+import { initArcade, arcadeOpen, openArcade, closeArcade, updateArcade, ARC_BY_CAB } from "./arcade.js";
 
 // ---------- renderer / scene ----------
 const dom = id => document.getElementById(id);
@@ -1913,64 +1915,7 @@ function updateBowling(dt) {
   }
 }
 
-// ---------- arcade cabinets: canvas mini-games inside the bowling alley ----------
-const ARCADE_NAMES = { smash: "🐛 BUG SMASH", spin: "🎰 LUCKY SPIN", reflex: "⚡ QUICK REFLEX" };
-const SPIN_SYM = ["🍒", "🍋", "🔔", "⭐", "7️⃣", "💎"], SPIN_PAY = [120, 140, 180, 240, 600, 360];
-const ARC_BY_CAB = ["smash", "spin", "reflex", "smash"];
-let arcadeOpen = false, ag = null, as = {};
-const elArcade = dom("arcade"), acv = dom("arcadecanvas"), actx = acv.getContext("2d");
-const ARCW = 300, ARCH = 400;
-function openArcade(game) {
-  ag = game; arcadeOpen = true;
-  if (game === "smash") as = { time: 25, hits: 0, bugs: [], spawn: 0, done: false };
-  else if (game === "reflex") as = { round: 0, total: 0, phase: "wait", wait: 0.9 + Math.random() * 1.6, t: 0, done: false };
-  else as = { reels: [0, 0, 0], spinning: false, spinT: 0, msg: "Tap SPIN ($25)", done: false };
-  dom("actitle").textContent = ARCADE_NAMES[game]; dom("acinfo").textContent = "";
-  elArcade.style.display = "flex";
-}
-function closeArcade() { arcadeOpen = false; ag = null; elArcade.style.display = "none"; }
-function arcadeReward(amt, msg) { const got = earn(Math.max(0, amt)); dom("acinfo").textContent = msg + (amt > 0 ? "  +$" + got : ""); if (amt > 0) AudioSys.play("cash", 0.6); save(); }
-function resolveSpin() {
-  const [a, b, c] = as.reels; let win = 0;
-  if (a === b && b === c) { win = SPIN_PAY[a]; as.msg = "JACKPOT " + SPIN_SYM[a] + "!"; }
-  else if (a === b || b === c || a === c) { win = 45; as.msg = "Pair! Tap SPIN ($25)"; }
-  else as.msg = "No win — Tap SPIN ($25)";
-  if (win > 0) arcadeReward(win, as.msg);
-}
-function arcadeTap(x, y) {
-  if (as.done) { closeArcade(); return; }
-  if (ag === "smash") { for (let i = as.bugs.length - 1; i >= 0; i--) { const b = as.bugs[i]; if ((x - b.x) ** 2 + (y - b.y) ** 2 < b.r * b.r) { as.bugs.splice(i, 1); as.hits++; AudioSys.play("blip", 0.4); buzz(8); break; } } }
-  else if (ag === "reflex") {
-    if (as.phase === "wait") { as.t = 0; as.wait = 0.9 + Math.random() * 1.7; dom("acinfo").textContent = "Too early!"; AudioSys.play("blip", 0.3); }
-    else { const rt = Math.round(as.t * 1000); as.total += rt; as.round++; if (as.round >= 5) { const avg = as.total / 5; as.done = true; arcadeReward(Math.round((650 - avg) * 0.7), "Avg " + Math.round(avg) + "ms"); } else { as.phase = "wait"; as.t = 0; as.wait = 0.9 + Math.random() * 1.7; } }
-  } else if (ag === "spin") {
-    if (!as.spinning && x > ARCW / 2 - 60 && x < ARCW / 2 + 60 && y > ARCH - 90 && y < ARCH - 40) { if (state.money < 25) { as.msg = "Need $25"; return; } state.money -= 25; as.spinning = true; as.spinT = 1.3; as.msg = "…"; AudioSys.play("blip", 0.5); }
-  }
-}
-function updateArcade(dt) {
-  actx.fillStyle = "#0a0a12"; actx.fillRect(0, 0, ARCW, ARCH); actx.textAlign = "center";
-  if (ag === "smash") {
-    if (!as.done) { as.time -= dt; if (as.time <= 0) { as.done = true; arcadeReward(as.hits * 15, "Time! " + as.hits + " bugs"); } else { as.spawn -= dt; if (as.spawn <= 0) { as.spawn = 0.45 + Math.random() * 0.55; as.bugs.push({ x: 28 + Math.random() * (ARCW - 56), y: 50 + Math.random() * (ARCH - 120), ttl: 1.3, r: 24 }); } for (const b of as.bugs) b.ttl -= dt; as.bugs = as.bugs.filter(b => b.ttl > 0); } }
-    actx.fillStyle = "#9fe0ff"; actx.font = "bold 18px sans-serif"; actx.textAlign = "left"; actx.fillText("⏱ " + Math.max(0, Math.ceil(as.time)), 12, 26); actx.textAlign = "right"; actx.fillText("🐛 " + as.hits, ARCW - 12, 26); actx.textAlign = "center";
-    actx.font = "40px serif"; for (const b of as.bugs) actx.fillText("🐛", b.x, b.y + 14);
-    if (as.done) { actx.fillStyle = "#ffd166"; actx.font = "bold 22px sans-serif"; actx.fillText("Tap to exit", ARCW / 2, ARCH / 2); }
-  } else if (ag === "reflex") {
-    if (!as.done) { as.t += dt; if (as.phase === "wait" && as.t >= as.wait) { as.phase = "go"; as.t = 0; } }
-    const go = as.phase === "go" && !as.done;
-    actx.fillStyle = go ? "#1f7a3a" : "#7a1f1f"; actx.fillRect(0, 0, ARCW, ARCH);
-    actx.fillStyle = "#fff"; actx.font = "bold 30px sans-serif"; actx.fillText(as.done ? "DONE" : go ? "TAP!" : "WAIT…", ARCW / 2, ARCH / 2);
-    actx.font = "bold 15px sans-serif"; actx.fillText("Round " + Math.min(5, as.round + 1) + "/5", ARCW / 2, 40);
-    if (as.done) actx.fillText("Tap to exit", ARCW / 2, ARCH - 30);
-  } else {
-    if (as.spinning) { as.spinT -= dt; if (as.spinT <= 0) { as.spinning = false; resolveSpin(); } else for (let i = 0; i < 3; i++) as.reels[i] = Math.floor(Math.random() * SPIN_SYM.length); }
-    actx.fillStyle = "#221a30"; actx.fillRect(28, ARCH / 2 - 60, ARCW - 56, 120);
-    actx.font = "58px serif"; for (let i = 0; i < 3; i++) actx.fillText(SPIN_SYM[as.reels[i]], ARCW / 2 - 78 + i * 78, ARCH / 2 + 20);
-    actx.fillStyle = "#ffd166"; actx.fillRect(ARCW / 2 - 60, ARCH - 90, 120, 50); actx.fillStyle = "#3d2410"; actx.font = "bold 20px sans-serif"; actx.fillText(as.spinning ? "…" : "SPIN $25", ARCW / 2, ARCH - 58);
-    actx.fillStyle = "#9fe0ff"; actx.font = "14px sans-serif"; actx.fillText(as.msg, ARCW / 2, 52); actx.fillText("$" + Math.floor(state.money), ARCW / 2, ARCH - 16);
-  }
-}
-acv.addEventListener("pointerdown", e => { e.preventDefault(); const r = acv.getBoundingClientRect(); arcadeTap((e.clientX - r.left) / r.width * ACW, (e.clientY - r.top) / r.height * ACH); });
-dom("acx").addEventListener("click", closeArcade);
+// ---------- arcade cabinets — moved to arcade.js (initArcade is called after the save/state section) ----------
 const arcadeBtn = dom("arcadebtn");
 const nearCabinet = () => inside && intTheme === "bowling" && player.x < INT.x - 5;
 arcadeBtn.addEventListener("click", () => {
@@ -2312,6 +2257,7 @@ function load() {
   return false;
 }
 const hasSave = !!localStorage.getItem(SAVE_KEY);
+initArcade({ earn, save, state, buzz });   // arcade mini-games need the economy + haptics hooks
 
 // ---------- player level / XP ----------
 // A single progression spine the whole economy feeds: every payout grants XP, and each
@@ -3165,98 +3111,8 @@ function updateHoop(dt) {
   }
 }
 
-// ---------- projectiles: bullets get a fast visible tracer, rockets/grenades get a REAL flight ----------
-// previously every shot resolved instantly regardless of range — a rocket fired at something 70 units
-// away detonated on the spot, which read as broken. Bullets keep their hit resolved instantly (the
-// target's state can't get weird mid-flight that way) but now draw an actual tracer flying to the
-// impact point; rockets/grenades are the real fix — they fly there and the blast only fires on arrival.
-const projDir = new THREE.Vector3(), UP_Y = new THREE.Vector3(0, 1, 0);
-const BULLET_SPEED = 150, ROCKET_SPEED = 42, GRENADE_SPEED = 30;
-const PROJ_POOL = 28;
-const bulletGeo = new THREE.CylinderGeometry(0.02, 0.03, 0.5, 5);
-const bulletMat = new THREE.MeshBasicMaterial({ color: 0xfff2c0 });
-const rocketBodyMat = new THREE.MeshStandardMaterial({ color: 0x3a3f47, roughness: 0.5, metalness: 0.3 });
-const rocketNoseMat = new THREE.MeshStandardMaterial({ color: 0xd94a2e, roughness: 0.4, emissive: 0x220900 });
-function makeRocketMesh() {
-  const g = new THREE.Group();
-  g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.6, 8), rocketBodyMat));
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.22, 8), rocketNoseMat); nose.position.y = 0.41; g.add(nose);
-  for (let i = 0; i < 4; i++) {
-    const f = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.16, 0.14), rocketBodyMat);
-    f.position.set(Math.sin(i * Math.PI / 2) * 0.11, -0.24, Math.cos(i * Math.PI / 2) * 0.11);
-    g.add(f);
-  }
-  return g;
-}
-const grenadeGeo = new THREE.SphereGeometry(0.09, 8, 6), grenadeMat = new THREE.MeshStandardMaterial({ color: 0x3f4a2e, roughness: 0.6 });
-const projPool = [];
-for (let i = 0; i < PROJ_POOL; i++) {
-  const bullet = new THREE.Mesh(bulletGeo, bulletMat); bullet.visible = false; scene.add(bullet);
-  const rocket = makeRocketMesh(); rocket.visible = false; scene.add(rocket);
-  const grenade = new THREE.Mesh(grenadeGeo, grenadeMat); grenade.visible = false; scene.add(grenade);
-  projPool.push({ bullet, rocket, grenade, active: false, kind: null, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, tx: 0, ty: 0, tz: 0, life: 0, trailCD: 0, onArrive: null });
-}
-let projCursor = 0;
-function projMesh(p) { return p.kind === "rocket" ? p.rocket : p.kind === "grenade" ? p.grenade : p.bullet; }
-function fireProjectile(kind, x, y, z, tx, ty, tz, onArrive) {
-  const p = projPool[projCursor]; projCursor = (projCursor + 1) % PROJ_POOL;
-  if (p.active) projMesh(p).visible = false;                 // pool exhausted (shouldn't happen) — steal the oldest
-  ty = ty != null ? ty : y;
-  const dx = tx - x, dy = ty - y, dz = tz - z, dist = Math.hypot(dx, dy, dz) || 1;
-  const speed = kind === "rocket" ? ROCKET_SPEED : kind === "grenade" ? GRENADE_SPEED : BULLET_SPEED;
-  p.active = true; p.kind = kind; p.x = x; p.y = y; p.z = z; p.tx = tx; p.ty = ty; p.tz = tz;
-  p.vx = dx / dist * speed; p.vy = dy / dist * speed; p.vz = dz / dist * speed;
-  p.life = dist / speed + 0.15; p.trailCD = 0; p.onArrive = onArrive || null;
-  const mesh = projMesh(p);
-  mesh.visible = true; mesh.position.set(x, y, z);
-  if (kind !== "grenade") { projDir.set(p.vx, p.vy, p.vz).normalize(); mesh.quaternion.setFromUnitVectors(UP_Y, projDir); }
-}
-function updateProjectiles(dt) {
-  for (const p of projPool) {
-    if (!p.active) continue;
-    p.life -= dt;
-    if (p.kind === "grenade") p.vy -= 9 * dt;                 // gentle lob arc
-    p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
-    const mesh = projMesh(p);
-    mesh.position.set(p.x, p.y, p.z);
-    if (p.kind !== "grenade") { projDir.set(p.vx, p.vy, p.vz).normalize(); mesh.quaternion.setFromUnitVectors(UP_Y, projDir); }
-    if (p.kind === "rocket") {
-      p.trailCD -= dt;
-      if (p.trailCD <= 0) { p.trailCD = 0.025; emit(p.x, p.y, p.z, rr(-0.15, 0.15), rr(-0.1, 0.2), rr(-0.15, 0.15), 0.5, 0.32, 0.32, 0.32); }
-    }
-    const dx2 = p.tx - p.x, dy2 = p.ty - p.y, dz2 = p.tz - p.z;
-    if (dx2 * dx2 + dy2 * dy2 + dz2 * dz2 < (p.kind === "bullet" ? 1.0 : 2.25) || p.life <= 0) {
-      mesh.visible = false; p.active = false;
-      if (p.onArrive) p.onArrive();
-    }
-  }
-}
-// bright soft muzzle flash (a real additive glow, not just particles) — pooled since rapid-fire
-// weapons can loose several shots before the last flash has faded
-const flashTex = canvasTex(48, (ctx, s) => { const c = s / 2; const g = ctx.createRadialGradient(c, c, 0, c, c, c); g.addColorStop(0, "#fff8e0"); g.addColorStop(0.4, "#ffcf7a"); g.addColorStop(1, "rgba(255,140,40,0)"); ctx.fillStyle = g; ctx.fillRect(0, 0, s, s); });
-const FLASH_POOL = 6;
-const flashPool = [];
-for (let i = 0; i < FLASH_POOL; i++) {
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
-  sp.visible = false; scene.add(sp);
-  flashPool.push({ sprite: sp, life: 0 });
-}
-let flashCursor = 0;
-function muzzleFlash(x, y, z, big) {
-  const f = flashPool[flashCursor]; flashCursor = (flashCursor + 1) % FLASH_POOL;
-  f.sprite.position.set(x, y, z); f.sprite.visible = true; f.sprite.material.opacity = 1;
-  f.sprite.scale.set(big ? 1.3 : 0.65, big ? 1.3 : 0.65, 1);
-  f.life = 0.07;
-  burst(x, y, z, big ? 14 : 8, big ? 0.9 : 0.6, big ? 0.9 : 0.6, big ? 0.22 : 0.16, 1, big ? 0.6 : 0.9, big ? 0.3 : 0.55);
-}
-function updateFlashes(dt) {
-  for (const f of flashPool) {
-    if (f.life <= 0) continue;
-    f.life -= dt;
-    f.sprite.material.opacity = clamp(f.life / 0.07, 0, 1);
-    if (f.life <= 0) f.sprite.visible = false;
-  }
-}
+// ---------- projectiles + muzzle flash — moved to projectiles.js ----------
+initProjectiles({ scene, burst, emit });   // builds its mesh pools in the scene (needs burst/emit for trails)
 
 // ---------- weapons (bought at the Ammo Shop; fire with the on-foot action button) ----------
 const WEAPONS = [
@@ -5811,6 +5667,7 @@ globalThis.__palmCity = {
     ball: { x: hoopBall.position.x, y: hoopBall.position.y, z: hoopBall.position.z } }),
   COURT,
   pressPunch: () => { actP = true; },
+  openArcade: g => openArcade(g), arcadeOpen: () => arcadeOpen,
   health: () => health,
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
   applyGfx: m => applyGfx(m), gfx: () => ({ mode: gfxMode, prCap: PR_CAP, msaa: msaaSamples, pr: renderer.getPixelRatio() }),
