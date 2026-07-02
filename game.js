@@ -855,6 +855,8 @@ let buildingMat = null;
 
 // ---------- beach district (south of the city, on the open ground beyond the grid) ----------
 const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigger) grid
+// beachfront basketball court: hoisted so the pickup-game logic further down (near doPunch) can see it
+const COURT = { x: 150, z: SEA_Z - 60, hoopL: { x: 150 - 13, z: SEA_Z - 60 }, hoopR: { x: 150 + 13, z: SEA_Z - 60 } };
 {
   // sand: tile uniformly (square ~11u tiles) across the beach plane. The old 16x7 repeat stretched the
   // grain ~20x horizontally (looked like planks). The plane reaches from the beachfront road down to the
@@ -988,7 +990,7 @@ const SEA_Z = HALF + 80;      // shoreline just past the south edge of the (bigg
   }
 
   // beachfront basketball court with two hoops
-  const courtX = 150, courtZ = SEA_Z - 60;
+  const courtX = COURT.x, courtZ = COURT.z;
   const court = new THREE.Mesh(new THREE.PlaneGeometry(30, 18), new THREE.MeshLambertMaterial({ map: courtTex, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -32 }));
   court.rotation.x = -Math.PI / 2; court.position.set(courtX, 0.09, courtZ); court.renderOrder = 2; scene.add(court);
   // face = direction toward centre court (in +x/-x): the pole sits on the baseline, the backboard hangs
@@ -3676,6 +3678,7 @@ function doPunch() {
   if (driving) return;
   if (inside) { if (intTheme === "bowling") doBowl(); return; }   // BOWL inside the alley; no fists indoors
   if (armed()) { doShoot(); return; }              // fire if a weapon is equipped, else throw a punch
+  if (nearCourtPlay()) { doHoopShot(); return; }   // step onto the beach court unarmed -> shoot hoops instead of punching air
   if (punchCD > 0) return;
   // 3-hit combo: jab, jab, then a heavier finishing kick — landing hits inside the window advances it,
   // letting the window lapse resets back to the opening jab
@@ -3716,6 +3719,65 @@ function doPunch() {
       { group: best.mesh, legL: best.legL, legR: best.legR, armL: best.armL, armR: best.armR, kneeL: best.kneeL, kneeR: best.kneeR },
       best.x, groundY(best.x, best.z), best.z, dh,
       { vx: Math.sin(dh) * rrand(lo, hi), vy: rrand(lo, hi), vz: Math.cos(dh) * rrand(lo, hi) }, "stagger", { npc: best });
+  }
+}
+
+// ---------- beach basketball: pickup game at the beachfront court ----------
+// a shooting spot in front of each hoop, offset toward centre-court along the court's long (x) axis
+const HOOP_SPOT_L = { x: COURT.hoopL.x + 6, z: COURT.hoopL.z };
+const HOOP_SPOT_R = { x: COURT.hoopR.x - 6, z: COURT.hoopR.z };
+const hoopBallTex = canvasTex(64, (ctx, s) => {
+  ctx.fillStyle = "#e8712a"; ctx.fillRect(0, 0, s, s);
+  ctx.strokeStyle = "#2a1508"; ctx.lineWidth = s * 0.045;
+  ctx.beginPath(); ctx.moveTo(s / 2, 0); ctx.lineTo(s / 2, s); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, s / 2); ctx.lineTo(s, s / 2); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(s / 2, s / 2, s * 0.46, s * 0.18, 0, 0, 7); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(s / 2, s / 2, s * 0.18, s * 0.46, 0, 0, 7); ctx.stroke();
+});
+const hoopBall = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), new THREE.MeshStandardMaterial({ map: hoopBallTex, roughness: 0.65 }));
+hoopBall.castShadow = true; scene.add(hoopBall);
+const hoopScore = textSprite("", "#fff", "rgba(20,20,30,.92)", 12, 3, 0);
+hoopScore.position.set(COURT.x, 4.6, COURT.z); scene.add(hoopScore);
+setSpriteText(hoopScore, "🏀 Walk up to a hoop and press SHOOT");
+let hoopMade = 0, hoopShot = 0, hoopShootT = 0;
+const hb = { flying: false, cd: 0, t: 0, dur: 0.55, sx: 0, sy: 0, sz: 0, tx: 0, ty: 0, tz: 0, willMake: false };
+function nearestHoopSpot() {
+  const dL = dist2(player.x, player.z, HOOP_SPOT_L.x, HOOP_SPOT_L.z), dR = dist2(player.x, player.z, HOOP_SPOT_R.x, HOOP_SPOT_R.z);
+  return dL < dR ? { spot: HOOP_SPOT_L, hoop: COURT.hoopL, d2: dL } : { spot: HOOP_SPOT_R, hoop: COURT.hoopR, d2: dR };
+}
+function nearCourtPlay() { return !driving && !inside && nearestHoopSpot().d2 < 100; }   // within ~10 units of a hoop's shooting spot
+function placeHoopBall() { const { spot } = nearestHoopSpot(); hoopBall.position.set(spot.x, 0.28, spot.z); }
+function doHoopShot() {
+  if (hb.flying || hb.cd > 0) return;
+  const { spot, hoop, d2 } = nearestHoopSpot();
+  hb.flying = true; hb.t = 0;
+  hb.sx = spot.x; hb.sy = 1.5; hb.sz = spot.z;
+  // accuracy falls off with distance from the sweet spot — line up close to the hoop for an easy look
+  const d = Math.sqrt(d2), acc = clamp(1 - (d - 2) / 8, 0.1, 0.92);
+  hb.willMake = ragRng() < acc;
+  hb.tx = hoop.x + (hb.willMake ? 0 : rrand(-1.6, 1.6)); hb.ty = 3.15; hb.tz = hoop.z + (hb.willMake ? 0 : rrand(-1.2, 1.2));
+  hoopShootT = 0.5;   // player animation: rise into a set-shot release
+  AudioSys.play("door", 0.35); buzz(10);
+}
+function updateHoop(dt) {
+  if (hb.cd > 0) hb.cd -= dt;
+  if (!hb.flying) { if (hb.cd <= 0) placeHoopBall(); return; }
+  hb.t += dt;
+  const k = clamp(hb.t / hb.dur, 0, 1);
+  hoopBall.position.set(hb.sx + (hb.tx - hb.sx) * k, hb.sy + (hb.ty - hb.sy) * k + Math.sin(k * Math.PI) * 2.2, hb.sz + (hb.tz - hb.sz) * k);
+  hoopBall.rotation.x -= 10 * dt;
+  if (k >= 1) {
+    hb.flying = false; hb.cd = 1.7; hoopShot++;
+    if (hb.willMake) {
+      hoopMade++;
+      const reward = earn(30);
+      setSpriteText(hoopScore, "🏀 SWISH! +$" + reward + "  (" + hoopMade + "/" + hoopShot + ")");
+      AudioSys.play("cash", 0.6); flash("#ffd166", 0.2); addShake(0.12); buzz(18); save();
+    } else {
+      setSpriteText(hoopScore, "🏀 Rim out!  (" + hoopMade + "/" + hoopShot + ")");
+      AudioSys.play("blip", 0.4);
+    }
+    setTimeout(() => { if (!inside) setSpriteText(hoopScore, "🏀 Press SHOOT  (" + hoopMade + "/" + hoopShot + ")"); }, 1400);
   }
 }
 
@@ -4795,7 +4857,7 @@ function updateHUD() {
   climbBtn.style.display = flying ? "block" : "none";
   diveBtn.style.display = flying ? "block" : "none";
   punchBtn.style.display = (!driving && !dlgLines && !garageOpen && !statsOpen && !styleOpen && !arcadeOpen) ? "block" : "none";
-  { const w = armed(); punchBtn.textContent = (inside && intTheme === "bowling") ? "🎳 BOWL" : w ? "🔫 " + ammoOf(w) : "PUNCH"; }
+  { const w = armed(); punchBtn.textContent = (inside && intTheme === "bowling") ? "🎳 BOWL" : w ? "🔫 " + ammoOf(w) : (!w && nearCourtPlay()) ? "🏀 SHOOT" : "PUNCH"; }
   // dedicated FIRE control only appears once a weapon's actually drawn (not indoors bowling, not driving)
   { const w = armed(); fireBtn.style.display = (w && !inside && !driving && !dlgLines && !garageOpen && !statsOpen && !styleOpen && !arcadeOpen) ? "block" : "none"; if (w) fireBtn.textContent = "🔥 " + ammoOf(w); }
   const menus = dlgLines || garageOpen || statsOpen || styleOpen || arcadeOpen;
@@ -4878,6 +4940,8 @@ function drawMinimap(t) {
     for (const C of CIRCUITS)
       mapCtx.fillRect(wx(C.start.x) - 2.5, wz(C.start.z) - 2.5, 5, 5);
   }
+  mapCtx.fillStyle = "#5f6368"; mapCtx.font = "8px sans-serif"; mapCtx.textAlign = "center";
+  mapCtx.fillText("🏀", wx(COURT.x), wz(COURT.z) + 3);
   mapCtx.fillStyle = "#f9a825";
   for (let i = 0; i < PALMS.length; i++) {
     if (palmCollected[i]) continue;
@@ -5594,6 +5658,7 @@ function update(dt) {
   if (shootCD > 0) shootCD -= dt;
   if (punchT > 0) punchT -= dt;
   if (inside && intTheme === "bowling") updateBowling(dt);
+  updateHoop(dt);
   if (hurtCD > 0) hurtCD -= dt; else if (health < 100) health = Math.min(100, health + 9 * dt);
   // refuel near the gas station; low-fuel warning while driving
   { const fx = driving ? driving.x : player.x, fz = driving ? driving.z : player.z;
@@ -6084,6 +6149,12 @@ function update(dt) {
       const kick = gunKickT > 0 ? (gunKickT / 0.14) * 0.32 : 0;
       hero.armR.rotation.x = -1.15 - kick; hero.armR.rotation.z = -0.12;
       hero.armL.rotation.x = -1.05 - kick * 0.6; hero.armL.rotation.z = 0.22;
+    } else if (hoopShootT > 0) {   // basketball: a two-handed set-shot release, rising then following through
+      const rise = Math.sin(clamp(1 - hoopShootT / 0.5, 0, 1) * Math.PI);
+      hero.armR.rotation.x = -1.4 - rise * 1.3; hero.armR.rotation.z = -0.05;
+      hero.armL.rotation.x = -1.2 - rise * 1.1; hero.armL.rotation.z = 0.05;
+      hero.legL.rotation.x = -rise * 0.35; hero.legR.rotation.x = -rise * 0.35;
+      hero.kneeL.rotation.x = rise * 0.5; hero.kneeR.rotation.x = rise * 0.5;
     } else if (kickT > 0) {   // combo finisher: a real front kick, not just another punch
       const k = Math.sin(clamp(kickT / 0.34, 0, 1) * Math.PI);
       hero.legR.rotation.x = -1.35 * k; hero.kneeR.rotation.x = 0.85 * k;
@@ -6092,8 +6163,12 @@ function update(dt) {
     else if (gait < 0.15 && hostileNear) {   // fighting stance: guard up whenever trouble's nearby and you're not mid-swing
       hero.armL.rotation.x = -0.72; hero.armR.rotation.x = -0.78; hero.armL.rotation.z = 0.17; hero.armR.rotation.z = -0.17;
       hero.legL.rotation.z = 0.05; hero.legR.rotation.z = -0.05;
+    } else if (gait < 0.15 && nearCourtPlay()) {   // idle dribble whenever you're standing near a hoop
+      const drib = Math.sin(simTime * 5) * 0.5 + 0.5;
+      hero.armR.rotation.x = -0.3 - drib * 0.55; hero.armR.rotation.z = -0.08;
+      hero.armL.rotation.x = -0.55; hero.armL.rotation.z = 0.15;
     }
-    gunKickT = Math.max(0, gunKickT - dt); kickT = Math.max(0, kickT - dt); comboT = Math.max(0, comboT - dt);
+    gunKickT = Math.max(0, gunKickT - dt); kickT = Math.max(0, kickT - dt); comboT = Math.max(0, comboT - dt); hoopShootT = Math.max(0, hoopShootT - dt);
   }
   for (const c of cars) {
     if (c === driving) continue;   // the driven vehicle syncs & leans itself, right in its control branch
@@ -6325,6 +6400,9 @@ globalThis.__palmCity = {
   hero, debugInput: () => ({ fuel, dry: fuel <= 0, dlgLines: !!dlgLines, braking: braking(), inp: readInput(), keys: [...keys] }),
   knockableProps, activeProps, moveObj: (o, dx, dz, r) => moveWithCollision(o, dx, dz, r), projPool,
   combatDebug: () => ({ comboStep, comboT, kickT, punchT, hostileNear, punchBufferT, punchCD }),
+  hoopDebug: () => ({ hoopMade, hoopShot, hoopShootT, flying: hb.flying, willMake: hb.willMake, cd: hb.cd, nearCourt: nearCourtPlay(),
+    ball: { x: hoopBall.position.x, y: hoopBall.position.y, z: hoopBall.position.z } }),
+  COURT,
   pressPunch: () => { actP = true; },
   health: () => health,
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
