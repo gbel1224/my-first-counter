@@ -10,6 +10,7 @@ import { initRagdolls, ragRng, rrand, ragdolls, RAG_G, spawnRagdoll, updateRagdo
 import { initVehicles, wheelGeo, carGeo, bikeGeo, CAR_COLORS, makeCar, makeBike, makeHeli, makeBoat, makePlane } from "./vehicles.js";
 import { initProjectiles, projPool, fireProjectile, updateProjectiles, muzzleFlash, updateFlashes } from "./projectiles.js";
 import { initArcade, arcadeOpen, openArcade, closeArcade, updateArcade, ARC_BY_CAB } from "./arcade.js";
+import { initWeather, updateWeather, weatherMode, cycleWeatherMode } from "./weather.js";
 
 // ---------- renderer / scene ----------
 const dom = id => document.getElementById(id);
@@ -2611,45 +2612,9 @@ let race = { stage: "idle", ci: -1, cp: 0, t: 0, armed: true };  // idle | activ
   cloudPts.frustumCulled = false; skyGroup.add(cloudPts);
 }
 
-// ---------- weather: rain that follows the player, with a slow auto-cycle ----------
-const RAIN_N = 360;
-const rainPos = new Float32Array(RAIN_N * 2 * 3);   // pairs of verts (streaks)
-const rainLocal = new Float32Array(RAIN_N * 3);     // local x,y,z of each streak top, around the player
-for (let i = 0; i < RAIN_N; i++) { rainLocal[i * 3] = rr(-45, 45); rainLocal[i * 3 + 1] = rr(0, 46); rainLocal[i * 3 + 2] = rr(-45, 45); }
-const rainGeo = new THREE.BufferGeometry();
-rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
-const rainSeg = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0xbcd0ee, transparent: true, opacity: 0, fog: false }));
-rainSeg.frustumCulled = false; scene.add(rainSeg);
-const _fogGray = new THREE.Color(0x6b7079);
-// mode: 0 auto · 1 rain · 2 clear. Default CLEAR — the auto-cycle's grey-fog rain washing in and out
-// reads as the screen "filtering" during play. Re-enable rain/auto from the settings panel.
-let weatherMode = (() => { try { const v = localStorage.getItem("palm_city_weather"); return v == null ? 2 : +v; } catch (e) { return 2; } })();
-let weather = 0, weatherTarget = 0, weatherTimer = 30;
-function updateWeather(dt) {
-  if (weatherMode === 1) weatherTarget = 1;
-  else if (weatherMode === 2) weatherTarget = 0;
-  else { weatherTimer -= dt; if (weatherTimer <= 0) { weatherTarget = Math.random() < 0.4 ? 1 : 0; weatherTimer = rr(45, 95); } }
-  weather += (weatherTarget - weather) * Math.min(1, dt * 0.4);
-  rainSeg.material.opacity = weather * 0.5;
-  if (weather > 0.02) {
-    const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
-    for (let i = 0; i < RAIN_N; i++) {
-      let y = rainLocal[i * 3 + 1] - dt * 65;
-      if (y < -2) { y += 48; rainLocal[i * 3] = rr(-45, 45); rainLocal[i * 3 + 2] = rr(-45, 45); }
-      rainLocal[i * 3 + 1] = y;
-      const x = px + rainLocal[i * 3], z = pz + rainLocal[i * 3 + 2];
-      rainPos[i * 6] = x; rainPos[i * 6 + 1] = y + 2.4; rainPos[i * 6 + 2] = z;       // streak top
-      rainPos[i * 6 + 3] = x + 0.3; rainPos[i * 6 + 4] = y; rainPos[i * 6 + 5] = z;   // streak bottom
-    }
-    rainGeo.attributes.position.needsUpdate = true;
-    scene.fog.color.lerp(_fogGray, weather * 0.45);                                   // grey, hazier mood
-    sun.intensity *= (1 - weather * 0.35);
-    hemi.intensity *= (1 - weather * 0.2);
-  }
-  // wet flooring: darker + far more reflective as the rain picks up
-  if (roadMat) { roadMat.roughness = 0.62 - weather * 0.42; roadMat.envMapIntensity = 0.55 + weather * 0.95; roadMat.color.setScalar(1 - weather * 0.32); }
-  if (sidewalkMat) { sidewalkMat.roughness = 0.85 - weather * 0.52; sidewalkMat.envMapIntensity = 0.35 + weather * 0.75; sidewalkMat.color.setScalar(1 - weather * 0.22); }
-}
+// ---------- weather — moved to weather.js ----------
+initWeather({ scene, sun, hemi, roadMat, sidewalkMat });   // also seeds the rain streaks (consumes the seeded RNG here, same order as before)
+
 
 function updateRace(dt) {
   if (state.mi < M.length || dlgLines) return;     // freeplay only
@@ -4604,7 +4569,7 @@ dom("stclose").textContent = STR.statsClose;
   bb.addEventListener("click", () => { bloomOn = !bloomOn; bloomFailed = false; try { localStorage.setItem(BLOOM_KEY, bloomOn ? "1" : "0"); } catch (e) {} bb.textContent = STR.bloomToggle(bloomOn); });
   const wb = dom("stweather");
   wb.textContent = STR.weatherToggle(weatherMode);
-  wb.addEventListener("click", () => { weatherMode = (weatherMode + 1) % 3; try { localStorage.setItem("palm_city_weather", String(weatherMode)); } catch (e) {} wb.textContent = STR.weatherToggle(weatherMode); });
+  wb.addEventListener("click", () => { wb.textContent = STR.weatherToggle(cycleWeatherMode()); });
   const lb = dom("stlight");
   if (lb) {
     lb.textContent = lightLabel();
@@ -5339,7 +5304,7 @@ function update(dt) {
   // income + missions
   state.money += incomeRate() / 60 * dt;
   envUpdate();
-  updateWeather(dt);
+  updateWeather(dt, driving ? driving.x : player.x, driving ? driving.z : player.z);
   // tip jars: owned businesses fill up; collect by stopping by on foot
   for (const b of BIZ) {
     const lvl = state.owned[b.id] || 0;
