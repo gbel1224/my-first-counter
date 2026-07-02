@@ -2801,34 +2801,41 @@ const state = {
   lvl: 1,                // player level (1..LVL_MAX); levels boost all earnings
   phase: "intro",        // intro | play
 };
+// One schema drives BOTH save() and load(). The old version was two hand-maintained twin lists —
+// every new persistent field had to be added in both places by name, and forgetting one silently
+// dropped that feature's progress on reload. Now a field is declared exactly once, here:
+// { save: state value -> what's written, load: raw saved value -> restored state value }.
+const _sfNum = { save: v => v || 0, load: v => v || 0 };
+const _sfBool = { save: v => !!v, load: v => !!v };
+const _sfObj = { save: v => v, load: v => v || {} };
+const DECOR_DEFAULTS = Object.assign({}, state.decor);
+const SAVE_FIELDS = {
+  money: { save: v => Math.floor(v), load: v => v },
+  owned: _sfObj, cars: _sfObj, mods: _sfObj, medals: _sfObj, ammo: _sfObj,
+  palms: { save: v => v, load: v => v || [] },
+  ach: { save: v => v, load: v => v || [] },
+  races: { save: v => v, load: (v, d) => v || (d.bestRace ? { downtown: d.bestRace } : {}) },   // migrate single-circuit saves
+  bestJump: _sfNum, maxMoney: _sfNum, bestRampage: _sfNum, bossWins: _sfNum, busts: _sfNum, rescues: _sfNum,
+  jacket: _sfNum, hat: _sfNum, glasses: _sfNum, beard: _sfNum, mi: _sfNum,
+  home: _sfBool, house: _sfBool, apt: _sfBool, jetpack: _sfBool,
+  outfit: { save: v => v, load: v => v == null ? -1 : v },
+  haircut: { save: v => v, load: v => v == null ? -1 : v },
+  weapon: { save: v => v, load: v => v == null ? null : v },
+  decor: { save: v => v, load: v => Object.assign({}, DECOR_DEFAULTS, v || {}) },
+  xp: { save: v => Math.round(v || 0), load: v => v || 0 },
+  lvl: { save: v => v || 1, load: v => v || 1 },
+};
 function save() {
   state.maxMoney = Math.max(state.maxMoney || 0, Math.floor(state.money));
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, money: Math.floor(state.money), owned: state.owned, cars: state.cars, mods: state.mods, palms: state.palms, bestJump: state.bestJump || 0, races: state.races, medals: state.medals, maxMoney: state.maxMoney || 0, bestRampage: state.bestRampage || 0, bossWins: state.bossWins || 0, busts: state.busts || 0, rescues: state.rescues || 0, home: !!state.home, house: !!state.house, apt: !!state.apt, outfit: state.outfit, haircut: state.haircut, jacket: state.jacket, hat: state.hat, glasses: state.glasses, beard: state.beard, weapon: state.weapon, ammo: state.ammo, jetpack: !!state.jetpack, decor: state.decor, ach: state.ach, mi: state.mi, xp: Math.round(state.xp || 0), lvl: state.lvl || 1 })); } catch (e) {}
+  const out = { v: 1 };
+  for (const k in SAVE_FIELDS) out[k] = SAVE_FIELDS[k].save(state[k]);
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(out)); } catch (e) {}
 }
 function load() {
   try {
     const d = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (d && d.v === 1) {
-      state.money = d.money; state.owned = d.owned || {}; state.mi = d.mi || 0;
-      state.cars = d.cars || {};
-      state.mods = d.mods || {};
-      state.palms = d.palms || [];
-      state.bestJump = d.bestJump || 0;
-      state.races = d.races || (d.bestRace ? { downtown: d.bestRace } : {});   // migrate single-circuit saves
-      state.medals = d.medals || {};
-      state.maxMoney = d.maxMoney || 0;
-      state.bestRampage = d.bestRampage || 0;
-      state.bossWins = d.bossWins || 0;
-      state.busts = d.busts || 0;
-      state.rescues = d.rescues || 0;
-      state.home = !!d.home; state.house = !!d.house; state.apt = !!d.apt;
-      state.outfit = d.outfit == null ? -1 : d.outfit; state.haircut = d.haircut == null ? -1 : d.haircut;
-      state.jacket = d.jacket || 0; state.hat = d.hat || 0; state.glasses = d.glasses || 0; state.beard = d.beard || 0;
-      state.weapon = (d.weapon == null ? null : d.weapon); state.ammo = d.ammo || {}; state.jetpack = !!d.jetpack;
-      if (d.decor) state.decor = Object.assign({}, state.decor, d.decor);
-      state.ach = d.ach || [];
-      state.xp = d.xp || 0;
-      state.lvl = d.lvl || 1;
+      for (const k in SAVE_FIELDS) state[k] = SAVE_FIELDS[k].load(d[k], d);
       recalcLvlMult();
       for (const k in state.owned) if (state.owned[k] === true) state.owned[k] = 1; // pre-upgrade saves
       return true;
@@ -5611,7 +5618,7 @@ function doActionB() {
 
 // ---------- simulation ----------
 const tmpM = new THREE.Matrix4(), tmpP = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpS = new THREE.Vector3(1, 1, 1);
-let simTime = 0, achTimer = 1, sprintT = 0;
+let simTime = 0, achTimer = 1, sprintT = 0, npcScanBucket = 0;
 const SPRINT_RAMP = 2.5;   // seconds of holding sprint to reach top running speed
 
 function update(dt) {
@@ -5875,15 +5882,29 @@ function update(dt) {
     }
   }
 
-  // traffic — obey signals, queue behind cars ahead, smooth start/stop, brake lights & honking
-  carGrid.clear();
-  for (const t of traffic) { if (t.jacked || t.dead) continue; const k = Math.floor(t.x / 14) + "," + Math.floor(t.z / 14); let a = carGrid.get(k); if (!a) carGrid.set(k, a = []); a.push(t); }
+  // traffic — obey signals, queue behind cars ahead, smooth start/stop, brake lights & honking.
+  // Same tiered LOD as the pedestrians: only cars within ~300u of you actually drive; the ring out
+  // to ~470u renders parked-in-place, and everything beyond that is hidden. Without this, every car
+  // in the city ran its full waypoint/queue/signal logic each frame no matter how far away it was.
   const tpx = driving ? driving.x : player.x, tpz = driving ? driving.z : player.z;
+  carGrid.clear();
+  for (const t of traffic) {
+    if (t.jacked || t.dead) continue;
+    t._d2 = dist2(t.x, t.z, tpx, tpz);
+    if (t._d2 > 90000) continue;   // far cars don't queue against anyone either
+    const k = Math.floor(t.x / 14) + "," + Math.floor(t.z / 14); let a = carGrid.get(k); if (!a) carGrid.set(k, a = []); a.push(t);
+  }
   // when you're on a rampage (recent mayhem) or heavily wanted, nearby drivers panic:
   // they floor it, run red lights and swerve away from you instead of calmly queuing.
   const mayhem = chaosCD > 0 || wanted >= 2;
   for (const t of traffic) {
     if (t.jacked) continue;   // being driven by the player, or left abandoned after a jack
+    if (!t.dead && t._d2 > 90000) {
+      t.mesh.visible = t._d2 < 220000;
+      if (t.mesh.visible && !t.placed) { t.mesh.position.set(t.x, groundY(t.x, t.z), t.z); t.mesh.rotation.y = t.h; t.placed = true; }
+      continue;
+    }
+    t.mesh.visible = true; t.placed = true;
     const [tx, tz] = t.wp[t.next];
     const dx = tx - t.x, dz = tz - t.z;
     const d = Math.hypot(dx, dz) || 1;
@@ -5927,8 +5948,15 @@ function update(dt) {
   // pedestrians
   const npcFx = driving ? driving.x : player.x, npcFz = driving ? driving.z : player.z;
   hostileNear = false;
-  for (const n of npcs) {
+  // stagger the far-crowd bookkeeping: an NPC already known to be far only re-checks its distance
+  // every 4th frame (round-robin by index), cutting the per-frame flat scan of the whole population
+  // to a quarter. Nearby NPCs still get a full check + simulation every frame; a far one waking up
+  // at worst 3 frames (~0.05s) late is imperceptible at these radii.
+  npcScanBucket = (npcScanBucket + 1) & 3;
+  for (let ni = 0; ni < npcs.length; ni++) {
+    const n = npcs[ni];
     if (n.ragdoll) continue;   // knocked down — fully owned by updateRagdolls() until they climb back up
+    if (n.far && (ni & 3) !== npcScanBucket) continue;
     // ambient pedestrians recycle to stay around you, so the streets are lively wherever you roam.
     // Snap each onto the SIDEWALK of a nearby road so they actually line the streets you see,
     // rather than scattering into block interiors / behind buildings where they're wasted.
@@ -5945,10 +5973,12 @@ function update(dt) {
     // simulates; the mid ring (<~470u) renders but freezes; everything beyond that is hidden outright.
     const d2 = dist2(n.x, n.z, npcFx, npcFz);
     if (d2 > 26000) {
+      n.far = true;
       n.mesh.visible = d2 < 220000;   // render out to ~470u so streets read as busy into the distance
       if (n.mesh.visible && !n.placed) { n.mesh.position.set(n.x, groundY(n.x, n.z), n.z); n.mesh.rotation.y = n.h; n.placed = true; }
       continue;
     }
+    n.far = false;
     n.mesh.visible = true; n.placed = true;
     n.flee = (n.flee || 0) - dt;
     if (n.talkCD > 0) n.talkCD -= dt;
