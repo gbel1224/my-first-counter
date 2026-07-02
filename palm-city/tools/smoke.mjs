@@ -1,6 +1,6 @@
 // Headless smoke run: drives the full 8-chapter story route against real Three.js.
 // Usage: node tools/smoke.mjs   (run from sunset-city/)
-import { mkdtempSync, readFileSync, writeFileSync, cpSync, mkdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, cpSync, mkdirSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -56,8 +56,9 @@ globalThis.FakeRenderer = class {
 const dir = mkdtempSync(join(tmpdir(), "sc-"));
 mkdirSync(join(dir, "vendor"), { recursive: true });
 cpSync(join(root, "vendor/three.module.js"), join(dir, "vendor/three.module.js"));
-cpSync(join(root, "strings.js"), join(dir, "strings.js"));
-cpSync(join(root, "audio.js"), join(dir, "audio.js"));
+// copy every root-level module (strings, audio, util, textures, ...) so game.js can be
+// split into more files without this harness needing a new line per module
+for (const f of readdirSync(root)) if (f.endsWith(".js") && f !== "game.js") cpSync(join(root, f), join(dir, f));
 writeFileSync(join(dir, "game.js"),
   readFileSync(join(root, "game.js"), "utf8").replace("new THREE.WebGLRenderer", "new globalThis.FakeRenderer"));
 await import(pathToFileURL(join(dir, "game.js")).href);

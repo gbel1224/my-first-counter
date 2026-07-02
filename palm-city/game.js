@@ -2,42 +2,9 @@
 import * as THREE from "./vendor/three.module.js";
 import { STR } from "./strings.js";
 import { AudioSys } from "./audio.js";
-
-// ---------- seeded RNG (world gen is deterministic) ----------
-function mulberry32(a) {
-  return function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-const rng = mulberry32(20260612);
-const rr = (a, b) => a + rng() * (b - a);
-const pick = arr => arr[(rng() * arr.length) | 0];
-
-// ---------- city constants ----------
-const N = 40, CELL = 88, ROAD = 18, BLOCK = 70;   // 40x40 city (chunked rendering + frustum culling keep it fast)
-const HALF = (N * CELL + ROAD) / 2;
-const roadC = k => -HALF + ROAD / 2 + k * CELL;
-const blockMin = i => roadC(i) + ROAD / 2;
-const bc = i => blockMin(i) + BLOCK / 2;
-// the original districts live in a centred 6x6 region; O recentres them so every
-// landmark/mission keeps its exact world position while the grid grows around it.
-const O = (N - 6) / 2;
-const Rc = i => roadC(i + O);
-const Bm = i => blockMin(i + O);
-const Bc = i => bc(i + O);
-const CURB = 0.22;
-
-const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
-const dist2 = (ax, az, bx, bz) => { const dx = ax - bx, dz = az - bz; return dx * dx + dz * dz; };
-function lerpAngle(a, b, t) {
-  let d = (b - a) % (Math.PI * 2);
-  if (d > Math.PI) d -= Math.PI * 2;
-  if (d < -Math.PI) d += Math.PI * 2;
-  return a + d * t;
-}
+import { mulberry32, rng, rr, pick, N, CELL, ROAD, BLOCK, HALF, roadC, blockMin, bc, O, Rc, Bm, Bc, CURB, clamp, dist2, lerpAngle } from "./util.js";
+import { boxGeoC, colorize, cylC, sphC, mergeGeos, textSprite } from "./geometry.js";
+import { setAnisotropy, canvasTex, canvasNormalTex, speckle, buildWorldTextures } from "./textures.js";
 
 // ---------- renderer / scene ----------
 const dom = id => document.getElementById(id);
@@ -58,6 +25,7 @@ let pr = PR_CAP;
 renderer.setPixelRatio(pr);
 renderer.setSize(innerWidth, innerHeight);
 const MAXANISO = (renderer.capabilities && renderer.capabilities.getMaxAnisotropy) ? renderer.capabilities.getMaxAnisotropy() : 1;   // crisp textures at grazing angles
+setAnisotropy(MAXANISO);   // textures.js reads this for every canvas texture it builds
 
 // post-processing bloom (default ON for the premium neon look; any failure silently falls back to
 // the plain renderer, and the adaptive pixel-ratio guard keeps fps up — toggle in the progress panel)
@@ -314,278 +282,15 @@ function onResize() {
   renderer.setSize(innerWidth, innerHeight);
 }
 
-// ---------- procedural textures (seamless by construction; style formula palette) ----------
-function canvasTex(size, draw, repX = 1, repY = 1) {
-  const c = document.createElement("canvas");
-  c.width = c.height = size;
-  draw(c.getContext("2d"), size);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.anisotropy = MAXANISO;            // crisp textures at grazing angles (distant roads/facades)
-  t.repeat.set(repX, repY);
-  return t;
-}
-// derive a tangent-space normal map from a grayscale height field (dark = recessed, light = raised),
-// so flat textured surfaces gain real relief under the sun. degrades to a flat normal when the test
-// harness has no readable 2D context (getImageData unavailable).
-function canvasNormalTex(size, drawHeight, repX = 1, repY = 1) {
-  const c = document.createElement("canvas"); c.width = c.height = size;
-  const ctx = c.getContext("2d");
-  ctx.fillStyle = "#808080"; ctx.fillRect(0, 0, size, size);
-  drawHeight(ctx, size);
-  let src = null;
-  try { const d = ctx.getImageData(0, 0, size, size); if (d && d.data) src = d.data; } catch (e) {}
-  if (src) {
-    const H = (x, y) => src[(((y + size) % size) * size + ((x + size) % size)) * 4] / 255;
-    const out = ctx.createImageData(size, size), o = out.data;
-    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-      const dx = H(x - 1, y) - H(x + 1, y), dy = H(x, y - 1) - H(x, y + 1);
-      const inv = 1 / Math.hypot(dx, dy, 1), i = (y * size + x) * 4;
-      o[i] = (dx * inv * 0.5 + 0.5) * 255;
-      o[i + 1] = (dy * inv * 0.5 + 0.5) * 255;
-      o[i + 2] = (inv * 0.5 + 0.5) * 255;
-      o[i + 3] = 255;
-    }
-    ctx.putImageData(out, 0, 0);
-  }
-  const t = new THREE.CanvasTexture(c);             // default (linear) colour space — correct for normal data
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(repX, repY);
-  t.anisotropy = MAXANISO;
-  return t;
-}
-// speckle that wraps across edges so the tile stays seamless
-function speckle(ctx, s, n, colors, r0, r1) {
-  for (let i = 0; i < n; i++) {
-    const x = rng() * s, y = rng() * s, r = rr(r0, r1);
-    ctx.fillStyle = pick(colors);
-    for (const ox of [0, -s, s]) for (const oz of [0, -s, s]) {
-      ctx.beginPath(); ctx.arc(x + ox, y + oz, r, 0, 7); ctx.fill();
-    }
-  }
-}
-const texAsphalt = canvasTex(384, (ctx, s) => {
-  ctx.fillStyle = "#46525a"; ctx.fillRect(0, 0, s, s);
-  speckle(ctx, s, 260, ["#4d5a62", "#3f4a52", "#525e66"], 1, 3);
-  for (let i = 0; i < 5; i++) { ctx.fillStyle = "rgba(28,34,38,.28)"; ctx.fillRect(Math.random() * s, Math.random() * s, 18 + Math.random() * 36, 12 + Math.random() * 26); }  // tar patches
-  for (let i = 0; i < 4; i++) { ctx.fillStyle = "rgba(16,18,22,.3)"; ctx.beginPath(); ctx.ellipse(Math.random() * s, Math.random() * s, 7 + Math.random() * 12, 4 + Math.random() * 7, Math.random() * 3, 0, 7); ctx.fill(); }  // oil stains
-  ctx.strokeStyle = "rgba(24,28,32,.5)"; ctx.lineWidth = 1.2;
-  for (let i = 0; i < 6; i++) { ctx.beginPath(); let x = Math.random() * s, y = Math.random() * s; ctx.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (Math.random() - 0.5) * 36; y += (Math.random() - 0.5) * 36; ctx.lineTo(x, y); } ctx.stroke(); }  // cracks
-  ctx.fillStyle = "#3a444b"; ctx.fillRect(0, 0, 14, s); ctx.fillRect(s - 14, 0, 14, s); // gutters
-  ctx.fillStyle = "#e8c35a";                                  // center dashes (64 divides 256 => seamless)
-  for (let y = 0; y < s; y += 64) ctx.fillRect(s / 2 - 3, y, 6, 32);
-}, 1, 30);
-// asphalt relief: pebble grain + recessed cracks and gutter grooves
-const texAsphaltNormal = canvasNormalTex(256, (ctx, s) => {
-  for (let i = 0; i < 220; i++) { ctx.fillStyle = Math.random() < 0.5 ? "#8e8e8e" : "#727272"; ctx.beginPath(); ctx.arc(Math.random() * s, Math.random() * s, 1 + Math.random() * 2, 0, 7); ctx.fill(); }
-  ctx.fillStyle = "#6a6a6a"; ctx.fillRect(0, 0, 14, s); ctx.fillRect(s - 14, 0, 14, s);   // gutter grooves
-  ctx.strokeStyle = "#5a5a5a"; ctx.lineWidth = 1.4;
-  for (let i = 0; i < 6; i++) { ctx.beginPath(); let x = Math.random() * s, y = Math.random() * s; ctx.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (Math.random() - 0.5) * 36; y += (Math.random() - 0.5) * 36; ctx.lineTo(x, y); } ctx.stroke(); }
-}, 1, 30);
-const texSidewalk = canvasTex(384, (ctx, s) => {
-  ctx.fillStyle = "#cfc5ae"; ctx.fillRect(0, 0, s, s);
-  speckle(ctx, s, 200, ["#d6cdb8", "#c6bca4", "#cabfa9"], 1, 2.5);
-  for (let i = 0; i < 3; i++) { ctx.fillStyle = "rgba(150,138,116,.18)"; ctx.beginPath(); ctx.ellipse(Math.random() * s, Math.random() * s, 10 + Math.random() * 16, 8 + Math.random() * 12, 0, 0, 7); ctx.fill(); }  // stains
-  ctx.strokeStyle = "rgba(120,110,92,.45)"; ctx.lineWidth = 1;
-  for (let i = 0; i < 4; i++) { ctx.beginPath(); let x = Math.random() * s, y = Math.random() * s; ctx.moveTo(x, y); for (let k = 0; k < 4; k++) { x += (Math.random() - 0.5) * 28; y += (Math.random() - 0.5) * 28; ctx.lineTo(x, y); } ctx.stroke(); }  // cracks
-  ctx.strokeStyle = "#b7ad96"; ctx.lineWidth = 3;
-  for (let i = 0; i <= 4; i++) {
-    const p = (s / 4) * i;
-    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, s); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(s, p); ctx.stroke();
-  }
-}, 16, 16);
-// sidewalk relief: faint grain + recessed expansion joints between the paving slabs
-const texSidewalkNormal = canvasNormalTex(256, (ctx, s) => {
-  for (let i = 0; i < 160; i++) { ctx.fillStyle = Math.random() < 0.5 ? "#8c8c8c" : "#767676"; ctx.beginPath(); ctx.arc(Math.random() * s, Math.random() * s, 1 + Math.random() * 1.6, 0, 7); ctx.fill(); }
-  ctx.strokeStyle = "#5e5e5e"; ctx.lineWidth = 3;
-  for (let i = 0; i <= 4; i++) {
-    const p = (s / 4) * i;
-    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, s); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(s, p); ctx.stroke();
-  }
-}, 16, 16);
-const texGrass = canvasTex(256, (ctx, s) => {
-  ctx.fillStyle = "#7fb069"; ctx.fillRect(0, 0, s, s);
-  speckle(ctx, s, 240, ["#8abc73", "#74a45f", "#90c47c", "#6d9b58"], 2, 6);
-}, 12, 12);
-// leafy mottle for tree/palm canopies (tinted green per-instance) — light & dark leaf clusters
-const texLeaf = canvasTex(64, (ctx, s) => {
-  ctx.fillStyle = "#eef3df"; ctx.fillRect(0, 0, s, s);
-  for (let i = 0; i < 150; i++) { ctx.fillStyle = Math.random() < 0.5 ? "rgba(64,86,46,.45)" : "rgba(255,255,255,.4)"; ctx.beginPath(); ctx.arc(Math.random() * s, Math.random() * s, 1.5 + Math.random() * 3.5, 0, 7); ctx.fill(); }
-}, 3, 3);
-// zebra crosswalk (white bars on transparent), 1:1 (no tiling)
-const texCrosswalk = canvasTex(64, (ctx, s) => { ctx.clearRect(0, 0, s, s); ctx.fillStyle = "#eef0ee"; const bars = 5, bw = s / (bars * 2 - 1); for (let i = 0; i < bars; i++) ctx.fillRect(i * bw * 2, 0, bw, s); }, 1, 1);
-// lane turn-arrow (points toward +Z = away from viewer / toward the intersection), white on transparent
-const texArrow = canvasTex(64, (ctx, s) => {
-  ctx.clearRect(0, 0, s, s); ctx.fillStyle = "#e7ebe4"; const cx = s / 2;
-  ctx.fillRect(cx - s * 0.07, s * 0.34, s * 0.14, s * 0.5);    // shaft
-  ctx.beginPath(); ctx.moveTo(cx, s * 0.12); ctx.lineTo(cx - s * 0.22, s * 0.42); ctx.lineTo(cx + s * 0.22, s * 0.42); ctx.closePath(); ctx.fill();  // head
-}, 1, 1);
-const texFacade = canvasTex(256, (ctx, s) => {
-  const band = 44;                                       // street-level storefront band
-  // wall: soft vertical gradient + fine concrete speckle (deterministic — no rng consumed)
-  const wg = ctx.createLinearGradient(0, 0, 0, s); wg.addColorStop(0, "#f3ecdd"); wg.addColorStop(1, "#dcd0bb");
-  ctx.fillStyle = wg; ctx.fillRect(0, 0, s, s);
-  for (let i = 0; i < 520; i++) { const x = (i * 113) % s, y = (i * 197) % s; ctx.fillStyle = (i & 1) ? "rgba(255,255,255,.045)" : "rgba(86,74,58,.05)"; ctx.fillRect(x, y, 2, 2); }
-  // storefront band with a lintel + big shop windows + a door
-  ctx.fillStyle = "#d2c6af"; ctx.fillRect(0, s - band, s, band);
-  ctx.fillStyle = "#b7aa90"; ctx.fillRect(0, s - band, s, 3);
-  for (let k = 0; k < 4; k++) { const bw = (s - 16) / 4; ctx.fillStyle = "#7e96a8"; ctx.fillRect(8 + k * bw + 3, s - band + 9, bw - 6, band - 20); }
-  ctx.fillStyle = "#6b5a44"; ctx.fillRect(s / 2 - 14, s - band + 8, 28, band - 12);
-  const cols = 6, rows = 7, ww = 22, wh = 18;
-  for (let cy = 0; cy < rows; cy++) { const y = 12 + cy * ((s - band - 24) / rows); ctx.fillStyle = "rgba(120,106,84,.32)"; ctx.fillRect(0, y + wh + 3, s, 2); }   // floor ledges
-  for (let cx = 0; cx < cols; cx++) for (let cy = 0; cy < rows; cy++) {
-    const x = 14 + cx * ((s - 28) / cols) + 4, y = 12 + cy * ((s - band - 24) / rows);
-    ctx.fillStyle = "#bdb39c"; ctx.fillRect(x - 2, y - 2, ww + 4, wh + 4);                          // window frame
-    if (rng() < 0.3) { const lg = ctx.createLinearGradient(x, y, x, y + wh); lg.addColorStop(0, "#ffe6ad"); lg.addColorStop(1, "#ffcf86"); ctx.fillStyle = lg; ctx.fillRect(x, y, ww, wh); }   // warm lit pane
-    else { const gg = ctx.createLinearGradient(x, y, x, y + wh); gg.addColorStop(0, "#9ab6cb"); gg.addColorStop(0.55, "#5f7c92"); gg.addColorStop(1, "#6f8a9f"); ctx.fillStyle = gg; ctx.fillRect(x, y, ww, wh);
-      ctx.fillStyle = "rgba(255,255,255,.16)"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + ww * 0.55, y); ctx.lineTo(x, y + wh * 0.55); ctx.closePath(); ctx.fill(); }   // glass + corner reflection
-  }
-});
-// night windows: black facade with a random subset of windows lit (used as an emissive map after dark)
-const texWindows = canvasTex(256, (ctx, s) => {
-  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, s, s);
-  const band = 44, cols = 6, rows = 7, ww = 22, wh = 18;
-  for (let cx = 0; cx < cols; cx++) for (let cy = 0; cy < rows; cy++) {
-    if (Math.random() < 0.5) continue;
-    const x = 14 + cx * ((s - 28) / cols) + 4, y = 12 + cy * ((s - band - 24) / rows);
-    ctx.fillStyle = Math.random() < 0.5 ? "#ffd98a" : "#ffe7b3";
-    ctx.fillRect(x, y, ww, wh);
-  }
-});
-// facade relief: raised mullion frames around recessed window glass + a sunk storefront band
-const texFacadeNormal = canvasNormalTex(256, (ctx, s) => {
-  const band = 44, cols = 6, rows = 7, ww = 22, wh = 18;
-  ctx.fillStyle = "#8c8c8c"; ctx.fillRect(0, 0, s, s);                 // wall plane
-  ctx.fillStyle = "#787878"; ctx.fillRect(0, s - band, s, band);      // storefront recessed
-  for (let cx = 0; cx < cols; cx++) for (let cy = 0; cy < rows; cy++) {
-    const x = 14 + cx * ((s - 28) / cols) + 4, y = 12 + cy * ((s - band - 24) / rows);
-    ctx.fillStyle = "#bcbcbc"; ctx.fillRect(x - 2, y - 2, ww + 4, wh + 4);   // raised frame
-    ctx.fillStyle = "#5a5a5a"; ctx.fillRect(x, y, ww, wh);                   // recessed glass
-  }
-});
-// glass-tower facade — a uniform window grid that tiles seamlessly so it can repeat up tall skyscrapers
-const texTower = canvasTex(128, (ctx, s) => {
-  // brushed-steel curtain wall with a subtle vertical sheen behind the glass mullions
-  const fg = ctx.createLinearGradient(0, 0, s, 0); fg.addColorStop(0, "#8aa1b3"); fg.addColorStop(0.5, "#9cb2c2"); fg.addColorStop(1, "#859caf");
-  ctx.fillStyle = fg; ctx.fillRect(0, 0, s, s);
-  const R = 4, cell = s / R, p = cell * 0.14;
-  for (let cy = 0; cy < R; cy++) for (let cx = 0; cx < R; cx++) {
-    const x = cx * cell + p, y = cy * cell + p, w = cell - 2 * p, hh = cell - 2 * p;
-    let top, bot;
-    if (rng() < 0.2) { top = "#fff0c8"; bot = "#ffd98a"; }            // lit interior
-    else if (rng() < 0.5) { top = "#86a3bf"; bot = "#4f6b84"; }       // cool blue glass
-    else { top = "#93b6c6"; bot = "#5d8092"; }                        // teal glass
-    const g = ctx.createLinearGradient(x, y, x, y + hh); g.addColorStop(0, top); g.addColorStop(1, bot);
-    ctx.fillStyle = g; ctx.fillRect(x, y, w, hh);
-    ctx.fillStyle = "rgba(255,255,255,.14)"; ctx.fillRect(x, y, w, 2);          // glint along the top of each pane
-    ctx.fillStyle = "rgba(20,30,40,.18)"; ctx.fillRect(x, y + hh - 2, w, 2);    // shadow line at the bottom
-  }
-}, 2, 7);
-// night version: a random subset of tower windows lit (emissive map after dark)
-const texTowerWin = canvasTex(128, (ctx, s) => {
-  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, s, s);
-  const R = 4, cell = s / R, p = cell * 0.16;
-  for (let cy = 0; cy < R; cy++) for (let cx = 0; cx < R; cx++) {
-    if (Math.random() < 0.55) continue;
-    ctx.fillStyle = Math.random() < 0.5 ? "#ffe7b3" : "#cfe3ff";
-    ctx.fillRect(cx * cell + p, cy * cell + p, cell - 2 * p, cell - 2 * p);
-  }
-}, 2, 7);
-// run-down apartment facade: grimy stucco, some boarded windows, cracks + graffiti
-const texGhetto = canvasTex(128, (ctx, s) => {
-  ctx.fillStyle = "#9a8e7c"; ctx.fillRect(0, 0, s, s);
-  for (let i = 0; i < 220; i++) { ctx.fillStyle = ["#8a7e6c", "#857a68", "#a89c88", "#6f6555"][i & 3]; const r = 1 + Math.random() * 3; ctx.fillRect(Math.random() * s, Math.random() * s, r, r); }
-  const R = 4, cell = s / R, p = cell * 0.2;
-  for (let cy = 0; cy < R; cy++) for (let cx = 0; cx < R; cx++) {
-    const wx = cx * cell + p, wy = cy * cell + p, ww = cell - 2 * p, wh = cell - 2 * p;
-    if (Math.random() < 0.35) { ctx.fillStyle = "#6b5236"; ctx.fillRect(wx, wy, ww, wh); ctx.strokeStyle = "#4a3724"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(wx, wy); ctx.lineTo(wx + ww, wy + wh); ctx.moveTo(wx + ww, wy); ctx.lineTo(wx, wy + wh); ctx.stroke(); }
-    else { ctx.fillStyle = Math.random() < 0.5 ? "#3a4048" : "#4a4438"; ctx.fillRect(wx, wy, ww, wh); }
-  }
-  ctx.strokeStyle = "rgba(40,32,24,.5)"; ctx.lineWidth = 1.5;
-  for (let i = 0; i < 5; i++) { ctx.beginPath(); let x = Math.random() * s, y = Math.random() * s; ctx.moveTo(x, y); for (let k = 0; k < 4; k++) { x += (Math.random() - 0.5) * 26; y += 6 + Math.random() * 14; ctx.lineTo(x, y); } ctx.stroke(); }
-  for (let i = 0; i < 3; i++) { ctx.fillStyle = ["#c0476b", "#3fa0d0", "#e0b020", "#5fb060"][(Math.random() * 4) | 0]; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.arc(Math.random() * s, Math.random() * s, 4 + Math.random() * 5, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
-}, 2, 3);
-const texGhettoWin = canvasTex(128, (ctx, s) => {
-  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, s, s);
-  const R = 4, cell = s / R, p = cell * 0.2;
-  for (let cy = 0; cy < R; cy++) for (let cx = 0; cx < R; cx++) {
-    if (Math.random() < 0.78) continue;                  // few lights on in the rough part of town
-    ctx.fillStyle = Math.random() < 0.5 ? "#ffd98a" : "#d9c089";
-    ctx.fillRect(cx * cell + p, cy * cell + p, cell - 2 * p, cell - 2 * p);
-  }
-}, 2, 3);
+// ---------- procedural textures — moved to textures.js ----------
+// built HERE (not at module load) so the seeded-RNG stream is consumed at the exact same point
+// in startup as when these were inline constants — the deterministic world stays byte-identical.
+const { texAsphalt, texAsphaltNormal, texSidewalk, texSidewalkNormal, texGrass, texLeaf, texCrosswalk, texArrow,
+  texFacade, texWindows, texFacadeNormal, texTower, texTowerWin, texGhetto, texGhettoWin } = buildWorldTextures();
 
 // ---------- geometry helpers (merged vertex-colored boxes => 1 draw call per model) ----------
-const _col = new THREE.Color();
-function boxGeoC(w, h, d, x, y, z, color) {
-  const g = new THREE.BoxGeometry(w, h, d);
-  g.translate(x, y, z);
-  const n = g.attributes.position.count;
-  const cols = new Float32Array(n * 3);
-  _col.set(color);
-  for (let i = 0; i < n; i++) { cols[i * 3] = _col.r; cols[i * 3 + 1] = _col.g; cols[i * 3 + 2] = _col.b; }
-  g.setAttribute("color", new THREE.BufferAttribute(cols, 3));
-  return g;
-}
-// rounded vertex-coloured primitives (smooth normals) for nicer characters — still merged to 1 mesh
-function colorize(g, color) {
-  const n = g.attributes.position.count, cols = new Float32Array(n * 3);
-  _col.set(color);
-  for (let i = 0; i < n; i++) { cols[i * 3] = _col.r; cols[i * 3 + 1] = _col.g; cols[i * 3 + 2] = _col.b; }
-  g.setAttribute("color", new THREE.BufferAttribute(cols, 3));
-  return g;
-}
-function cylC(rT, rB, h, x, y, z, color) {
-  const g = new THREE.CylinderGeometry(rT, rB, h, 16, 1);
-  g.translate(x, y, z); return colorize(g, color);
-}
-function sphC(r, x, y, z, color, sx = 1, sy = 1, sz = 1) {
-  const g = new THREE.SphereGeometry(r, 18, 14);
-  if (sx !== 1 || sy !== 1 || sz !== 1) g.scale(sx, sy, sz);
-  g.translate(x, y, z); return colorize(g, color);
-}
-function mergeGeos(geos) {
-  const pos = [], norm = [], col = [], uv = [], idx = [];
-  let off = 0;
-  const hasUv = !!geos[0].attributes.uv, hasCol = !!geos[0].attributes.color;
-  for (const g of geos) {
-    const p = g.attributes.position, nr = g.attributes.normal;
-    for (let i = 0; i < p.count; i++) {
-      pos.push(p.getX(i), p.getY(i), p.getZ(i));
-      norm.push(nr.getX(i), nr.getY(i), nr.getZ(i));
-      if (hasCol) { const c = g.attributes.color; col.push(c.getX(i), c.getY(i), c.getZ(i)); }
-      if (hasUv) { const u = g.attributes.uv; uv.push(u.getX(i), u.getY(i)); }
-    }
-    for (let i = 0; i < g.index.count; i++) idx.push(g.index.getX(i) + off);
-    off += p.count;
-    g.dispose();
-  }
-  const out = new THREE.BufferGeometry();
-  out.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-  out.setAttribute("normal", new THREE.Float32BufferAttribute(norm, 3));
-  if (hasCol) out.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
-  if (hasUv) out.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
-  out.setIndex(idx);
-  return out;
-}
-function textSprite(text, fg, bg, w, h, y) {
-  const c = document.createElement("canvas");
-  c.width = 512; c.height = 128;
-  const ctx = c.getContext("2d");
-  ctx.fillStyle = bg;
-  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(6, 14, 500, 100, 28); ctx.fill(); }
-  else ctx.fillRect(6, 14, 500, 100);
-  ctx.fillStyle = fg; ctx.font = "800 52px sans-serif";
-  ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillText(text, 256, 66, 470);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true }));
-  sp.scale.set(w, h, 1); sp.position.y = y;
-  return sp;
-}
+// moved to geometry.js — imported at the top of the file
+const _col = new THREE.Color();   // scratch colour, still used by instanced-tint code below
 
 // ---------- world build ----------
 const colliders = [];   // {x0,x1,z0,z1}
