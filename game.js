@@ -11,6 +11,7 @@ import { initVehicles, wheelGeo, carGeo, bikeGeo, CAR_COLORS, makeCar, makeBike,
 import { initProjectiles, projPool, fireProjectile, updateProjectiles, muzzleFlash, updateFlashes } from "./projectiles.js";
 import { initArcade, arcadeOpen, openArcade, closeArcade, updateArcade, ARC_BY_CAB } from "./arcade.js";
 import { initWeather, updateWeather, weatherMode, cycleWeatherMode } from "./weather.js";
+import { initOcean, updateOcean, sharks, swimmers } from "./ocean.js";
 
 // ---------- renderer / scene ----------
 const dom = id => document.getElementById(id);
@@ -1217,6 +1218,11 @@ boats.push(makeBoat(-90, SEA_Z + 7));
 boats.push(makeJetSki(34, SEA_Z + 5, 0xffd23f));
 boats.push(makeJetSki(-52, SEA_Z + 5, 0x3fa9f5));
 boats.push(makeJetSki(160, SEA_Z + 6, 0xe8543f));
+initOcean(scene, SEA_Z, {
+  focus: () => ({ x: driving ? driving.x : player.x, z: driving ? driving.z : player.z, swimming }),
+  hurt: n => hurt(n), toast: t => toast(t), addShake: v => addShake(v), buzz: v => buzz(v),
+  burst: (...a) => burst(...a), emit: (...a) => emit(...a),
+});
 
 // ---------- jetpack pickup: grab it once, then hold BOOST on foot to fly ----------
 const jetpackPickup = { x: PLAZA.x - 26, z: Rc(3) - 12 };
@@ -2542,6 +2548,9 @@ const CIRCUITS = [
     cps: [[Rc(5), Rc(1)], [Rc(5), Rc(5)], [Rc(1), Rc(5)], [Rc(1), Rc(1)]] },
   { id: "harbor", start: { x: Rc(4), z: Rc(3) }, limit: 42, reward: 400,
     cps: [[Rc(6), Rc(3)], [Rc(6), Rc(5)], [Rc(4), Rc(5)], [Rc(4), Rc(3)]] },
+  // water circuit: grab a jet ski (or boat) and slalom the coast — the start line floats by the rental skis
+  { id: "wake", water: true, start: { x: 34, z: SEA_Z + 16 }, limit: 58, reward: 900,
+    cps: [[-80, SEA_Z + 45], [-190, SEA_Z + 95], [-40, SEA_Z + 140], [130, SEA_Z + 95], [210, SEA_Z + 45], [34, SEA_Z + 16]] },
 ];
 const RACE_BEST_BONUS = 300, RACE_CP_R = 9;
 const MEDAL_BONUS = [0, 200, 500, 1000];   // bronze / silver / gold cash on first reaching a tier
@@ -2558,7 +2567,7 @@ let race = { stage: "idle", ci: -1, cp: 0, t: 0, armed: true };  // idle | activ
   const padMat = new THREE.MeshLambertMaterial({ map: checkTex, transparent: true, opacity: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
   for (const C of CIRCUITS) {
     const m = new THREE.Mesh(padGeo, padMat);
-    m.position.set(C.start.x, CURB + 0.05, C.start.z);
+    m.position.set(C.start.x, C.water ? 0.14 : CURB + 0.05, C.start.z);
     scene.add(m);
   }
 }
@@ -5315,6 +5324,7 @@ function update(dt) {
   state.money += incomeRate() / 60 * dt;
   envUpdate();
   updateWeather(dt, driving ? driving.x : player.x, driving ? driving.z : player.z);
+  updateOcean(dt, simTime);
   // tip jars: owned businesses fill up; collect by stopping by on foot
   for (const b of BIZ) {
     const lvl = state.owned[b.id] || 0;
@@ -5675,6 +5685,8 @@ globalThis.__palmCity = {
   pressPunch: () => { actP = true; },
   openArcade: g => openArcade(g), arcadeOpen: () => arcadeOpen,
   swimming: () => swimming,
+  sharks, swimmers, race,
+  finishStory: () => { state.mi = M.length; mState = "done"; },   // jump straight to freeplay (dev/testing)
   health: () => health,
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
   applyGfx: m => applyGfx(m), gfx: () => ({ mode: gfxMode, prCap: PR_CAP, msaa: msaaSamples, pr: renderer.getPixelRatio() }),
