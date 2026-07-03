@@ -32,3 +32,6 @@ You arrive in a sunny pastel beach city with **$25**. Climb from odd jobs to own
 
 ## Run locally
 Open `index.html` in any modern browser. That's it — no build step.
+
+## 🎮 Unity 3D remake
+A full GTA III-style 3D remake lives in [`unity/`](unity/): 21 C# scripts that generate the entire game — city, vehicles, peds, cops, missions, HUD — from code and primitives, so you can press Play in an empty scene with zero assets. See [`unity/SETUP.md`](unity/SETUP.md) for the 5-minute setup (Unity 6 LTS recommended).
