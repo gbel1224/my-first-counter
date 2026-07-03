@@ -14,6 +14,10 @@ namespace PalmCity
 
         public static void Build(Transform playerTarget)
         {
+            // take over rendering from any leftover template camera
+            foreach (var oldCam in FindObjectsOfType<Camera>()) oldCam.gameObject.SetActive(false);
+            foreach (var al in FindObjectsOfType<AudioListener>()) al.enabled = false;
+
             var go = new GameObject("MainCamera");
             go.tag = "MainCamera";
             var cam = go.AddComponent<Camera>();

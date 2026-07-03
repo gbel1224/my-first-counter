@@ -19,6 +19,10 @@ namespace PalmCity
         {
             Instance = this;
 
+            // the day/night cycle owns the sun — disable any template light
+            foreach (var l in FindObjectsOfType<Light>())
+                if (l.type == LightType.Directional) l.enabled = false;
+
             var sunGo = new GameObject("Sun");
             sun = sunGo.AddComponent<Light>();
             sun.type = LightType.Directional;

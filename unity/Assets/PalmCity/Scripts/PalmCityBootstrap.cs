@@ -26,6 +26,15 @@ namespace PalmCity
             gameObject.AddComponent<MissionManager>();
         }
 
+        // Safety net: if Play is pressed in a scene that has no bootstrap
+        // (e.g. Unity's default empty scene), spawn one automatically.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        static void AutoBoot()
+        {
+            if (FindObjectOfType<PalmCityBootstrap>() == null)
+                new GameObject("Game (auto)").AddComponent<PalmCityBootstrap>();
+        }
+
         void Start()
         {
             if (showStartMenu) StartMenu.Build(this);
