@@ -64,9 +64,11 @@ namespace PalmCity
             {
                 Projectile.Launch(origin + baseDir * 1.5f, baseDir, w.damage);
                 PlayerCamera.Shake(0.35f);
+                Sfx.Play("boom", 0.7f);
             }
             else
             {
+                Sfx.Play(w.name == "Shotgun" ? "boom" : w.name == "Rifle" ? "crack" : "pop", 0.5f);
                 for (int i = 0; i < w.pellets; i++)
                 {
                     Vector3 dir = Quaternion.Euler(Random.Range(-w.spread, w.spread) * 0.4f,
@@ -112,6 +114,7 @@ namespace PalmCity
                 connected = true;
             }
             FX.Burst(center, Color.white, connected ? 4 : 2, 2f);
+            if (connected) Sfx.Play("hit", 0.7f);
         }
 
         void AimAtNearestThreat()

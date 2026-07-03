@@ -13,6 +13,7 @@ namespace PalmCity
             FX.Burst(pos, new Color(0.35f, 0.35f, 0.35f), 10, 4f);
             FX.Flash(pos, new Color(1f, 0.6f, 0.2f), radius * 3f, 0.15f);
             PlayerCamera.Shake(0.5f);
+            Sfx.Play("boom");
 
             var seen = new HashSet<IDamageable>();
             foreach (var col in Physics.OverlapSphere(pos, radius))

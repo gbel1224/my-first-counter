@@ -35,6 +35,11 @@ namespace PalmCity
             try { File.WriteAllText(Path, JsonUtility.ToJson(d)); } catch { }
         }
 
+        public static void Delete()
+        {
+            try { if (File.Exists(Path)) File.Delete(Path); } catch { }
+        }
+
         public static SaveData Load()
         {
             try

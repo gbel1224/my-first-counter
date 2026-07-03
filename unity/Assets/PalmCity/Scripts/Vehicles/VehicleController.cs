@@ -42,7 +42,7 @@ namespace PalmCity
         float inThrottle, inSteer;
         bool inBrake, burning;
         Renderer bodyRenderer;
-        GameObject lightBar;
+        GameObject lightBar, headlights;
 
         public float Speed => speed;
 
@@ -98,6 +98,21 @@ namespace PalmCity
 
             var vc = go.AddComponent<VehicleController>();
             vc.type = t; vc.typeIndex = typeIdx; vc.rb = rb; vc.bodyRenderer = rend;
+
+            // headlights (emissive, toggled at night)
+            vc.headlights = new GameObject("Headlights");
+            vc.headlights.transform.SetParent(go.transform, false);
+            var beamMat = Mats.Emissive(new Color(1f, 0.95f, 0.75f), 3f);
+            foreach (var side in new[] { -t.dims.z * 0.3f, t.dims.z * 0.3f })
+            {
+                var h = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                Destroy(h.GetComponent<Collider>());
+                h.transform.SetParent(vc.headlights.transform, false);
+                h.transform.localPosition = new Vector3(side, -t.dims.y * 0.1f, t.dims.x / 2f);
+                h.transform.localScale = new Vector3(0.3f, 0.15f, 0.06f);
+                h.GetComponent<Renderer>().material = beamMat;
+            }
+            vc.headlights.SetActive(false);
 
             if (t.isCop) vc.BuildLightBar();
             if (withDriverAI) vc.ai = go.AddComponent<VehicleAI>();
@@ -160,6 +175,12 @@ namespace PalmCity
             {
                 bool sirenOn = !playerDriven || WantedSystem.Instance.Stars > 0;
                 lightBar.SetActive(sirenOn && Mathf.FloorToInt(Time.time * 6f) % 2 == 0);
+            }
+            if (headlights != null)
+            {
+                bool wantOn = DayNightCycle.Instance != null && DayNightCycle.Instance.IsNight
+                              && (playerDriven || ai != null);
+                if (headlights.activeSelf != wantOn) headlights.SetActive(wantOn);
             }
         }
 

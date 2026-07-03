@@ -170,6 +170,7 @@ namespace PalmCity
                 }
             }
             FX.Tracer(origin, end, new Color(1f, 0.5f, 0.4f));
+            Sfx.Play("pop", 0.25f);
         }
 
         void Walk(Vector3 dir, float spd)
@@ -197,6 +198,7 @@ namespace PalmCity
             if (dead) return;
             dead = true;
 
+            Sfx.Play("hit", 0.6f);
             GameManager.Instance.RegisterPedKill(this, byExplosion);
             if (Random.value < 0.55f) Pickup.Drop(transform.position, PickupKind.Cash, cashDrop);
             if (isBoss) Pickup.Drop(transform.position + Vector3.right, PickupKind.Health, 0);

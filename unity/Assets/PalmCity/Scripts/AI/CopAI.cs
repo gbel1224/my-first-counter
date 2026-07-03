@@ -99,6 +99,7 @@ namespace PalmCity
                 }
             }
             FX.Tracer(origin, end, new Color(0.6f, 0.8f, 1f));
+            Sfx.Play("pop", 0.25f);
         }
 
         public void TakeDamage(float amount, Vector3 hitPoint, GameObject source)
@@ -115,6 +116,7 @@ namespace PalmCity
             if (dead) return;
             dead = true;
 
+            Sfx.Play("hit", 0.6f);
             GameManager.Instance.RegisterCopKill();
             Pickup.Drop(transform.position, PickupKind.Cash, Random.Range(20, 61));
             if (Random.value < 0.4f) Pickup.Drop(transform.position + Vector3.forward, PickupKind.Armor, 0);

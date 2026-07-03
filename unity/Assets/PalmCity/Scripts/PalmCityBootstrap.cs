@@ -8,9 +8,11 @@ namespace PalmCity
     public class PalmCityBootstrap : MonoBehaviour
     {
         [Header("Start Mode")]
-        [Tooltip("Skip the story and start with the full arsenal + $5000.")]
+        [Tooltip("Show the title screen (New Game / Continue / Free Roam) on launch.")]
+        public bool showStartMenu = true;
+        [Tooltip("If the start menu is off: skip the story, full arsenal + $5000.")]
         public bool freeRoam = false;
-        [Tooltip("Resume from the last save if one exists (story mode only).")]
+        [Tooltip("If the start menu is off: resume from the last save if one exists.")]
         public bool loadSaveIfPresent = true;
 
         void Awake()
@@ -26,7 +28,13 @@ namespace PalmCity
 
         void Start()
         {
-            GameManager.Instance.Begin(freeRoam, loadSaveIfPresent);
+            if (showStartMenu) StartMenu.Build(this);
+            else Launch(freeRoam, loadSaveIfPresent);
+        }
+
+        public void Launch(bool asFreeRoam, bool load)
+        {
+            GameManager.Instance.Begin(asFreeRoam, load);
         }
     }
 }

@@ -75,6 +75,7 @@ namespace PalmCity
         public void AddCash(float n)
         {
             cash += n;
+            if (n > 0f) Sfx.Play("cash", 0.5f);
             HUDBuilder.I.FlashCredit(n);
             HUDBuilder.I.Refresh();
         }

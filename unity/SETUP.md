@@ -35,11 +35,14 @@ Copy the `Assets/PalmCity` folder from this repo into your project's `Assets/` f
 1. **File → New Scene** (Basic/Empty — either is fine). Delete any default objects except nothing is required; the game creates its own camera, light, and UI. *(If the template scene has a Main Camera or Directional Light, delete them to avoid duplicates.)*
 2. Create an empty GameObject: **GameObject → Create Empty**, name it `Game`.
 3. **Add Component → Palm City Bootstrap**.
-4. Press **Play**. That's the whole setup.
+4. Press **Play**. That's the whole setup — you'll land on the title screen (**New Game / Continue / Free Roam**).
 
 In the Inspector on `PalmCityBootstrap`:
+- **Show Start Menu** — untick to boot straight into gameplay; the two options below then apply:
 - **Free Roam** — skip the story, start with $5,000 and every weapon.
 - **Load Save If Present** — continue from the last auto-save (story mode).
+
+Sound effects are synthesized at runtime (`Core/Sfx.cs`) — gunshots, explosions, hits and cash chimes work with no audio files.
 
 ## 6. Controls
 
@@ -65,15 +68,16 @@ Set **Default Orientation → Landscape Left** in Player Settings (the HUD is la
 ```
 Assets/PalmCity/Scripts/
 ├── PalmCityBootstrap.cs   ← the one component you add by hand
-├── Core/      GameManager (cash/XP/level/death), SaveSystem (JSON), Mats
+├── Core/      GameManager (cash/XP/level/death), SaveSystem (JSON), Mats,
+│              Sfx (procedural sound effects)
 ├── World/     CityGenerator (roads/buildings/palms/beach), DayNightCycle (+rain)
 ├── Player/    PlayerController (walk/enter cars), PlayerCamera (chase cam + shake)
 ├── Combat/    WeaponSystem (7 weapons), Projectile (RPG), Explosion (chains), FX
 ├── Vehicles/  VehicleController (arcade physics, burn→explode), VehicleAI (traffic/chase)
 ├── AI/        PedestrianAI, CopAI, WantedSystem (5★ heat), EntityPopulator
 ├── Gameplay/  MissionManager (12 chapters), Pickup
-└── UI/        HUDBuilder (whole HUD from code), VirtualJoystick, HoldButton,
-               MinimapCamera, InputHub
+└── UI/        HUDBuilder (whole HUD from code), StartMenu, VirtualJoystick,
+               HoldButton, MinimapCamera, InputHub
 ```
 
 Save file: `Application.persistentDataPath/palmcity_save.json` (auto-saves every 20 s and on mission complete).
@@ -83,5 +87,5 @@ Save file: `Application.persistentDataPath/palmcity_save.json` (auto-saves every
 - Replace capsule people / box cars with real models: edit the `Build(...)` factory methods in `PedestrianAI`, `CopAI`, `VehicleController`, `PlayerController` — the gameplay logic doesn't care what the visuals are.
 - Nicer driving: swap the arcade math in `VehicleController.FixedUpdate` for `WheelCollider`s.
 - Smarter pathfinding: add the AI Navigation package and move peds with `NavMeshAgent`.
-- Sound: add `AudioSource` calls in `WeaponSystem.TryFire`, `Explosion.Boom`, `VehicleController`.
+- Better sound: replace the synthesized clips in `Core/Sfx.cs` with real `AudioClip` assets — the `Sfx.Play("boom")` call sites stay the same.
 - More story: add entries to the chapter list in `MissionManager.Chapters()` — each is ~5 lines.
