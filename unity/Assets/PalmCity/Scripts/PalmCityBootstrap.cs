@@ -1,0 +1,50 @@
+using UnityEngine;
+
+namespace PalmCity
+{
+    /// The only component you need to add in the Editor.
+    /// Put it on an empty GameObject in an empty scene and press Play —
+    /// it wires up the whole game from code and primitives.
+    public class PalmCityBootstrap : MonoBehaviour
+    {
+        [Header("Start Mode")]
+        [Tooltip("Show the title screen (New Game / Continue / Free Roam) on launch.")]
+        public bool showStartMenu = true;
+        [Tooltip("If the start menu is off: skip the story, full arsenal + $5000.")]
+        public bool freeRoam = false;
+        [Tooltip("If the start menu is off: resume from the last save if one exists.")]
+        public bool loadSaveIfPresent = true;
+
+        void Awake()
+        {
+            Application.targetFrameRate = 60;
+            if (GetComponent<VisualLibrary>() == null) gameObject.AddComponent<VisualLibrary>();
+            gameObject.AddComponent<GameManager>();
+            gameObject.AddComponent<CityGenerator>();
+            gameObject.AddComponent<DayNightCycle>();
+            gameObject.AddComponent<WantedSystem>();
+            gameObject.AddComponent<EntityPopulator>();
+            gameObject.AddComponent<MissionManager>();
+        }
+
+        // Safety net: if Play is pressed in a scene that has no bootstrap
+        // (e.g. Unity's default empty scene), spawn one automatically.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        static void AutoBoot()
+        {
+            if (FindObjectOfType<PalmCityBootstrap>() == null)
+                new GameObject("Game (auto)").AddComponent<PalmCityBootstrap>();
+        }
+
+        void Start()
+        {
+            if (showStartMenu) StartMenu.Build(this);
+            else Launch(freeRoam, loadSaveIfPresent);
+        }
+
+        public void Launch(bool asFreeRoam, bool load)
+        {
+            GameManager.Instance.Begin(asFreeRoam, load);
+        }
+    }
+}
