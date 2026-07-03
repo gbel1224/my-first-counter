@@ -51,21 +51,42 @@ namespace PalmCity
             ped.armed = boss || (hostile && Random.value < 0.6f);
             ped.cashDrop = Random.Range(2, 41);
 
-            // visuals
-            var body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            Destroy(body.GetComponent<Collider>());
-            body.transform.SetParent(go.transform, false);
-            body.transform.localPosition = new Vector3(0f, 0.8f, 0f);
-            body.transform.localScale = new Vector3(0.55f, 0.55f, 0.55f) * (boss ? 1.25f : 1f);
-            ped.bodyRenderer = body.GetComponent<Renderer>();
-            ped.bodyRenderer.material = Mats.Solid(ped.shirtColor);
+            // visuals — Asset Store model if one is slotted, primitives otherwise
+            var lib = VisualLibrary.I;
+            GameObject model = lib != null ? lib.PickPed() : null;
+            if (model != null)
+            {
+                VisualLibrary.FitHeight(model, go.transform, boss ? 2.1f : 1.7f);
+            }
+            else
+            {
+                var body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                Destroy(body.GetComponent<Collider>());
+                body.transform.SetParent(go.transform, false);
+                body.transform.localPosition = new Vector3(0f, 0.8f, 0f);
+                body.transform.localScale = new Vector3(0.55f, 0.55f, 0.55f) * (boss ? 1.25f : 1f);
+                ped.bodyRenderer = body.GetComponent<Renderer>();
+                ped.bodyRenderer.material = Mats.Solid(ped.shirtColor);
 
-            var head = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            Destroy(head.GetComponent<Collider>());
-            head.transform.SetParent(go.transform, false);
-            head.transform.localPosition = new Vector3(0f, 1.55f, 0f) * (boss ? 1.2f : 1f);
-            head.transform.localScale = Vector3.one * 0.35f * (boss ? 1.2f : 1f);
-            head.GetComponent<Renderer>().material = Mats.Solid(ped.skinColor);
+                var head = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                Destroy(head.GetComponent<Collider>());
+                head.transform.SetParent(go.transform, false);
+                head.transform.localPosition = new Vector3(0f, 1.55f, 0f) * (boss ? 1.2f : 1f);
+                head.transform.localScale = Vector3.one * 0.35f * (boss ? 1.2f : 1f);
+                head.GetComponent<Renderer>().material = Mats.Solid(ped.skinColor);
+            }
+
+            // hostiles get a floating marker so they stay readable with any model
+            if (hostile)
+            {
+                var mark = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                Destroy(mark.GetComponent<Collider>());
+                mark.transform.SetParent(go.transform, false);
+                mark.transform.localPosition = new Vector3(0f, boss ? 2.6f : 2.2f, 0f);
+                mark.transform.localScale = Vector3.one * 0.22f;
+                mark.GetComponent<Renderer>().material =
+                    Mats.Emissive(boss ? new Color(1f, 0.85f, 0.2f) : new Color(1f, 0.15f, 0.15f), 3f);
+            }
 
             if (hostile && MinimapCamera.I != null)
                 MinimapCamera.AddBlip(go.transform, boss ? new Color(1f, 0.85f, 0.2f) : Color.red, boss ? 8f : 5f);

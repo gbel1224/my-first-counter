@@ -62,38 +62,51 @@ namespace PalmCity
             box.size = new Vector3(t.dims.z, t.dims.y, t.dims.x); // width, height, length (z = forward)
             box.center = new Vector3(0f, 0f, 0f);
 
-            // body
-            var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            Destroy(body.GetComponent<Collider>());
-            body.transform.SetParent(go.transform, false);
-            body.transform.localScale = new Vector3(t.dims.z, t.dims.y * 0.6f, t.dims.x);
-            body.transform.localPosition = new Vector3(0f, -t.dims.y * 0.15f, 0f);
-            var rend = body.GetComponent<Renderer>();
-            rend.material = Mats.Solid(t.color);
+            // visuals — Asset Store model if slotted, primitives otherwise
+            var lib = VisualLibrary.I;
+            GameObject prefab = null;
+            if (lib != null)
+                prefab = t.isCop ? lib.copCarModel : t.isBike ? lib.bikeModel : lib.PickCar();
 
-            // cabin
-            if (!t.isBike)
+            Renderer rend = null;
+            if (prefab != null)
             {
-                var cabin = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                Destroy(cabin.GetComponent<Collider>());
-                cabin.transform.SetParent(go.transform, false);
-                cabin.transform.localScale = new Vector3(t.dims.z * 0.85f, t.dims.y * 0.45f, t.dims.x * 0.45f);
-                cabin.transform.localPosition = new Vector3(0f, t.dims.y * 0.28f, -t.dims.x * 0.05f);
-                cabin.GetComponent<Renderer>().material = Mats.Solid(new Color(0.1f, 0.16f, 0.24f));
+                var model = VisualLibrary.FitLength(prefab, go.transform, t.dims.x,
+                    lib.vehicleYawOffset, -t.dims.y / 2f);
+                rend = model.GetComponentInChildren<Renderer>();
             }
-
-            // wheels (visual only)
-            var wheelMat = Mats.Solid(new Color(0.08f, 0.08f, 0.08f));
-            float wx = t.dims.z / 2f, wz = t.dims.x * 0.32f, wy = -t.dims.y / 2f + 0.1f;
-            foreach (var off in new[] { new Vector3(wx, wy, wz), new Vector3(-wx, wy, wz), new Vector3(wx, wy, -wz), new Vector3(-wx, wy, -wz) })
+            else
             {
-                var wheel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                Destroy(wheel.GetComponent<Collider>());
-                wheel.transform.SetParent(go.transform, false);
-                wheel.transform.localPosition = off;
-                wheel.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
-                wheel.transform.localScale = new Vector3(0.65f, 0.12f, 0.65f);
-                wheel.GetComponent<Renderer>().material = wheelMat;
+                var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                Destroy(body.GetComponent<Collider>());
+                body.transform.SetParent(go.transform, false);
+                body.transform.localScale = new Vector3(t.dims.z, t.dims.y * 0.6f, t.dims.x);
+                body.transform.localPosition = new Vector3(0f, -t.dims.y * 0.15f, 0f);
+                rend = body.GetComponent<Renderer>();
+                rend.material = Mats.Solid(t.color);
+
+                if (!t.isBike)
+                {
+                    var cabin = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    Destroy(cabin.GetComponent<Collider>());
+                    cabin.transform.SetParent(go.transform, false);
+                    cabin.transform.localScale = new Vector3(t.dims.z * 0.85f, t.dims.y * 0.45f, t.dims.x * 0.45f);
+                    cabin.transform.localPosition = new Vector3(0f, t.dims.y * 0.28f, -t.dims.x * 0.05f);
+                    cabin.GetComponent<Renderer>().material = Mats.Solid(new Color(0.1f, 0.16f, 0.24f));
+                }
+
+                var wheelMat = Mats.Solid(new Color(0.08f, 0.08f, 0.08f));
+                float wx = t.dims.z / 2f, wz = t.dims.x * 0.32f, wy = -t.dims.y / 2f + 0.1f;
+                foreach (var off in new[] { new Vector3(wx, wy, wz), new Vector3(-wx, wy, wz), new Vector3(wx, wy, -wz), new Vector3(-wx, wy, -wz) })
+                {
+                    var wheel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    Destroy(wheel.GetComponent<Collider>());
+                    wheel.transform.SetParent(go.transform, false);
+                    wheel.transform.localPosition = off;
+                    wheel.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+                    wheel.transform.localScale = new Vector3(0.65f, 0.12f, 0.65f);
+                    wheel.GetComponent<Renderer>().material = wheelMat;
+                }
             }
 
             var vc = go.AddComponent<VehicleController>();
@@ -214,7 +227,7 @@ namespace PalmCity
         IEnumerator BurnThenExplode()
         {
             burning = true;
-            bodyRenderer.material = Mats.Solid(new Color(0.15f, 0.1f, 0.1f));
+            if (bodyRenderer != null) bodyRenderer.material = Mats.Solid(new Color(0.15f, 0.1f, 0.1f));
             float t = Random.Range(1.4f, 2.2f);
             while (t > 0f)
             {

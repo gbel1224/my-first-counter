@@ -28,19 +28,27 @@ namespace PalmCity
             var visuals = new GameObject("Visuals");
             visuals.transform.SetParent(go.transform, false);
 
-            var body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            Destroy(body.GetComponent<Collider>());
-            body.transform.SetParent(visuals.transform, false);
-            body.transform.localPosition = new Vector3(0f, 0.85f, 0f);
-            body.transform.localScale = new Vector3(0.6f, 0.6f, 0.6f);
-            body.GetComponent<Renderer>().material = Mats.Solid(new Color(0.12f, 0.43f, 0.92f));
+            var lib = VisualLibrary.I;
+            if (lib != null && lib.playerModel != null)
+            {
+                VisualLibrary.FitHeight(lib.playerModel, visuals.transform, 1.8f);
+            }
+            else
+            {
+                var body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                Destroy(body.GetComponent<Collider>());
+                body.transform.SetParent(visuals.transform, false);
+                body.transform.localPosition = new Vector3(0f, 0.85f, 0f);
+                body.transform.localScale = new Vector3(0.6f, 0.6f, 0.6f);
+                body.GetComponent<Renderer>().material = Mats.Solid(new Color(0.12f, 0.43f, 0.92f));
 
-            var head = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            Destroy(head.GetComponent<Collider>());
-            head.transform.SetParent(visuals.transform, false);
-            head.transform.localPosition = new Vector3(0f, 1.65f, 0f);
-            head.transform.localScale = Vector3.one * 0.38f;
-            head.GetComponent<Renderer>().material = Mats.Solid(new Color(0.91f, 0.73f, 0.54f));
+                var head = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                Destroy(head.GetComponent<Collider>());
+                head.transform.SetParent(visuals.transform, false);
+                head.transform.localPosition = new Vector3(0f, 1.65f, 0f);
+                head.transform.localScale = Vector3.one * 0.38f;
+                head.GetComponent<Renderer>().material = Mats.Solid(new Color(0.91f, 0.73f, 0.54f));
+            }
 
             var pc = go.AddComponent<PlayerController>();
             pc.visuals = visuals;

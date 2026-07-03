@@ -79,7 +79,36 @@ Assets/PalmCity/Scripts/
 
 Save file: `Application.persistentDataPath/palmcity_save.json` (auto-saves every 20 s and on mission complete).
 
-## 7. Where to take it next
+## 7. Make it look real — free Asset Store models
+
+The game has a **Visual Library**: slots for player / pedestrians / cops / cars / buildings / trees. Drop any prefab in a slot and every spawner uses it automatically (auto-scaled, physics untouched). Empty slots keep the primitive look.
+
+**Good free packs (Asset Store, all $0):**
+
+| Slot | Pack to search for | Notes |
+|---|---|---|
+| Everything at once | **"POLYGON Starter Pack" (Synty Studios)** | character, car, buildings, props in one consistent low-poly style — best first pick |
+| Cars | **"ARCADE: FREE Racing Car"** | clean low-poly car |
+| People | **"Character Pack: Free Sample" (Supercyan)** | casual characters |
+| Trees | search **"free low poly tree"** | lots of options |
+
+**How to wire them up:**
+
+1. In Unity: **Window → Asset Store** (or visit assetstore.unity.com) → find the pack → **Add to My Assets**.
+2. **Window → Package Manager → My Assets** → select the pack → **Download → Import**.
+3. In your scene, select the **Game** object (the one with `PalmCityBootstrap`).
+   *If your scene doesn't have one (auto-boot mode): GameObject → Create Empty → name it `Game` → Add Component → **Palm City Bootstrap**.*
+4. **Add Component → Visual Library.**
+5. In the imported pack's folders, find the **Prefabs** folder and drag prefabs into the matching slots: a character into **Player Model**, several people into **Pedestrian Models**, cars into **Car Models**, buildings into **Building Models**, trees into **Tree Models**.
+6. Press **Play**.
+
+Tips:
+- Pick **plain prefabs** (just the model) — avoid ones named "…Controller" or with scripts attached.
+- If cars drive **sideways**, set **Vehicle Yaw Offset** on the Visual Library to `90` or `-90`.
+- Models are auto-scaled and their colliders stripped — gameplay hitboxes don't change.
+- Characters without animations will glide instead of walk; packs whose prefabs include an idle animation look best. (Real walk animations are the next upgrade — ask for it.)
+
+## 8. Where to take it next
 
 - Replace capsule people / box cars with real models: edit the `Build(...)` factory methods in `PedestrianAI`, `CopAI`, `VehicleController`, `PlayerController` — the gameplay logic doesn't care what the visuals are.
 - Nicer driving: swap the arcade math in `VehicleController.FixedUpdate` for `WheelCollider`s.

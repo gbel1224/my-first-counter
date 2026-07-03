@@ -30,16 +30,21 @@ namespace PalmCity
         {
             var root = new GameObject("City").transform;
 
+            var lib = VisualLibrary.I;
+
             // ground (grass) — top surface at y = 0
             var ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
             ground.name = "Ground";
             ground.transform.SetParent(root);
             ground.transform.position = new Vector3(WORLD / 2f, -0.5f, WORLD / 2f);
             ground.transform.localScale = new Vector3(WORLD + 200f, 1f, WORLD + 400f);
-            ground.GetComponent<Renderer>().material = Mats.Solid(new Color(0.18f, 0.42f, 0.29f));
+            ground.GetComponent<Renderer>().material =
+                (lib != null && lib.groundMaterial != null) ? lib.groundMaterial
+                : Mats.Solid(new Color(0.18f, 0.42f, 0.29f));
 
             // roads
-            var roadMat = Mats.Solid(new Color(0.23f, 0.25f, 0.28f));
+            var roadMat = (lib != null && lib.roadMaterial != null) ? lib.roadMaterial
+                : Mats.Solid(new Color(0.23f, 0.25f, 0.28f));
             for (int i = 0; i <= GRID; i++)
             {
                 float line = i * CELL;
@@ -106,8 +111,24 @@ namespace PalmCity
                             b.transform.SetParent(root);
                             b.transform.position = new Vector3(px, h / 2f, pz);
                             b.transform.localScale = new Vector3(w, h, d);
-                            b.GetComponent<Renderer>().material =
-                                Mats.Solid(BuildingPalette[Random.Range(0, BuildingPalette.Length)]);
+
+                            var lib2 = VisualLibrary.I;
+                            GameObject bModel = lib2 != null ? lib2.PickBuilding() : null;
+                            if (bModel != null)
+                            {
+                                // keep the cube as an invisible collider; the model is the look
+                                b.GetComponent<Renderer>().enabled = false;
+                                var anchor = new GameObject("BuildingAnchor");
+                                anchor.transform.SetParent(root);
+                                anchor.transform.position = new Vector3(px, 0f, pz);
+                                VisualLibrary.FitHeight(bModel, anchor.transform, h,
+                                    Random.Range(0, 4) * 90f);
+                            }
+                            else
+                            {
+                                b.GetComponent<Renderer>().material =
+                                    Mats.Solid(BuildingPalette[Random.Range(0, BuildingPalette.Length)]);
+                            }
                         }
                     }
 
@@ -135,6 +156,16 @@ namespace PalmCity
             var palm = new GameObject("Palm");
             palm.transform.SetParent(parent);
             palm.transform.position = pos;
+
+            // use a slotted tree model when one is available
+            var lib = VisualLibrary.I;
+            GameObject treeModel = lib != null ? lib.PickTree() : null;
+            if (treeModel != null)
+            {
+                VisualLibrary.FitHeight(treeModel, palm.transform, Random.Range(4f, 7f),
+                    Random.Range(0f, 360f));
+                return;
+            }
 
             var trunk = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             trunk.transform.SetParent(palm.transform);

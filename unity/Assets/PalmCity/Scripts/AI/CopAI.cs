@@ -20,26 +20,34 @@ namespace PalmCity
             var cc = go.AddComponent<CharacterController>();
             cc.height = 1.7f; cc.radius = 0.3f; cc.center = new Vector3(0f, 0.85f, 0f);
 
-            var body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            Destroy(body.GetComponent<Collider>());
-            body.transform.SetParent(go.transform, false);
-            body.transform.localPosition = new Vector3(0f, 0.8f, 0f);
-            body.transform.localScale = new Vector3(0.55f, 0.55f, 0.55f);
-            body.GetComponent<Renderer>().material = Mats.Solid(new Color(0.13f, 0.19f, 0.31f));
+            var lib = VisualLibrary.I;
+            if (lib != null && lib.copModel != null)
+            {
+                VisualLibrary.FitHeight(lib.copModel, go.transform, 1.75f);
+            }
+            else
+            {
+                var body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                Destroy(body.GetComponent<Collider>());
+                body.transform.SetParent(go.transform, false);
+                body.transform.localPosition = new Vector3(0f, 0.8f, 0f);
+                body.transform.localScale = new Vector3(0.55f, 0.55f, 0.55f);
+                body.GetComponent<Renderer>().material = Mats.Solid(new Color(0.13f, 0.19f, 0.31f));
 
-            var head = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            Destroy(head.GetComponent<Collider>());
-            head.transform.SetParent(go.transform, false);
-            head.transform.localPosition = new Vector3(0f, 1.55f, 0f);
-            head.transform.localScale = Vector3.one * 0.35f;
-            head.GetComponent<Renderer>().material = Mats.Solid(new Color(0.91f, 0.73f, 0.54f));
+                var head = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                Destroy(head.GetComponent<Collider>());
+                head.transform.SetParent(go.transform, false);
+                head.transform.localPosition = new Vector3(0f, 1.55f, 0f);
+                head.transform.localScale = Vector3.one * 0.35f;
+                head.GetComponent<Renderer>().material = Mats.Solid(new Color(0.91f, 0.73f, 0.54f));
 
-            var badge = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            Destroy(badge.GetComponent<Collider>());
-            badge.transform.SetParent(go.transform, false);
-            badge.transform.localPosition = new Vector3(0f, 1.05f, 0.2f);
-            badge.transform.localScale = new Vector3(0.15f, 0.15f, 0.05f);
-            badge.GetComponent<Renderer>().material = Mats.Emissive(new Color(1f, 0.85f, 0.2f), 1.5f);
+                var badge = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                Destroy(badge.GetComponent<Collider>());
+                badge.transform.SetParent(go.transform, false);
+                badge.transform.localPosition = new Vector3(0f, 1.05f, 0.2f);
+                badge.transform.localScale = new Vector3(0.15f, 0.15f, 0.05f);
+                badge.GetComponent<Renderer>().material = Mats.Emissive(new Color(1f, 0.85f, 0.2f), 1.5f);
+            }
 
             var cop = go.AddComponent<CopAI>();
             if (MinimapCamera.I != null) MinimapCamera.AddBlip(go.transform, new Color(0.25f, 0.6f, 1f), 5f);

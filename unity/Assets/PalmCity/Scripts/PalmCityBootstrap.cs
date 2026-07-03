@@ -18,6 +18,7 @@ namespace PalmCity
         void Awake()
         {
             Application.targetFrameRate = 60;
+            if (GetComponent<VisualLibrary>() == null) gameObject.AddComponent<VisualLibrary>();
             gameObject.AddComponent<GameManager>();
             gameObject.AddComponent<CityGenerator>();
             gameObject.AddComponent<DayNightCycle>();
