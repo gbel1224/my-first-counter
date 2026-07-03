@@ -64,6 +64,7 @@ export const STR = {
     downtown: { name: "Downtown Loop" },
     outer:    { name: "Outer Ring" },
     harbor:   { name: "Harbor Dash" },
+    wake:     { name: "Wake Breaker" },
   },
   raceWin: (reward, time) => "Race won! +$" + reward + " · " + time.toFixed(1) + "s",
   raceBest: (reward, time) => "New best lap " + time.toFixed(1) + "s! +$" + reward,
