@@ -168,8 +168,8 @@ namespace PalmCity
             rb.MoveRotation(rb.rotation * Quaternion.Euler(0f, yawDelta, 0f));
 
             Vector3 v = transform.forward * speed;
-            v.y = rb.velocity.y;
-            rb.velocity = v;
+            v.y = rb.Velocity().y;
+            rb.SetVelocity(v);
 
             if (lightBar != null)
             {
@@ -191,9 +191,9 @@ namespace PalmCity
 
             // run over pedestrians / cops
             var ped = c.collider.GetComponentInParent<PedestrianAI>();
-            if (ped != null && Mathf.Abs(speed) > 5f) { ped.Die(false, rb.velocity); return; }
+            if (ped != null && Mathf.Abs(speed) > 5f) { ped.Die(false, rb.Velocity()); return; }
             var cop = c.collider.GetComponentInParent<CopAI>();
-            if (cop != null && Mathf.Abs(speed) > 6f) { cop.Die(rb.velocity); return; }
+            if (cop != null && Mathf.Abs(speed) > 6f) { cop.Die(rb.Velocity()); return; }
 
             if (impact > 8f)
             {

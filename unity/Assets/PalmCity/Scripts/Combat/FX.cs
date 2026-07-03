@@ -18,7 +18,7 @@ namespace PalmCity
                 go.GetComponent<Renderer>().material = Mats.Solid(color);
                 var rb = go.AddComponent<Rigidbody>();
                 rb.mass = 0.1f;
-                rb.velocity = Random.onUnitSphere * Random.Range(force * 0.3f, force) + Vector3.up * force * 0.4f;
+                rb.SetVelocity(Random.onUnitSphere * Random.Range(force * 0.3f, force) + Vector3.up * force * 0.4f);
                 rb.angularVelocity = Random.onUnitSphere * 10f;
                 go.AddComponent<DebrisChunk>().life = Random.Range(0.6f, 1.4f);
             }

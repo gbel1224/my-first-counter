@@ -18,7 +18,7 @@ namespace PalmCity
 
             var rb = go.AddComponent<Rigidbody>();
             rb.useGravity = false;
-            rb.velocity = dir.normalized * 32f;
+            rb.SetVelocity(dir.normalized * 32f);
 
             var p = go.AddComponent<Projectile>();
             p.damage = damage;
