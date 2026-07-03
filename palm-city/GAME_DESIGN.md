@@ -27,7 +27,8 @@ A complete description of the game, written so it can be handed to a new develop
 
 - On foot: walk/run, enter any unlocked vehicle.
 - **Cars**: free city cars + jackable traffic. 3 buyable personal cars at the garage dealership (Coral $1.5k / Azure $4k / Sterling $12k) with distinct accel/top-speed/turn stats, perks (jump boost, heat magnet, fine discount), engine/turbo/tyre upgrades, and repainting. Personal cars persist.
-- **Motorbikes** (nimble, lean into turns, rider visibly mounts), **helicopters** (vertical lift, hover), **planes** (build speed on the runway, take off, fly), **boats** (harbor + open sea), and a hidden **jetpack** pickup (hold boost to fly on foot).
+- **Motorbikes** (nimble, lean into turns, rider visibly mounts), **helicopters** (vertical lift, hover), **planes** (build speed on the runway, take off, fly), **boats** (harbor + open sea), **jet skis** (fast, twitchy, skip across the chop, rider visible on the saddle), and a hidden **jetpack** pickup (hold boost to fly on foot).
+- **Swimming:** walk past the waterline and you swim — surface float with bobbing, treading-water idle, front-crawl stroke with splashes while moving, half walking speed, no combat in the water, board boats/jet skis straight from the water, hop off mid-sea and swim. Police/NPCs/traffic stop at the beach.
 - Vehicle feel: weight transfer (pitch/roll under braking/acceleration), skid marks, stunt ramps with air-time jump scoring ("best jump" record), horn, brake lights.
 - Hitting pedestrians hard sends them ragdolling; car collisions knock over street props (trash cans, hydrants tumble with physics).
 

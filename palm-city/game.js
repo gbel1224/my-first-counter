@@ -7,7 +7,7 @@ import { boxGeoC, colorize, cylC, sphC, mergeGeos, textSprite } from "./geometry
 import { setAnisotropy, canvasTex, canvasNormalTex, speckle, buildWorldTextures } from "./textures.js";
 import { matPerson, personGeo, articulatedPerson, walkerGeos, makeWalker, HERO_PAL, NPC_PALS, npcGeos, npcWalkerGeos } from "./characters.js";
 import { initRagdolls, ragRng, rrand, ragdolls, RAG_G, spawnRagdoll, updateRagdolls } from "./ragdoll.js";
-import { initVehicles, wheelGeo, carGeo, bikeGeo, CAR_COLORS, makeCar, makeBike, makeHeli, makeBoat, makePlane } from "./vehicles.js";
+import { initVehicles, wheelGeo, carGeo, bikeGeo, CAR_COLORS, makeCar, makeBike, makeHeli, makeBoat, makeJetSki, makePlane } from "./vehicles.js";
 import { initProjectiles, projPool, fireProjectile, updateProjectiles, muzzleFlash, updateFlashes } from "./projectiles.js";
 import { initArcade, arcadeOpen, openArcade, closeArcade, updateArcade, ARC_BY_CAB } from "./arcade.js";
 import { initWeather, updateWeather, weatherMode, cycleWeatherMode } from "./weather.js";
@@ -1213,6 +1213,10 @@ helis.push(makeHeli(PLAZA.x + 22, Rc(3) - 12));
 const boats = [];
 boats.push(makeBoat(10, SEA_Z + 7));
 boats.push(makeBoat(-90, SEA_Z + 7));
+// jet skis: quick, twitchy watercraft — the rider stays visible on the saddle like the bikes
+boats.push(makeJetSki(34, SEA_Z + 5, 0xffd23f));
+boats.push(makeJetSki(-52, SEA_Z + 5, 0x3fa9f5));
+boats.push(makeJetSki(160, SEA_Z + 6, 0xe8543f));
 
 // ---------- jetpack pickup: grab it once, then hold BOOST on foot to fly ----------
 const jetpackPickup = { x: PLAZA.x - 26, z: Rc(3) - 12 };
@@ -4748,7 +4752,7 @@ function doActionA() {
     if (hitsCollider(ex, ez, 0.5)) { ex = c.x - rx * 2.6; ez = c.z - rz * 2.6; }
     // owned cars + bikes play a get-off / dismount animation; everything else hops out instantly
     if (!c.heli && !c.plane && !c.boat && !c.wp) { startMount(c, "out", ex, ez); return; }
-    player.x = clamp(ex, WB.x0, WB.x1); player.z = clamp(ez, WB.z0, WB.z1);
+    player.x = clamp(ex, WB.x0, WB.x1); player.z = clamp(ez, WB.z0, SWIM_Z1);   // stepping off at sea -> swim
     player.h = c.h;
     c.speed = 0; c.lat = 0;
     driving = null;
@@ -4776,7 +4780,7 @@ function doActionA() {
       driving = c;
       // owned cars + bikes get a get-in / mount animation; aircraft, boats and jacked street cars board instantly
       if (!c.heli && !c.plane && !c.boat && !c.wp) startMount(c, "in");
-      else hero.group.visible = false;
+      else hero.group.visible = !!c.jetski;   // jet-ski rider stays in view on the saddle
       if (!mount) AudioSys.play("door", 0.8);
       // one-time take-off tip the first time you ever board each aircraft (saved so it shows once)
       if (c.heli && !state.flewHeli) { state.flewHeli = true; toast("🚁 Hold ▲ to lift off — then steer with the stick"); save(); }
@@ -4932,16 +4936,20 @@ function update(dt) {
       if (c.prop) c.prop.rotation.z += 50 * dt;
     } else if (c.boat) {
       // ---- arcade boat: throttle forward, turn scales with speed, stays on the harbour ----
-      c.h -= inp.mx * 1.4 * dt * clamp(Math.abs(c.speed) / 6, 0.25, 1);
-      const accel = Math.max(0, inp.mz) * 15;
+      // jet skis are the hot version: quicker off the line, higher top end, much sharper steering,
+      // and at speed they skip across the chop instead of just bobbing
+      const js = !!c.jetski;
+      c.h -= inp.mx * (js ? 2.3 : 1.4) * dt * clamp(Math.abs(c.speed) / 6, 0.25, 1);
+      const accel = Math.max(0, inp.mz) * (js ? 24 : 15);
       c.speed += (accel - c.speed * 0.5) * dt;
       if (braking()) c.speed -= 16 * dt;
-      c.speed = clamp(c.speed, -4, 22);
+      c.speed = clamp(c.speed, -4, js ? 32 : 22);
       c.x = clamp(c.x + Math.sin(c.h) * c.speed * dt, -HALF - 380, HALF + 380);
       c.z = clamp(c.z + Math.cos(c.h) * c.speed * dt, SEA_Z - 1, SEA_Z + 560);   // keep it in the water
-      c.mesh.position.set(c.x, 0.1 + Math.sin(simTime * 2 + c.x * 0.1) * 0.12, c.z);   // gentle bob
-      c.mesh.rotation.set(Math.sin(simTime * 1.5) * 0.03, c.h, inp.mx * 0.12);
-      if (Math.abs(c.speed) > 3 && Math.random() < 0.6) emit(c.x - Math.sin(c.h) * 2.4, 0.15, c.z - Math.cos(c.h) * 2.4, rr(-0.5, 0.5), rr(0.1, 0.5), rr(-0.5, 0.5), 0.6, 0.85, 0.9, 0.98);   // wake spray
+      const hop = js ? Math.max(0, Math.sin(simTime * 7 + c.x * 0.2)) * clamp(c.speed / 32, 0, 1) * 0.22 : 0;
+      c.mesh.position.set(c.x, 0.1 + Math.sin(simTime * 2 + c.x * 0.1) * 0.12 + hop, c.z);   // gentle bob (+ chop-skip)
+      c.mesh.rotation.set(Math.sin(simTime * 1.5) * 0.03 - hop * 0.5, c.h, inp.mx * (js ? 0.3 : 0.12));
+      if (Math.abs(c.speed) > 3 && Math.random() < (js ? 0.9 : 0.6)) emit(c.x - Math.sin(c.h) * (js ? 1.3 : 2.4), 0.15, c.z - Math.cos(c.h) * (js ? 1.3 : 2.4), rr(-0.5, 0.5), rr(0.1, js ? 0.9 : 0.5), rr(-0.5, 0.5), 0.6, 0.85, 0.9, 0.98);   // wake spray
     } else {
     // throttle / brake — dedicated brake button (or Space) decelerates then reverses
     const brakeAmt = braking() ? 1 : (inp.mz < 0 ? -inp.mz : 0);
@@ -5439,10 +5447,11 @@ function update(dt) {
     c.mesh.rotation.x = (c.y > 0) ? clamp(-c.vy * 0.02, -0.5, 0.5) : 0;
     if (c.bike) c.mesh.rotation.z = clamp((c.lat || 0) * 0.05, -0.45, 0.45);   // lean into turns
   }
-  // motorcycle rider: a bike isn't a car, so keep the real player visible and mount them on the saddle
-  if (driving && driving.bike && !mount) {
+  // motorcycle rider: a bike isn't a car, so keep the real player visible and mount them on the saddle.
+  // Jet skis reuse the same saddle pose — their seat height rides the bobbing hull instead of the ground.
+  if (driving && (driving.bike || driving.jetski) && !mount) {
     const c = driving, fx = Math.sin(c.h), fz = Math.cos(c.h);
-    const gy = groundY(c.x, c.z) + (c.y || 0);
+    const gy = c.jetski ? c.mesh.position.y + 0.18 : groundY(c.x, c.z) + (c.y || 0);
     // body english: tuck forward under boost (+1), shift upright & braced under hard braking (-1)
     const hardBrake = braking() && c.speed > 6;
     const leanTgt = boosting() ? 1 : (hardBrake ? -0.7 : 0);

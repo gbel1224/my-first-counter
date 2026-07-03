@@ -91,6 +91,17 @@ export function makeBoat(x, z) {
   return { x, z, h: 0, speed: 0, mesh: g, boat: true };
 }
 
+export function makeJetSki(x, z, color) {
+  const g = new THREE.Group();
+  const mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.35, metalness: 0.25, envMapIntensity: 1.1 });
+  const hull = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.42, 2.1), mat(color)); hull.position.y = 0.34; hull.castShadow = true; g.add(hull);
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.6), mat(color)); nose.position.set(0, 0.36, 1.25); g.add(nose);
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.2, 1.0), mat(0x23262b)); seat.position.set(0, 0.62, -0.35); g.add(seat);
+  const col = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.42, 0.12), mat(0x3a3f47)); col.position.set(0, 0.72, 0.72); col.rotation.x = 0.5; g.add(col);
+  const bars = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.07, 0.08), mat(0x3a3f47)); bars.position.set(0, 0.92, 0.62); g.add(bars);
+  g.position.set(x, 0.1, z); scene.add(g);
+  return { x, z, h: 0, speed: 0, mesh: g, boat: true, jetski: true };
+}
 export function makePlane(x, z) {
   const g = new THREE.Group();
   const mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.45, metalness: 0.4, envMapIntensity: 0.9 });
