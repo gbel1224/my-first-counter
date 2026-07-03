@@ -13,38 +13,35 @@ Everything — city, cars, pedestrians, cops, UI — is generated **from code an
 
 In Unity Hub: **Installs → Install Editor → Unity 6 LTS**. If you plan to publish to your phone, tick **Android Build Support** (or **iOS Build Support** on a Mac) during install.
 
-## 2. Create the project
+## 2. Option A — open this folder directly (fastest)
 
-1. Unity Hub → **New Project**.
-2. Template: **Universal 3D** (URP) — or "3D Core", both work.
-3. Name it `PalmCity`, create.
+The `unity/` folder **is** a Unity project. No creating, no copying:
 
-## 3. One required setting
+1. Get the repo onto your machine: `git clone https://github.com/gbel1224/my-first-counter.git` (or GitHub → **Code → Download ZIP** and extract).
+2. Unity Hub → **Projects → Add → Add project from disk** → select the `my-first-counter/unity` folder.
+3. Open it. If Hub warns the exact editor version isn't installed, just pick your Unity 6 install and confirm the upgrade.
+4. First open takes a minute while Unity imports. Then open **`Assets/Scenes/Main.unity`** and press **Play**.
 
-The touch/keyboard input uses Unity's classic input API, so:
+That's it — the title screen (**New Game / Continue / Free Roam**) comes up. This project uses the built-in render pipeline and classic input, so no extra settings are needed.
 
-- **Edit → Project Settings → Player → Other Settings → Active Input Handling → Both**
-- Unity will restart the editor. (If you skip this, on-foot keyboard controls and UI taps won't respond in some templates.)
+> On Unity **2021/2022 LTS** instead of Unity 6: edit `Packages/manifest.json` and change `"com.unity.ugui": "2.0.0"` to `"1.0.0"` before opening.
 
-## 4. Add the scripts
+## 3. Option B — add to an existing project
 
-Copy the `Assets/PalmCity` folder from this repo into your project's `Assets/` folder (drag it into the Project window, or copy it in Explorer/Finder while Unity is closed). Wait for the compile spinner to finish — there should be no errors.
+If you'd rather bring Palm City into a project you already have:
 
-## 5. Build the scene (30 seconds)
+1. Copy the `Assets/PalmCity` folder into your project's `Assets/`. Wait for the compile spinner — there should be no errors.
+2. If your project uses the **Input System** package (URP templates do): **Edit → Project Settings → Player → Other Settings → Active Input Handling → Both**, and let the editor restart.
+3. New empty scene (delete any default camera/light — the game spawns its own) → **GameObject → Create Empty** → name it `Game` → **Add Component → Palm City Bootstrap** → **Play**.
 
-1. **File → New Scene** (Basic/Empty — either is fine). Delete any default objects except nothing is required; the game creates its own camera, light, and UI. *(If the template scene has a Main Camera or Directional Light, delete them to avoid duplicates.)*
-2. Create an empty GameObject: **GameObject → Create Empty**, name it `Game`.
-3. **Add Component → Palm City Bootstrap**.
-4. Press **Play**. That's the whole setup — you'll land on the title screen (**New Game / Continue / Free Roam**).
-
-In the Inspector on `PalmCityBootstrap`:
+In the Inspector on the `Game` object's `PalmCityBootstrap` component (both options):
 - **Show Start Menu** — untick to boot straight into gameplay; the two options below then apply:
 - **Free Roam** — skip the story, start with $5,000 and every weapon.
 - **Load Save If Present** — continue from the last auto-save (story mode).
 
 Sound effects are synthesized at runtime (`Core/Sfx.cs`) — gunshots, explosions, hits and cash chimes work with no audio files.
 
-## 6. Controls
+## 4. Controls
 
 | Action | Touch (on-screen) | Editor keyboard |
 |---|---|---|
@@ -56,18 +53,18 @@ Sound effects are synthesized at runtime (`Core/Sfx.cs`) — gunshots, explosion
 | Brake (driving) | BRAKE button | Space |
 | Pause | II button | — |
 
-## 7. Build to your phone
+## 5. Build to your phone
 
 **Android:** File → Build Settings → Android → Switch Platform → connect phone (USB debugging on) → Build and Run.
 **iOS:** requires a Mac + Xcode; Build generates an Xcode project you run from there.
 
 Set **Default Orientation → Landscape Left** in Player Settings (the HUD is laid out for landscape).
 
-## 8. How it's organized
+## 6. How it's organized
 
 ```
 Assets/PalmCity/Scripts/
-├── PalmCityBootstrap.cs   ← the one component you add by hand
+├── PalmCityBootstrap.cs   ← the single entry-point component (pre-placed in Assets/Scenes/Main.unity)
 ├── Core/      GameManager (cash/XP/level/death), SaveSystem (JSON), Mats,
 │              Sfx (procedural sound effects)
 ├── World/     CityGenerator (roads/buildings/palms/beach), DayNightCycle (+rain)
@@ -82,7 +79,7 @@ Assets/PalmCity/Scripts/
 
 Save file: `Application.persistentDataPath/palmcity_save.json` (auto-saves every 20 s and on mission complete).
 
-## 9. Where to take it next
+## 7. Where to take it next
 
 - Replace capsule people / box cars with real models: edit the `Build(...)` factory methods in `PedestrianAI`, `CopAI`, `VehicleController`, `PlayerController` — the gameplay logic doesn't care what the visuals are.
 - Nicer driving: swap the arcade math in `VehicleController.FixedUpdate` for `WheelCollider`s.
