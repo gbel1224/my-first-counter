@@ -1255,6 +1255,7 @@ const WB = {
   z0: -HALF - 24,                             // north: a little past the last block
   z1: SEA_Z - 5,                              // south: stop right at the water's edge
 };
+const SWIM_Z1 = SEA_Z + 380;   // the on-foot player alone may pass the waterline — and swim out this far
 
 // police cars (spawned by wanted level)
 const POLICE_N = 5;   // up to 5-star wanted
@@ -2972,6 +2973,7 @@ let actP = false, punchCD = 0, punchT = 0, gunKickT = 0, kickT = 0, comboStep = 
 function doPunch() {
   if (driving) return;
   if (inside) { if (intTheme === "bowling") doBowl(); return; }   // BOWL inside the alley; no fists indoors
+  if (swimming) return;                            // no punching or gunfire while treading water
   if (armed()) { doShoot(); return; }              // fire if a weapon is equipped, else throw a punch
   if (nearCourtPlay()) { doHoopShot(); return; }   // step onto the beach court unarmed -> shoot hoops instead of punching air
   if (punchCD > 0) return;
@@ -3828,7 +3830,7 @@ function moveWithCollision(o, dx, dz, r) {
   let nx = clamp(o.x + dx, WB.x0, WB.x1);
   let hit = findCollider(nx, o.z, r);
   if (!hit) o.x = nx; else { tryKnockProp(hit, o); if (driving === o) { o.speed *= -0.25; carHit(o); } }
-  let nz = clamp(o.z + dz, WB.z0, WB.z1);
+  let nz = clamp(o.z + dz, WB.z0, o === player ? SWIM_Z1 : WB.z1);   // only the player can wade in and swim
   hit = findCollider(o.x, nz, r);
   if (!hit) o.z = nz; else { tryKnockProp(hit, o); if (driving === o) { o.speed *= -0.25; carHit(o); } }
 }
@@ -4061,10 +4063,10 @@ function updateHUD() {
   boostBtn.style.display = (drive && !flying) ? "block" : "none";
   climbBtn.style.display = flying ? "block" : "none";
   diveBtn.style.display = flying ? "block" : "none";
-  punchBtn.style.display = (!driving && !dlgLines && !garageOpen && !statsOpen && !styleOpen && !arcadeOpen) ? "block" : "none";
+  punchBtn.style.display = (!driving && !swimming && !dlgLines && !garageOpen && !statsOpen && !styleOpen && !arcadeOpen) ? "block" : "none";
   { const w = armed(); punchBtn.textContent = (inside && intTheme === "bowling") ? "🎳 BOWL" : w ? "🔫 " + ammoOf(w) : (!w && nearCourtPlay()) ? "🏀 SHOOT" : "PUNCH"; }
   // dedicated FIRE control only appears once a weapon's actually drawn (not indoors bowling, not driving)
-  { const w = armed(); fireBtn.style.display = (w && !inside && !driving && !dlgLines && !garageOpen && !statsOpen && !styleOpen && !arcadeOpen) ? "block" : "none"; if (w) fireBtn.textContent = "🔥 " + ammoOf(w); }
+  { const w = armed(); fireBtn.style.display = (w && !inside && !driving && !swimming && !dlgLines && !garageOpen && !statsOpen && !styleOpen && !arcadeOpen) ? "block" : "none"; if (w) fireBtn.textContent = "🔥 " + ammoOf(w); }
   const menus = dlgLines || garageOpen || statsOpen || styleOpen || arcadeOpen;
   const showDoor = !menus && (inside || !!nearEnterable());
   doorBtn.style.display = showDoor ? "block" : "none";
@@ -4816,7 +4818,7 @@ function doActionB() {
 
 // ---------- simulation ----------
 const tmpM = new THREE.Matrix4(), tmpP = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpS = new THREE.Vector3(1, 1, 1);
-let simTime = 0, achTimer = 1, sprintT = 0, npcScanBucket = 0;
+let simTime = 0, achTimer = 1, sprintT = 0, npcScanBucket = 0, swimming = false, swimSplashT = 0;
 const SPRINT_RAMP = 2.5;   // seconds of holding sprint to reach top running speed
 
 function update(dt) {
@@ -5048,7 +5050,7 @@ function update(dt) {
     const f = { x: Math.sin(camYaw), z: Math.cos(camYaw) }, r = { x: -Math.cos(camYaw), z: Math.sin(camYaw) };
     const wx = f.x * inp.mz + r.x * inp.mx, wz = f.z * inp.mz + r.z * inp.mx;
     player.x = clamp(player.x + wx * 9 * dt, WB.x0, WB.x1);
-    player.z = clamp(player.z + wz * 9 * dt, WB.z0, WB.z1);
+    player.z = clamp(player.z + wz * 9 * dt, WB.z0, SWIM_Z1);   // jetpack may cross the waterline
     player.y = clamp(player.y + (boosting() ? 15 : -11) * dt, gy, 95);
     if (Math.hypot(wx, wz) > 0.01) player.h = Math.atan2(wx, wz);
     player.speed = 0;
@@ -5067,7 +5069,7 @@ function update(dt) {
     // hold sprint longer to build up speed: charge ramps 0->1 over SPRINT_RAMP s, decays faster when released
     sprintT = clamp(sprint ? sprintT + dt : sprintT - dt * 2.5, 0, SPRINT_RAMP);
     const sprintMul = 1 + (sprint ? 0.32 + (sprintT / SPRINT_RAMP) * 0.63 : 0);   // 1.0 walk -> 1.32 -> ~1.95 at full charge
-    const speed = (mag > 0.72 ? 6.4 : mag * 4.6) * sprintMul;
+    const speed = (mag > 0.72 ? 6.4 : mag * 4.6) * sprintMul * (swimming ? 0.52 : 1);   // water drag
     player.speed = speed;
     if (mag > 0.01) {
       const len = Math.hypot(wx, wz) || 1;
@@ -5360,12 +5362,41 @@ function update(dt) {
   if (toastTimer > 0) { toastTimer -= dt; if (toastTimer <= 0) elToast.style.opacity = 0; }
 
   // player mesh (skipped while airborne — the parachute/jetpack branches pose the hero themselves)
+  swimming = !driving && !inside && !airMode && player.z > SEA_Z + 0.5;   // past the waterline on foot -> in the water
   if (!driving && !airMode) {
     const gy = groundY(player.x, player.z);
+    if (swimming) {
+      // afloat: tread water in place, pitch prone into a front crawl while moving. The float height is
+      // derived from the body tilt so the head stays above the waterline whatever the pose, plus a bob.
+      const sgait = Math.min(1, player.speed / 4);
+      const tilt = 0.5 + sgait * 0.8;
+      const floatY = 0.62 - 1.63 * Math.cos(tilt) + Math.sin(simTime * 2.1) * 0.05;   // head + shoulders ride above the surface
+      player.y += (floatY - player.y) * Math.min(1, 8 * dt);
+      hero.group.position.set(player.x, player.y, player.z);
+      hero.group.rotation.set(tilt, player.h, 0);
+      hero.legL.rotation.z = hero.legR.rotation.z = 0;
+      if (sgait > 0.12) {   // front crawl: alternating full-circle strokes + flutter kick + splashes
+        hero.armL.rotation.x = -1.7 + Math.sin(player.walkPhase * 1.15) * 1.55; hero.armL.rotation.z = 0.12;
+        hero.armR.rotation.x = -1.7 + Math.sin(player.walkPhase * 1.15 + Math.PI) * 1.55; hero.armR.rotation.z = -0.12;
+        hero.legL.rotation.x = Math.sin(player.walkPhase * 2.3) * 0.4;
+        hero.legR.rotation.x = -Math.sin(player.walkPhase * 2.3) * 0.4;
+        hero.kneeL.rotation.x = 0.25; hero.kneeR.rotation.x = 0.25;
+        swimSplashT -= dt;
+        if (swimSplashT <= 0) { swimSplashT = 0.16; burst(player.x, 0.12, player.z, 3, 0.7, 0.5, 0.28, 0.85, 0.93, 1.0); }
+      } else {              // treading water
+        const tread = Math.sin(simTime * 2.4);
+        hero.armL.rotation.x = -0.5 + tread * 0.18; hero.armL.rotation.z = 0.5;
+        hero.armR.rotation.x = -0.5 - tread * 0.18; hero.armR.rotation.z = -0.5;
+        hero.legL.rotation.x = tread * 0.3; hero.legR.rotation.x = -tread * 0.3;
+        hero.kneeL.rotation.x = 0.4; hero.kneeR.rotation.x = 0.4;
+      }
+      gunKickT = Math.max(0, gunKickT - dt); kickT = Math.max(0, kickT - dt); comboT = Math.max(0, comboT - dt); hoopShootT = Math.max(0, hoopShootT - dt);
+    } else {
     player.y += (gy - player.y) * Math.min(1, 12 * dt);
     hero.group.position.set(player.x, player.y, player.z);
     hero.group.rotation.set(0, player.h, 0);              // clear any pitch/lean left over from riding
     hero.legL.rotation.z = hero.legR.rotation.z = 0;      // clear the bike-saddle knee splay
+    hero.armL.rotation.z = hero.armR.rotation.z = 0;      // clear stale arm splay (swim/aim poses set their own)
     const gait = Math.min(1, player.speed / 4);
     const sw = Math.sin(player.walkPhase) * gait * 0.45;
     hero.legL.rotation.x = sw; hero.legR.rotation.x = -sw;
@@ -5397,6 +5428,7 @@ function update(dt) {
       hero.armL.rotation.x = -0.55; hero.armL.rotation.z = 0.15;
     }
     gunKickT = Math.max(0, gunKickT - dt); kickT = Math.max(0, kickT - dt); comboT = Math.max(0, comboT - dt); hoopShootT = Math.max(0, hoopShootT - dt);
+    }
   }
   for (const c of cars) {
     if (c === driving) continue;   // the driven vehicle syncs & leans itself, right in its control branch
@@ -5633,6 +5665,7 @@ globalThis.__palmCity = {
   COURT,
   pressPunch: () => { actP = true; },
   openArcade: g => openArcade(g), arcadeOpen: () => arcadeOpen,
+  swimming: () => swimming,
   health: () => health,
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
   applyGfx: m => applyGfx(m), gfx: () => ({ mode: gfxMode, prCap: PR_CAP, msaa: msaaSamples, pr: renderer.getPixelRatio() }),
