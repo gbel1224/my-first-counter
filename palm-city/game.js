@@ -11,7 +11,7 @@ import { initVehicles, wheelGeo, carGeo, bikeGeo, CAR_COLORS, makeCar, makeBike,
 import { initProjectiles, projPool, fireProjectile, updateProjectiles, muzzleFlash, updateFlashes } from "./projectiles.js";
 import { initArcade, arcadeOpen, openArcade, closeArcade, updateArcade, ARC_BY_CAB } from "./arcade.js";
 import { initWeather, updateWeather, weatherMode, cycleWeatherMode } from "./weather.js";
-import { initOcean, updateOcean, sharks, swimmers } from "./ocean.js";
+import { initOcean, updateOcean, sharks, swimmers, fishing, fishTap, treasures, dive, nearTreasure, startDive, diveDepth } from "./ocean.js";
 
 // ---------- renderer / scene ----------
 const dom = id => document.getElementById(id);
@@ -1219,9 +1219,13 @@ boats.push(makeJetSki(34, SEA_Z + 5, 0xffd23f));
 boats.push(makeJetSki(-52, SEA_Z + 5, 0x3fa9f5));
 boats.push(makeJetSki(160, SEA_Z + 6, 0xe8543f));
 initOcean(scene, SEA_Z, {
-  focus: () => ({ x: driving ? driving.x : player.x, z: driving ? driving.z : player.z, swimming }),
+  focus: () => ({ x: driving ? driving.x : player.x, z: driving ? driving.z : player.z, h: driving ? driving.h : player.h, swimming }),
   hurt: n => hurt(n), toast: t => toast(t), addShake: v => addShake(v), buzz: v => buzz(v),
   burst: (...a) => burst(...a), emit: (...a) => emit(...a),
+  earn: n => earn(n), save: () => save(),
+  fishable: () => !!(driving && driving.boat && Math.abs(driving.speed) < 0.8),
+  taken: () => state.treasures,
+  collectTreasure: (i, pay) => { state.treasures.push(i); toast("💎 Sunken treasure!  +$" + earn(pay)); save(); },
 });
 
 // ---------- jetpack pickup: grab it once, then hold BOOST on foot to fly ----------
@@ -2221,6 +2225,7 @@ const state = {
   weapon: null, ammo: {},   // equipped weapon index + owned ammo per weapon id
   decor: { wall: 0, floor: 2, sofa: 1, bed: 1, rug: 1, tv: 1, plant: 1, table: 1, art: 1, lamp: 1 },   // apartment furnishings
   ach: [],               // unlocked achievement ids
+  treasures: [],         // collected sunken-treasure dive spots (indices)
   mi: 0,                 // mission index; 8 = story complete
   xp: 0,                 // experience toward the next player level
   lvl: 1,                // player level (1..LVL_MAX); levels boost all earnings
@@ -2239,6 +2244,7 @@ const SAVE_FIELDS = {
   owned: _sfObj, cars: _sfObj, mods: _sfObj, medals: _sfObj, ammo: _sfObj,
   palms: { save: v => v, load: v => v || [] },
   ach: { save: v => v, load: v => v || [] },
+  treasures: { save: v => v, load: v => v || [] },
   races: { save: v => v, load: (v, d) => v || (d.bestRace ? { downtown: d.bestRace } : {}) },   // migrate single-circuit saves
   bestJump: _sfNum, maxMoney: _sfNum, bestRampage: _sfNum, bossWins: _sfNum, busts: _sfNum, rescues: _sfNum,
   jacket: _sfNum, hat: _sfNum, glasses: _sfNum, beard: _sfNum, mi: _sfNum,
@@ -2986,7 +2992,7 @@ let actP = false, punchCD = 0, punchT = 0, gunKickT = 0, kickT = 0, comboStep = 
 function doPunch() {
   if (driving) return;
   if (inside) { if (intTheme === "bowling") doBowl(); return; }   // BOWL inside the alley; no fists indoors
-  if (swimming) return;                            // no punching or gunfire while treading water
+  if (swimming) { if (nearTreasure(player.x, player.z) >= 0) startDive(player.x, player.z); return; }   // dive a treasure spot; no combat in the water
   if (armed()) { doShoot(); return; }              // fire if a weapon is equipped, else throw a punch
   if (nearCourtPlay()) { doHoopShot(); return; }   // step onto the beach court unarmed -> shoot hoops instead of punching air
   if (punchCD > 0) return;
@@ -3761,7 +3767,7 @@ addEventListener("pointerup", joyEnd);
 addEventListener("pointercancel", joyEnd);
 document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
 
-const btnA = dom("btnA"), btnB = dom("btnB"), brakeBtn = dom("brake"), boostBtn = dom("boost"), punchBtn = dom("punch"), fireBtn = dom("fireBtn");
+const btnA = dom("btnA"), btnB = dom("btnB"), brakeBtn = dom("brake"), boostBtn = dom("boost"), punchBtn = dom("punch"), fireBtn = dom("fireBtn"), fishBtn = dom("fishBtn");
 const climbBtn = dom("climbbtn"), diveBtn = dom("divebtn");
 const doorBtn = dom("doorbtn");
 doorBtn.addEventListener("click", () => {
@@ -3788,6 +3794,7 @@ climbBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropag
 diveBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); diveHeld = true; });
 punchBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actP = true; });
 fireBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); actP = true; });
+fishBtn.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); if (state.phase === "play" && !dlgLines) fishTap(); });
 addEventListener("pointerup", () => { bHeld = false; brakeHeld = false; boostHeld = false; climbHeld = false; diveHeld = false; });
 addEventListener("pointercancel", () => { bHeld = false; brakeHeld = false; boostHeld = false; climbHeld = false; diveHeld = false; });
 // keyboard nitro (Shift) while driving
@@ -4076,8 +4083,11 @@ function updateHUD() {
   boostBtn.style.display = (drive && !flying) ? "block" : "none";
   climbBtn.style.display = flying ? "block" : "none";
   diveBtn.style.display = flying ? "block" : "none";
-  punchBtn.style.display = (!driving && !swimming && !dlgLines && !garageOpen && !statsOpen && !styleOpen && !arcadeOpen) ? "block" : "none";
-  { const w = armed(); punchBtn.textContent = (inside && intTheme === "bowling") ? "🎳 BOWL" : w ? "🔫 " + ammoOf(w) : (!w && nearCourtPlay()) ? "🏀 SHOOT" : "PUNCH"; }
+  const treasureHere = swimming && nearTreasure(player.x, player.z) >= 0;
+  punchBtn.style.display = (!driving && (!swimming || treasureHere) && !dlgLines && !garageOpen && !statsOpen && !styleOpen && !arcadeOpen) ? "block" : "none";
+  { const w = armed(); punchBtn.textContent = treasureHere ? "🤿 DIVE" : (inside && intTheme === "bowling") ? "🎳 BOWL" : w ? "🔫 " + ammoOf(w) : (!w && nearCourtPlay()) ? "🏀 SHOOT" : "PUNCH"; }
+  fishBtn.style.display = (driving && driving.boat && Math.abs(driving.speed) < 0.8 && !dlgLines) ? "block" : "none";
+  fishBtn.textContent = fishing.stage === "bite" ? "❗ REEL!" : fishing.stage === "waiting" ? "🎣 …" : "🎣 CAST";
   // dedicated FIRE control only appears once a weapon's actually drawn (not indoors bowling, not driving)
   { const w = armed(); fireBtn.style.display = (w && !inside && !driving && !swimming && !dlgLines && !garageOpen && !statsOpen && !styleOpen && !arcadeOpen) ? "block" : "none"; if (w) fireBtn.textContent = "🔥 " + ammoOf(w); }
   const menus = dlgLines || garageOpen || statsOpen || styleOpen || arcadeOpen;
@@ -4162,6 +4172,8 @@ function drawMinimap(t) {
   }
   mapCtx.fillStyle = "#5f6368"; mapCtx.font = "8px sans-serif"; mapCtx.textAlign = "center";
   mapCtx.fillText("🏀", wx(COURT.x), wz(COURT.z) + 3);
+  mapCtx.fillStyle = "#f4b400";
+  for (const tr of treasures) if (!tr.taken) { mapCtx.beginPath(); mapCtx.arc(wx(tr.x), wz(tr.z), 2, 0, 7); mapCtx.fill(); }
   mapCtx.fillStyle = "#f9a825";
   for (let i = 0; i < PALMS.length; i++) {
     if (palmCollected[i]) continue;
@@ -5388,7 +5400,7 @@ function update(dt) {
       // derived from the body tilt so the head stays above the waterline whatever the pose, plus a bob.
       const sgait = Math.min(1, player.speed / 4);
       const tilt = 0.5 + sgait * 0.8;
-      const floatY = 0.62 - 1.63 * Math.cos(tilt) + Math.sin(simTime * 2.1) * 0.05;   // head + shoulders ride above the surface
+      const floatY = 0.62 - 1.63 * Math.cos(tilt) + Math.sin(simTime * 2.1) * 0.05 - diveDepth();   // head + shoulders above the surface (a dive pulls you under)
       player.y += (floatY - player.y) * Math.min(1, 8 * dt);
       hero.group.position.set(player.x, player.y, player.z);
       hero.group.rotation.set(tilt, player.h, 0);
@@ -5685,7 +5697,7 @@ globalThis.__palmCity = {
   pressPunch: () => { actP = true; },
   openArcade: g => openArcade(g), arcadeOpen: () => arcadeOpen,
   swimming: () => swimming,
-  sharks, swimmers, race,
+  sharks, swimmers, race, fishing, treasures, oceanDive: dive, fishTap: () => fishTap(),
   finishStory: () => { state.mi = M.length; mState = "done"; },   // jump straight to freeplay (dev/testing)
   health: () => health,
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),

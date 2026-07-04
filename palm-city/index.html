@@ -116,6 +116,9 @@
     width:72px; height:72px; background:radial-gradient(circle at 35% 30%,#ff9a82,#e0604a); color:#fff; font-size:13px; }
   /* dedicated FIRE control: only shown with a weapon drawn, bigger + redder than the punch/fire-dual
      button below it so there's an unmistakable "shoot" input distinct from melee */
+  #fishBtn { bottom:calc(206px + env(safe-area-inset-bottom, 0px)); right:calc(108px + env(safe-area-inset-right, 0px));
+    width:76px; height:76px; background:radial-gradient(circle at 35% 30%,#5fc9e8,#1d6fa8); color:#fff; font-size:13px;
+    font-weight:900; box-shadow:0 7px 18px rgba(0,40,90,.5), inset 0 2px 7px rgba(255,255,255,.4), inset 0 -4px 9px rgba(0,30,60,.4); }
   #fireBtn { bottom:calc(206px + env(safe-area-inset-bottom, 0px)); right:calc(108px + env(safe-area-inset-right, 0px));
     width:82px; height:82px; background:radial-gradient(circle at 35% 30%,#ff6a5a,#c81e1e); color:#fff; font-size:14px;
     font-weight:900; box-shadow:0 7px 18px rgba(90,0,0,.5), inset 0 2px 7px rgba(255,255,255,.4), inset 0 -4px 9px rgba(60,0,0,.4); }
@@ -393,6 +396,7 @@
   <button id="divebtn" class="btn pe">▼</button>
   <button id="punch" class="btn pe">PUNCH</button>
   <button id="fireBtn" class="btn pe">🔥 FIRE</button>
+  <button id="fishBtn" class="btn pe">🎣 CAST</button>
   <button id="btnA" class="btn pe"></button>
   <button id="doorbtn" class="pe">🚪 ENTER</button>
   <button id="talkbtn" class="pe">💬 TALK</button>
