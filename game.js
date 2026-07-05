@@ -1193,6 +1193,41 @@ for (let t = 0; t < Math.round(200 * N / 32); t++) {   // traffic scales with th
     h: 0, speed: rr(7, 11), mesh: makeCar(pick(CAR_COLORS)),
   });
 }
+// extra traffic so the streets feel busy, not empty. Spawned from a DEDICATED local PRNG (never the
+// seeded world stream) so the deterministic city/economy stays byte-identical — the LOD only
+// simulates/draws the cars near you, so a fuller road stays cheap.
+{
+  let _et = 0x7A11C0DE >>> 0;
+  const erand = () => { _et = (_et + 0x6D2B79F5) >>> 0; let t = _et; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const epick = arr => arr[(erand() * arr.length) | 0];
+  for (let t = 0; t < Math.round(500 * N / 32); t++) {   // ~+625 cars
+    // concentrate the extras in the central ~24×24 blocks (the core + suburbs you actually drive
+    // through) instead of the far map edges — far denser where it matters, for the same car budget
+    const i = 8 + (erand() * 24) | 0, j = 8 + (erand() * 24) | 0;
+    const x0 = roadC(i) + 4, x1 = roadC(i + 1) - 4, z0 = roadC(j) + 4, z1 = roadC(j + 1) - 4;
+    const wp = [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
+    const start = (erand() * 4) | 0;
+    traffic.push({
+      wp, next: (start + 1) % 4, x: wp[start][0], z: wp[start][1],
+      h: 0, speed: 7 + erand() * 4, mesh: makeCar(epick(CAR_COLORS)),
+    });
+  }
+  // avenue cruisers: cars that run LONG straight routes down a main road (not tiny block loops), so the
+  // street you're driving on actually has a stream of traffic flowing along it — oncoming and ahead.
+  for (let t = 0; t < Math.round(240 * N / 32); t++) {
+    const k = 8 + (erand() * 24) | 0;             // a central road line
+    const lane = (erand() < 0.5 ? -1 : 1) * 3;    // pick a lane either side of the centre line
+    const a = 6 + (erand() * 22) | 0, b = a + 4 + (erand() * 14) | 0;   // two endpoints several blocks apart
+    let wp, h0;
+    if (erand() < 0.5) { const x = roadC(k) + lane; wp = [[x, roadC(a)], [x, roadC(Math.min(b, N))]]; }   // N-S run
+    else { const z = roadC(k) + lane; wp = [[roadC(a), z], [roadC(Math.min(b, N)), z]]; }                  // E-W run
+    const start = (erand() * 2) | 0;
+    traffic.push({
+      wp, next: (start + 1) % 2, x: wp[start][0], z: wp[start][1],
+      h: 0, speed: 8 + erand() * 5, mesh: makeCar(epick(CAR_COLORS)),
+    });
+  }
+}
 // armored cash trucks: rare, tanky targets — crack one open for a big score and serious heat.
 // uses a local PRNG so the main seeded stream (NPCs, parked cars) stays byte-for-byte identical.
 {
@@ -5137,7 +5172,7 @@ function update(dt) {
     const [tx, tz] = t.wp[t.next];
     const dx = tx - t.x, dz = tz - t.z;
     const d = Math.hypot(dx, dz) || 1;
-    if (d < 2) { t.next = (t.next + 1) % 4; continue; }
+    if (d < 2) { t.next = (t.next + 1) % t.wp.length; continue; }   // wp.length is 4 for block loops, 2 for avenue cruisers
     let fx = dx / d, fz = dz / d;
     const pd = mayhem ? dist2(t.x, t.z, tpx, tpz) : 1e9;
     const panic = pd < 3600;                                          // within ~60u of the chaos
