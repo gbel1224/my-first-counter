@@ -2090,7 +2090,7 @@ function updateCarLights(g) {
 // player headlight beams: two flat fans spilling forward onto the road, only while driving at night
 const headBeams = new THREE.Group(); headBeams.visible = false;
 {
-  const bGeo = new THREE.ConeGeometry(2.2, 11, 14, 1, true); bGeo.rotateX(-Math.PI / 2); bGeo.translate(0, 0, -11 / 2);
+  const bGeo = new THREE.ConeGeometry(2.2, 11, 14, 1, true); bGeo.rotateX(-Math.PI / 2); bGeo.translate(0, 0, 11 / 2);   // apex at the headlights, fanning FORWARD (+z = the car's facing)
   const bMat = new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0.0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
   headBeams.userData.mat = bMat;
   for (const s of [-1, 1]) { const b = new THREE.Mesh(bGeo, bMat); b.position.x = s * 0.7; b.scale.y = 0.16; headBeams.add(b); }
@@ -2111,7 +2111,7 @@ function updateHeadBeams(g) {
 const TBEAMS = 14, TBEAM_R2 = 9000;
 const trafBeams = new THREE.Group(); trafBeams.visible = false; scene.add(trafBeams);
 {
-  const bGeo = new THREE.ConeGeometry(2.0, 9, 12, 1, true); bGeo.rotateX(-Math.PI / 2); bGeo.translate(0, 0, -9 / 2);
+  const bGeo = new THREE.ConeGeometry(2.0, 9, 12, 1, true); bGeo.rotateX(-Math.PI / 2); bGeo.translate(0, 0, 9 / 2);   // apex at the headlights, fanning FORWARD
   for (let i = 0; i < TBEAMS; i++) {
     const mat = new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
     const g = new THREE.Group(); g.userData.mat = mat; g.visible = false;
