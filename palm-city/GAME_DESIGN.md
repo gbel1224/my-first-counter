@@ -58,6 +58,7 @@ A complete description of the game, written so it can be handed to a new develop
 - Mission structure: go-to markers, timed race legs, condition steps. Freeplay unlocks fully after the story.
 - **Phone (on-demand jobs):** Rampage (wreck 5 cars in 60s), Courier (timed delivery), Bounty (destroy a marked car), Turf Takeover, and Hire Muscle ($1500 for an armed ally who follows you and guns down gangsters).
 - **Side gigs (freeplay):** Vigilante (chase down fleeing crooks, on foot or by car, escalating rewards), Paramedic (rush patients to the hospital), Taxi-style side job after chapter 5.
+- **Dynamic street events (freeplay):** the world spontaneously spawns a random event near you every ~45-90s — a Cash Drop (grab it), a Rush Delivery (timed pickup→dropoff), or a Bounty (catch a fleeing target on foot or by car). Each drops a tall pulsing light beacon you follow via the normal objective marker/minimap/HUD, with a countdown and a cash reward. Keeps freeplay from ever feeling empty.
 
 ## Economy & progression
 
