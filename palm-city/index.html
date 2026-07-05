@@ -15,13 +15,19 @@
     -webkit-user-select:none; user-select:none; touch-action:none; overscroll-behavior:none; }
   canvas { display:block; }
   /* color grade on the 3D layer only — vibrant, warm golden-sunset look */
-  #scene { filter:saturate(1.22) contrast(1.07) brightness(1.02) sepia(0.05); }
+  #scene { filter:saturate(1.0) contrast(1.02) brightness(1.0); }
   #ui { position:fixed; inset:0; pointer-events:none; }
   .pe { pointer-events:auto; }
   #flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none;
     transition:opacity .45s ease-out; }
   #vignette { position:absolute; inset:0; pointer-events:none;
-    background:radial-gradient(ellipse 78% 82% at center, rgba(0,0,0,0) 56%, rgba(0,0,0,.34) 100%); }
+    background:
+      radial-gradient(ellipse 92% 62% at 50% 22%, rgba(255,180,110,.10) 0%, rgba(255,180,110,0) 55%),
+      radial-gradient(ellipse 70% 78% at center, rgba(0,0,0,0) 48%, rgba(8,10,20,.5) 100%); }
+  /* film grain — a static noise wash that gives the 3D layer real-footage texture instead of flat CG */
+  #grain { position:absolute; inset:0; pointer-events:none; opacity:.04; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size:170px 170px; }
 
   #topbar { position:absolute; top:env(safe-area-inset-top, 0); left:0; right:0;
     display:flex; align-items:flex-start; padding:10px 12px; gap:10px; }
@@ -394,6 +400,7 @@
 <div id="ui">
   <div id="flash"></div>
   <div id="vignette"></div>
+  <div id="grain"></div>
   <div id="topbar">
     <div id="moneybox"><div id="money"></div><div id="income"></div><div id="palms"></div><div id="lvlrow"><span id="lvltext"></span><div id="lvlbar"><i id="lvlfill"></i></div></div></div>
     <div id="missionbox"><div id="mtitle"></div><div id="mstep"></div></div>
