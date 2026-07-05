@@ -12,6 +12,7 @@ import { initProjectiles, projPool, fireProjectile, updateProjectiles, muzzleFla
 import { initArcade, arcadeOpen, openArcade, closeArcade, updateArcade, ARC_BY_CAB } from "./arcade.js";
 import { initWeather, updateWeather, weatherMode, cycleWeatherMode } from "./weather.js";
 import { initOcean, updateOcean, sharks, swimmers, fishing, fishTap, treasures, dive, nearTreasure, startDive, diveDepth } from "./ocean.js";
+import { initEvents, updateEvents, eventObjective, eventActive, _debug as eventsDebug } from "./events.js";
 
 // ---------- renderer / scene ----------
 const dom = id => document.getElementById(id);
@@ -1261,6 +1262,14 @@ initOcean(scene, SEA_Z, {
   fishable: () => !!(driving && driving.boat && Math.abs(driving.speed) < 0.8),
   taken: () => state.treasures,
   collectTreasure: (i, pay) => { state.treasures.push(i); toast("💎 Sunken treasure!  +$" + earn(pay)); save(); },
+});
+initEvents(scene, {
+  focus: () => ({ x: driving ? driving.x : player.x, z: driving ? driving.z : player.z, h: driving ? driving.h : player.h, driving: !!driving, speed: driving ? Math.abs(driving.speed) : player.speed }),
+  groundY: (x, z) => groundY(x, z),
+  toast: t => toast(t), earn: n => earn(n), save: () => save(), buzz: v => buzz(v), addShake: v => addShake(v),
+  burst: (...a) => burst(...a),
+  // only fire in freeplay, when you're free to act (not in a menu / dialogue / mid-mission / indoors)
+  canStart: () => state.mi >= M.length && !dlgLines && !inside && !garageOpen && !statsOpen && !styleOpen && !arcadeOpen && !mapOpen,
 });
 
 // ---------- jetpack pickup: grab it once, then hold BOOST on foot to fly ----------
@@ -4039,6 +4048,8 @@ function currentObjective() {
       const C = CIRCUITS[race.ci], cp = C.cps[race.cp];
       return { title: STR.raceTitle + " · " + STR.circuits[C.id].name, text: STR.raceProgress(race.cp + 1, C.cps.length) + " · " + STR.raceTimer(Math.ceil(race.t)) + " · " + STR.goldTarget(goldTime(C)), x: cp[0], z: cp[1] };
     }
+    const evo = eventObjective();
+    if (evo) return evo;
     if (side.stage === "carry") return { title: STR.freeplay, text: STR.sideJobGo, x: side.x, z: side.z };
     if (sideUnlocked()) return { title: STR.freeplay, text: STR.sideJobAt, x: DEPOT.x, z: DEPOT.z };
     return { title: STR.freeplay, text: "", x: undefined };
@@ -5392,6 +5403,7 @@ function update(dt) {
   updateMissions(dt);
   updateSideJob();
   updateRace(dt);
+  updateEvents(dt, simTime);
   updateVigilante(dt);
   updateParamedic(dt);
   updatePolice(dt);
@@ -5733,6 +5745,7 @@ globalThis.__palmCity = {
   openArcade: g => openArcade(g), arcadeOpen: () => arcadeOpen,
   swimming: () => swimming,
   sharks, swimmers, race, fishing, treasures, oceanDive: dive, fishTap: () => fishTap(),
+  eventsDebug, eventActive: () => eventActive(),
   finishStory: () => { state.mi = M.length; mState = "done"; },   // jump straight to freeplay (dev/testing)
   health: () => health,
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
