@@ -293,8 +293,9 @@ function onResize() {
 // ---------- procedural textures — moved to textures.js ----------
 // built HERE (not at module load) so the seeded-RNG stream is consumed at the exact same point
 // in startup as when these were inline constants — the deterministic world stays byte-identical.
-const { texAsphalt, texAsphaltNormal, texSidewalk, texSidewalkNormal, texGrass, texLeaf, texCrosswalk, texArrow,
-  texFacade, texWindows, texFacadeNormal, texTower, texTowerWin, texGhetto, texGhettoWin } = buildWorldTextures();
+const { texAsphalt, texAsphaltNormal, texAsphaltRough, texSidewalk, texSidewalkNormal, texSidewalkRough,
+  texGrass, texLeaf, texCrosswalk, texArrow, texFacade, texWindows, texFacadeNormal,
+  texTower, texTowerWin, texTowerRough, texGhetto, texGhettoWin } = buildWorldTextures();
 
 // ---------- geometry helpers (merged vertex-colored boxes => 1 draw call per model) ----------
 // moved to geometry.js — imported at the top of the file
@@ -347,8 +348,8 @@ scene.add(ground);
 
 // roads: two merged meshes (all vertical, all horizontal)
 {
-  const matRoad = roadMat = new THREE.MeshStandardMaterial({ map: texAsphalt, normalMap: texAsphaltNormal, roughness: 0.62, metalness: 0.0, envMapIntensity: 0.55, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
-  matRoad.normalScale.set(0.7, 0.7);
+  const matRoad = roadMat = new THREE.MeshStandardMaterial({ map: texAsphalt, normalMap: texAsphaltNormal, roughnessMap: texAsphaltRough, roughness: 1.0, metalness: 0.0, envMapIntensity: 0.6, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+  matRoad.normalScale.set(0.9, 0.9);
   const vGeos = [], hGeos = [];
   for (let k = 0; k <= N; k++) {
     let g = new THREE.PlaneGeometry(ROAD, 2 * HALF);
@@ -431,9 +432,9 @@ const GAS = { x: Rc(2) + 7, z: Rc(3) - 7 };   // roadside fuel station (west-cen
     ((isResid(i, j) || (PARKS.has(i + "," + j) && i + "," + j !== PLAZA_KEY)) ? grass : paved).push([bc(i), bc(j)]);
   const m = new THREE.Matrix4();
   const mk = (list, tex, pbr) => {
-    const mat = pbr ? (sidewalkMat = new THREE.MeshStandardMaterial({ map: tex, normalMap: texSidewalkNormal, roughness: 0.85, metalness: 0.0, envMapIntensity: 0.35 }))
+    const mat = pbr ? (sidewalkMat = new THREE.MeshStandardMaterial({ map: tex, normalMap: texSidewalkNormal, roughnessMap: texSidewalkRough, roughness: 1.0, metalness: 0.0, envMapIntensity: 0.4 }))
       : new THREE.MeshLambertMaterial({ map: tex });
-    if (pbr) mat.normalScale.set(0.9, 0.9);
+    if (pbr) mat.normalScale.set(1.0, 1.0);
     const im = new THREE.InstancedMesh(slab, mat, list.length);
     im.receiveShadow = true;
     list.forEach(([x, z], i) => { m.makeTranslation(x, 0, z); im.setMatrixAt(i, m); });
@@ -510,7 +511,7 @@ let buildingMat = null;
   placed.forEach((b, i) => { if (i % 7 === 0) ENTERABLES.push({ x: b.x, z: b.z, name: "🏢 Lobby", r: Math.pow(Math.max(b.w, b.d) / 2 + 4, 2) }); });
 
   // downtown skyscrapers — reflective glass-tower facade (PBR so the sky env mirrors off the glass)
-  const towerSide = new THREE.MeshStandardMaterial({ map: texTower, metalness: 0.85, roughness: 0.16, envMapIntensity: 1.5, emissive: 0xffffff, emissiveMap: texTowerWin, emissiveIntensity: 0 });   // sharper, more mirror-like curtain-wall glass
+  const towerSide = new THREE.MeshStandardMaterial({ map: texTower, roughnessMap: texTowerRough, metalness: 0.85, roughness: 1.0, envMapIntensity: 1.6, emissive: 0xffffff, emissiveMap: texTowerWin, emissiveIntensity: 0 });   // sharper, more mirror-like curtain-wall glass; roughness map keeps panes glassy, mullions matte
   specialMats.push(towerSide);
   boxChunks(towers, [towerSide, towerSide, matRoof, matRoof, towerSide, towerSide]);
 
