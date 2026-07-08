@@ -7,7 +7,7 @@ import { boxGeoC, colorize, cylC, sphC, mergeGeos, textSprite } from "./geometry
 import { setAnisotropy, canvasTex, canvasNormalTex, speckle, buildWorldTextures } from "./textures.js";
 import { matPerson, personGeo, articulatedPerson, walkerGeos, makeWalker, HERO_PAL, NPC_PALS, npcGeos, npcWalkerGeos } from "./characters.js";
 import { initRagdolls, ragRng, rrand, ragdolls, RAG_G, spawnRagdoll, updateRagdolls } from "./ragdoll.js";
-import { initVehicles, wheelGeo, carGeo, bikeGeo, CAR_COLORS, makeCar, makeBike, makeHeli, makeBoat, makeJetSki, makePlane } from "./vehicles.js";
+import { initVehicles, wheelGeo, carGeo, bikeGeo, CAR_COLORS, makeCar, makeBike, makeHeli, makeBoat, makeJetSki, makePlane, makeBlob } from "./vehicles.js";
 import { initProjectiles, projPool, fireProjectile, updateProjectiles, muzzleFlash, updateFlashes } from "./projectiles.js";
 import { initArcade, arcadeOpen, openArcade, closeArcade, updateArcade, ARC_BY_CAB } from "./arcade.js";
 import { initWeather, updateWeather, weatherMode, cycleWeatherMode } from "./weather.js";
@@ -248,7 +248,7 @@ let dayMode = (() => { try { return localStorage.getItem("palm_city_light") === 
 let dayCycle = (() => { try { return localStorage.getItem("palm_city_cycle") === "1"; } catch (e) { return false; } })();
 const DAY_T = 0.25;
 let gNight = 0;   // current night factor (0 bright day … 1 deep night), shared across systems
-let gradeSat = dayMode === "midday" ? 0.92 : 1.0;   // saturation multiplier in the final grade (was a hard 1.11)
+let gradeSat = dayMode === "midday" ? 1.06 : 1.12;   // saturation multiplier in the final grade — punchy, toy-diorama colour
 const _sky = new THREE.Color(), _top = new THREE.Color(), _sunCol = new THREE.Color();
 function envUpdate() {
   const KEYS = dayMode === "midday" ? ENV_MIDDAY : ENV_KEYS;
@@ -1576,6 +1576,7 @@ vince.visible = false;
 // ---------- player ----------
 const hero = articulatedPerson(HERO_PAL);
 hero.group.traverse(o => { if (o.isMesh) o.castShadow = true; });
+hero.group.add(makeBlob(1.5, 1.5, 0.4));   // soft contact shadow grounds the player on foot
 scene.add(hero.group);
 
 // ---------- vehicle entry/exit animation: a door swings open + the player gets in / mounts ----------
@@ -4690,7 +4691,7 @@ function applyDayMode(mode, refresh) {
   sun.color.setHex(midday ? 0xfff1da : 0xffd9a0);
   hemi.color.setHex(midday ? 0xdce8f6 : 0xffe8c4);
   renderer.toneMappingExposure = midday ? 1.18 : 1.3;
-  gradeSat = midday ? 0.92 : 1.0;
+  gradeSat = midday ? 1.06 : 1.12;
   if (compMat) compMat.uniforms.uSat.value = gradeSat;
   try { localStorage.setItem("palm_city_light", dayMode); } catch (e) {}
   if (refresh) envUpdate();   // refresh sky / fog / sun intensity immediately (runtime toggle only)
@@ -5619,7 +5620,7 @@ function buildBloom() {
   blurMat = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, dir: { value: new THREE.Vector2() } }, vertexShader: BLOOM_VERT,
     fragmentShader: "uniform sampler2D tDiffuse; uniform vec2 dir; varying vec2 vUv; void main(){ vec3 s=texture2D(tDiffuse,vUv).rgb*0.227027; s+=texture2D(tDiffuse,vUv+dir*1.3846).rgb*0.316216; s+=texture2D(tDiffuse,vUv-dir*1.3846).rgb*0.316216; s+=texture2D(tDiffuse,vUv+dir*3.2308).rgb*0.07027; s+=texture2D(tDiffuse,vUv-dir*3.2308).rgb*0.07027; gl_FragColor=vec4(s,1.0); }" });
   compMat = new THREE.ShaderMaterial({ uniforms: { tScene: { value: null }, tBloom: { value: null }, tAO: { value: null }, uAO: { value: 1 }, strength: { value: 1.05 }, uSat: { value: gradeSat }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(bloomW, bloomH) } }, vertexShader: BLOOM_VERT,
-    fragmentShader: "uniform sampler2D tScene; uniform sampler2D tBloom; uniform sampler2D tAO; uniform float uAO; uniform float strength; uniform float uSat; uniform float uTime; uniform vec2 uRes; varying vec2 vUv; vec3 toSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,vec3(0.0)),vec3(0.41666))-0.055, step(0.0031308,c)); } float hash(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); } void main(){ vec2 uv=vUv; vec2 d=uv-0.5; float r2=dot(d,d); vec3 sc=texture2D(tScene,uv).rgb; float ao=texture2D(tAO,uv).r; sc*=mix(1.0,ao,uAO); vec3 bl=texture2D(tBloom,uv).rgb; vec3 col=toSRGB(max(sc+bl*strength,0.0)); float luma=dot(col,vec3(0.2126,0.7152,0.0722)); col=mix(vec3(luma),col,uSat); col=(col-0.5)*1.13+0.5; vec3 shTint=vec3(0.90,0.97,1.08), hiTint=vec3(1.07,1.0,0.88); col*=mix(shTint,hiTint,smoothstep(0.12,0.9,luma)); col*=1.0-r2*0.5; col+=(hash(uv*uRes+fract(uTime))-0.5)*0.045; gl_FragColor=vec4(clamp(col,0.0,1.0),1.0); }" });
+    fragmentShader: "uniform sampler2D tScene; uniform sampler2D tBloom; uniform sampler2D tAO; uniform float uAO; uniform float strength; uniform float uSat; uniform float uTime; uniform vec2 uRes; varying vec2 vUv; vec3 toSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,vec3(0.0)),vec3(0.41666))-0.055, step(0.0031308,c)); } float hash(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); } void main(){ vec2 uv=vUv; vec2 d=uv-0.5; float r2=dot(d,d); vec3 sc=texture2D(tScene,uv).rgb; float ao=texture2D(tAO,uv).r; sc*=mix(1.0,ao,uAO); vec3 bl=texture2D(tBloom,uv).rgb; vec3 col=toSRGB(max(sc+bl*strength,0.0)); float luma=dot(col,vec3(0.2126,0.7152,0.0722)); col=mix(vec3(luma),col,uSat); col=(col-0.5)*1.05+0.5; col=col*0.965+0.024; vec3 shTint=vec3(1.02,1.0,0.965), hiTint=vec3(1.06,1.008,0.915); col*=mix(shTint,hiTint,smoothstep(0.1,0.9,luma)); col*=vec3(1.022,1.006,0.985); col*=1.0-r2*0.2; col+=(hash(uv*uRes+fract(uTime))-0.5)*0.014; gl_FragColor=vec4(clamp(col,0.0,1.0),1.0); }" });
   bloomReady = true;
 }
 function blit(mat, target) { fsQuad.material = mat; renderer.setRenderTarget(target || null); renderer.render(fsScene, fsCam); }

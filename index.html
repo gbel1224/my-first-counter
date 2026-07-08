@@ -15,17 +15,17 @@
     -webkit-user-select:none; user-select:none; touch-action:none; overscroll-behavior:none; }
   canvas { display:block; }
   /* color grade on the 3D layer only — vibrant, warm golden-sunset look */
-  #scene { filter:saturate(1.0) contrast(1.02) brightness(1.0); }
+  #scene { filter:saturate(1.13) contrast(1.0) brightness(1.05); }
   #ui { position:fixed; inset:0; pointer-events:none; }
   .pe { pointer-events:auto; }
   #flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none;
     transition:opacity .45s ease-out; }
   #vignette { position:absolute; inset:0; pointer-events:none;
     background:
-      radial-gradient(ellipse 92% 62% at 50% 22%, rgba(255,180,110,.10) 0%, rgba(255,180,110,0) 55%),
-      radial-gradient(ellipse 70% 78% at center, rgba(0,0,0,0) 48%, rgba(8,10,20,.5) 100%); }
+      radial-gradient(ellipse 96% 66% at 50% 20%, rgba(255,196,120,.12) 0%, rgba(255,196,120,0) 58%),
+      radial-gradient(ellipse 76% 84% at center, rgba(0,0,0,0) 62%, rgba(14,16,26,.22) 100%); }
   /* film grain — a static noise wash that gives the 3D layer real-footage texture instead of flat CG */
-  #grain { position:absolute; inset:0; pointer-events:none; opacity:.04; mix-blend-mode:overlay;
+  #grain { position:absolute; inset:0; pointer-events:none; opacity:.015; mix-blend-mode:overlay;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     background-size:170px 170px; }
 
