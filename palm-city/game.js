@@ -5745,7 +5745,7 @@ globalThis.__palmCity = {
   openArcade: g => openArcade(g), arcadeOpen: () => arcadeOpen,
   swimming: () => swimming,
   sharks, swimmers, race, fishing, treasures, oceanDive: dive, fishTap: () => fishTap(),
-  eventsDebug, eventActive: () => eventActive(),
+  eventsDebug, eventActive: () => eventActive(), currentObjective: () => currentObjective(),
   finishStory: () => { state.mi = M.length; mState = "done"; },   // jump straight to freeplay (dev/testing)
   health: () => health,
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
