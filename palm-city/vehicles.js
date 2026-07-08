@@ -7,6 +7,27 @@ import { boxGeoC, colorize, mergeGeos } from "./geometry.js";
 let scene = null;
 export function initVehicles(sceneRef) { scene = sceneRef; }
 
+// ---- soft contact shadow: a radial dark blob that grounds a mesh on the road, the way polished
+// mobile games (Sunday City et al) sit every car/character in a soft AO pool. One shared texture;
+// the plane rides just above the ground under the object and tilts imperceptibly with weight transfer.
+let _blobTex = null;
+function blobTex() {
+  if (_blobTex) return _blobTex;
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const x = c.getContext("2d");
+  const g = x.createRadialGradient(32, 32, 1, 32, 32, 31);
+  g.addColorStop(0, "rgba(0,0,0,0.55)"); g.addColorStop(0.55, "rgba(0,0,0,0.30)"); g.addColorStop(1, "rgba(0,0,0,0)");
+  x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  _blobTex = new THREE.CanvasTexture(c); _blobTex.colorSpace = THREE.SRGBColorSpace;
+  return _blobTex;
+}
+export function makeBlob(w, l, opacity) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l),
+    new THREE.MeshBasicMaterial({ map: blobTex(), transparent: true, opacity: opacity == null ? 0.42 : opacity, depthWrite: false, color: 0x000000 }));
+  m.rotation.x = -Math.PI / 2; m.position.y = 0.05; m.renderOrder = 2;
+  return m;
+}
+
 // round vertex-coloured wheel (axle along X so it lies flat on its side)
 export function wheelGeo(r, w, x, y, z, color) {
   const g = new THREE.CylinderGeometry(r, r, w, 14, 1);
@@ -33,6 +54,7 @@ export const CAR_COLORS = [0xe8543f, 0x3f7fe8, 0xf0c040, 0x58b368, 0xc25cd6, 0xe
 export function makeCar(color) {
   const mesh = new THREE.Mesh(carGeo, new THREE.MeshStandardMaterial({ vertexColors: true, color, metalness: 0.6, roughness: 0.22, envMapIntensity: 1.5 }));   // glossy reflective PBR paint + glassy cabin
   mesh.castShadow = true; mesh.receiveShadow = true;
+  mesh.add(makeBlob(3.0, 6.2, 0.4));   // soft contact shadow grounds the car on the road
   scene.add(mesh);
   return mesh;
 }
@@ -51,6 +73,7 @@ export const bikeGeo = mergeGeos([                              // low, realisti
 export function makeBike(color) {
   const mesh = new THREE.Mesh(bikeGeo, new THREE.MeshStandardMaterial({ vertexColors: true, color, metalness: 0.6, roughness: 0.3, envMapIntensity: 1.1 }));
   mesh.castShadow = true; mesh.receiveShadow = true;
+  mesh.add(makeBlob(1.4, 3.2, 0.4));   // soft contact shadow
   scene.add(mesh);
   return mesh;
 }
