@@ -5702,13 +5702,15 @@ function frame(now) {
   } else acc = 0;
   if (state.phase === "play") updateSunShadow();
   renderFrame();
-  // adaptive resolution: hold ~60fps by nudging pixel ratio between PR_FLOOR and PR_CAP
+  // adaptive resolution: ONLY in Performance mode (for genuinely weak devices). Quality mode is
+  // pinned dead-flat at full resolution (PR_CAP) — no mid-gameplay rescaling, so the picture never
+  // softens then sharpens as fps wobbles. "Quality to the sky": crisp and steady, always.
   perfFrames++;
   if (now - perfAt >= 1000) {
     const fps = perfFrames * 1000 / (now - perfAt);
     perfFrames = 0; perfAt = now;
     if (perfWarmup > 0) perfWarmup--;
-    else if (state.phase === "play") {
+    else if (state.phase === "play" && gfxMode === "perf") {
       // Only step down after the framerate is low for TWO consecutive seconds, so a transient
       // dip (an explosion, a cop swarm) can't permanently ratchet the resolution to the floor.
       // Recover readily as soon as fps is healthy — no dead-zone where it gets stuck blurry.
