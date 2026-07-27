@@ -2,7 +2,7 @@
 // heli/boat/plane builders. Split out of game.js; the scene is injected once via
 // initVehicles() (it lives in game.js), same pattern as ragdoll.js.
 import * as THREE from "./vendor/three.module.js";
-import { boxGeoC, colorize, mergeGeos } from "./geometry.js";
+import { boxGeoC, colorize, mergeGeos, roundedBoxC } from "./geometry.js";
 
 let scene = null;
 export function initVehicles(sceneRef) { scene = sceneRef; }
@@ -33,22 +33,24 @@ export function wheelGeo(r, w, x, y, z, color) {
   const g = new THREE.CylinderGeometry(r, r, w, 14, 1);
   g.rotateZ(Math.PI / 2); g.translate(x, y, z); return colorize(g, color);
 }
+// smooth, rounded body (soft edges everywhere) for a polished mobile-game look instead of a hard cube
 export const carGeo = mergeGeos([
-  boxGeoC(2.0, 0.55, 4.6, 0, 0.72, 0, 0xffffff),          // lower body (white => tintable)
-  boxGeoC(1.9, 0.22, 4.2, 0, 1.0, 0, 0xffffff),           // upper body shoulder (tintable, slimmer)
-  boxGeoC(1.7, 0.6, 2.3, 0, 1.32, -0.2, 0x131c27),        // glass cabin (deep tint, reads as glass with the glossy paint)
-  wheelGeo(0.44, 0.34, 0.92, 0.42, 1.5, 0x1b1d22),        // round tyres
-  wheelGeo(0.44, 0.34, -0.92, 0.42, 1.5, 0x1b1d22),
-  wheelGeo(0.44, 0.34, 0.92, 0.42, -1.5, 0x1b1d22),
-  wheelGeo(0.44, 0.34, -0.92, 0.42, -1.5, 0x1b1d22),
-  wheelGeo(0.18, 0.36, 0.93, 0.42, 1.5, 0xc2c6cc),        // chrome hubcaps
-  wheelGeo(0.18, 0.36, -0.93, 0.42, 1.5, 0xc2c6cc),
-  wheelGeo(0.18, 0.36, 0.93, 0.42, -1.5, 0xc2c6cc),
-  wheelGeo(0.18, 0.36, -0.93, 0.42, -1.5, 0xc2c6cc),
-  boxGeoC(0.34, 0.18, 0.1, 0.55, 0.85, 2.31, 0xfff4c4),   // headlights
-  boxGeoC(0.34, 0.18, 0.1, -0.55, 0.85, 2.31, 0xfff4c4),
-  boxGeoC(0.34, 0.18, 0.1, 0.55, 0.85, -2.31, 0xc8403a),  // taillights
-  boxGeoC(0.34, 0.18, 0.1, -0.55, 0.85, -2.31, 0xc8403a),
+  roundedBoxC(2.04, 0.58, 4.64, 0.26, 0, 0.82, 0, 0xffffff, 0.16),   // lower body (rounded, white => tintable) — raised so the wheels read
+  roundedBoxC(1.9, 0.34, 3.9, 0.28, 0, 1.08, -0.05, 0xffffff, 0.12),  // rounded shoulder / beltline
+  roundedBoxC(1.62, 0.62, 2.25, 0.30, 0, 1.34, -0.2, 0x131c27, 0.16), // rounded glass cabin (deep tint => glass)
+  roundedBoxC(1.5, 0.2, 1.0, 0.16, 0, 1.16, 1.15, 0x1b2632, 0.08),    // windshield sliver up front
+  wheelGeo(0.46, 0.38, 0.94, 0.42, 1.5, 0x14161a),        // round tyres (fuller, smoother)
+  wheelGeo(0.46, 0.38, -0.94, 0.42, 1.5, 0x14161a),
+  wheelGeo(0.46, 0.38, 0.94, 0.42, -1.5, 0x14161a),
+  wheelGeo(0.46, 0.38, -0.94, 0.42, -1.5, 0x14161a),
+  wheelGeo(0.21, 0.40, 0.95, 0.42, 1.5, 0xc7ccd2),        // chrome hubcaps
+  wheelGeo(0.21, 0.40, -0.95, 0.42, 1.5, 0xc7ccd2),
+  wheelGeo(0.21, 0.40, 0.95, 0.42, -1.5, 0xc7ccd2),
+  wheelGeo(0.21, 0.40, -0.95, 0.42, -1.5, 0xc7ccd2),
+  roundedBoxC(0.4, 0.2, 0.14, 0.09, 0.6, 0.86, 2.33, 0xfff4c4, 0.06),  // rounded headlights
+  roundedBoxC(0.4, 0.2, 0.14, 0.09, -0.6, 0.86, 2.33, 0xfff4c4, 0.06),
+  roundedBoxC(0.4, 0.2, 0.14, 0.09, 0.6, 0.86, -2.33, 0xc8403a, 0.06), // rounded taillights
+  roundedBoxC(0.4, 0.2, 0.14, 0.09, -0.6, 0.86, -2.33, 0xc8403a, 0.06),
 ]);
 export const CAR_COLORS = [0xe8543f, 0x3f7fe8, 0xf0c040, 0x58b368, 0xc25cd6, 0xe8e4da, 0xff8c42];
 export function makeCar(color) {

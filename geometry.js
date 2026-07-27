@@ -30,6 +30,32 @@ export function sphC(r, x, y, z, color, sx = 1, sy = 1, sz = 1) {
   if (sx !== 1 || sy !== 1 || sz !== 1) g.scale(sx, sy, sz);
   g.translate(x, y, z); return colorize(g, color);
 }
+// a rounded, bevelled box (soft edges on all sides) — for smooth AA-style car bodies instead of hard
+// cubes. Built from an extruded rounded-rectangle profile; a sequential index is attached so it drops
+// straight into mergeGeos alongside the box/cyl/sph primitives.
+export function roundedBoxC(w, h, d, r, x, y, z, color, bevel = 0.08) {
+  r = Math.max(0.001, Math.min(r, w / 2 - 0.001, h / 2 - 0.001));
+  bevel = Math.min(bevel, d / 2 - 0.01, r);
+  const hw = w / 2, hh = h / 2;
+  const s = new THREE.Shape();
+  s.moveTo(-hw + r, -hh);
+  s.lineTo(hw - r, -hh);
+  s.quadraticCurveTo(hw, -hh, hw, -hh + r);
+  s.lineTo(hw, hh - r);
+  s.quadraticCurveTo(hw, hh, hw - r, hh);
+  s.lineTo(-hw + r, hh);
+  s.quadraticCurveTo(-hw, hh, -hw, hh - r);
+  s.lineTo(-hw, -hh + r);
+  s.quadraticCurveTo(-hw, -hh, -hw + r, -hh);
+  const depth = Math.max(0.01, d - bevel * 2);
+  const g = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 3, steps: 1, curveSegments: 6 });
+  g.translate(0, 0, -depth / 2);          // centre the extrusion on Z
+  g.translate(x, y, z);
+  g.computeVertexNormals();
+  if (!g.index) { const c = g.attributes.position.count, ix = new Uint32Array(c); for (let i = 0; i < c; i++) ix[i] = i; g.setIndex(new THREE.BufferAttribute(ix, 1)); }
+  if (g.attributes.uv) g.deleteAttribute("uv");   // vertex-coloured only; keep attribute set uniform for mergeGeos
+  return colorize(g, color);
+}
 export function mergeGeos(geos) {
   const pos = [], norm = [], col = [], uv = [], idx = [];
   let off = 0;
