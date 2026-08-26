@@ -4,7 +4,7 @@ import { STR } from "./strings.js";
 import { AudioSys } from "./audio.js";
 import { mulberry32, rng, rr, pick, N, CELL, ROAD, BLOCK, HALF, roadC, blockMin, bc, O, Rc, Bm, Bc, CURB, clamp, dist2, lerpAngle } from "./util.js";
 import { boxGeoC, colorize, cylC, sphC, mergeGeos, textSprite } from "./geometry.js";
-import { setAnisotropy, canvasTex, canvasNormalTex, speckle, buildWorldTextures } from "./textures.js";
+import { setAnisotropy, setTexScale, canvasTex, canvasNormalTex, speckle, buildWorldTextures } from "./textures.js";
 import { matPerson, personGeo, articulatedPerson, walkerGeos, makeWalker, HERO_PAL, NPC_PALS, npcGeos, npcWalkerGeos } from "./characters.js";
 import { initRagdolls, ragRng, rrand, ragdolls, RAG_G, spawnRagdoll, updateRagdolls } from "./ragdoll.js";
 import { initVehicles, wheelGeo, carGeo, bikeGeo, CAR_COLORS, makeCar, makeBike, makeHeli, makeBoat, makeJetSki, makePlane, makeBlob } from "./vehicles.js";
@@ -293,6 +293,10 @@ function onResize() {
 // ---------- procedural textures — moved to textures.js ----------
 // built HERE (not at module load) so the seeded-RNG stream is consumed at the exact same point
 // in startup as when these were inline constants — the deterministic world stays byte-identical.
+// Phones halve every canvas: the full-size set is ~130MB of VRAM once mipmapped, which desktop
+// absorbs happily and mobile does not. Detail counts scale with area, so the smaller tiles keep
+// the same look, just softer.
+setTexScale(isMobile ? 0.5 : 1);
 const { texAsphalt, texAsphaltNormal, texAsphaltRough, texSidewalk, texSidewalkNormal, texSidewalkRough,
   texGrass, texLeaf, texCrosswalk, texArrow, texFacade, texWindows, texFacadeNormal,
   texTower, texTowerWin, texTowerRough, texGhetto, texGhettoWin } = buildWorldTextures();
