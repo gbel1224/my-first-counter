@@ -1813,7 +1813,7 @@ const nearShop = () => {
   for (const sh of SHOPS) if (dist2(player.x, player.z, sh.x, sh.z) < 30) return sh;
   return null;
 };
-const player = { x: PLAZA.x, z: Rc(3) - 12, y: CURB, h: Math.PI, walkPhase: 0, speed: 0 };
+const player = { x: PLAZA.x, z: Rc(3) - 12, y: CURB, h: Math.PI, walkPhase: 0, speed: 0, turn: 0 };
 let driving = null;   // car object (or helicopter) while driving/flying
 let para = null;      // non-null while parachuting (after bailing from a chopper midair)
 // parachute canopy (a half-dome), hidden until deployed
@@ -5166,11 +5166,17 @@ function update(dt) {
     if (mag > 0.01) {
       const len = Math.hypot(wx, wz) || 1;
       moveWithCollision(player, wx / len * speed * dt, wz / len * speed * dt, 0.45);
+      const h0 = player.h;
       player.h = lerpAngle(player.h, Math.atan2(wx, wz), 1 - Math.exp(-12 * dt));
+      // how fast the heading is sweeping, smoothed — drives the bank into a corner
+      let dh = player.h - h0;
+      if (dh > Math.PI) dh -= Math.PI * 2; else if (dh < -Math.PI) dh += Math.PI * 2;
+      player.turn += ((dt > 0 ? dh / dt : 0) - player.turn) * Math.min(1, 9 * dt);
       camYaw = lerpAngle(camYaw, Math.atan2(wx, wz), 1 - Math.exp(-1.6 * dt));
       player.walkPhase += speed * dt * 2.4;
     } else {
       player.walkPhase *= 1 - Math.min(1, 10 * dt);
+      player.turn *= 1 - Math.min(1, 6 * dt);
     }
   }
 
@@ -5512,7 +5518,11 @@ function update(dt) {
     //     would drive the toes and outer edge into the pavement — tiltLift gives back exactly the
     //     height that costs. All three numbers are measured against the road, not eyeballed.
     const lean = gait * 0.05 + Math.min(0.075, Math.max(0, player.speed - 4.6) * 0.012);
-    const roll = Math.sin(ph) * 0.05 * gait;
+    // bank into a corner the way a runner does — heading sweeping left drops the shoulder left.
+    // Folded into `roll`, so tiltLift below compensates the extra tilt for free and the outside
+    // sole can't dig into the road on a hard turn.
+    const bank = clamp(-player.turn * 0.085, -0.26, 0.26) * gait;
+    const roll = Math.sin(ph) * 0.05 * gait + bank;
     const tiltLift = 0.22 * Math.sin(lean) + 0.2 * Math.abs(Math.sin(roll));
     hero.group.position.y = player.y - HIP_Y * (1 - Math.cos(sw)) * 0.3 + tiltLift;
     hero.group.rotation.x = lean;
