@@ -1575,9 +1575,23 @@ vince.visible = false;
 
 // ---------- player ----------
 const hero = articulatedPerson(HERO_PAL);
+// yaw first, then pitch/roll in body space — so a forward lean or a weight shift tilts the body
+// along its own axes instead of the world's, whichever way you happen to be facing.
+hero.group.rotation.order = "YXZ";
 hero.group.traverse(o => { if (o.isMesh) o.castShadow = true; });
-hero.group.add(makeBlob(1.5, 1.5, 0.4));   // soft contact shadow grounds the player on foot
 scene.add(hero.group);
+// The foot shadow lives in the scene, NOT under hero.group: parented, it would inherit the body's
+// walk lean and weight roll and go skating through the road surface. Flat on the ground, always.
+const heroBlob = makeBlob(1.5, 1.5, 0.4);
+scene.add(heroBlob);
+const HIP_Y = 0.88;   // hip pivot height — the lever a swinging leg lifts its foot on (see the walk dip)
+// scratch for keeping a parented contact shadow world-flat under a body that pitches/rolls
+const _flatQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
+const _tmpQ = new THREE.Quaternion();
+function levelBlob(mesh) {   // cancel the parent's tilt so the shadow stays lying on the road
+  const b = mesh.userData && mesh.userData.blob;
+  if (b) b.quaternion.copy(_tmpQ.copy(mesh.quaternion).invert()).multiply(_flatQ);
+}
 
 // ---------- vehicle entry/exit animation: a door swings open + the player gets in / mounts ----------
 let mount = null;   // { c, mode:'in'|'out', t, dur, ex, ez } while a get-in / get-off plays
@@ -5104,6 +5118,7 @@ function update(dt) {
     c.pitch = (c.pitch || 0) + (pitchTgt - (c.pitch || 0)) * Math.min(1, 7 * dt);
     c.mesh.rotation.x = c.y > 0 ? clamp(-c.vy * 0.02, -0.4, 0.4) : c.pitch;
     c.mesh.rotation.z = c.bike ? clamp((c.lat || 0) * 0.05, -0.45, 0.45) : clamp((c.lat || 0) * 0.03, -0.22, 0.22);
+    levelBlob(c.mesh);   // the car you're driving pitches/rolls constantly — keep its shadow on the road
     }
     camYaw = lerpAngle(camYaw, c.h, 1 - Math.exp(-3.2 * dt));
   } else if (para) {
@@ -5117,7 +5132,7 @@ function update(dt) {
     const gy = groundY(player.x, player.z);
     if (player.y <= gy) { player.y = gy; para = null; paraMesh.visible = false; toast("🪂 Nice landing!"); buzz(20); }
     hero.group.position.set(player.x, player.y, player.z);
-    hero.group.rotation.y = player.h;
+    hero.group.rotation.set(0, player.h, 0);   // drop the stride's lean/roll — you're hanging, not walking
     paraMesh.position.set(player.x, player.y + 2.4, player.z);
     camYaw = lerpAngle(camYaw, player.h, 1 - Math.exp(-3 * dt));
   } else if (state.jetpack && (boosting() || player.y > groundY(player.x, player.z) + 0.35)) {
@@ -5134,7 +5149,7 @@ function update(dt) {
     hero.legL.rotation.x = 0.25; hero.legR.rotation.x = 0.25; hero.kneeL.rotation.x = 0.35; hero.kneeR.rotation.x = 0.35;
     hero.armL.rotation.x = 0.5; hero.armR.rotation.x = 0.5;
     hero.group.position.set(player.x, player.y, player.z);
-    hero.group.rotation.y = player.h;
+    hero.group.rotation.set(0, player.h, 0);   // drop the stride's lean/roll — you're flying, not walking
     if (boosting()) emit(player.x, player.y + 0.15, player.z, rr(-0.3, 0.3), rr(-0.9, -0.3), rr(-0.3, 0.3), 0.4, 1.0, 0.7, 0.3);   // thrust
   } else {
     // camera-relative walk
@@ -5370,9 +5385,11 @@ function update(dt) {
     n.kneeL.rotation.x = kAmp * Math.max(0, -Math.cos(n.walkPhase));   // flexes mid-swing, straight at the extremes
     n.kneeR.rotation.x = kAmp * Math.max(0, Math.cos(n.walkPhase));
     const gy = groundY(n.x, n.z);
-    n.mesh.position.set(n.x, gy + (stepping ? Math.abs(Math.sin(n.walkPhase)) * 0.03 : 0), n.z);
+    // dip as the legs split (a swung leg lifts its own foot, so the pelvis has to come down to plant
+    // the step) and roll onto the foot carrying the weight — same physics as the hero's stride
+    n.mesh.position.set(n.x, gy - (stepping ? n.mesh.scale.y * HIP_Y * (1 - Math.cos(sw)) * 0.3 : 0), n.z);
     n.mesh.rotation.y = n.h;
-    n.mesh.rotation.z = stepping ? Math.sin(n.walkPhase) * 0.025 : 0;
+    n.mesh.rotation.z = stepping ? Math.sin(n.walkPhase) * 0.04 * spd : 0;
   }
   for (let i = npcs.length - 1; i >= 0; i--) if (npcs[i]._dead) npcs.splice(i, 1);   // remove anyone killed this frame
   updateRagdolls(dt);
@@ -5477,12 +5494,31 @@ function update(dt) {
     hero.legL.rotation.z = hero.legR.rotation.z = 0;      // clear the bike-saddle knee splay
     hero.armL.rotation.z = hero.armR.rotation.z = 0;      // clear stale arm splay (swim/aim poses set their own)
     const gait = Math.min(1, player.speed / 4);
-    const sw = Math.sin(player.walkPhase) * gait * 0.45;
+    const ph = player.walkPhase;
+    const sw = Math.sin(ph) * gait * 0.48;
     hero.legL.rotation.x = sw; hero.legR.rotation.x = -sw;
-    hero.armL.rotation.x = -sw * 0.7; hero.armR.rotation.x = sw * 0.7;
+    hero.armL.rotation.x = -sw * 0.78; hero.armR.rotation.x = sw * 0.78;
     const kAmp = gait * 1.0;   // knees flex as each shin swings through (never hyperextend)
-    hero.kneeL.rotation.x = kAmp * Math.max(0, -Math.cos(player.walkPhase));
-    hero.kneeR.rotation.x = kAmp * Math.max(0, Math.cos(player.walkPhase));
+    hero.kneeL.rotation.x = kAmp * Math.max(0, -Math.cos(ph));
+    hero.kneeR.rotation.x = kAmp * Math.max(0, Math.cos(ph));
+    // Carry the body's weight: dip as the legs split, roll onto the foot taking the load, and lean
+    // into the run as you build speed. This is what separates a puppet swinging its limbs from
+    // someone actually walking.
+    //   · dip follows the (1−cos θ) curve of a swinging leg lifting its own foot — that shape is what
+    //     plants each step instead of skating. The coefficient sits well under the full hip lever
+    //     because the shoe tilts with the leg, eating most of the theoretical lift; under-dipping
+    //     leaves a foot a hair high (invisible), over-dipping sinks it through the road (very visible).
+    //   · this character has no ankle, so leaning/rolling pivots the whole body about the soles and
+    //     would drive the toes and outer edge into the pavement — tiltLift gives back exactly the
+    //     height that costs. All three numbers are measured against the road, not eyeballed.
+    const lean = gait * 0.05 + Math.min(0.075, Math.max(0, player.speed - 4.6) * 0.012);
+    const roll = Math.sin(ph) * 0.05 * gait;
+    const tiltLift = 0.22 * Math.sin(lean) + 0.2 * Math.abs(Math.sin(roll));
+    hero.group.position.y = player.y - HIP_Y * (1 - Math.cos(sw)) * 0.3 + tiltLift;
+    hero.group.rotation.x = lean;
+    hero.group.rotation.z = roll;
+    hero.armL.rotation.z = 0.07 * gait; hero.armR.rotation.z = -0.07 * gait;
+    if (gait < 0.02) hero.group.position.y = player.y + Math.sin(simTime * 1.7) * 0.012;   // idle breathing
     if (armed()) {   // two-handed aim pose whenever a weapon's drawn, with a sharp recoil snap per shot
       const kick = gunKickT > 0 ? (gunKickT / 0.14) * 0.32 : 0;
       hero.armR.rotation.x = -1.15 - kick; hero.armR.rotation.z = -0.12;
@@ -5508,6 +5544,13 @@ function update(dt) {
     }
     gunKickT = Math.max(0, gunKickT - dt); kickT = Math.max(0, kickT - dt); comboT = Math.max(0, comboT - dt); hoopShootT = Math.max(0, hoopShootT - dt);
     }
+  }
+  {
+    // keep the foot shadow flat on the road under wherever the body ended up this frame — it must
+    // never pick up the stride's lean/roll, and it fades out once you're airborne or in the water
+    const bx = hero.group.position.x, bz = hero.group.position.z, bgy = groundY(bx, bz);
+    heroBlob.visible = hero.group.visible && !swimming && (hero.group.position.y - bgy) < 1.2;
+    if (heroBlob.visible) heroBlob.position.set(bx, bgy + 0.05, bz);
   }
   for (const c of cars) {
     if (c === driving) continue;   // the driven vehicle syncs & leans itself, right in its control branch
