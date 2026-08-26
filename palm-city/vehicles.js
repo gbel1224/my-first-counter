@@ -61,7 +61,8 @@ export const CAR_COLORS = [0xe8543f, 0x3f7fe8, 0xf0c040, 0x58b368, 0xc25cd6, 0xe
 export function makeCar(color) {
   const mesh = new THREE.Mesh(carGeo, new THREE.MeshStandardMaterial({ vertexColors: true, color, metalness: 0.6, roughness: 0.22, envMapIntensity: 1.5 }));   // glossy reflective PBR paint + glassy cabin
   mesh.castShadow = true; mesh.receiveShadow = true;
-  mesh.add(makeBlob(3.0, 6.2, 0.4));   // soft contact shadow grounds the car on the road
+  const blob = makeBlob(3.0, 6.2, 0.4);   // soft contact shadow grounds the car on the road
+  mesh.userData.blob = blob; mesh.add(blob);
   scene.add(mesh);
   return mesh;
 }
