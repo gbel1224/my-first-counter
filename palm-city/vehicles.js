@@ -22,11 +22,16 @@ function blobTex() {
   return _blobTex;
 }
 export function makeBlob(w, l, opacity) {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l),
-    new THREE.MeshBasicMaterial({ map: blobTex(), transparent: true, opacity: opacity == null ? 0.42 : opacity, depthWrite: false, color: 0x000000 }));
+  const op = opacity == null ? 0.42 : opacity;
+  // share one material per opacity — the crowd alone would otherwise allocate hundreds of them
+  const key = op.toFixed(2);
+  let mat = _blobMats.get(key);
+  if (!mat) { mat = new THREE.MeshBasicMaterial({ map: blobTex(), transparent: true, opacity: op, depthWrite: false, color: 0x000000 }); _blobMats.set(key, mat); }
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), mat);
   m.rotation.x = -Math.PI / 2; m.position.y = 0.05; m.renderOrder = 2;
   return m;
 }
+const _blobMats = new Map();
 
 // round vertex-coloured wheel (axle along X so it lies flat on its side)
 export function wheelGeo(r, w, x, y, z, color) {
