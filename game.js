@@ -2826,6 +2826,14 @@ function updateParamedic(dt) {
 // ---------- wanted level & police ----------
 let wanted = 0, wantedCD = 0, crimeCD = 0;
 let bustTimer = 0, copsOnYou = false;   // on-foot arrest timer + escape (broke-contact) tracking
+// What the police KNOW, as opposed to where you actually are. One shared belief for the whole
+// force: it only refreshes while a unit has eyes on you, and rots the moment you break sight.
+// This is the difference between a chase you can outplay and a stopwatch you wait out.
+const copBelief = { x: 0, z: 0 };
+let copSearchT = 0;           // seconds since the last confirmed sighting
+let copSearching = false;     // force has lost you and is sweeping (drives the HUD state)
+const COP_SIGHT = 88;         // how far a cruiser can make you out, given a clear line
+function policeSeeReset(x, z) { copBelief.x = x; copBelief.z = z; copSearchT = 0; copSearching = false; }
 let holdup = null, getaway = 0;         // active store holdup + clean-getaway bonus window
 let job = null;                         // active on-demand phone job
 // ---------- ragdoll physics — moved to ragdoll.js ----------
@@ -2855,7 +2863,7 @@ function wasted() {
   const sp = homeSpawn() || PLAZA;                      // respawn at an owned property, else the plaza
   player.x = sp.x; player.z = sp.z + 12; player.y = CURB; player.speed = 0;
   health = 100; hurtCD = 2; fuel = 100;
-  wanted = 0; wantedCD = 0; crimeCD = 0; bustTimer = 0; copsOnYou = false; holdup = null; getaway = 0;
+  wanted = 0; wantedCD = 0; crimeCD = 0; bustTimer = 0; copsOnYou = false; copSearching = false; copSearchT = 0; holdup = null; getaway = 0;
   for (const p of police) { p.active = false; p.mesh.position.set(0, -9999, 0); }
   clearChaseUnits();
   // shake off the rival's hit-squad on death; if it was the showdown, the boss bows out for now
@@ -2882,7 +2890,7 @@ function bust() {
   toast(STR.busted(fine));
   AudioSys.play("door", 1);
   addShake(0.7); buzz([0, 60, 40, 120]); flash("#ff3b3b", 0.42);
-  wanted = 0; wantedCD = 0; crimeCD = 0; bustTimer = 0; copsOnYou = false; holdup = null; getaway = 0;
+  wanted = 0; wantedCD = 0; crimeCD = 0; bustTimer = 0; copsOnYou = false; copSearching = false; copSearchT = 0; holdup = null; getaway = 0;
   for (const p of police) { p.active = false; p.mesh.position.set(0, -9999, 0); }
   clearChaseUnits();
   save();
@@ -2896,22 +2904,70 @@ function updatePolice(dt) {
   const heat = heatActive();
   const px = driving ? driving.x : player.x, pz = driving ? driving.z : player.z;
   let nearestD = Infinity, grabbing = false;
+
+  // ---- what does the force actually know right now? ----
+  // Sight is resolved before anyone moves, so every unit acts on the same belief this frame.
+  let seen = false;
+  if (heat > 0 && !inside) {                      // duck into an interior and nobody has eyes on you
+    for (let i = 0; i < police.length; i++) {
+      const p = police[i];
+      if (!p.active) continue;
+      // Range is authoritative every frame; the expensive occlusion ray is staggered. Without the
+      // cheap range gate the cached result outlives the truth — get far enough away fast enough and
+      // a unit keeps "seeing" you for a fraction of a second, which is long enough to hand dispatch
+      // your new position and undo the escape you just earned.
+      if (dist2(p.x, p.z, px, pz) > COP_SIGHT * COP_SIGHT) { p.sees = false; p.losCD = 0; }
+      else {
+        p.losCD = (p.losCD || 0) - dt;
+        if (p.losCD <= 0) {                        // staggered so the whole force never rays on one frame
+          p.losCD = 0.13 + Math.random() * 0.12;
+          p.sees = hasLineOfSight(p.x, p.z, px, pz, COP_SIGHT);
+        }
+      }
+      if (p.sees) seen = true;
+    }
+    // the chopper is an eye in the sky — rooftops and alleys don't hide you from above
+    if (chopper.active && !chopper.dead && dist2(chopper.x, chopper.z, px, pz) < 140 * 140) seen = true;
+  }
+  if (seen) { copBelief.x = px; copBelief.z = pz; copSearchT = 0; }
+  else copSearchT += dt;
+  // a short grace period so clipping behind one pillar doesn't flip the whole force into a search
+  copSearching = wanted > 0 && !seen && copSearchT > 1.3;
+
   for (let i = 0; i < police.length; i++) {
     const p = police[i];
     const want = i < heat;
     if (want && !p.active) {
       const ang = Math.random() * Math.PI * 2;
-      p.x = clamp(px + Math.cos(ang) * 72, -HALF + 3, HALF - 3);
-      p.z = clamp(pz + Math.sin(ang) * 72, -HALF + 3, HALF - 3);
-      p.h = Math.atan2(px - p.x, pz - p.z); p.speed = 0; p.active = true; p.shootCD = rr(0.6, 1.6);
+      // New units roll in toward where dispatch THINKS you are. Keyed on live sight rather than the
+      // search flag: during the grace period before a search formally starts, nobody can see you, so
+      // spawning a fresh cruiser on your true position would hand them the location you just broke
+      // line of sight to earn — and quietly undo every escape.
+      const bx = seen ? px : copBelief.x, bz = seen ? pz : copBelief.z;
+      p.x = clamp(bx + Math.cos(ang) * 72, -HALF + 3, HALF - 3);
+      p.z = clamp(bz + Math.sin(ang) * 72, -HALF + 3, HALF - 3);
+      p.h = Math.atan2(bx - p.x, bz - p.z); p.speed = 0; p.active = true; p.shootCD = rr(0.6, 1.6);
+      p.sees = false; p.losCD = 0; p.sx = undefined;
     } else if (!want && p.active) {
       p.active = false; p.mesh.position.set(0, -9999, 0);
     }
     if (!p.active) continue;
     const dx = px - p.x, dz = pz - p.z, d = Math.hypot(dx, dz) || 1;
     if (d < nearestD) nearestD = d;
-    p.h = lerpAngle(p.h, Math.atan2(dx, dz), 1 - Math.exp(-4 * dt));
-    const tgt = dlgLines ? 0 : 19 + heat * 1.2;   // higher stars = faster, scarier police
+    // steer: run you down while they can see you; otherwise converge on the last known position
+    // and sweep outward from it, casting wider the longer their information has been rotting
+    let tx = copBelief.x, tz = copBelief.z;
+    if (copSearching) {
+      const ring = Math.min(72, 10 + copSearchT * 5.5);
+      if (p.sx === undefined || dist2(p.x, p.z, p.sx, p.sz) < 90) {
+        const a = Math.random() * Math.PI * 2, r = ring * (0.3 + Math.random() * 0.7);
+        p.sx = clamp(copBelief.x + Math.cos(a) * r, -HALF + 6, HALF - 6);
+        p.sz = clamp(copBelief.z + Math.sin(a) * r, -HALF + 6, HALF - 6);
+      }
+      tx = p.sx; tz = p.sz;
+    } else p.sx = undefined;
+    p.h = lerpAngle(p.h, Math.atan2(tx - p.x, tz - p.z), 1 - Math.exp(-4 * dt));
+    const tgt = dlgLines ? 0 : copSearching ? 12 : 19 + heat * 1.2;   // they slow right down to sweep
     p.speed += (tgt - p.speed) * Math.min(1, 3 * dt);
     moveWithCollision(p, Math.sin(p.h) * p.speed * dt, Math.cos(p.h) * p.speed * dt, 2.1);
     p.mesh.position.set(p.x, groundY(p.x, p.z), p.z);
@@ -2920,9 +2976,10 @@ function updatePolice(dt) {
     if (!dlgLines && driving && d < 3.6 && hitCD <= 0) {   // PIT ram — drains your health in a car
       hitCD = 0.8; hurt(26);
     }
-    if (!driving && d < 2.8) grabbing = true;               // close enough on foot to make the arrest
-    // gunfire from 3 stars up: dangerous at range, far less accurate while you sprint or drive fast
-    if (!dlgLines && heat >= 3 && d > 4 && d < 42) {
+    if (!driving && d < 2.8 && !copSearching) grabbing = true;   // can't cuff what they haven't found
+    // gunfire from 3 stars up: dangerous at range, far less accurate while you sprint or drive fast.
+    // Gated on this unit's own line of sight — nobody gets to shoot you through a building.
+    if (!dlgLines && heat >= 3 && p.sees && d > 4 && d < 42) {
       p.shootCD -= dt;
       if (p.shootCD <= 0) {
         p.shootCD = rr(0.9, 1.7);
@@ -2937,15 +2994,17 @@ function updatePolice(dt) {
   // on-foot arrest: stay cornered by a cop for ~1.1s and you're BUSTED (lose cash, not your life)
   if (grabbing && !driving) { bustTimer += dt; if (bustTimer >= 1.1) { bustTimer = 0; bust(); return; } }
   else bustTimer = Math.max(0, bustTimer - dt * 2);
-  // escape: heat only cools once you've broken contact with every cop (out-run / out-manoeuvre them)
+  // Escape: heat cools only while they've genuinely lost track of you — broken line of sight, not
+  // merely 60 units of distance. Stay hidden and the stars fall away; get spotted again and the
+  // clock resets, wherever you'd got to.
   if (wanted > 0) {
-    if (nearestD <= 60) { wantedCD = Math.max(wantedCD, 6); copsOnYou = true; }
+    if (!copSearching) { wantedCD = Math.max(wantedCD, 6); copsOnYou = true; }
     else {
-      if (copsOnYou) { copsOnYou = false; toast("🚓 Shaking them — keep moving!"); }
+      if (copsOnYou) { copsOnYou = false; toast("🔍 Out of sight — they're sweeping the area. Stay hidden!"); }
       wantedCD -= dt * (driving && driving.heatMult ? driving.heatMult : 1);
       if (wantedCD <= 0) { wanted = Math.max(0, wanted - 1); wantedCD = 8; if (wanted === 0) toast(STR.wantedClear); }
     }
-  }
+  } else copSearching = false;
 }
 // a tank shell blast: hurts you and nearby cars, but doesn't add to YOUR heat/combo (the cops did it)
 function explodeShell(x, z) {
@@ -3905,6 +3964,20 @@ function findCollider(x, z, r) {                          // like hitsCollider, 
   return null;
 }
 function hitsCollider(x, z, r) { return findCollider(x, z, r) !== null; }
+// Can this unit actually SEE that point, or is a building in the way? Marches the segment against
+// the same collider grid the world already uses, skipping both endpoints so standing next to a
+// prop doesn't blind everyone. Callers stagger their checks — this is far too costly to run for
+// every cop every frame, and eyesight doesn't need 60Hz.
+function hasLineOfSight(x, z, tx, tz, maxD) {
+  const dx = tx - x, dz = tz - z, d = Math.hypot(dx, dz);
+  if (d > maxD) return false;
+  const steps = Math.min(26, Math.max(2, Math.ceil(d / 4)));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    if (hitsCollider(x + dx * t, z + dz * t, 0.5)) return false;
+  }
+  return true;
+}
 function moveWithCollision(o, dx, dz, r) {
   if (inside && o === player) {                          // confined to the interior room
     o.x = clamp(o.x + dx, INT.x - 9.3, INT.x + 9.3);
@@ -4093,7 +4166,10 @@ function updateHUD() {
     if (p100 !== lastXpShown) { elLvlFill.style.width = p100 + "%"; lastXpShown = p100; }
   }
   const heat = heatActive();
-  elWanted.textContent = heat > 0 ? "\u2605".repeat(heat) : "";
+  // stars go hollow while the force is searching \u2014 the player has to be able to read "they've lost
+  // me, keep still" at a glance, or the whole hide-and-seek layer is invisible
+  elWanted.textContent = heat > 0 ? (copSearching ? "\u2606".repeat(heat) + " \ud83d\udd0d" : "\u2605".repeat(heat)) : "";
+  elWanted.style.opacity = copSearching ? "0.7" : "1";
   if (health < 100) { elHealth.style.display = "block"; elHealthFill.style.width = health + "%"; elHealthFill.style.background = health > 50 ? "#9fe6a0" : health > 25 ? "#ffd166" : "#ff5b5b"; }
   else if (elHealth.style.display !== "none") elHealth.style.display = "none";
 
@@ -5815,6 +5891,10 @@ globalThis.__palmCity = {
   setCycle: v => { dayCycle = v; envUpdate(); }, setSimTime: t => { simTime = t; envUpdate(); },
   nightBeams: () => trafBeams.visible ? trafBeams.children.filter(c => c.visible).length : 0,
   setWanted: n => { wanted = clamp(n, 0, 5); wantedCD = 14; }, chopper: () => chopper, tank: () => tank,
+  copDebug: () => ({ wanted, searching: copSearching, searchT: copSearchT, belief: { x: copBelief.x, z: copBelief.z },
+    sees: police.filter(p => p.active).map(p => !!p.sees) }),
+  los: (x, z, tx, tz, d) => hasLineOfSight(x, z, tx, tz, d === undefined ? COP_SIGHT : d),
+  colliders,
   mounting: () => !!mount,
   talkTo: () => talkTo(nearestTalkNPC()),
   startJob: id => startJob(id),
