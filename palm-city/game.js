@@ -13,6 +13,7 @@ import { initArcade, arcadeOpen, openArcade, closeArcade, updateArcade, ARC_BY_C
 import { initWeather, updateWeather, weatherMode, cycleWeatherMode } from "./weather.js";
 import { initOcean, updateOcean, sharks, swimmers, fishing, fishTap, treasures, dive, nearTreasure, startDive, diveDepth } from "./ocean.js";
 import { initEvents, updateEvents, eventObjective, eventActive, _debug as eventsDebug } from "./events.js";
+import { initHeists, updateHeists, heistObjective, heistActive, startHeist, abortHeist, _debug as heistsDebug } from "./heists.js";
 
 // ---------- renderer / scene ----------
 const dom = id => document.getElementById(id);
@@ -1276,6 +1277,16 @@ initEvents(scene, {
   // only fire in freeplay, when you're free to act (not in a menu / dialogue / mid-mission / indoors)
   canStart: () => state.mi >= M.length && !dlgLines && !inside && !garageOpen && !statsOpen && !styleOpen && !arcadeOpen && !mapOpen,
 });
+initHeists(scene, {
+  focus: () => ({ x: driving ? driving.x : player.x, z: driving ? driving.z : player.z, driving: !!driving }),
+  toast: t => toast(t), earn: n => earn(n), save: () => save(), buzz: v => buzz(v), addShake: v => addShake(v),
+  burst: (...a) => burst(...a),
+  addHeat: n => { wanted = clamp(Math.max(wanted, n), 0, 5); wantedCD = 14; },
+  wanted: () => wanted,
+  copSearching: () => copSearching,          // the clean-getaway bonus rides on the new police AI
+  targets: () => HEIST_TARGETS,
+  canStart: () => state.mi >= M.length && !dlgLines && !inside,
+});
 
 // ---------- jetpack pickup: grab it once, then hold BOOST on foot to fly ----------
 const jetpackPickup = { x: PLAZA.x - 26, z: Rc(3) - 12 };
@@ -2234,6 +2245,18 @@ const BIZ = [
   { id: "taxi", cost: 3500, rate: 150, x: Bc(2), z: 110, ly: 4.6, tips: 0 },
   { id: "marina", cost: 15000, rate: 700, x: Bc(5), z: 196, ly: 4.6, tips: 0 },
 ];
+// Places worth robbing — the real named landmarks, so a score reads as somewhere in the city you
+// already know rather than a marker dropped on an arbitrary street corner. Consumed lazily by the
+// heist module (it only asks when you actually take a job), so declaring it here is fine.
+const HEIST_TARGETS = [
+  { x: Bc(5) - 32, z: Bc(0) + 18, name: STR.biz.club.name },
+  { x: Bc(5), z: 196, name: STR.biz.marina.name },
+  { x: Bc(4) - 32, z: Bc(2), name: STR.biz.burger.name },
+  { x: Bc(2), z: 110, name: STR.biz.taxi.name },
+  { x: Bc(1) + 32, z: Bc(3), name: STR.biz.wash.name },
+  { x: Bc(0), z: Bc(4), name: STR.depotName },
+  { x: GARAGE.x, z: GARAGE.z, name: STR.garageName },
+];
 for (const b of BIZ) {
   b.sale = textSprite(STR.forSale(b.cost), "#fff", "rgba(200,90,30,.92)", 11, 2.75, 0);
   b.sale.position.set(b.x, b.ly, b.z);
@@ -2863,7 +2886,7 @@ function wasted() {
   const sp = homeSpawn() || PLAZA;                      // respawn at an owned property, else the plaza
   player.x = sp.x; player.z = sp.z + 12; player.y = CURB; player.speed = 0;
   health = 100; hurtCD = 2; fuel = 100;
-  wanted = 0; wantedCD = 0; crimeCD = 0; bustTimer = 0; copsOnYou = false; copSearching = false; copSearchT = 0; holdup = null; getaway = 0;
+  wanted = 0; wantedCD = 0; crimeCD = 0; bustTimer = 0; copsOnYou = false; copSearching = false; copSearchT = 0; holdup = null; getaway = 0; abortHeist();
   for (const p of police) { p.active = false; p.mesh.position.set(0, -9999, 0); }
   clearChaseUnits();
   // shake off the rival's hit-squad on death; if it was the showdown, the boss bows out for now
@@ -2890,7 +2913,7 @@ function bust() {
   toast(STR.busted(fine));
   AudioSys.play("door", 1);
   addShake(0.7); buzz([0, 60, 40, 120]); flash("#ff3b3b", 0.42);
-  wanted = 0; wantedCD = 0; crimeCD = 0; bustTimer = 0; copsOnYou = false; copSearching = false; copSearchT = 0; holdup = null; getaway = 0;
+  wanted = 0; wantedCD = 0; crimeCD = 0; bustTimer = 0; copsOnYou = false; copSearching = false; copSearchT = 0; holdup = null; getaway = 0; abortHeist();
   for (const p of police) { p.active = false; p.mesh.position.set(0, -9999, 0); }
   clearChaseUnits();
   save();
@@ -3471,9 +3494,12 @@ const JOBS = [
   { id: "bounty", label: "🎯 Bounty", desc: "Destroy the marked car in 60s" },
   { id: "takeover", label: "🚩 Turf Takeover", desc: "Wipe out a gang to seize their turf" },
   { id: "hire", label: "🤝 Hire Muscle", desc: "$1500 — an armed ally guns down gangsters with you" },
+  { id: "heistLoud", label: "🔫 Heist — Loud", desc: "Big score, 4 stars the moment the alarm trips" },
+  { id: "heistQuiet", label: "🤫 Heist — Quiet", desc: "Smaller take, slower vault, only 2 stars" },
 ];
 function startJob(id) {
   if (id === "hire") { hireAlly(); closePhone(); return; }   // instant, not a timed job
+  if (id === "heistLoud" || id === "heistQuiet") { if (startHeist(id === "heistLoud" ? "loud" : "quiet")) closePhone(); return; }
   if (job) { toast("Finish your current job first"); return; }
   if (id === "rampage") { job = { id, label: "💥 RAMPAGE", t: 60, prog: 0, goal: 5 }; toast("💥 RAMPAGE — wreck 5 cars in 60s!"); }
   else if (id === "courier") {
@@ -4141,6 +4167,8 @@ function currentObjective() {
       const C = CIRCUITS[race.ci], cp = C.cps[race.cp];
       return { title: STR.raceTitle + " · " + STR.circuits[C.id].name, text: STR.raceProgress(race.cp + 1, C.cps.length) + " · " + STR.raceTimer(Math.ceil(race.t)) + " · " + STR.goldTarget(goldTime(C)), x: cp[0], z: cp[1] };
     }
+    const ho = heistObjective();
+    if (ho) return ho;
     const evo = eventObjective();
     if (evo) return evo;
     if (side.stage === "carry") return { title: STR.freeplay, text: STR.sideJobGo, x: side.x, z: side.z };
@@ -5509,6 +5537,7 @@ function update(dt) {
   updateSideJob();
   updateRace(dt);
   updateEvents(dt, simTime);
+  updateHeists(dt, simTime);
   updateVigilante(dt);
   updateParamedic(dt);
   updatePolice(dt);
@@ -5871,6 +5900,7 @@ globalThis.__palmCity = {
   freeze: v => { paused = v; }, render: () => renderFrame(),
   state, player, cars, police, traffic, atms, helis, boats, planes, gangsters, allies, npcs, GANGS, SHOPS, AIRPORT, update, beginPlay, advanceDialogue,
   ragdolls, doPunch: () => doPunch(), explodeAt: (x, z, r) => explodeAt(x, z, r), wasted: () => wasted(),
+  debugDriving: () => driving,
   forceDrive: c => { driving = c; if (c) { c.speed = c.speed || 0; hero.group.visible = false; } else hero.group.visible = true },
   hero, debugInput: () => ({ fuel, dry: fuel <= 0, dlgLines: !!dlgLines, braking: braking(), inp: readInput(), keys: [...keys] }),
   knockableProps, activeProps, moveObj: (o, dx, dz, r) => moveWithCollision(o, dx, dz, r), projPool,
@@ -5883,6 +5913,7 @@ globalThis.__palmCity = {
   swimming: () => swimming,
   sharks, swimmers, race, fishing, treasures, oceanDive: dive, fishTap: () => fishTap(),
   eventsDebug, eventActive: () => eventActive(), currentObjective: () => currentObjective(),
+  heistsDebug, heistActive: () => heistActive(), startHeist: a => startHeist(a),
   finishStory: () => { state.mi = M.length; mState = "done"; },   // jump straight to freeplay (dev/testing)
   health: () => health,
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
