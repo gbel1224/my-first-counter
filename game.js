@@ -4898,6 +4898,16 @@ if (phoneEl.style) phoneEl.style.cssText = "position:absolute;inset:0;display:no
 if (phoneCard.style) phoneCard.style.cssText = "display:flex;flex-direction:column;width:302px;max-width:92vw;padding:7px;background:linear-gradient(160deg,#3a3a42,#121216 42%,#0a0a0e);border-radius:40px;box-shadow:0 24px 60px rgba(4,2,8,.7),inset 0 0 0 1.5px rgba(255,255,255,.16),inset 0 1px 2px rgba(255,255,255,.28);";
 let phoneApp = "home";   // home | jobs | gram | contacts | bank | stocks
 let stockSel = null;     // ticker being traded
+// A transient red alert inside the handset. A failed transaction used to do nothing at all (or at
+// best clamp itself silently), which reads as a broken button — the phone has to say why.
+let phoneErr = null, phoneErrT = 0;
+function phoneError(msg) {
+  phoneErr = msg;
+  AudioSys.play("door", 0.3); buzz([0, 45]);
+  clearTimeout(phoneErrT);
+  phoneErrT = setTimeout(() => { phoneErr = null; if (phoneOpen) openPhone(); }, 3600);
+}
+function clearPhoneErr() { phoneErr = null; clearTimeout(phoneErrT); }
 function closePhone() { phoneOpen = false; phoneEl.style.display = "none"; }
 const mkBtn = (html, css, fn) => {
   const b = document.createElement("button"); b.className = "pe popbtn"; b.innerHTML = html;
@@ -4949,7 +4959,7 @@ function phoneChrome(body, title) {
   screen.appendChild(body);
   // home indicator — tap it to go back, like swiping up
   const homeBar = mkBtn("", "align-self:center;width:118px;height:5px;border-radius:3px;background:rgba(255,255,255,.75);border:none;padding:0;margin:6px 0 2px;",
-    () => { if (phoneApp === "home") closePhone(); else { phoneApp = "home"; stockSel = null; openPhone(); } });
+    () => { clearPhoneErr(); if (phoneApp === "home") closePhone(); else { phoneApp = "home"; stockSel = null; openPhone(); } });
   screen.appendChild(homeBar);
   phoneCard.appendChild(screen);
 }
@@ -4958,7 +4968,7 @@ function appIcon(icon, name, badge, grad, go) {
   const b = mkBtn("<div style='font-size:29px;line-height:1'>" + icon + "</div>" +
     (badge ? "<div style='position:absolute;top:-5px;right:-5px;background:#ff3b30;color:#fff;border-radius:11px;min-width:20px;padding:1px 5px;font-size:11px;font-weight:700;border:2px solid rgba(0,0,0,.25)'>" + badge + "</div>" : ""),
     "position:relative;width:58px;height:58px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:" + grad + ";box-shadow:0 4px 10px rgba(0,0,0,.34),inset 0 1px 1px rgba(255,255,255,.22);border:none;padding:0;",
-    () => { phoneApp = go; if (go === "gram") markRead(); openPhone(); });
+    () => { clearPhoneErr(); phoneApp = go; if (go === "gram") markRead(); openPhone(); });
   wrap.appendChild(b);
   wrap.appendChild(el("div", "font-size:11px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);", name));
   return wrap;
@@ -5004,12 +5014,30 @@ function openPhone() {
     body.appendChild(head);
     const amounts = [100, 1000, 10000];
     const rowD = el("div", "display:grid;grid-template-columns:repeat(4,1fr);gap:6px;");
-    amounts.forEach(a => rowD.appendChild(mkBtn("+" + (a >= 1000 ? (a / 1000) + "k" : a), PILL, () => { const d = deposit(state, a); if (d) { toast("🏦 Deposited " + money(d)); AudioSys.play("blip", .5); save(); } openPhone(); })));
-    rowD.appendChild(mkBtn("All", PILL, () => { const d = deposit(state, state.money); if (d) { toast("🏦 Deposited " + money(d)); AudioSys.play("blip", .5); save(); } openPhone(); }));
+    amounts.forEach(a => rowD.appendChild(mkBtn("+" + (a >= 1000 ? (a / 1000) + "k" : a), PILL, () => {
+      // refuse the whole amount rather than banking a partial one — a button labelled +10k that
+      // quietly deposits the $340 in your pocket is worse than one that tells you no
+      if (state.money < a) phoneError("Can't deposit " + money(a) + " — you've only got " + money(state.money) + " on you.");
+      else { const d = deposit(state, a); clearPhoneErr(); toast("🏦 Deposited " + money(d)); AudioSys.play("blip", .5); save(); }
+      openPhone();
+    })));
+    rowD.appendChild(mkBtn("All", PILL, () => {
+      if (state.money < 1) phoneError("You've got no cash on you to deposit.");
+      else { const d = deposit(state, state.money); clearPhoneErr(); toast("🏦 Deposited " + money(d)); AudioSys.play("blip", .5); save(); }
+      openPhone();
+    }));
     body.appendChild(el("div", "font-size:11px;color:#dcd6e6;opacity:.8;margin-top:2px", "DEPOSIT")); body.appendChild(rowD);
     const rowW = el("div", "display:grid;grid-template-columns:repeat(4,1fr);gap:6px;");
-    amounts.forEach(a => rowW.appendChild(mkBtn("−" + (a >= 1000 ? (a / 1000) + "k" : a), PILL, () => { const d = withdraw(state, a); if (d) { toast("🏦 Withdrew " + money(d)); AudioSys.play("blip", .5); save(); } openPhone(); })));
-    rowW.appendChild(mkBtn("All", PILL, () => { const d = withdraw(state, state.bank); if (d) { toast("🏦 Withdrew " + money(d)); AudioSys.play("blip", .5); save(); } openPhone(); }));
+    amounts.forEach(a => rowW.appendChild(mkBtn("−" + (a >= 1000 ? (a / 1000) + "k" : a), PILL, () => {
+      if (state.bank < a) phoneError("Can't withdraw " + money(a) + " — your balance is " + money(state.bank) + ".");
+      else { const d = withdraw(state, a); clearPhoneErr(); toast("🏦 Withdrew " + money(d)); AudioSys.play("blip", .5); save(); }
+      openPhone();
+    })));
+    rowW.appendChild(mkBtn("All", PILL, () => {
+      if (state.bank < 1) phoneError("There's nothing in the bank to withdraw.");
+      else { const d = withdraw(state, state.bank); clearPhoneErr(); toast("🏦 Withdrew " + money(d)); AudioSys.play("blip", .5); save(); }
+      openPhone();
+    }));
     body.appendChild(el("div", "font-size:11px;color:#dcd6e6;opacity:.8;margin-top:2px", "WITHDRAW")); body.appendChild(rowW);
     // term deposit
     body.appendChild(el("div", "font-size:11px;color:#dcd6e6;opacity:.8;margin-top:2px", "TERM DEPOSIT · +" + (TERM_RATE * 100) + "% after " + TERM_SECS + "s"));
@@ -5018,7 +5046,11 @@ function openPhone() {
       body.appendChild(mkBtn("Break early (forfeit interest)", PILL, () => { const a = breakTerm(state); if (a) { toast("🏦 Broke the term — " + money(a) + " back, no interest"); save(); } openPhone(); }));
     } else {
       const rowT = el("div", "display:grid;grid-template-columns:repeat(3,1fr);gap:6px;");
-      [1000, 5000, 25000].forEach(a => rowT.appendChild(mkBtn("Lock " + (a / 1000) + "k", PILL, () => { const d = openTerm(state, a); if (d) { toast("🏦 Locked " + money(d) + " for " + TERM_SECS + "s"); AudioSys.play("blip", .5); save(); } else toast("Not enough in the bank"); openPhone(); })));
+      [1000, 5000, 25000].forEach(a => rowT.appendChild(mkBtn("Lock " + (a / 1000) + "k", PILL, () => {
+        if (state.bank < a) phoneError("Can't lock " + money(a) + " — your balance is " + money(state.bank) + ". Deposit more first.");
+        else { const d = openTerm(state, a); clearPhoneErr(); toast("🏦 Locked " + money(d) + " for " + TERM_SECS + "s"); AudioSys.play("blip", .5); save(); }
+        openPhone();
+      })));
       body.appendChild(rowT);
     }
 
@@ -5045,12 +5077,31 @@ function openPhone() {
         "<div style='font-size:12px;opacity:.85;margin-top:4px'>You hold <b>" + held + "</b> · worth " + money(held * p) + "</div>" +
         "<div style='font-size:12px;opacity:.85'>Cash " + money(state.money) + "</div>"));
       const buy = el("div", "display:grid;grid-template-columns:repeat(4,1fr);gap:6px;");
-      [1, 10, 50].forEach(n => buy.appendChild(mkBtn("Buy " + n, PILL, () => { const c = buyShares(state, t.id, n); if (c) { toast("📈 Bought " + n + " " + t.id + " −" + money(c)); AudioSys.play("blip", .5); save(); } else toast("Not enough cash"); openPhone(); })));
-      buy.appendChild(mkBtn("Max", PILL, () => { const n = Math.floor(state.money / p); const c = buyShares(state, t.id, n); if (c) { toast("📈 Bought " + n + " " + t.id + " −" + money(c)); AudioSys.play("blip", .5); save(); } else toast("Not enough cash"); openPhone(); }));
+      [1, 10, 50].forEach(n => buy.appendChild(mkBtn("Buy " + n, PILL, () => {
+        const c = buyShares(state, t.id, n);
+        if (c) { clearPhoneErr(); toast("📈 Bought " + n + " " + t.id + " −" + money(c)); AudioSys.play("blip", .5); save(); }
+        else phoneError("Can't buy " + n + " " + t.id + " — that's " + money(Math.ceil(p * n)) + " and you've got " + money(state.money) + ".");
+        openPhone();
+      })));
+      buy.appendChild(mkBtn("Max", PILL, () => {
+        const n = Math.floor(state.money / p); const c = buyShares(state, t.id, n);
+        if (c) { clearPhoneErr(); toast("📈 Bought " + n + " " + t.id + " −" + money(c)); AudioSys.play("blip", .5); save(); }
+        else phoneError("Not enough cash for even one share of " + t.id + " at $" + p.toFixed(2) + ".");
+        openPhone();
+      }));
       body.appendChild(el("div", "font-size:11px;color:#dcd6e6;opacity:.8", "BUY")); body.appendChild(buy);
       const sell = el("div", "display:grid;grid-template-columns:repeat(4,1fr);gap:6px;");
-      [1, 10, 50].forEach(n => sell.appendChild(mkBtn("Sell " + n, PILL, () => { const g = sellShares(state, t.id, n); if (g) { toast("📉 Sold " + n + " " + t.id + " +" + money(g)); AudioSys.play("cash", .5); save(); } else toast("You don't hold that many"); openPhone(); })));
-      sell.appendChild(mkBtn("All", PILL, () => { const g = sellShares(state, t.id, held); if (g) { toast("📉 Sold " + held + " " + t.id + " +" + money(g)); AudioSys.play("cash", .5); save(); } else toast("Nothing to sell"); openPhone(); }));
+      [1, 10, 50].forEach(n => sell.appendChild(mkBtn("Sell " + n, PILL, () => {
+        if (held < n) { phoneError("You only hold " + held + " " + t.id + " — can't sell " + n + "."); openPhone(); return; }
+        const g = sellShares(state, t.id, n); clearPhoneErr();
+        toast("📉 Sold " + n + " " + t.id + " +" + money(g)); AudioSys.play("cash", .5); save(); openPhone();
+      })));
+      sell.appendChild(mkBtn("All", PILL, () => {
+        const g = sellShares(state, t.id, held);
+        if (g) { clearPhoneErr(); toast("📉 Sold " + held + " " + t.id + " +" + money(g)); AudioSys.play("cash", .5); save(); }
+        else phoneError("You don't hold any " + t.id + " to sell.");
+        openPhone();
+      }));
       body.appendChild(el("div", "font-size:11px;color:#dcd6e6;opacity:.8", "SELL")); body.appendChild(sell);
       body.appendChild(mkBtn("◀ All tickers", PILL, () => { stockSel = null; openPhone(); }));
     }
@@ -5069,6 +5120,9 @@ function openPhone() {
         "<div style='color:#bdb3cc;font-size:11px;margin-top:5px'>♥ " + p.likes.toLocaleString() + "</div>"));
     }
   }
+  if (phoneErr) body.insertBefore(el("div",
+    "padding:11px 13px;border-radius:14px;background:linear-gradient(160deg,rgba(255,59,48,.30),rgba(170,26,22,.24));border:1px solid rgba(255,96,86,.6);color:#ffdedb;font-size:12.5px;line-height:1.4;display:flex;gap:8px;align-items:flex-start;box-shadow:0 3px 12px rgba(255,40,30,.18);",
+    "<span style='font-size:15px;line-height:1.1'>⚠️</span><span>" + phoneErr + "</span>"), body.firstChild);
   phoneChrome(body, title);
   phoneOpen = true; phoneEl.style.display = "flex"; popIn(phoneCard);
 }
