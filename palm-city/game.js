@@ -16,7 +16,8 @@ import { initEvents, updateEvents, eventObjective, eventActive, _debug as events
 import { initHeists, updateHeists, heistObjective, heistActive, startHeist, abortHeist, _debug as heistsDebug } from "./heists.js";
 import { updateFeed, feed, unread, markRead, ageLabel, clockLabel, pushHeist, pushRampage, pushLevel, _debug as phoneDebug,
   bankTick, deposit, withdraw, openTerm, breakTerm, TERM_RATE, TERM_SECS, SAVINGS_RATE,
-  TICKERS, ensurePrices, stocksTick, shockByName, chaosShock, buyShares, sellShares, portfolioValue } from "./phone.js";
+  TICKERS, ensurePrices, stocksTick, shockByName, chaosShock, buyShares, sellShares, portfolioValue,
+  takeNotify, toggleLike, pushUserPost, ledgerAdd } from "./phone.js";
 
 // ---------- renderer / scene ----------
 const dom = id => document.getElementById(id);
@@ -2299,6 +2300,7 @@ const state = {
   term: null,            // active term deposit: { amt, left } (locked, pays interest at maturity)
   shares: {},            // ticker -> shares held
   sprice: {},            // ticker -> last price (persisted so the market doesn't reset each load)
+  ledger: [],            // bank statement: newest first, each line carrying the balance it left
   owned: {},
   cars: {},              // owned personal cars: pid -> chosen paint color (hex)
   mods: {},              // pid -> [engine, turbo, tyres] upgrade levels
@@ -2352,6 +2354,7 @@ const SAVE_FIELDS = {
   bank: { save: v => Math.floor(v || 0), load: v => v || 0 },
   term: { save: v => v || null, load: v => (v && v.amt > 0) ? v : null },
   shares: _sfObj, sprice: _sfObj,
+  ledger: { save: v => (v || []).slice(0, 24), load: v => v || [] },
   lvl: { save: v => v || 1, load: v => v || 1 },
 };
 function save() {
@@ -4911,6 +4914,7 @@ let phoneErr = null, phoneErrT = 0;
 // The typed amount has to survive a re-render: every button calls openPhone(), which rebuilds the
 // whole screen, so an <input>'s own value would be wiped on each tap.
 let phoneAmt = "", phoneAmtFocus = false;
+let phonePost = "", phonePostFocus = false;   // Palmgram composer, held outside the DOM for the same reason
 function amtRow(placeholder, onA, labelA, onB, labelB) {
   const wrap = el("div", "display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:stretch;");
   const inp = document.createElement("input");
@@ -5103,6 +5107,18 @@ function openPhone() {
       })));
       body.appendChild(rowT);
     }
+    // statement — newest first, with the balance each line left behind, so interest is visible
+    body.appendChild(el("div", "font-size:11px;color:#dcd6e6;opacity:.8;margin-top:2px", "STATEMENT"));
+    const led = state.ledger || [];
+    if (!led.length) body.appendChild(el("div", "font-size:11.5px;color:#cfc6dd;opacity:.7;padding:8px 2px;line-height:1.45",
+      "No movements yet. Deposit something and the interest will start showing up here."));
+    for (const L of led.slice(0, 12)) {
+      const pos = L.a >= 0;
+      body.appendChild(el("div", "display:flex;justify-content:space-between;align-items:baseline;padding:7px 11px;border-radius:12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.08);",
+        "<span style='font-size:12px;color:#efe9f7'>" + L.k + "</span>" +
+        "<span style='text-align:right'><b style='font-size:12.5px;color:" + (pos ? "#8ef0ac" : "#ff9b9b") + "'>" + (pos ? "+" : "−") + money(Math.abs(L.a)) + "</b>" +
+        "<br><small style='font-size:10.5px;color:#bdb3cc'>bal " + money(L.b) + "</small></span>"));
+    }
 
   } else if (phoneApp === "stocks") {
     title = "Stocks";
@@ -5177,16 +5193,40 @@ function openPhone() {
 
   } else {
     title = "Palmgram";
+    // composer — your own voice in the feed
+    const comp = el("div", "display:grid;grid-template-columns:1fr auto;gap:6px;");
+    const ci = document.createElement("input");
+    ci.className = "pe"; ci.type = "text"; ci.maxLength = 140; ci.placeholder = "Post something…";
+    ci.value = phonePost;
+    ci.style.cssText = "min-width:0;padding:9px 11px;border-radius:11px;font-size:12.5px;color:#fff;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.2);outline:none;";
+    ci.addEventListener("input", () => { phonePost = ci.value; });
+    ci.addEventListener("focus", () => { phonePostFocus = true; });
+    ci.addEventListener("blur", () => { phonePostFocus = false; });
+    comp.appendChild(ci);
+    comp.appendChild(mkBtn("Post", PILL + "padding-left:13px;padding-right:13px;", () => {
+      const t = phonePost.trim();
+      if (!t) { phoneError("Write something first."); openPhone(); return; }
+      pushUserPost(t); phonePost = ""; clearPhoneErr();
+      AudioSys.play("blip", .5); toast("🌴 Posted to Palmgram");
+      openPhone();
+    }));
+    if (phonePostFocus) setTimeout(() => { ci.focus(); ci.setSelectionRange(ci.value.length, ci.value.length); }, 0);
+    body.appendChild(comp);
     const list = feed();
     if (!list.length) body.appendChild(el("div", "color:#e6dff2;font-size:12px;text-align:center;padding:18px 6px;line-height:1.5;opacity:.85",
       "Quiet in Palm City right now. Give it a minute… or give them something to talk about."));
     for (const p of list) {
-      body.appendChild(el("div", "padding:10px 11px;border-radius:16px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.1);",
+      const card = el("div", "padding:10px 11px;border-radius:16px;background:" + (p.mine ? "rgba(120,90,200,.22)" : "rgba(255,255,255,.1)") + ";border:1px solid " + (p.mine ? "rgba(180,150,255,.3)" : "rgba(255,255,255,.1)") + ";",
         "<div style='display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px'>" +
         "<span style='color:#ffd166;font-weight:700'>" + p.name + " <span style='color:#c9bfd8;font-weight:400'>" + p.handle + "</span></span>" +
         "<span style='color:#bdb3cc'>" + ageLabel(p.age) + "</span></div>" +
-        "<div style='color:#fff;font-size:12.5px;line-height:1.4'>" + p.text + "</div>" +
-        "<div style='color:#bdb3cc;font-size:11px;margin-top:5px'>♥ " + p.likes.toLocaleString() + "</div>"));
+        "<div style='color:#fff;font-size:12.5px;line-height:1.4'>" + p.text + "</div>");
+      const likeRow = el("div", "margin-top:6px;");
+      likeRow.appendChild(mkBtn((p.liked ? "♥" : "♡") + " " + p.likes.toLocaleString(),
+        "padding:4px 10px;border-radius:10px;font-size:11.5px;font-weight:600;color:" + (p.liked ? "#ff6b8a" : "#bdb3cc") + ";background:" + (p.liked ? "rgba(255,107,138,.16)" : "rgba(255,255,255,.07)") + ";border:1px solid " + (p.liked ? "rgba(255,107,138,.4)" : "rgba(255,255,255,.12)") + ";",
+        () => { toggleLike(p.id); AudioSys.play("blip", .3); openPhone(); }));
+      card.appendChild(likeRow);
+      body.appendChild(card);
     }
   }
   if (phoneErr) body.insertBefore(el("div",
@@ -5196,6 +5236,30 @@ function openPhone() {
   phoneOpen = true; phoneEl.style.display = "flex"; popIn(phoneCard);
 }
 phoneBtn.addEventListener("click", () => phoneOpen ? closePhone() : openPhone());
+// An iOS-style banner for posts that came from something you did. Without it the feed only exists
+// if you happen to think to open the phone — the city reacts, and you never find out.
+const notifEl = document.createElement("div");
+notifEl.className = "pe";
+notifEl.style.cssText = "position:absolute;top:calc(env(safe-area-inset-top,0px) + 8px);left:50%;transform:translateX(-50%) translateY(-140%);width:min(330px,86vw);padding:10px 13px;border-radius:18px;background:rgba(28,24,36,.86);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.16);box-shadow:0 10px 28px rgba(4,2,8,.5);color:#fff;z-index:78;opacity:0;transition:transform .34s cubic-bezier(.22,1,.36,1),opacity .28s ease;cursor:pointer;";
+notifEl.addEventListener("click", () => { hideNotif(); clearPhoneErr(); phoneApp = "gram"; markRead(); openPhone(); });
+dom("ui").appendChild(notifEl);
+let notifT = 0;
+function showNotif(n) {
+  notifEl.innerHTML = "<div style='display:flex;gap:9px;align-items:flex-start'>" +
+    "<div style='width:26px;height:26px;border-radius:8px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:15px;background:linear-gradient(160deg,#f76b8a,#c13584)'>🌴</div>" +
+    "<div style='min-width:0'><div style='font-size:11px;opacity:.75;letter-spacing:.3px'>PALMGRAM · " + n.name + "</div>" +
+    "<div style='font-size:12.5px;line-height:1.35;margin-top:1px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical'>" + n.text + "</div></div></div>";
+  notifEl.style.transform = "translateX(-50%) translateY(0)";
+  notifEl.style.opacity = "1";
+  notifT = 4.4;
+  AudioSys.play("blip", 0.32);
+}
+function hideNotif() { notifT = 0; notifEl.style.transform = "translateX(-50%) translateY(-140%)"; notifEl.style.opacity = "0"; }
+function updateNotif(dt) {
+  if (notifT > 0) { notifT -= dt; if (notifT <= 0) hideNotif(); return; }
+  if (phoneOpen) return;                       // don't notify about the app you're already reading
+  const n = takeNotify(); if (n) showNotif(n);
+}
 // a quiet unread dot, so the feed is something you notice rather than something you remember to check
 let phoneBadgeShown = -1;
 function refreshPhoneBadge() {
@@ -5848,6 +5912,7 @@ function update(dt) {
   const matured = bankTick(dt, state);
   if (matured) { toast("🏦 Term deposit matured  +$" + matured.gain.toLocaleString() + " interest"); AudioSys.play("cash", 0.7); save(); }
   stocksTick(dt, state);
+  updateNotif(dt);
   updateVigilante(dt);
   updateParamedic(dt);
   updatePolice(dt);

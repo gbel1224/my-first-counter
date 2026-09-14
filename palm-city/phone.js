@@ -41,13 +41,28 @@ const HANDLES = {
   rando3:  { handle: "@surfrat99", name: "surf rat", tone: "civilian" },
 };
 
-function add(src, text, likeLo, likeHi) {
+// Notifications the HUD drains and shows as a banner. Only the posts that came from something you
+// DID get queued — ambient city chatter would turn a living feed into a nag.
+let notifyQ = [];
+export function takeNotify() { return notifyQ.shift() || null; }
+function add(src, text, likeLo, likeHi, notable) {
   posts.unshift({
     id: nextId++, handle: src.handle, name: src.name, text,
-    likes: Math.round(pr(likeLo || 3, likeHi || 400)), age: 0,
+    likes: Math.round(pr(likeLo || 3, likeHi || 400)), age: 0, liked: false,
   });
   if (posts.length > MAX_POSTS) posts.length = MAX_POSTS;
   unreadCount++;
+  if (notable) { notifyQ.push({ name: src.name, text }); if (notifyQ.length > 3) notifyQ.shift(); }
+}
+export function toggleLike(id) {
+  const p = posts.find(x => x.id === id); if (!p) return false;
+  p.liked = !p.liked; p.likes += p.liked ? 1 : -1;
+  return p.liked;
+}
+// your own posts: they don't mark themselves unread, and nobody notifies you about you
+export function pushUserPost(text) {
+  posts.unshift({ id: nextId++, handle: "@you", name: "You", text, likes: 0, age: 0, liked: false, mine: true });
+  if (posts.length > MAX_POSTS) posts.length = MAX_POSTS;
 }
 
 // ---- the reactive posts: these fire off real game state ----
@@ -93,9 +108,9 @@ const AMBIENT = [
   [HANDLES.news, () => "Tourism board says Palm City is 'safer than ever'. Unclear what they are measuring."],
 ];
 
-export function pushHeist(name) { add(HANDLES.news, pick(HEIST)(name), 400, 4200); }
+export function pushHeist(name) { add(HANDLES.news, pick(HEIST)(name), 400, 4200, true); }
 export function pushRampage(score, x, z) {
-  add(pick([HANDLES.rando, HANDLES.rando2, HANDLES.gossip]), pick(RAMPAGE)(areaName(x, z)), 60, 1500);
+  add(pick([HANDLES.rando, HANDLES.rando2, HANDLES.gossip]), pick(RAMPAGE)(areaName(x, z)), 60, 1500, true);
 }
 export function pushLevel(lvl) { add(HANDLES.gossip, "word is somebody in this city just levelled up. again. (lvl " + lvl + ")", 20, 300); }
 export function pushCustom(text) { add(HANDLES.news, text, 20, 800); }
@@ -105,9 +120,9 @@ export function pushCustom(text) { add(HANDLES.news, text, 20, 800); }
 export function updateFeed(dt, snap) {
   for (const p of posts) p.age += dt;
   if (prev) {
-    if (snap.wanted > 0 && prev.wanted === 0) add(HANDLES.scanner, pick(HEAT_UP)(areaName(snap.x, snap.z)), 40, 900);
-    if (snap.searching && !prev.searching) add(HANDLES.scanner, pick(SEARCHING)(areaName(snap.x, snap.z)), 80, 2000);
-    if (snap.wanted === 0 && prev.wanted > 0) add(HANDLES.gossip, pick(CLEARED)(areaName(snap.x, snap.z)), 120, 2600);
+    if (snap.wanted > 0 && prev.wanted === 0) add(HANDLES.scanner, pick(HEAT_UP)(areaName(snap.x, snap.z)), 40, 900, true);
+    if (snap.searching && !prev.searching) add(HANDLES.scanner, pick(SEARCHING)(areaName(snap.x, snap.z)), 80, 2000, true);
+    if (snap.wanted === 0 && prev.wanted > 0) add(HANDLES.gossip, pick(CLEARED)(areaName(snap.x, snap.z)), 120, 2600, true);
   }
   prev = { wanted: snap.wanted, searching: snap.searching, x: snap.x, z: snap.z };
   ambientCD -= dt;
@@ -134,7 +149,7 @@ export function clockLabel(simTime, cycleOn) {
   const h = h24 % 12 === 0 ? 12 : h24 % 12;
   return h + ":" + String(m).padStart(2, "0") + (h24 < 12 ? " AM" : " PM");
 }
-export function resetFeed() { posts = []; unreadCount = 0; prev = null; ambientCD = 14; }
+export function resetFeed() { posts = []; unreadCount = 0; prev = null; ambientCD = 14; notifyQ = []; }
 
 // ============================ BANK ============================
 // The point of banking isn't a menu — it's that the death and bust fines only ever take CASH ON
@@ -144,8 +159,26 @@ export const SAVINGS_RATE = 0.006;      // per minute of play, compounding
 export const TERM_RATE = 0.08;          // paid at maturity
 export const TERM_SECS = 180;           // three minutes locked
 
+// A statement line per movement, newest first, each carrying the balance it left behind — which is
+// what makes interest visible instead of a number that quietly drifts upward.
+export function ledgerAdd(st, kind, amt) {
+  if (!st.ledger) st.ledger = [];
+  st.ledger.unshift({ k: kind, a: Math.round(amt), b: Math.round(st.bank) });
+  if (st.ledger.length > 24) st.ledger.length = 24;
+}
+// Interest accrues every frame; a statement line every frame would be useless. Bank it up and post
+// a single line once it's worth reading.
+let interestAccum = 0, interestCD = 30;
 export function bankTick(dt, st) {
-  if (st.bank > 0) st.bank += st.bank * SAVINGS_RATE * (dt / 60);
+  if (st.bank > 0) {
+    const gain = st.bank * SAVINGS_RATE * (dt / 60);
+    st.bank += gain; interestAccum += gain;
+  }
+  interestCD -= dt;
+  if (interestCD <= 0) {
+    interestCD = 30;
+    if (interestAccum >= 1) { ledgerAdd(st, "Interest", interestAccum); interestAccum = 0; }
+  }
   if (st.term && st.term.amt > 0) {
     st.term.left -= dt;
     if (st.term.left <= 0) {
@@ -153,6 +186,7 @@ export function bankTick(dt, st) {
       st.bank += payout;
       const gain = payout - st.term.amt;
       st.term = null;
+      ledgerAdd(st, "Term matured", payout);
       add(HANDLES.news, "Palm City Savings & Loan posts another quarter of 'unremarkable' growth.", 8, 120);
       return { matured: true, payout, gain };
     }
@@ -162,22 +196,22 @@ export function bankTick(dt, st) {
 export function deposit(st, amt) {
   amt = Math.floor(Math.min(amt, st.money));
   if (amt <= 0) return 0;
-  st.money -= amt; st.bank += amt; return amt;
+  st.money -= amt; st.bank += amt; ledgerAdd(st, "Deposit", amt); return amt;
 }
 export function withdraw(st, amt) {
   amt = Math.floor(Math.min(amt, st.bank));
   if (amt <= 0) return 0;
-  st.bank -= amt; st.money += amt; return amt;
+  st.bank -= amt; st.money += amt; ledgerAdd(st, "Withdrawal", -amt); return amt;
 }
 export function openTerm(st, amt) {
   if (st.term) return 0;
   amt = Math.floor(Math.min(amt, st.bank));
   if (amt <= 0) return 0;
-  st.bank -= amt; st.term = { amt, left: TERM_SECS }; return amt;
+  st.bank -= amt; st.term = { amt, left: TERM_SECS }; ledgerAdd(st, "Term locked", -amt); return amt;
 }
 export function breakTerm(st) {                 // early exit forfeits the interest, keeps the principal
   if (!st.term) return 0;
-  const amt = st.term.amt; st.bank += amt; st.term = null; return amt;
+  const amt = st.term.amt; st.bank += amt; st.term = null; ledgerAdd(st, "Term broken", amt); return amt;
 }
 
 // ============================ STOCKS ============================
@@ -209,9 +243,6 @@ export function stocksTick(dt, st) {
     const noise = (prng() - 0.5) * 2 * t.vol;
     st.sprice[t.id] = Math.max(t.base * 0.2, Math.min(t.base * 4, p * (1 + drift + noise)));
   }
-}
-export function shock(id, pct) {                 // a one-off move, from something you did
-  return { id, pct };
 }
 export function applyShock(st, id, pct) {
   ensurePrices(st);
