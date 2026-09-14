@@ -3885,6 +3885,13 @@ function updateNemesis(dt) {
 const keys = new Set();
 let actA = false, actB = false, bHeld = false;   // actA/actB edge-triggered, bHeld = sprint hold
 addEventListener("keydown", e => {
+  // A focused text field owns the keyboard. Without this, typing a deposit amount would run the
+  // game's bindings underneath it — "P" closes the phone mid-entry, E/B fire actions, Q swaps weapon.
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA")) {
+    if (e.code === "Escape") ae.blur();
+    return;
+  }
   if (e.code === "Enter" || (e.code === "Space" && dlgLines)) { advanceDialogue(); e.preventDefault(); return; }
   if (e.code === "KeyE") actA = true;
   if (e.code === "KeyB") actB = true;
@@ -4901,6 +4908,31 @@ let stockSel = null;     // ticker being traded
 // A transient red alert inside the handset. A failed transaction used to do nothing at all (or at
 // best clamp itself silently), which reads as a broken button — the phone has to say why.
 let phoneErr = null, phoneErrT = 0;
+// The typed amount has to survive a re-render: every button calls openPhone(), which rebuilds the
+// whole screen, so an <input>'s own value would be wiped on each tap.
+let phoneAmt = "", phoneAmtFocus = false;
+function amtRow(placeholder, onA, labelA, onB, labelB) {
+  const wrap = el("div", "display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:stretch;");
+  const inp = document.createElement("input");
+  inp.className = "pe"; inp.type = "text"; inp.inputMode = "numeric"; inp.placeholder = placeholder;
+  inp.value = phoneAmt;
+  inp.style.cssText = "min-width:0;padding:9px 11px;border-radius:11px;font-size:13px;font-weight:600;color:#fff;background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.22);outline:none;";
+  inp.addEventListener("input", () => { phoneAmt = inp.value.replace(/[^0-9.]/g, ""); if (inp.value !== phoneAmt) inp.value = phoneAmt; });
+  inp.addEventListener("focus", () => { phoneAmtFocus = true; });
+  inp.addEventListener("blur", () => { phoneAmtFocus = false; });
+  wrap.appendChild(inp);
+  wrap.appendChild(mkBtn(labelA, PILL + "padding-left:11px;padding-right:11px;", onA));
+  wrap.appendChild(mkBtn(labelB, PILL + "padding-left:11px;padding-right:11px;", onB));
+  if (phoneAmtFocus) setTimeout(() => { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }, 0);
+  return wrap;
+}
+// parse what they typed, refusing the nonsense cases out loud instead of silently doing nothing
+function typedAmt(what) {
+  const n = Math.floor(parseFloat(phoneAmt));
+  if (!phoneAmt.trim()) { phoneError("Type an amount first."); return null; }
+  if (!isFinite(n) || n <= 0) { phoneError("\"" + phoneAmt + "\" isn't an amount you can " + what + "."); return null; }
+  return n;
+}
 function phoneError(msg) {
   phoneErr = msg;
   AudioSys.play("door", 0.3); buzz([0, 45]);
@@ -5039,6 +5071,24 @@ function openPhone() {
       openPhone();
     }));
     body.appendChild(el("div", "font-size:11px;color:#dcd6e6;opacity:.8;margin-top:2px", "WITHDRAW")); body.appendChild(rowW);
+    body.appendChild(el("div", "font-size:11px;color:#dcd6e6;opacity:.8;margin-top:2px", "OR TYPE AN AMOUNT"));
+    body.appendChild(amtRow("e.g. 2500",
+      () => {   // deposit exactly what they typed
+        const n = typedAmt("deposit");
+        if (n !== null) {
+          if (state.money < n) phoneError("Can't deposit " + money(n) + " — you've only got " + money(state.money) + " on you.");
+          else { const d = deposit(state, n); clearPhoneErr(); phoneAmt = ""; toast("🏦 Deposited " + money(d)); AudioSys.play("blip", .5); save(); }
+        }
+        openPhone();
+      }, "Deposit",
+      () => {
+        const n = typedAmt("withdraw");
+        if (n !== null) {
+          if (state.bank < n) phoneError("Can't withdraw " + money(n) + " — your balance is " + money(state.bank) + ".");
+          else { const d = withdraw(state, n); clearPhoneErr(); phoneAmt = ""; toast("🏦 Withdrew " + money(d)); AudioSys.play("blip", .5); save(); }
+        }
+        openPhone();
+      }, "Withdraw"));
     // term deposit
     body.appendChild(el("div", "font-size:11px;color:#dcd6e6;opacity:.8;margin-top:2px", "TERM DEPOSIT · +" + (TERM_RATE * 100) + "% after " + TERM_SECS + "s"));
     if (state.term) {
@@ -5103,6 +5153,25 @@ function openPhone() {
         openPhone();
       }));
       body.appendChild(el("div", "font-size:11px;color:#dcd6e6;opacity:.8", "SELL")); body.appendChild(sell);
+      body.appendChild(el("div", "font-size:11px;color:#dcd6e6;opacity:.8;margin-top:2px", "OR TYPE A SHARE COUNT"));
+      body.appendChild(amtRow("e.g. 25",
+        () => {
+          const n = typedAmt("buy");
+          if (n !== null) {
+            const c = buyShares(state, t.id, n);
+            if (c) { clearPhoneErr(); phoneAmt = ""; toast("📈 Bought " + n + " " + t.id + " −" + money(c)); AudioSys.play("blip", .5); save(); }
+            else phoneError("Can't buy " + n + " " + t.id + " — that's " + money(Math.ceil(p * n)) + " and you've got " + money(state.money) + ".");
+          }
+          openPhone();
+        }, "Buy",
+        () => {
+          const n = typedAmt("sell");
+          if (n !== null) {
+            if (held < n) phoneError("You only hold " + held + " " + t.id + " — can't sell " + n + ".");
+            else { const g = sellShares(state, t.id, n); clearPhoneErr(); phoneAmt = ""; toast("📉 Sold " + n + " " + t.id + " +" + money(g)); AudioSys.play("cash", .5); save(); }
+          }
+          openPhone();
+        }, "Sell"));
       body.appendChild(mkBtn("◀ All tickers", PILL, () => { stockSel = null; openPhone(); }));
     }
 
@@ -6155,7 +6224,7 @@ globalThis.__palmCity = {
   sharks, swimmers, race, fishing, treasures, oceanDive: dive, fishTap: () => fishTap(),
   eventsDebug, eventActive: () => eventActive(), currentObjective: () => currentObjective(),
   heistsDebug, heistActive: () => heistActive(), startHeist: a => startHeist(a),
-  phoneDebug, openPhone: () => openPhone(), closePhone: () => closePhone(), phoneApp: v => { phoneApp = v; },
+  phoneDebug, stockSel: v => { stockSel = v; }, openPhone: () => openPhone(), closePhone: () => closePhone(), phoneApp: v => { phoneApp = v; },
   bankOps: { deposit: a => deposit(state, a), withdraw: a => withdraw(state, a), openTerm: a => openTerm(state, a),
              breakTerm: () => breakTerm(state), TERM_SECS, TERM_RATE },
   stockOps: { buy: (id, n) => buyShares(state, id, n), sell: (id, n) => sellShares(state, id, n), value: () => portfolioValue(state) },
