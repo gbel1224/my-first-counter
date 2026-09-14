@@ -14,7 +14,9 @@ import { initWeather, updateWeather, weatherMode, cycleWeatherMode } from "./wea
 import { initOcean, updateOcean, sharks, swimmers, fishing, fishTap, treasures, dive, nearTreasure, startDive, diveDepth } from "./ocean.js";
 import { initEvents, updateEvents, eventObjective, eventActive, _debug as eventsDebug } from "./events.js";
 import { initHeists, updateHeists, heistObjective, heistActive, startHeist, abortHeist, _debug as heistsDebug } from "./heists.js";
-import { updateFeed, feed, unread, markRead, ageLabel, clockLabel, pushHeist, pushRampage, pushLevel, _debug as phoneDebug } from "./phone.js";
+import { updateFeed, feed, unread, markRead, ageLabel, clockLabel, pushHeist, pushRampage, pushLevel, _debug as phoneDebug,
+  bankTick, deposit, withdraw, openTerm, breakTerm, TERM_RATE, TERM_SECS, SAVINGS_RATE,
+  TICKERS, ensurePrices, stocksTick, shockByName, chaosShock, buyShares, sellShares, portfolioValue } from "./phone.js";
 
 // ---------- renderer / scene ----------
 const dom = id => document.getElementById(id);
@@ -1286,7 +1288,7 @@ initHeists(scene, {
   wanted: () => wanted,
   copSearching: () => copSearching,          // the clean-getaway bonus rides on the new police AI
   targets: () => HEIST_TARGETS,
-  onScore: name => pushHeist(name),
+  onScore: name => { pushHeist(name); shockByName(state, name, -0.22); },
   canStart: () => state.mi >= M.length && !dlgLines && !inside,
 });
 
@@ -2293,6 +2295,10 @@ function collectPalm(i) {
 const SAVE_KEY = "sunset_city_save_v1"; // legacy key kept so pre-rename progress survives
 const state = {
   money: 25,
+  bank: 0,               // savings — the fines only ever take cash on hand, so this is the safe pile
+  term: null,            // active term deposit: { amt, left } (locked, pays interest at maturity)
+  shares: {},            // ticker -> shares held
+  sprice: {},            // ticker -> last price (persisted so the market doesn't reset each load)
   owned: {},
   cars: {},              // owned personal cars: pid -> chosen paint color (hex)
   mods: {},              // pid -> [engine, turbo, tyres] upgrade levels
@@ -2343,6 +2349,9 @@ const SAVE_FIELDS = {
   weapon: { save: v => v, load: v => v == null ? null : v },
   decor: { save: v => v, load: v => Object.assign({}, DECOR_DEFAULTS, v || {}) },
   xp: { save: v => Math.round(v || 0), load: v => v || 0 },
+  bank: { save: v => Math.floor(v || 0), load: v => v || 0 },
+  term: { save: v => v || null, load: v => (v && v.amt > 0) ? v : null },
+  shares: _sfObj, sprice: _sfObj,
   lvl: { save: v => v || 1, load: v => v || 1 },
 };
 function save() {
@@ -3388,7 +3397,7 @@ function addChaos(pts) {
 }
 function bankCombo() {                                     // window lapsed: pay out and chase the record
   if (chaos <= 0) { resetCombo(); return; }
-  if (chaos > 400) pushRampage(chaos, player.x, player.z);   // big enough that the city noticed
+  if (chaos > 400) { pushRampage(chaos, player.x, player.z); chaosShock(state); }   // the city noticed — and so did the market
   const reward = earn(Math.round(chaos));
   const prevBest = state.bestRampage || 0;
   if (chaos > prevBest) { state.bestRampage = Math.round(chaos); toast("🏆 NEW BEST RAMPAGE  +$" + reward); flash("#ffe24a", 0.4); AudioSys.play("jingle", 1.0); buzz([0, 40, 30, 80]); save(); }
@@ -4885,14 +4894,19 @@ const phoneBtn = dom("phonebtn"), phoneEl = dom("phone"), phoneCard = dom("phone
 phoneBtn.textContent = "📱";
 if (phoneBtn.style) phoneBtn.style.cssText = "position:absolute;right:16px;top:166px;width:50px;height:50px;border-radius:50%;font-size:21px;background:rgba(28,30,38,.72);color:#fff;border:1px solid rgba(255,205,140,.3);z-index:25;";
 if (phoneEl.style) phoneEl.style.cssText = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(10,6,14,.42),rgba(6,3,10,.62));backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:70;";
-if (phoneCard.style) phoneCard.style.cssText = "display:flex;flex-direction:column;gap:9px;width:300px;padding:20px;background:linear-gradient(165deg,rgba(40,32,50,.95),rgba(20,14,24,.96));backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-radius:22px;border:1px solid rgba(255,205,140,.32);box-shadow:0 20px 54px rgba(6,3,10,.62),inset 0 1px 1px rgba(255,255,255,.14);";
-let phoneApp = "home";   // home | jobs | gram | contacts
+// the card is the handset itself: dark titanium bezel, deep corner radius, a soft rim highlight
+if (phoneCard.style) phoneCard.style.cssText = "display:flex;flex-direction:column;width:302px;max-width:92vw;padding:7px;background:linear-gradient(160deg,#3a3a42,#121216 42%,#0a0a0e);border-radius:40px;box-shadow:0 24px 60px rgba(4,2,8,.7),inset 0 0 0 1.5px rgba(255,255,255,.16),inset 0 1px 2px rgba(255,255,255,.28);";
+let phoneApp = "home";   // home | jobs | gram | contacts | bank | stocks
+let stockSel = null;     // ticker being traded
 function closePhone() { phoneOpen = false; phoneEl.style.display = "none"; }
 const mkBtn = (html, css, fn) => {
   const b = document.createElement("button"); b.className = "pe popbtn"; b.innerHTML = html;
   b.style.cssText = css; if (fn) b.addEventListener("click", fn); return b;
 };
-const ROW_CSS = "padding:11px 12px;border-radius:14px;font-size:13px;line-height:1.3;color:#fff;text-align:left;background:linear-gradient(165deg,rgba(58,50,70,.96),rgba(36,30,46,.96));box-shadow:0 3px 9px rgba(0,0,0,.32),inset 0 1px 1px rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.14);";
+const el = (tag, css, html) => { const d = document.createElement(tag); if (css) d.style.cssText = css; if (html != null) d.innerHTML = html; return d; };
+const ROW_CSS = "padding:11px 12px;border-radius:14px;font-size:13px;line-height:1.3;color:#fff;text-align:left;background:rgba(60,60,66,.72);border:1px solid rgba(255,255,255,.09);";
+const PILL = "padding:9px 6px;border-radius:11px;font-size:12.5px;font-weight:600;color:#fff;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.14);";
+const money = n => "$" + Math.floor(n).toLocaleString();
 // phone contacts — people who actually do something when you call them
 const CONTACTS = [
   { id: "marco", label: "📞 Marco", desc: "Ask what you should be doing" },
@@ -4919,69 +4933,143 @@ function callContact(id) {
     AudioSys.play("horn", 0.6); save(); closePhone(); return;
   }
 }
-function phoneChrome(body) {
+// ---- iPhone-ish shell: bezel, dynamic island, status bar, home indicator ----
+function phoneChrome(body, title) {
   phoneCard.innerHTML = "";
-  // status bar — the in-world clock is what makes it read as a phone and not a menu
-  const bar = document.createElement("div");
-  bar.style.cssText = "display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#cfc6dd;opacity:.85;padding:0 4px 2px;";
-  bar.innerHTML = "<span>" + clockLabel(simTime, dayCycle) + "</span><span>▂▄▆ 📶  " +
-    (wanted > 0 ? "<span style='color:#ff8f8f'>◉ LIVE</span>" : "🔋") + "</span>";
-  phoneCard.appendChild(bar);
-  phoneCard.appendChild(body);
-  const foot = document.createElement("div");
-  foot.style.cssText = "display:flex;gap:8px;margin-top:2px;";
-  if (phoneApp !== "home") foot.appendChild(mkBtn("◀ Back",
-    "flex:1;padding:9px;border-radius:12px;color:#fff;background:linear-gradient(165deg,rgba(60,54,74,.95),rgba(38,33,50,.95));border:1px solid rgba(255,255,255,.14);",
-    () => { phoneApp = "home"; openPhone(); }));
-  foot.appendChild(mkBtn("Close",
-    "flex:1;padding:9px;border-radius:12px;color:#fff;background:linear-gradient(165deg,rgba(96,52,52,.95),rgba(64,34,34,.95));border:1px solid rgba(255,160,140,.2);", closePhone));
-  phoneCard.appendChild(foot);
+  const screen = el("div", "position:relative;display:flex;flex-direction:column;gap:9px;border-radius:32px;padding:12px 13px 10px;min-height:430px;background:linear-gradient(170deg,#2b2140 0%,#3a2b4e 38%,#5a3b52 72%,#8a5a4a 100%);overflow:hidden;");
+  // dynamic island
+  screen.appendChild(el("div", "position:absolute;top:9px;left:50%;transform:translateX(-50%);width:74px;height:21px;border-radius:12px;background:#08080c;z-index:3;"));
+  // status bar
+  const bar = el("div", "display:flex;justify-content:space-between;align-items:center;font-size:11.5px;font-weight:600;color:#fff;padding:3px 6px 0;letter-spacing:.2px;");
+  bar.innerHTML = "<span>" + clockLabel(simTime, dayCycle) + "</span><span style='display:flex;gap:5px;align-items:center'>" +
+    (wanted > 0 ? "<span style='color:#ff7b7b'>◉</span>" : "") + "<span style='font-size:10px'>▂▄▆</span><span style='font-size:10px'>❐</span><span style='font-size:11px'>🔋</span></span>";
+  screen.appendChild(bar);
+  if (title) screen.appendChild(el("div", "color:#fff;font-weight:700;font-size:19px;padding:4px 4px 0;letter-spacing:.2px;", title));
+  body.style.cssText += ";flex:1;";
+  screen.appendChild(body);
+  // home indicator — tap it to go back, like swiping up
+  const homeBar = mkBtn("", "align-self:center;width:118px;height:5px;border-radius:3px;background:rgba(255,255,255,.75);border:none;padding:0;margin:6px 0 2px;",
+    () => { if (phoneApp === "home") closePhone(); else { phoneApp = "home"; stockSel = null; openPhone(); } });
+  screen.appendChild(homeBar);
+  phoneCard.appendChild(screen);
+}
+function appIcon(icon, name, badge, grad, go) {
+  const wrap = el("div", "display:flex;flex-direction:column;align-items:center;gap:5px;");
+  const b = mkBtn("<div style='font-size:29px;line-height:1'>" + icon + "</div>" +
+    (badge ? "<div style='position:absolute;top:-5px;right:-5px;background:#ff3b30;color:#fff;border-radius:11px;min-width:20px;padding:1px 5px;font-size:11px;font-weight:700;border:2px solid rgba(0,0,0,.25)'>" + badge + "</div>" : ""),
+    "position:relative;width:58px;height:58px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:" + grad + ";box-shadow:0 4px 10px rgba(0,0,0,.34),inset 0 1px 1px rgba(255,255,255,.22);border:none;padding:0;",
+    () => { phoneApp = go; if (go === "gram") markRead(); openPhone(); });
+  wrap.appendChild(b);
+  wrap.appendChild(el("div", "font-size:11px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);", name));
+  return wrap;
 }
 function openPhone() {
   if (state.phase !== "play" || dlgLines) return;
-  const body = document.createElement("div");
-  body.style.cssText = "display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow-y:auto;";
+  ensurePrices(state);
+  const body = el("div", "display:flex;flex-direction:column;gap:9px;max-height:46vh;overflow-y:auto;");
+  let title = null;
+
   if (phoneApp === "home") {
-    const grid = document.createElement("div");
-    grid.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:10px;";
-    const app = (icon, name, badge, go) => {
-      const b = mkBtn("<div style='font-size:26px;line-height:1.1'>" + icon + "</div><div style='font-size:12px;margin-top:3px'>" + name + "</div>" +
-        (badge ? "<div style='position:absolute;top:6px;right:8px;background:#ff4d4d;color:#fff;border-radius:9px;padding:1px 6px;font-size:10px;font-weight:700'>" + badge + "</div>" : ""),
-        "position:relative;padding:14px 8px;border-radius:16px;color:#fff;text-align:center;background:linear-gradient(165deg,rgba(58,50,70,.96),rgba(34,28,44,.96));box-shadow:0 3px 9px rgba(0,0,0,.32),inset 0 1px 1px rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.14);",
-        () => { phoneApp = go; if (go === "gram") markRead(); openPhone(); });
-      grid.appendChild(b);
-    };
-    app("💼", "Jobs", 0, "jobs");
-    app("🌴", "Palmgram", unread(), "gram");
-    app("📇", "Contacts", 0, "contacts");
-    const money = mkBtn("<div style='font-size:26px;line-height:1.1'>💰</div><div style='font-size:12px;margin-top:3px'>$" + Math.floor(state.money).toLocaleString() + "</div>",
-      "padding:14px 8px;border-radius:16px;color:#ffe9b3;text-align:center;background:linear-gradient(165deg,rgba(70,58,34,.96),rgba(44,34,20,.96));border:1px solid rgba(255,205,140,.24);", null);
-    grid.appendChild(money);
+    const grid = el("div", "display:grid;grid-template-columns:repeat(4,1fr);gap:13px 6px;padding:10px 2px 4px;");
+    grid.appendChild(appIcon("💼", "Jobs", 0, "linear-gradient(160deg,#5b6ef0,#3b45b8)", "jobs"));
+    grid.appendChild(appIcon("🌴", "Palmgram", unread(), "linear-gradient(160deg,#f76b8a,#c13584)", "gram"));
+    grid.appendChild(appIcon("🏦", "Bank", 0, "linear-gradient(160deg,#3ec46d,#1c8a46)", "bank"));
+    grid.appendChild(appIcon("📈", "Stocks", 0, "linear-gradient(160deg,#2b2b33,#0e0e13)", "stocks"));
+    grid.appendChild(appIcon("📇", "Contacts", 0, "linear-gradient(160deg,#f0a93f,#c2721a)", "contacts"));
     body.appendChild(grid);
+    // a little wallet widget under the dock
+    const w = el("div", "margin-top:6px;padding:12px 14px;border-radius:18px;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.16);color:#fff;");
+    const port = portfolioValue(state);
+    w.innerHTML = "<div style='font-size:11px;opacity:.75;margin-bottom:3px'>WALLET</div>" +
+      "<div style='display:flex;justify-content:space-between;font-size:13px'><span>Cash</span><b>" + money(state.money) + "</b></div>" +
+      "<div style='display:flex;justify-content:space-between;font-size:13px'><span>Bank</span><b style='color:#8ef0ac'>" + money(state.bank) + "</b></div>" +
+      (port > 0 ? "<div style='display:flex;justify-content:space-between;font-size:13px'><span>Stocks</span><b style='color:#9ec7ff'>" + money(port) + "</b></div>" : "") +
+      (state.term ? "<div style='display:flex;justify-content:space-between;font-size:12px;opacity:.8;margin-top:3px'><span>Term deposit</span><span>" + money(state.term.amt) + " · " + Math.ceil(state.term.left) + "s</span></div>" : "");
+    body.appendChild(w);
+
   } else if (phoneApp === "jobs") {
+    title = "Jobs";
     JOBS.forEach(J => body.appendChild(mkBtn("<b>" + J.label + "</b><br><small style='opacity:.7'>" + J.desc + "</small>", ROW_CSS, () => startJob(J.id))));
+
   } else if (phoneApp === "contacts") {
+    title = "Contacts";
     CONTACTS.forEach(C => body.appendChild(mkBtn("<b>" + C.label + "</b><br><small style='opacity:.7'>" + C.desc + "</small>", ROW_CSS, () => callContact(C.id))));
-  } else {
-    const list = feed();
-    if (!list.length) {
-      const empty = document.createElement("div");
-      empty.style.cssText = "color:#bdb3cc;font-size:12px;text-align:center;padding:18px 6px;line-height:1.5;";
-      empty.textContent = "Quiet in Palm City right now. Give it a minute… or give them something to talk about.";
-      body.appendChild(empty);
+
+  } else if (phoneApp === "bank") {
+    title = "Bank";
+    const head = el("div", "padding:14px;border-radius:18px;background:linear-gradient(160deg,rgba(62,196,109,.24),rgba(28,138,70,.18));border:1px solid rgba(140,240,170,.28);color:#fff;");
+    head.innerHTML = "<div style='font-size:11px;opacity:.8'>BALANCE</div><div style='font-size:26px;font-weight:700;color:#8ef0ac'>" + money(state.bank) + "</div>" +
+      "<div style='font-size:11.5px;opacity:.8;margin-top:4px'>Cash on hand " + money(state.money) + " · " + (SAVINGS_RATE * 100).toFixed(1) + "%/min interest</div>" +
+      "<div style='font-size:11px;opacity:.7;margin-top:5px;line-height:1.4'>Fines only ever take the cash in your pocket. Anything in here is safe.</div>";
+    body.appendChild(head);
+    const amounts = [100, 1000, 10000];
+    const rowD = el("div", "display:grid;grid-template-columns:repeat(4,1fr);gap:6px;");
+    amounts.forEach(a => rowD.appendChild(mkBtn("+" + (a >= 1000 ? (a / 1000) + "k" : a), PILL, () => { const d = deposit(state, a); if (d) { toast("🏦 Deposited " + money(d)); AudioSys.play("blip", .5); save(); } openPhone(); })));
+    rowD.appendChild(mkBtn("All", PILL, () => { const d = deposit(state, state.money); if (d) { toast("🏦 Deposited " + money(d)); AudioSys.play("blip", .5); save(); } openPhone(); }));
+    body.appendChild(el("div", "font-size:11px;color:#dcd6e6;opacity:.8;margin-top:2px", "DEPOSIT")); body.appendChild(rowD);
+    const rowW = el("div", "display:grid;grid-template-columns:repeat(4,1fr);gap:6px;");
+    amounts.forEach(a => rowW.appendChild(mkBtn("−" + (a >= 1000 ? (a / 1000) + "k" : a), PILL, () => { const d = withdraw(state, a); if (d) { toast("🏦 Withdrew " + money(d)); AudioSys.play("blip", .5); save(); } openPhone(); })));
+    rowW.appendChild(mkBtn("All", PILL, () => { const d = withdraw(state, state.bank); if (d) { toast("🏦 Withdrew " + money(d)); AudioSys.play("blip", .5); save(); } openPhone(); }));
+    body.appendChild(el("div", "font-size:11px;color:#dcd6e6;opacity:.8;margin-top:2px", "WITHDRAW")); body.appendChild(rowW);
+    // term deposit
+    body.appendChild(el("div", "font-size:11px;color:#dcd6e6;opacity:.8;margin-top:2px", "TERM DEPOSIT · +" + (TERM_RATE * 100) + "% after " + TERM_SECS + "s"));
+    if (state.term) {
+      body.appendChild(el("div", ROW_CSS, "<b>" + money(state.term.amt) + " locked</b><br><small style='opacity:.75'>Matures in " + Math.ceil(state.term.left) + "s → +" + money(state.term.amt * TERM_RATE) + "</small>"));
+      body.appendChild(mkBtn("Break early (forfeit interest)", PILL, () => { const a = breakTerm(state); if (a) { toast("🏦 Broke the term — " + money(a) + " back, no interest"); save(); } openPhone(); }));
+    } else {
+      const rowT = el("div", "display:grid;grid-template-columns:repeat(3,1fr);gap:6px;");
+      [1000, 5000, 25000].forEach(a => rowT.appendChild(mkBtn("Lock " + (a / 1000) + "k", PILL, () => { const d = openTerm(state, a); if (d) { toast("🏦 Locked " + money(d) + " for " + TERM_SECS + "s"); AudioSys.play("blip", .5); save(); } else toast("Not enough in the bank"); openPhone(); })));
+      body.appendChild(rowT);
     }
+
+  } else if (phoneApp === "stocks") {
+    title = "Stocks";
+    if (!stockSel) {
+      const port = portfolioValue(state);
+      body.appendChild(el("div", "padding:12px 14px;border-radius:18px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.14);color:#fff;",
+        "<div style='font-size:11px;opacity:.75'>PORTFOLIO</div><div style='font-size:24px;font-weight:700;color:#9ec7ff'>" + money(port) + "</div>" +
+        "<div style='font-size:11px;opacity:.7;margin-top:3px'>Cash " + money(state.money) + "</div>"));
+      for (const t of TICKERS) {
+        const p = state.sprice[t.id], held = state.shares[t.id] || 0;
+        const dev = (p - t.base) / t.base, up = dev >= 0;
+        body.appendChild(mkBtn(
+          "<div style='display:flex;justify-content:space-between;align-items:center'>" +
+          "<span><b>" + t.id + "</b> <small style='opacity:.6'>" + t.name + "</small>" + (held ? "<br><small style='color:#9ec7ff'>" + held + " shares</small>" : "") + "</span>" +
+          "<span style='text-align:right'><b>$" + p.toFixed(2) + "</b><br><small style='color:" + (up ? "#6ee08a" : "#ff7b7b") + "'>" + (up ? "▲" : "▼") + " " + Math.abs(dev * 100).toFixed(1) + "%</small></span></div>",
+          ROW_CSS, () => { stockSel = t.id; openPhone(); }));
+      }
+    } else {
+      const t = TICKERS.find(x => x.id === stockSel), p = state.sprice[t.id], held = state.shares[t.id] || 0;
+      body.appendChild(el("div", "padding:14px;border-radius:18px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.14);color:#fff;",
+        "<div style='font-size:11px;opacity:.75'>" + t.name + "</div><div style='font-size:26px;font-weight:700'>" + t.id + " $" + p.toFixed(2) + "</div>" +
+        "<div style='font-size:12px;opacity:.85;margin-top:4px'>You hold <b>" + held + "</b> · worth " + money(held * p) + "</div>" +
+        "<div style='font-size:12px;opacity:.85'>Cash " + money(state.money) + "</div>"));
+      const buy = el("div", "display:grid;grid-template-columns:repeat(4,1fr);gap:6px;");
+      [1, 10, 50].forEach(n => buy.appendChild(mkBtn("Buy " + n, PILL, () => { const c = buyShares(state, t.id, n); if (c) { toast("📈 Bought " + n + " " + t.id + " −" + money(c)); AudioSys.play("blip", .5); save(); } else toast("Not enough cash"); openPhone(); })));
+      buy.appendChild(mkBtn("Max", PILL, () => { const n = Math.floor(state.money / p); const c = buyShares(state, t.id, n); if (c) { toast("📈 Bought " + n + " " + t.id + " −" + money(c)); AudioSys.play("blip", .5); save(); } else toast("Not enough cash"); openPhone(); }));
+      body.appendChild(el("div", "font-size:11px;color:#dcd6e6;opacity:.8", "BUY")); body.appendChild(buy);
+      const sell = el("div", "display:grid;grid-template-columns:repeat(4,1fr);gap:6px;");
+      [1, 10, 50].forEach(n => sell.appendChild(mkBtn("Sell " + n, PILL, () => { const g = sellShares(state, t.id, n); if (g) { toast("📉 Sold " + n + " " + t.id + " +" + money(g)); AudioSys.play("cash", .5); save(); } else toast("You don't hold that many"); openPhone(); })));
+      sell.appendChild(mkBtn("All", PILL, () => { const g = sellShares(state, t.id, held); if (g) { toast("📉 Sold " + held + " " + t.id + " +" + money(g)); AudioSys.play("cash", .5); save(); } else toast("Nothing to sell"); openPhone(); }));
+      body.appendChild(el("div", "font-size:11px;color:#dcd6e6;opacity:.8", "SELL")); body.appendChild(sell);
+      body.appendChild(mkBtn("◀ All tickers", PILL, () => { stockSel = null; openPhone(); }));
+    }
+
+  } else {
+    title = "Palmgram";
+    const list = feed();
+    if (!list.length) body.appendChild(el("div", "color:#e6dff2;font-size:12px;text-align:center;padding:18px 6px;line-height:1.5;opacity:.85",
+      "Quiet in Palm City right now. Give it a minute… or give them something to talk about."));
     for (const p of list) {
-      const card = document.createElement("div");
-      card.style.cssText = "padding:10px 11px;border-radius:14px;background:linear-gradient(165deg,rgba(52,45,64,.92),rgba(32,27,42,.92));border:1px solid rgba(255,255,255,.1);";
-      card.innerHTML = "<div style='display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px'>" +
-        "<span style='color:#ffd166;font-weight:700'>" + p.name + " <span style='color:#9a90ab;font-weight:400'>" + p.handle + "</span></span>" +
-        "<span style='color:#8e84a0'>" + ageLabel(p.age) + "</span></div>" +
-        "<div style='color:#f2ecff;font-size:12.5px;line-height:1.4'>" + p.text + "</div>" +
-        "<div style='color:#8e84a0;font-size:11px;margin-top:5px'>♥ " + p.likes.toLocaleString() + "</div>";
-      body.appendChild(card);
+      body.appendChild(el("div", "padding:10px 11px;border-radius:16px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.1);",
+        "<div style='display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px'>" +
+        "<span style='color:#ffd166;font-weight:700'>" + p.name + " <span style='color:#c9bfd8;font-weight:400'>" + p.handle + "</span></span>" +
+        "<span style='color:#bdb3cc'>" + ageLabel(p.age) + "</span></div>" +
+        "<div style='color:#fff;font-size:12.5px;line-height:1.4'>" + p.text + "</div>" +
+        "<div style='color:#bdb3cc;font-size:11px;margin-top:5px'>♥ " + p.likes.toLocaleString() + "</div>"));
     }
   }
-  phoneChrome(body);
+  phoneChrome(body, title);
   phoneOpen = true; phoneEl.style.display = "flex"; popIn(phoneCard);
 }
 phoneBtn.addEventListener("click", () => phoneOpen ? closePhone() : openPhone());
@@ -5634,6 +5722,9 @@ function update(dt) {
   updateHeists(dt, simTime);
   // the city talks about what you did — fed a snapshot rather than wired into every system
   updateFeed(dt, { wanted, searching: copSearching, x: player.x, z: player.z });
+  const matured = bankTick(dt, state);
+  if (matured) { toast("🏦 Term deposit matured  +$" + matured.gain.toLocaleString() + " interest"); AudioSys.play("cash", 0.7); save(); }
+  stocksTick(dt, state);
   updateVigilante(dt);
   updateParamedic(dt);
   updatePolice(dt);
@@ -6011,6 +6102,11 @@ globalThis.__palmCity = {
   eventsDebug, eventActive: () => eventActive(), currentObjective: () => currentObjective(),
   heistsDebug, heistActive: () => heistActive(), startHeist: a => startHeist(a),
   phoneDebug, openPhone: () => openPhone(), closePhone: () => closePhone(), phoneApp: v => { phoneApp = v; },
+  bankOps: { deposit: a => deposit(state, a), withdraw: a => withdraw(state, a), openTerm: a => openTerm(state, a),
+             breakTerm: () => breakTerm(state), TERM_SECS, TERM_RATE },
+  stockOps: { buy: (id, n) => buyShares(state, id, n), sell: (id, n) => sellShares(state, id, n), value: () => portfolioValue(state) },
+  phoneOps: { shockByName: (n, p) => shockByName(state, n, p) },
+  forceBust: () => bust(),
   finishStory: () => { state.mi = M.length; mState = "done"; },   // jump straight to freeplay (dev/testing)
   health: () => health,
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
