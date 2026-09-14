@@ -96,6 +96,7 @@ function payout() {
   if (clean) deps.toast("🕶️ Vanished before they ever found you.");
   AudioSys.play("cash", 1.0); deps.buzz([0, 60, 40, 120]); deps.addShake(0.25);
   deps.burst(h.tx, 0.6, h.tz, 22, 2.0, 2.4, 0.8, 1.0, 0.85, 0.35);
+  if (deps.onScore) deps.onScore(h.name);   // the city reads about it
   deps.save();
   h = null; markA.visible = false;
 }

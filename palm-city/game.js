@@ -14,6 +14,7 @@ import { initWeather, updateWeather, weatherMode, cycleWeatherMode } from "./wea
 import { initOcean, updateOcean, sharks, swimmers, fishing, fishTap, treasures, dive, nearTreasure, startDive, diveDepth } from "./ocean.js";
 import { initEvents, updateEvents, eventObjective, eventActive, _debug as eventsDebug } from "./events.js";
 import { initHeists, updateHeists, heistObjective, heistActive, startHeist, abortHeist, _debug as heistsDebug } from "./heists.js";
+import { updateFeed, feed, unread, markRead, ageLabel, clockLabel, pushHeist, pushRampage, pushLevel, _debug as phoneDebug } from "./phone.js";
 
 // ---------- renderer / scene ----------
 const dom = id => document.getElementById(id);
@@ -1285,6 +1286,7 @@ initHeists(scene, {
   wanted: () => wanted,
   copSearching: () => copSearching,          // the clean-getaway bonus rides on the new police AI
   targets: () => HEIST_TARGETS,
+  onScore: name => pushHeist(name),
   canStart: () => state.mi >= M.length && !dlgLines && !inside,
 });
 
@@ -2381,6 +2383,7 @@ function addXP(n) {
     leveled = true;
     const bonus = state.lvl * 150;                    // a cash reward on every level-up
     state.money += bonus;
+    pushLevel(state.lvl);
     recalcLvlMult();
     toast(STR.levelUp(state.lvl, bonus));
     AudioSys.play("jingle", 0.9); flash("#7ad1ff", 0.45); buzz([0, 40, 30, 60]);
@@ -3385,6 +3388,7 @@ function addChaos(pts) {
 }
 function bankCombo() {                                     // window lapsed: pay out and chase the record
   if (chaos <= 0) { resetCombo(); return; }
+  if (chaos > 400) pushRampage(chaos, player.x, player.z);   // big enough that the city noticed
   const reward = earn(Math.round(chaos));
   const prevBest = state.bestRampage || 0;
   if (chaos > prevBest) { state.bestRampage = Math.round(chaos); toast("🏆 NEW BEST RAMPAGE  +$" + reward); flash("#ffe24a", 0.4); AudioSys.play("jingle", 1.0); buzz([0, 40, 30, 80]); save(); }
@@ -4193,6 +4197,7 @@ function updateHUD() {
     const p100 = Math.round(pct);
     if (p100 !== lastXpShown) { elLvlFill.style.width = p100 + "%"; lastXpShown = p100; }
   }
+  refreshPhoneBadge();
   const heat = heatActive();
   // stars go hollow while the force is searching \u2014 the player has to be able to read "they've lost
   // me, keep still" at a glance, or the whole hide-and-seek layer is invisible
@@ -4881,25 +4886,114 @@ phoneBtn.textContent = "📱";
 if (phoneBtn.style) phoneBtn.style.cssText = "position:absolute;right:16px;top:166px;width:50px;height:50px;border-radius:50%;font-size:21px;background:rgba(28,30,38,.72);color:#fff;border:1px solid rgba(255,205,140,.3);z-index:25;";
 if (phoneEl.style) phoneEl.style.cssText = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(10,6,14,.42),rgba(6,3,10,.62));backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:70;";
 if (phoneCard.style) phoneCard.style.cssText = "display:flex;flex-direction:column;gap:9px;width:300px;padding:20px;background:linear-gradient(165deg,rgba(40,32,50,.95),rgba(20,14,24,.96));backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-radius:22px;border:1px solid rgba(255,205,140,.32);box-shadow:0 20px 54px rgba(6,3,10,.62),inset 0 1px 1px rgba(255,255,255,.14);";
+let phoneApp = "home";   // home | jobs | gram | contacts
 function closePhone() { phoneOpen = false; phoneEl.style.display = "none"; }
+const mkBtn = (html, css, fn) => {
+  const b = document.createElement("button"); b.className = "pe popbtn"; b.innerHTML = html;
+  b.style.cssText = css; if (fn) b.addEventListener("click", fn); return b;
+};
+const ROW_CSS = "padding:11px 12px;border-radius:14px;font-size:13px;line-height:1.3;color:#fff;text-align:left;background:linear-gradient(165deg,rgba(58,50,70,.96),rgba(36,30,46,.96));box-shadow:0 3px 9px rgba(0,0,0,.32),inset 0 1px 1px rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.14);";
+// phone contacts — people who actually do something when you call them
+const CONTACTS = [
+  { id: "marco", label: "📞 Marco", desc: "Ask what you should be doing" },
+  { id: "muscle", label: "🤝 Hire Muscle", desc: "$1500 — an armed ally rides with you" },
+  { id: "mech", label: "🔧 Mechanic", desc: "$500 — has your car brought to you" },
+];
+function callContact(id) {
+  if (id === "marco") {
+    const o = currentObjective();
+    toast("📞 Marco: \"" + (o && o.text ? o.text : "Keep building, kid. City's yours.") + "\"");
+    AudioSys.play("blip", 0.6); closePhone(); return;
+  }
+  if (id === "muscle") { hireAlly(); closePhone(); return; }
+  if (id === "mech") {
+    const mine = cars.filter(c => c.personal && !c.locked);
+    if (!mine.length) { toast("🔧 \"You don't own a car yet — try the City Garage.\""); return; }
+    if (state.money < 500) { toast("🔧 \"Cash up front. $500.\""); return; }
+    if (driving) { toast("🔧 \"You're already driving something.\""); return; }
+    state.money -= 500;
+    const c = mine[0], a = player.h + Math.PI / 2;
+    c.x = player.x + Math.cos(a) * 7; c.z = player.z + Math.sin(a) * 7; c.h = player.h; c.speed = 0;
+    c.mesh.position.set(c.x, groundY(c.x, c.z), c.z); c.mesh.rotation.y = c.h;
+    toast("🔧 Mechanic dropped your car off  −$500");
+    AudioSys.play("horn", 0.6); save(); closePhone(); return;
+  }
+}
+function phoneChrome(body) {
+  phoneCard.innerHTML = "";
+  // status bar — the in-world clock is what makes it read as a phone and not a menu
+  const bar = document.createElement("div");
+  bar.style.cssText = "display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#cfc6dd;opacity:.85;padding:0 4px 2px;";
+  bar.innerHTML = "<span>" + clockLabel(simTime, dayCycle) + "</span><span>▂▄▆ 📶  " +
+    (wanted > 0 ? "<span style='color:#ff8f8f'>◉ LIVE</span>" : "🔋") + "</span>";
+  phoneCard.appendChild(bar);
+  phoneCard.appendChild(body);
+  const foot = document.createElement("div");
+  foot.style.cssText = "display:flex;gap:8px;margin-top:2px;";
+  if (phoneApp !== "home") foot.appendChild(mkBtn("◀ Back",
+    "flex:1;padding:9px;border-radius:12px;color:#fff;background:linear-gradient(165deg,rgba(60,54,74,.95),rgba(38,33,50,.95));border:1px solid rgba(255,255,255,.14);",
+    () => { phoneApp = "home"; openPhone(); }));
+  foot.appendChild(mkBtn("Close",
+    "flex:1;padding:9px;border-radius:12px;color:#fff;background:linear-gradient(165deg,rgba(96,52,52,.95),rgba(64,34,34,.95));border:1px solid rgba(255,160,140,.2);", closePhone));
+  phoneCard.appendChild(foot);
+}
 function openPhone() {
   if (state.phase !== "play" || dlgLines) return;
-  phoneCard.innerHTML = "";
-  const title = document.createElement("div"); title.textContent = "📱 JOBS";
-  title.style.cssText = "text-align:center;color:#ffd166;font-weight:700;font-size:13px;letter-spacing:1px;margin-bottom:2px;"; phoneCard.appendChild(title);
-  JOBS.forEach(J => {
-    const b = document.createElement("button"); b.className = "pe popbtn";
-    b.innerHTML = "<b>" + J.label + "</b><br><small style='opacity:.7'>" + J.desc + "</small>";
-    b.style.cssText = "padding:12px;border-radius:14px;font-size:13px;line-height:1.3;color:#fff;text-align:left;background:linear-gradient(165deg,rgba(58,50,70,.96),rgba(36,30,46,.96));box-shadow:0 3px 9px rgba(0,0,0,.32),inset 0 1px 1px rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.14);";
-    b.addEventListener("click", () => startJob(J.id));
-    phoneCard.appendChild(b);
-  });
-  const close = document.createElement("button"); close.className = "pe popbtn"; close.textContent = "Close";
-  close.style.cssText = "padding:9px;border-radius:12px;color:#fff;background:linear-gradient(165deg,rgba(96,52,52,.95),rgba(64,34,34,.95));box-shadow:0 3px 8px rgba(0,0,0,.3);border:1px solid rgba(255,160,140,.2);margin-top:4px;";
-  close.addEventListener("click", closePhone); phoneCard.appendChild(close);
+  const body = document.createElement("div");
+  body.style.cssText = "display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow-y:auto;";
+  if (phoneApp === "home") {
+    const grid = document.createElement("div");
+    grid.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:10px;";
+    const app = (icon, name, badge, go) => {
+      const b = mkBtn("<div style='font-size:26px;line-height:1.1'>" + icon + "</div><div style='font-size:12px;margin-top:3px'>" + name + "</div>" +
+        (badge ? "<div style='position:absolute;top:6px;right:8px;background:#ff4d4d;color:#fff;border-radius:9px;padding:1px 6px;font-size:10px;font-weight:700'>" + badge + "</div>" : ""),
+        "position:relative;padding:14px 8px;border-radius:16px;color:#fff;text-align:center;background:linear-gradient(165deg,rgba(58,50,70,.96),rgba(34,28,44,.96));box-shadow:0 3px 9px rgba(0,0,0,.32),inset 0 1px 1px rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.14);",
+        () => { phoneApp = go; if (go === "gram") markRead(); openPhone(); });
+      grid.appendChild(b);
+    };
+    app("💼", "Jobs", 0, "jobs");
+    app("🌴", "Palmgram", unread(), "gram");
+    app("📇", "Contacts", 0, "contacts");
+    const money = mkBtn("<div style='font-size:26px;line-height:1.1'>💰</div><div style='font-size:12px;margin-top:3px'>$" + Math.floor(state.money).toLocaleString() + "</div>",
+      "padding:14px 8px;border-radius:16px;color:#ffe9b3;text-align:center;background:linear-gradient(165deg,rgba(70,58,34,.96),rgba(44,34,20,.96));border:1px solid rgba(255,205,140,.24);", null);
+    grid.appendChild(money);
+    body.appendChild(grid);
+  } else if (phoneApp === "jobs") {
+    JOBS.forEach(J => body.appendChild(mkBtn("<b>" + J.label + "</b><br><small style='opacity:.7'>" + J.desc + "</small>", ROW_CSS, () => startJob(J.id))));
+  } else if (phoneApp === "contacts") {
+    CONTACTS.forEach(C => body.appendChild(mkBtn("<b>" + C.label + "</b><br><small style='opacity:.7'>" + C.desc + "</small>", ROW_CSS, () => callContact(C.id))));
+  } else {
+    const list = feed();
+    if (!list.length) {
+      const empty = document.createElement("div");
+      empty.style.cssText = "color:#bdb3cc;font-size:12px;text-align:center;padding:18px 6px;line-height:1.5;";
+      empty.textContent = "Quiet in Palm City right now. Give it a minute… or give them something to talk about.";
+      body.appendChild(empty);
+    }
+    for (const p of list) {
+      const card = document.createElement("div");
+      card.style.cssText = "padding:10px 11px;border-radius:14px;background:linear-gradient(165deg,rgba(52,45,64,.92),rgba(32,27,42,.92));border:1px solid rgba(255,255,255,.1);";
+      card.innerHTML = "<div style='display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px'>" +
+        "<span style='color:#ffd166;font-weight:700'>" + p.name + " <span style='color:#9a90ab;font-weight:400'>" + p.handle + "</span></span>" +
+        "<span style='color:#8e84a0'>" + ageLabel(p.age) + "</span></div>" +
+        "<div style='color:#f2ecff;font-size:12.5px;line-height:1.4'>" + p.text + "</div>" +
+        "<div style='color:#8e84a0;font-size:11px;margin-top:5px'>♥ " + p.likes.toLocaleString() + "</div>";
+      body.appendChild(card);
+    }
+  }
+  phoneChrome(body);
   phoneOpen = true; phoneEl.style.display = "flex"; popIn(phoneCard);
 }
 phoneBtn.addEventListener("click", () => phoneOpen ? closePhone() : openPhone());
+// a quiet unread dot, so the feed is something you notice rather than something you remember to check
+let phoneBadgeShown = -1;
+function refreshPhoneBadge() {
+  const n = unread();
+  if (n === phoneBadgeShown) return;
+  phoneBadgeShown = n;
+  phoneBtn.textContent = n > 0 ? "📱" : "📱";
+  phoneBtn.style.boxShadow = n > 0 ? "0 0 0 2px rgba(255,77,77,.85), 0 0 12px rgba(255,77,77,.5)" : "";
+}
 phoneEl.addEventListener("click", e => { if (e.target === phoneEl) closePhone(); });
 
 // ---------- consolidated HUD menu: one ☰ button replaces the floating 🔫/📱/🗺 buttons ----------
@@ -5538,6 +5632,8 @@ function update(dt) {
   updateRace(dt);
   updateEvents(dt, simTime);
   updateHeists(dt, simTime);
+  // the city talks about what you did — fed a snapshot rather than wired into every system
+  updateFeed(dt, { wanted, searching: copSearching, x: player.x, z: player.z });
   updateVigilante(dt);
   updateParamedic(dt);
   updatePolice(dt);
@@ -5914,6 +6010,7 @@ globalThis.__palmCity = {
   sharks, swimmers, race, fishing, treasures, oceanDive: dive, fishTap: () => fishTap(),
   eventsDebug, eventActive: () => eventActive(), currentObjective: () => currentObjective(),
   heistsDebug, heistActive: () => heistActive(), startHeist: a => startHeist(a),
+  phoneDebug, openPhone: () => openPhone(), closePhone: () => closePhone(), phoneApp: v => { phoneApp = v; },
   finishStory: () => { state.mi = M.length; mState = "done"; },   // jump straight to freeplay (dev/testing)
   health: () => health,
   NEM, nemGoons, nemBoss: () => nemBoss, nemCar: () => nemCar, addGrudge: n => nemAddGrudge(n),
