@@ -135,4 +135,118 @@ export function clockLabel(simTime, cycleOn) {
   return h + ":" + String(m).padStart(2, "0") + (h24 < 12 ? " AM" : " PM");
 }
 export function resetFeed() { posts = []; unreadCount = 0; prev = null; ambientCD = 14; }
-export const _debug = { feed: () => posts, unread: () => unreadCount, push: pushCustom };
+
+// ============================ BANK ============================
+// The point of banking isn't a menu — it's that the death and bust fines only ever take CASH ON
+// HAND. Money in the bank cannot be fined away, so walking into a heist with your fortune deposited
+// is a real decision rather than a chore. Interest is the reward for leaving it there.
+export const SAVINGS_RATE = 0.006;      // per minute of play, compounding
+export const TERM_RATE = 0.08;          // paid at maturity
+export const TERM_SECS = 180;           // three minutes locked
+
+export function bankTick(dt, st) {
+  if (st.bank > 0) st.bank += st.bank * SAVINGS_RATE * (dt / 60);
+  if (st.term && st.term.amt > 0) {
+    st.term.left -= dt;
+    if (st.term.left <= 0) {
+      const payout = Math.round(st.term.amt * (1 + TERM_RATE));
+      st.bank += payout;
+      const gain = payout - st.term.amt;
+      st.term = null;
+      add(HANDLES.news, "Palm City Savings & Loan posts another quarter of 'unremarkable' growth.", 8, 120);
+      return { matured: true, payout, gain };
+    }
+  }
+  return null;
+}
+export function deposit(st, amt) {
+  amt = Math.floor(Math.min(amt, st.money));
+  if (amt <= 0) return 0;
+  st.money -= amt; st.bank += amt; return amt;
+}
+export function withdraw(st, amt) {
+  amt = Math.floor(Math.min(amt, st.bank));
+  if (amt <= 0) return 0;
+  st.bank -= amt; st.money += amt; return amt;
+}
+export function openTerm(st, amt) {
+  if (st.term) return 0;
+  amt = Math.floor(Math.min(amt, st.bank));
+  if (amt <= 0) return 0;
+  st.bank -= amt; st.term = { amt, left: TERM_SECS }; return amt;
+}
+export function breakTerm(st) {                 // early exit forfeits the interest, keeps the principal
+  if (!st.term) return 0;
+  const amt = st.term.amt; st.bank += amt; st.term = null; return amt;
+}
+
+// ============================ STOCKS ============================
+// Palm City tickers, each tied to somewhere you can actually walk into. That link is the whole
+// design: rob a business and its stock craters, so the score you just pulled is also a tip-off you
+// could have traded on. Mayhem quietly lifts the private-security ticker.
+export const TICKERS = [
+  { id: "PALM", name: "Palm Taxi Co.", base: 42, vol: 0.010 },
+  { id: "BUNS", name: "Big Bun Burgers", base: 18, vol: 0.015 },
+  { id: "NEON", name: "Neon Palms Club", base: 76, vol: 0.019 },
+  { id: "WASH", name: "Marina Car Wash", base: 9, vol: 0.013 },
+  { id: "BAY", name: "Bayside Marina", base: 130, vol: 0.016 },
+  { id: "VIGL", name: "Vigil Security Grp", base: 55, vol: 0.014 },
+];
+let tickCD = 0;
+export function ensurePrices(st) {
+  if (!st.sprice) st.sprice = {};
+  for (const t of TICKERS) if (!(st.sprice[t.id] > 0)) st.sprice[t.id] = t.base;
+  if (!st.shares) st.shares = {};
+}
+export function stocksTick(dt, st) {
+  ensurePrices(st);
+  tickCD -= dt;
+  if (tickCD > 0) return;
+  tickCD = 3;                                    // a print every few seconds, not every frame
+  for (const t of TICKERS) {
+    const p = st.sprice[t.id];
+    const drift = (t.base - p) / t.base * 0.02;  // gentle pull back toward fair value
+    const noise = (prng() - 0.5) * 2 * t.vol;
+    st.sprice[t.id] = Math.max(t.base * 0.2, Math.min(t.base * 4, p * (1 + drift + noise)));
+  }
+}
+export function shock(id, pct) {                 // a one-off move, from something you did
+  return { id, pct };
+}
+export function applyShock(st, id, pct) {
+  ensurePrices(st);
+  const t = TICKERS.find(x => x.id === id); if (!t) return;
+  st.sprice[id] = Math.max(t.base * 0.2, Math.min(t.base * 4, st.sprice[id] * (1 + pct)));
+}
+// heists name their target by its display name; map that back to a ticker
+export function shockByName(st, name, pct) {
+  const t = TICKERS.find(x => x.name === name); if (!t) return null;
+  applyShock(st, t.id, pct);
+  add(HANDLES.news, "$" + t.id + " slides after the incident at " + t.name + ". Investors 'reviewing exposure'.", 50, 900);
+  return t.id;
+}
+export function chaosShock(st) { applyShock(st, "VIGL", 0.06); }   // mayhem is good for the security business
+export function buyShares(st, id, n) {
+  ensurePrices(st);
+  const p = st.sprice[id]; n = Math.floor(n);
+  const cost = Math.ceil(p * n);
+  if (n <= 0 || cost > st.money) return 0;
+  st.money -= cost; st.shares[id] = (st.shares[id] || 0) + n; return cost;
+}
+export function sellShares(st, id, n) {
+  ensurePrices(st);
+  const have = st.shares[id] || 0; n = Math.min(Math.floor(n), have);
+  if (n <= 0) return 0;
+  const gain = Math.floor(st.sprice[id] * n);
+  st.shares[id] = have - n; st.money += gain; return gain;
+}
+export function portfolioValue(st) {
+  ensurePrices(st);
+  let v = 0; for (const t of TICKERS) v += (st.shares[t.id] || 0) * st.sprice[t.id];
+  return v;
+}
+
+export const _debug = {
+  feed: () => posts, unread: () => unreadCount, push: pushCustom,
+  tickers: () => TICKERS, forceTick: () => { tickCD = 0; },
+};
