@@ -50,7 +50,7 @@ function rawHeight(x, z) {
   let h = 2.6 + fbm(x * 0.011, z * 0.011, 4) * 9 + fbm(x * 0.05 + 10, z * 0.05 - 3, 2) * 1.3;
   // Mountains rise all around the valley.
   const rim = smoothstep(116, 172, r);
-  h += Math.pow(rim, 1.35) * (58 + fbm(x * 0.02, z * 0.02, 3) * 24);
+  h += Math.pow(rim, 1.35) * (36 + fbm(x * 0.02, z * 0.02, 3) * 18);
   // Stillwater lake basin.
   const lake = ZONES.lake;
   const dl = Math.hypot(x - lake.x, z - lake.z) + simplex2(x * 0.05, z * 0.05) * 4;
@@ -138,7 +138,7 @@ export function zoneAt(x, z) {
 const C = (hex) => new THREE.Color(hex);
 const PAL = {
   grassA: C('#4c7a2e'), grassB: C('#86a43f'), dry: C('#a79a52'), dirt: C('#8a6644'),
-  cobble: C('#877b6c'), stone: C('#6f6760'), rock: C('#655d58'), rockHi: C('#8e857c'),
+  cobble: C('#877b6c'), stone: C('#6f6760'), rock: C('#5a4a44'), rockB: C('#7d6655'), rockHi: C('#8e857c'),
   snow: C('#e9edf2'), sand: C('#c9b47c'), bed: C('#34503f'),
 };
 
@@ -173,9 +173,12 @@ function paint(x, z, h, slope, out) {
   grass *= 1 - arena;
 
   const rocky = smoothstep(0.45, 0.75, slope);
-  out.lerp(h > 30 ? PAL.rockHi : PAL.rock, rocky);
+  // Banded sandstone-and-slate cliffs instead of flat gray.
+  const strata = 0.5 + 0.5 * Math.sin(h * 0.55 + fbm(x * 0.03, z * 0.03, 2) * 4);
+  const cliff = PAL.rock.clone().lerp(PAL.rockB, strata * 0.8).lerp(PAL.rockHi, smoothstep(24, 36, h) * 0.6);
+  out.lerp(cliff, rocky);
   grass *= 1 - rocky;
-  out.lerp(PAL.snow, smoothstep(44, 56, h + n1 * 8) * (1 - rocky * 0.6));
+  out.lerp(PAL.snow, smoothstep(30, 40, h + n1 * 8) * (1 - rocky * 0.6));
   grass *= 1 - smoothstep(20, 30, h);
 
   const shore = 1 - smoothstep(0.2, 1.3, h);

@@ -85,6 +85,7 @@ export class World {
     this.animated = [];       // things with update(dt, t)
     this.windUniforms = { uTime: { value: 0 } };
     this.markers = { npcs: [], spawns: [] };
+    this.occluders = [];      // big solid props the camera should not clip through
     this.rand = mulberry32(7);
   }
 
@@ -402,10 +403,14 @@ export class World {
   }
 
   // ----- Instanced scatter ------------------------------------------------------
-  instanced(propName, transforms, { sway = 0, shadow = true } = {}) {
+  instanced(propName, transforms, { sway = 0, shadow = true, tint = null } = {}) {
     if (!transforms.length) return;
     for (const part of this.assets.propMeshes(propName)) {
       let material = part.material;
+      if (tint) {
+        material = material.clone();
+        material.color.multiply(new THREE.Color(tint));
+      }
       if (sway) {
         material = material.clone();
         const wind = this.windUniforms;
@@ -434,11 +439,12 @@ export class World {
     }
   }
 
-  place(obj, x, z, { rot = 0, scale = 1, y = null, sink = 0 } = {}) {
+  place(obj, x, z, { rot = 0, scale = 1, y = null, sink = 0, occlude = false } = {}) {
     obj.position.set(x, (y ?? heightAt(x, z)) - sink, z);
     obj.rotation.y = rot;
     obj.scale.setScalar(scale);
     this.scene.add(obj);
+    if (occlude) this.occluders.push(obj);
     return obj;
   }
 
@@ -519,15 +525,16 @@ export class World {
     const m = new THREE.Matrix4();
     for (let i = 0; i < 46; i++) {
       const a = (i / 46) * Math.PI * 2 + rand() * 0.08;
-      const r = 185 + rand() * 50;
+      const r = 190 + rand() * 40;
       const x = Math.cos(a) * r;
       const z = Math.sin(a) * r;
-      const scale = 34 + rand() * 22;
+      const scale = 24 + rand() * 14;
       const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rand() * 6.28);
       (lists[kinds[i % kinds.length]] ||= []).push(
-        m.clone().compose(new THREE.Vector3(x, heightAt(x * 0.8, z * 0.8) - 6, z), q, new THREE.Vector3(scale, scale * (0.8 + rand() * 0.5), scale)));
+        m.clone().compose(new THREE.Vector3(x, heightAt(x * 0.8, z * 0.8) - 8, z), q, new THREE.Vector3(scale, scale * (0.65 + rand() * 0.4), scale)));
     }
-    for (const [name, list] of Object.entries(lists)) this.instanced(name, list, { shadow: false });
+    // Distant peaks: cooler and darker so they sit back in the haze.
+    for (const [name, list] of Object.entries(lists)) this.instanced(name, list, { shadow: false, tint: '#8f93b8' });
   }
 
   buildClouds() {
@@ -634,7 +641,7 @@ export class World {
       const x = v.x + Math.cos(a) * r;
       const z = v.z + Math.sin(a) * r;
       const obj = this.assets.prop(name);
-      this.place(obj, x, z, { rot: face(x, z) + turn, scale, sink: 0.25 });
+      this.place(obj, x, z, { rot: face(x, z) + turn, scale, sink: 0.25, occlude: true });
       const box = new THREE.Box3().setFromObject(obj);
       const size = box.getSize(new THREE.Vector3());
       this.colliders.circle(x, z, colliderR ?? Math.min(size.x, size.z) * 0.46);
@@ -650,7 +657,7 @@ export class World {
     building('building_home_B_red', 172, 26);
     building('building_tower_A_red', -72, 27, { scale: HEX * 1.1 });
     const mill = this.assets.prop('building_windmill_red');
-    this.place(mill, 36, 34, { rot: -2.2, scale: HEX * 1.15, sink: 0.3 });
+    this.place(mill, 36, 34, { rot: -2.2, scale: HEX * 1.15, sink: 0.3, occlude: true });
     this.colliders.circle(36, 34, 3.4);
     this.windmill = mill;
 
@@ -721,7 +728,7 @@ export class World {
         if (Math.abs(x - cx) < 4 && s.axis === 'x') {        // doorways on the road
           if (rand() > 0.4) {
             const arch = this.assets.prop('d_wall_arched');
-            this.place(arch, x, z, { y, rot: s.rot, scale: 1 });
+            this.place(arch, x, z, { y, rot: s.rot, scale: 1, occlude: true });
           }
           continue;
         }
@@ -733,7 +740,7 @@ export class World {
         }
         const piece = wallPieces[Math.floor(rand() * wallPieces.length)];
         const w = this.assets.prop(piece);
-        this.place(w, x, z, { y: heightAt(x, z) - 0.2, rot: s.rot, scale: 1 });
+        this.place(w, x, z, { y: heightAt(x, z) - 0.2, rot: s.rot, scale: 1, occlude: true });
         if (s.axis === 'x') this.colliders.wall(x - 2, z, x + 2, z, 0.55);
         else this.colliders.wall(x, z - 2, x, z + 2, 0.55);
         if (rand() < 0.25) {
@@ -750,7 +757,7 @@ export class World {
         const z = cz - 10 + k * 7;
         const broken = rand() < 0.4;
         const pillar = this.assets.prop(broken ? 'd_column' : 'd_pillar');
-        this.place(pillar, x, z, { y: heightAt(x, z) - 0.1, scale: broken ? 1.6 : 1 });
+        this.place(pillar, x, z, { y: heightAt(x, z) - 0.1, scale: broken ? 1.6 : 1, occlude: true });
         this.colliders.circle(x, z, 0.85);
       }
     }
@@ -810,7 +817,7 @@ export class World {
       const z = s.z + Math.sin(a) * 16.5;
       if (z > s.z + 12) continue;                      // leave the entrance open
       const p = this.assets.prop(k % 3 === 0 ? 'd_column' : 'd_pillar_decorated');
-      this.place(p, x, z, { y: heightAt(x, z) - 0.1, rot: -a, scale: k % 3 === 0 ? 1.6 : 1.15 });
+      this.place(p, x, z, { y: heightAt(x, z) - 0.1, rot: -a, scale: k % 3 === 0 ? 1.6 : 1.15, occlude: true });
       this.colliders.circle(x, z, 1.1);
     }
     this.torch(s.x - 7, s.z + 14);
@@ -818,7 +825,7 @@ export class World {
     this.torch(s.x, s.z - 14, { light: false });
     for (const side of [-1, 1]) {
       const b = this.assets.prop('d_banner_patternA_red');
-      this.place(b, s.x + side * 4.5, s.z + 19, { rot: 0, scale: 0.9 });
+      this.place(b, s.x + side * 8.5, s.z + 17.5, { rot: side * -0.5, scale: 0.7 });
     }
     this.arenaCenter = new THREE.Vector3(s.x, y, s.z);
     this.arenaRadius = 17.5;

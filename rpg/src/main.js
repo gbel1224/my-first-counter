@@ -826,7 +826,17 @@ class Game {
     c.target.z = damp(c.target.z, tgt.z, 14, dt);
     c.curDist = damp(c.curDist ?? dist, dist, 4, dt);
     const off = new THREE.Vector3(Math.sin(c.yaw) * Math.cos(c.pitch), Math.sin(c.pitch), Math.cos(c.yaw) * Math.cos(c.pitch)).multiplyScalar(c.curDist);
-    const pos = c.target.clone().add(off);
+    let pos = c.target.clone().add(off);
+    // Pull in when a wall or building sits between the camera and the knight.
+    const len = off.length();
+    const dir = off.clone().divideScalar(len);
+    this.ray ??= new THREE.Raycaster();
+    this.ray.set(c.target, dir);
+    this.ray.far = len;
+    const hit = this.ray.intersectObjects(this.world.occluders, true)[0];
+    const want = hit ? Math.max(1.4, hit.distance - 0.5) : len;
+    c.clip = want < (c.clip ?? len) ? want : damp(c.clip ?? len, want, 3, dt);
+    pos = c.target.clone().addScaledVector(dir, Math.min(len, c.clip));
     const ground = heightAt(pos.x, pos.z) + 0.7;
     if (pos.y < ground) pos.y = ground;
     c.shake = Math.max(0, c.shake - dt * 2.5);

@@ -24,7 +24,7 @@ function makeBar() {
 
 const TYPES = {
   minion: {
-    model: 'minion', name: 'Risen Minion', hp: 60, speed: 4.7, range: 2.3, damage: 8, poise: 0, xp: 26, gold: 6,
+    model: 'minion', name: 'Risen Minion', hp: 60, speed: 4.7, range: 2.3, damage: 7, poise: 0, xp: 26, gold: 6,
     weapon: ['Skeleton_Blade', 'handslot.r'], attacks: ['1H_Melee_Attack_Chop', '1H_Melee_Attack_Slice_Diagonal'], hitAt: 0.45, cooldown: [1.5, 2.6],
     move: 'Running_A',
   },
@@ -214,6 +214,7 @@ export class Enemy {
 
   rise() {
     this.setState('rise');
+    this.cool = 1.2 + Math.random() * 1.4;      // a beat to get your bearings
     this.actor.play('Skeletons_Awaken_Floor', { loop: false, fade: 0.1, speed: 1.6 });
     this.audio.rise();
     this.fx.emit(this.position.clone().add(new THREE.Vector3(0, 0.3, 0)), { count: 30, speed: 2.5, up: 2, color: '#9c8f76', size: 0.5, life: 1.1, gravity: -2, drag: 2, jitter: 1.2 });
