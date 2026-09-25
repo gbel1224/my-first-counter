@@ -125,7 +125,7 @@ class Game {
     const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: QUALITY[this.quality].samples });
     this.composer = new EffectComposer(this.renderer, rt);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.42, 0.55, 0.92);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.34, 0.5, 0.95);
     this.composer.addPass(this.bloom);
     this.grade = new ShaderPass(GRADE);
     this.composer.addPass(this.grade);
@@ -802,7 +802,7 @@ class Game {
   titleCamera(dt) {
     const t = performance.now() / 1000;
     const v = ZONES.village;
-    const a = -0.35 + t * 0.04;
+    const a = -0.5 + Math.sin(t * 0.06) * 0.4;      // sway, but never stare into the low sun
     const target = new THREE.Vector3(v.x, v.h + 5, v.z - 12);
     this.camera.position.set(v.x + Math.sin(a) * 46, v.h + 19 + Math.sin(t * 0.2) * 2, v.z + 6 + Math.cos(a) * 46);
     this.camera.lookAt(target);

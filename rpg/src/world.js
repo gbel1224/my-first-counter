@@ -112,8 +112,8 @@ export class World {
     const u = sky.material.uniforms;
     u.turbidity.value = 7;
     u.rayleigh.value = 2.2;
-    u.mieCoefficient.value = 0.006;
-    u.mieDirectionalG.value = 0.86;
+    u.mieCoefficient.value = 0.0045;
+    u.mieDirectionalG.value = 0.82;
     const elevation = THREE.MathUtils.degToRad(11);
     const azimuth = THREE.MathUtils.degToRad(215);
     this.sunDir = new THREE.Vector3().setFromSphericalCoords(1, Math.PI / 2 - elevation, azimuth);

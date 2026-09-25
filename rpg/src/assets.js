@@ -33,10 +33,16 @@ export class Assets {
 
   async load(onProgress) {
     const loader = new GLTFLoader();
+    // Decode embedded textures through <img> (blob: images) rather than fetch().
+    loader.register((parser) => {
+      parser.textureLoader = new THREE.TextureLoader(parser.options.manager);
+      return { name: 'cinderhold_image_textures' };
+    });
     const keys = Object.keys(FILES);
     let done = 0;
     await Promise.all(keys.map(async (key) => {
-      this.gltf[key] = await loader.loadAsync(FILES[key]);
+      const buffer = await fetchModel(FILES[key]);
+      this.gltf[key] = await loader.parseAsync(buffer, 'assets/');
       done++;
       onProgress?.(done / keys.length);
     }));
@@ -91,6 +97,24 @@ export class Assets {
     });
     return list;
   }
+}
+
+// Models ship as .glb; hosts that only serve web types get a base64 copy at <name>.glb.txt.
+async function fetchModel(url) {
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      const buf = await res.arrayBuffer();
+      const magic = new Uint8Array(buf, 0, 4);
+      if (String.fromCharCode(...magic) === 'glTF') return buf;
+    }
+  } catch { /* fall through to the text copy */ }
+  const res = await fetch(url + '.txt');
+  if (!res.ok) throw new Error(`Could not load ${url}`);
+  const bin = atob((await res.text()).trim());
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
 }
 
 function indexClips(list) {
