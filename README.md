@@ -42,7 +42,5 @@ Change `apex_height`, `LAND`, or the squash amounts and re-run the script.
 
 ## Bonus: Cinderhold (browser action RPG)
 
-`rpg/` holds **Cinderhold**, a 3D action RPG vertical slice built with three.js. It has
-sword combat with combos, dodges and parries, skeleton enemies, a two-phase boss, quests,
-NPCs, leveling, and a full valley to explore. See [`rpg/README.md`](rpg/README.md) for
-controls, how to run it locally, and credits.
+**Cinderhold**, a 3D action RPG built with three.js, started here and now lives in its own
+repository: [gbel1224/cinderhold](https://github.com/gbel1224/cinderhold).
