@@ -1,0 +1,329 @@
+<title>Cinderhold</title>
+<meta name="description" content="Cinderhold: a 3D action RPG vertical slice that runs in the browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans+SC:wght@500;700;800&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Grenze+Gotisch:wght@500;700;900&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --ink: #100d18;
+    --ink-2: #1a1624;
+    --panel: rgba(16, 13, 24, 0.78);
+    --panel-solid: #16121f;
+    --parchment: #efe3c8;
+    --parchment-dim: #b9ac92;
+    --hairline: rgba(239, 227, 200, 0.22);
+    --ember: #ff7a2f;
+    --ember-hot: #ffc35a;
+    --blood: #d8413a;
+    --stamina: #e7c667;
+    --moss: #9cc26a;
+    --steel: #9fb4c7;
+    --display: "Grenze Gotisch", "UnifrakturCook", Georgia, serif;
+    --body: "Alegreya Sans", "Trebuchet MS", system-ui, sans-serif;
+    --caps: "Alegreya Sans SC", "Alegreya Sans", system-ui, sans-serif;
+    --chamfer: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px),
+                       calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px);
+  }
+  html, body { height: 100%; }
+  body {
+    margin: 0; overflow: hidden; background: var(--ink); color: var(--parchment);
+    font-family: var(--body); font-size: 15px; -webkit-font-smoothing: antialiased;
+    user-select: none; -webkit-user-select: none; touch-action: none;
+  }
+  #game { position: fixed; inset: 0; }
+  #game canvas { display: block; width: 100%; height: 100%; }
+  .layer { position: fixed; inset: 0; pointer-events: none; }
+  .layer > * { pointer-events: auto; }
+  button { font: inherit; color: inherit; }
+  button:focus-visible { outline: 2px solid var(--ember-hot); outline-offset: 3px; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- Loading + title ---------- */
+  #title {
+    display: grid; align-content: end; justify-items: start; gap: 22px;
+    padding: max(28px, env(safe-area-inset-top, 0px)) clamp(18px, 6vw, 88px) clamp(28px, 9vh, 96px);
+    background:
+      radial-gradient(120% 90% at 0% 100%, rgba(10, 8, 16, 0.92) 0%, rgba(10, 8, 16, 0.55) 45%, transparent 75%),
+      linear-gradient(to top, rgba(10, 8, 16, 0.7), transparent 45%);
+  }
+  .eyebrow {
+    font-family: var(--caps); font-weight: 700; letter-spacing: 0.22em; text-transform: lowercase;
+    font-size: 14px; color: var(--ember-hot); margin: 0;
+  }
+  .logo {
+    font-family: var(--display); font-weight: 900; margin: 0; line-height: 0.82;
+    font-size: clamp(64px, 13vw, 168px); letter-spacing: 0.01em; color: var(--parchment);
+    text-shadow: 0 0 40px rgba(255, 122, 47, 0.35), 0 4px 0 #2a1a10;
+  }
+  .logo span { color: var(--ember); }
+  .tagline { max-width: 34ch; margin: 0; font-size: clamp(16px, 1.6vw, 19px); line-height: 1.5; color: var(--parchment-dim); }
+  .menu { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .btn {
+    position: relative; cursor: pointer; border: 0; padding: 14px 26px 13px;
+    font-family: var(--caps); font-weight: 800; font-size: 17px; letter-spacing: 0.12em; text-transform: lowercase;
+    background: linear-gradient(180deg, #ff9a4a, #e05a1c); color: #1b0d05; clip-path: var(--chamfer);
+    transition: filter 0.15s ease, transform 0.15s ease;
+  }
+  .btn:hover { filter: brightness(1.12); transform: translateY(-1px); }
+  .btn:disabled { filter: grayscale(0.7) brightness(0.7); cursor: progress; }
+  .btn.ghost { background: rgba(239, 227, 200, 0.08); color: var(--parchment); box-shadow: inset 0 0 0 1px var(--hairline); }
+  .loadbar { width: min(340px, 80vw); height: 3px; background: rgba(239, 227, 200, 0.14); }
+  .loadbar i { display: block; height: 100%; width: 0; background: var(--ember); transition: width 0.2s ease; }
+  .fineprint { margin: 0; font-size: 13px; color: rgba(239, 227, 200, 0.55); max-width: 60ch; line-height: 1.5; }
+  .fineprint a { color: var(--parchment-dim); }
+
+  /* ---------- Generic panel ---------- */
+  .panel {
+    background: var(--panel); clip-path: var(--chamfer); box-shadow: inset 0 0 0 1px var(--hairline);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .label { font-family: var(--caps); font-weight: 700; letter-spacing: 0.14em; text-transform: lowercase; font-size: 12px; color: var(--parchment-dim); }
+
+  /* ---------- HUD ---------- */
+  #hud { opacity: 0; transition: opacity 0.6s ease; }
+  #hud.on { opacity: 1; }
+  #vitals {
+    position: absolute; left: 18px; bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; padding: 12px 16px 12px 12px;
+    width: min(340px, calc(100vw - 36px));
+  }
+  .crest {
+    grid-row: span 3; width: 54px; height: 54px; display: grid; place-items: center;
+    font-family: var(--display); font-size: 30px; font-weight: 900; color: #1b0d05;
+    background: radial-gradient(circle at 35% 30%, var(--ember-hot), var(--ember) 60%, #9c3710);
+    clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  }
+  .bar { position: relative; height: 12px; background: rgba(0, 0, 0, 0.45); box-shadow: inset 0 0 0 1px rgba(239, 227, 200, 0.12); }
+  .bar i { position: absolute; inset: 0; transform-origin: left; transition: transform 0.12s linear; }
+  .bar b { position: absolute; inset: 0; transform-origin: left; background: rgba(255, 255, 255, 0.35); transition: transform 0.6s ease 0.25s; }
+  .bar.hp i { background: linear-gradient(90deg, #8f1f1b, var(--blood)); }
+  .bar.st { height: 7px; } .bar.st i { background: var(--stamina); }
+  .bar.em { height: 7px; } .bar.em i { background: linear-gradient(90deg, #b8410f, var(--ember), var(--ember-hot)); }
+  .bar.em.full { box-shadow: 0 0 12px var(--ember), inset 0 0 0 1px var(--ember-hot); }
+  .bar span { position: absolute; right: 6px; top: -1px; font-size: 11px; line-height: 14px; color: var(--parchment); text-shadow: 0 1px 2px #000; }
+  #xpline { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--parchment-dim); }
+  #xpbar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(0, 0, 0, 0.5); }
+  #xpbar i { display: block; height: 100%; background: var(--moss); width: 0; transition: width 0.4s ease; }
+
+  #abilities {
+    position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    display: flex; gap: 8px;
+  }
+  .slot { position: relative; width: 58px; height: 58px; display: grid; place-items: center; text-align: center; overflow: hidden; }
+  .slot .icon { font-family: var(--display); font-size: 26px; line-height: 1; color: var(--parchment); }
+  .slot .key { position: absolute; left: 6px; top: 4px; font-family: var(--caps); font-size: 11px; font-weight: 800; color: var(--ember-hot); }
+  .slot .count { position: absolute; right: 6px; bottom: 3px; font-size: 13px; font-weight: 700; }
+  .slot .cool { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6); height: 0; }
+  .slot.ready { box-shadow: inset 0 0 0 1px var(--ember-hot), 0 0 18px rgba(255, 122, 47, 0.5); }
+
+  #quest { position: absolute; left: 18px; top: calc(18px + env(safe-area-inset-top, 0px)); padding: 12px 16px; max-width: min(330px, calc(100vw - 190px)); }
+  #quest h3 { margin: 2px 0 4px; font-family: var(--display); font-weight: 700; font-size: 22px; line-height: 1.1; color: var(--parchment); text-wrap: balance; }
+  #quest p { margin: 0; font-size: 14px; line-height: 1.4; color: var(--parchment-dim); }
+  #quest .prog { color: var(--ember-hot); font-weight: 700; }
+  #quest.flash { animation: flash 1.2s ease; }
+  @keyframes flash { 0%, 100% { filter: none; } 30% { filter: brightness(1.8) drop-shadow(0 0 12px var(--ember)); } }
+
+  #minimap { position: absolute; right: 18px; top: calc(18px + env(safe-area-inset-top, 0px)); width: 164px; height: 164px; padding: 0; }
+  #minimap canvas { width: 100%; height: 100%; display: block; }
+  #gold { position: absolute; right: 18px; top: calc(190px + env(safe-area-inset-top, 0px)); padding: 6px 12px; font-weight: 700; color: var(--ember-hot); }
+
+  #bossbar { position: absolute; left: 50%; top: calc(26px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); width: min(560px, 62vw); text-align: center; }
+  #bossbar h4 { margin: 0 0 6px; font-family: var(--display); font-weight: 900; font-size: 26px; letter-spacing: 0.04em; text-shadow: 0 2px 8px #000; }
+  #bossbar .bar { height: 10px; }
+  #bossbar .bar i { background: linear-gradient(90deg, #5a0e0b, #c2261f, #ff5a36); }
+
+  #prompt { position: absolute; left: 50%; bottom: calc(100px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 9px 16px; font-size: 16px; white-space: nowrap; }
+  #prompt kbd { font-family: var(--caps); font-weight: 800; color: var(--ember-hot); margin-right: 6px; }
+
+  #toast { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); text-align: center; pointer-events: none; }
+  #toast .big { font-family: var(--display); font-weight: 900; font-size: clamp(34px, 6vw, 64px); line-height: 1; text-shadow: 0 0 30px rgba(255, 122, 47, 0.5), 0 3px 0 #1b0d05; }
+  #toast .small { font-family: var(--caps); font-weight: 700; letter-spacing: 0.3em; font-size: 14px; color: var(--ember-hot); margin-top: 8px; }
+  #toast.show { animation: toast 3.2s ease forwards; }
+  @keyframes toast { 0% { opacity: 0; transform: translate(-50%, 10px); } 12%, 75% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
+
+  #floaters { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  .dmg { position: absolute; left: 0; top: 0; font-weight: 800; font-size: 20px; color: #fff; text-shadow: 0 2px 0 #000, 0 0 8px rgba(0,0,0,0.6); will-change: transform, opacity; white-space: nowrap; }
+  .dmg.crit { color: var(--ember-hot); font-size: 28px; }
+  .dmg.hurt { color: #ff6b5e; }
+  .dmg.heal { color: var(--moss); }
+  .dmg.info { color: var(--steel); font-family: var(--caps); letter-spacing: 0.12em; font-size: 16px; }
+  .dmg.gold { color: var(--ember-hot); font-size: 16px; }
+  .dmg.xp { color: var(--moss); font-size: 15px; }
+
+  #hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(170, 20, 10, 0.55)); transition: opacity 0.4s ease; }
+
+  /* ---------- Dialogue + shop ---------- */
+  #dialogue { position: absolute; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(720px, calc(100vw - 32px)); padding: 18px 22px 16px; cursor: pointer; }
+  #dialogue .who { font-family: var(--display); font-weight: 700; font-size: 24px; color: var(--ember-hot); margin: 0 0 6px; }
+  #dialogue .line { margin: 0; font-size: 18px; line-height: 1.5; min-height: 3em; max-width: 65ch; }
+  #dialogue .next { margin-top: 10px; text-align: right; font-size: 12px; }
+  #dialogue .choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  #dialogue .choices .btn { font-size: 14px; padding: 10px 16px; }
+
+  /* ---------- Menus ---------- */
+  .screen { position: fixed; inset: 0; display: grid; place-items: center; padding-inline: 16px; background: rgba(8, 6, 12, 0.72); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+  .card { width: min(560px, 100%); padding: 28px 28px 24px; display: grid; gap: 16px; }
+  .card h2 { margin: 0; font-family: var(--display); font-weight: 900; font-size: clamp(38px, 7vw, 56px); line-height: 1; text-wrap: balance; }
+  .card p { margin: 0; line-height: 1.55; color: var(--parchment-dim); }
+  .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 18px; font-size: 15px; }
+  .keys dt { font-family: var(--caps); font-weight: 800; color: var(--ember-hot); letter-spacing: 0.06em; }
+  .keys dd { margin: 0; color: var(--parchment); }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg button { cursor: pointer; border: 0; padding: 8px 14px; background: rgba(239, 227, 200, 0.08); box-shadow: inset 0 0 0 1px var(--hairline); clip-path: var(--chamfer); font-family: var(--caps); font-weight: 700; letter-spacing: 0.08em; }
+  .seg button[aria-pressed="true"] { background: var(--ember); color: #1b0d05; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+  .stats div { padding: 10px 12px; background: rgba(239, 227, 200, 0.06); box-shadow: inset 0 0 0 1px var(--hairline); }
+  .stats b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; color: var(--parchment); }
+
+  /* ---------- Touch controls ---------- */
+  #touch { display: none; }
+  body.touch #touch { display: block; }
+  #stick { position: absolute; left: 22px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); width: 124px; height: 124px; border-radius: 50%; background: rgba(239, 227, 200, 0.08); box-shadow: inset 0 0 0 1px var(--hairline); }
+  #stick i { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: rgba(239, 227, 200, 0.28); }
+  #tbtns { position: absolute; right: 16px; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(3, 62px); gap: 10px; }
+  #tbtns button { width: 62px; height: 62px; border: 0; border-radius: 50%; background: rgba(16, 13, 24, 0.7); box-shadow: inset 0 0 0 1px var(--hairline); font-family: var(--caps); font-weight: 800; font-size: 13px; letter-spacing: 0.04em; }
+  #tbtns button.main { grid-column: 3; grid-row: 1 / span 2; height: 134px; border-radius: 34px; background: rgba(224, 90, 28, 0.75); color: #1b0d05; }
+  body.touch #abilities { display: none; }
+  body.touch #vitals { width: min(300px, calc(100vw - 36px)); }
+
+  @media (max-width: 640px) {
+    #minimap { width: 112px; height: 112px; }
+    #gold { top: calc(138px + env(safe-area-inset-top, 0px)); }
+    #quest { max-width: calc(100vw - 150px); padding: 10px 12px; }
+    #quest h3 { font-size: 18px; }
+    #quest p { font-size: 13px; }
+    #bossbar { top: calc(150px + env(safe-area-inset-top, 0px)); width: calc(100vw - 32px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #toast.show { animation-duration: 0.01s; }
+    .btn { transition: none; }
+  }
+</style>
+
+<div id="game"></div>
+
+<div class="layer" id="title">
+  <p class="eyebrow">a cinderhold chronicle</p>
+  <h1 class="logo">Cinder<span>hold</span></h1>
+  <p class="tagline">The Bone King has stolen the Ember Shard and the dead are waking in the Hollow Ruins. Take up the sword and bring the light home.</p>
+  <div class="loadbar" id="loadbar" aria-label="Loading"><i></i></div>
+  <div class="menu">
+    <button class="btn" id="play" disabled>Loading…</button>
+    <button class="btn ghost" id="howto">Controls</button>
+  </div>
+  <p class="fineprint">A playable vertical slice built for the web with three.js. Characters and props by Kay Lousberg (<a href="https://kaylousberg.com" target="_blank" rel="noopener">KayKit</a>, CC0). Best with a keyboard and mouse; touch controls appear on phones.</p>
+</div>
+
+<div class="layer" id="hud">
+  <div id="quest" class="panel" hidden>
+    <div class="label" id="questLabel">quest</div>
+    <h3 id="questTitle"></h3>
+    <p id="questText"></p>
+  </div>
+  <div id="minimap" class="panel"><canvas id="mapCanvas" width="328" height="328"></canvas></div>
+  <div id="gold" class="panel num">0 gold</div>
+  <div id="bossbar" hidden>
+    <h4 id="bossName">The Bone King</h4>
+    <div class="bar"><b></b><i></i></div>
+  </div>
+  <div id="vitals" class="panel">
+    <div class="crest" id="level">1</div>
+    <div class="bar hp" id="hpBar"><b></b><i></i><span class="num" id="hpText">100 / 100</span></div>
+    <div class="bar st" id="stBar"><i></i></div>
+    <div class="bar em" id="emBar"><i></i></div>
+    <div id="xpline"><span id="lvlName">Level 1 Knight</span><span class="num" id="xpText">0 / 100 xp</span></div>
+    <div id="xpbar"><i></i></div>
+  </div>
+  <div id="abilities">
+    <div class="slot panel"><span class="key">lmb</span><span class="icon">⚔</span></div>
+    <div class="slot panel"><span class="key">rmb</span><span class="icon">⛨</span></div>
+    <div class="slot panel"><span class="key">spc</span><span class="icon">↷</span></div>
+    <div class="slot panel" id="emberSlot"><span class="key">e</span><span class="icon">✹</span><i class="cool"></i></div>
+    <div class="slot panel"><span class="key">q</span><span class="icon">⚱</span><span class="count num" id="potionCount">3</span></div>
+  </div>
+  <div id="prompt" class="panel" hidden></div>
+  <div id="toast"><div class="big"></div><div class="small"></div></div>
+  <div id="dialogue" class="panel" hidden>
+    <p class="who"></p>
+    <p class="line"></p>
+    <div class="choices"></div>
+    <div class="next label">click or press f</div>
+  </div>
+  <div id="touch">
+    <div id="stick"><i></i></div>
+    <div id="tbtns">
+      <button id="tDodge" aria-label="Dodge">roll</button>
+      <button id="tBlock" aria-label="Block">block</button>
+      <button id="tAttack" class="main" aria-label="Attack">strike</button>
+      <button id="tPotion" aria-label="Drink potion">potion</button>
+      <button id="tEmber" aria-label="Ember burst">ember</button>
+    </div>
+  </div>
+</div>
+
+<div id="floaters"></div>
+<div id="hurt"></div>
+
+<div class="screen" id="pause" hidden>
+  <div class="card panel">
+    <h2>Paused</h2>
+    <div>
+      <div class="label">graphics</div>
+      <div class="seg" id="quality">
+        <button type="button" data-q="low" id="qLow">Low</button>
+        <button type="button" data-q="medium" id="qMed">Medium</button>
+        <button type="button" data-q="high" id="qHigh">High</button>
+      </div>
+    </div>
+    <div>
+      <div class="label">sound</div>
+      <div class="seg">
+        <button type="button" id="soundToggle" aria-pressed="true">On</button>
+      </div>
+    </div>
+    <dl class="keys" id="keysPause"></dl>
+    <div class="menu"><button class="btn" id="resume">Resume</button></div>
+  </div>
+</div>
+
+<div class="screen" id="controls" hidden>
+  <div class="card panel">
+    <h2>How to fight</h2>
+    <dl class="keys" id="keysHelp"></dl>
+    <p>Chain three swings for a heavy finisher. Block right as a blow lands to parry and stagger. Hits charge your ember; unleash it with E.</p>
+    <div class="menu"><button class="btn" id="closeHelp">Got it</button></div>
+  </div>
+</div>
+
+<div class="screen" id="dead" hidden>
+  <div class="card panel">
+    <p class="eyebrow">the ember gutters</p>
+    <h2>You have fallen</h2>
+    <p id="deadText">The villagers drag you back to the well. Some of your gold was lost along the way.</p>
+    <div class="menu"><button class="btn" id="respawn">Rise again</button></div>
+  </div>
+</div>
+
+<div class="screen" id="victory" hidden>
+  <div class="card panel">
+    <p class="eyebrow">the ember is home</p>
+    <h2>Cinderhold endures</h2>
+    <p>The shard burns on the altar again and the Hollow Ruins are quiet. You finished the vertical slice.</p>
+    <div class="stats" id="stats"></div>
+    <div class="menu">
+      <button class="btn" id="keepPlaying">Keep exploring</button>
+      <button class="btn ghost" id="restart">Play again</button>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="src/main.js"></script>
