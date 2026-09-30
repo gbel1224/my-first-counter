@@ -227,11 +227,32 @@ export const TICKERS = [
   { id: "VIGL", name: "Vigil Security Grp", base: 55, vol: 0.014 },
 ];
 let tickCD = 0;
+// Recent prints per ticker for the charts. Session-only: on load it starts from the saved price.
+const HIST_N = 60;                               // 60 prints x 3s = the last three minutes
+const hist = {};
+function record(st) {
+  for (const t of TICKERS) {
+    const h = hist[t.id] || (hist[t.id] = []);
+    h.push(st.sprice[t.id]); if (h.length > HIST_N) h.shift();
+  }
+}
+export function priceHistory(id) { return hist[id] || []; }
 export function ensurePrices(st) {
   if (!st.sprice) st.sprice = {};
-  for (const t of TICKERS) if (!(st.sprice[t.id] > 0)) st.sprice[t.id] = t.base;
+  if (!st.sfair) st.sfair = {};
+  for (const t of TICKERS) {
+    if (!(st.sprice[t.id] > 0)) st.sprice[t.id] = t.base;
+    if (!(st.sfair[t.id] > 0)) st.sfair[t.id] = st.sprice[t.id];
+  }
   if (!st.shares) st.shares = {};
+  if (!st.scost) st.scost = {};
+  if (!hist[TICKERS[0].id]) record(st);
 }
+// Prices wander around a FAIR value, and fair value only creeps back to the long-run base very slowly
+// (~35 minutes of play to halve a gap). News moves fair value with the price. That's what stops a
+// heist from being a guaranteed trade: the crash mostly sticks, so buying your own dip earns about
+// what the bank would have paid you risk-free — and the bank never goes down.
+const FAIR_RECOVER = 0.001;                      // per 3s print
 export function stocksTick(dt, st) {
   ensurePrices(st);
   tickCD -= dt;
@@ -239,15 +260,20 @@ export function stocksTick(dt, st) {
   tickCD = 3;                                    // a print every few seconds, not every frame
   for (const t of TICKERS) {
     const p = st.sprice[t.id];
-    const drift = (t.base - p) / t.base * 0.02;  // gentle pull back toward fair value
+    const f = st.sfair[t.id] += (t.base - st.sfair[t.id]) * FAIR_RECOVER;
+    const drift = (f - p) / f * 0.02;            // gentle pull back toward fair value
     const noise = (prng() - 0.5) * 2 * t.vol;
     st.sprice[t.id] = Math.max(t.base * 0.2, Math.min(t.base * 4, p * (1 + drift + noise)));
   }
+  record(st);
 }
+const clampP = (t, v) => Math.max(t.base * 0.2, Math.min(t.base * 4, v));
 export function applyShock(st, id, pct) {
   ensurePrices(st);
   const t = TICKERS.find(x => x.id === id); if (!t) return;
-  st.sprice[id] = Math.max(t.base * 0.2, Math.min(t.base * 4, st.sprice[id] * (1 + pct)));
+  st.sprice[id] = clampP(t, st.sprice[id] * (1 + pct));
+  st.sfair[id] = clampP(t, st.sfair[id] * (1 + pct));   // the news re-rates the company, not just today's print
+  const h = hist[id]; if (h && h.length) h[h.length - 1] = st.sprice[id];   // the chart shows the cliff now, not in 3s
 }
 // heists name their target by its display name; map that back to a ticker
 export function shockByName(st, name, pct) {
@@ -262,14 +288,24 @@ export function buyShares(st, id, n) {
   const p = st.sprice[id]; n = Math.floor(n);
   const cost = Math.ceil(p * n);
   if (n <= 0 || cost > st.money) return 0;
-  st.money -= cost; st.shares[id] = (st.shares[id] || 0) + n; return cost;
+  st.money -= cost; st.shares[id] = (st.shares[id] || 0) + n;
+  st.scost[id] = (st.scost[id] || 0) + cost;     // cost basis, for the P/L line
+  return cost;
 }
 export function sellShares(st, id, n) {
   ensurePrices(st);
   const have = st.shares[id] || 0; n = Math.min(Math.floor(n), have);
   if (n <= 0) return 0;
   const gain = Math.floor(st.sprice[id] * n);
+  st.scost[id] = have - n > 0 ? (st.scost[id] || 0) * (have - n) / have : 0;   // average-cost basis
   st.shares[id] = have - n; st.money += gain; return gain;
+}
+// what you paid for what you still hold (legacy saves had no basis: treat it as bought at today's price)
+export function costBasis(st, id) {
+  ensurePrices(st);
+  const held = st.shares[id] || 0; if (!held) return 0;
+  if (!(st.scost[id] > 0)) st.scost[id] = held * st.sprice[id];
+  return st.scost[id];
 }
 export function portfolioValue(st) {
   ensurePrices(st);
@@ -279,5 +315,5 @@ export function portfolioValue(st) {
 
 export const _debug = {
   feed: () => posts, unread: () => unreadCount, push: pushCustom,
-  tickers: () => TICKERS, forceTick: () => { tickCD = 0; },
+  tickers: () => TICKERS, forceTick: () => { tickCD = 0; }, hist: id => hist[id],
 };

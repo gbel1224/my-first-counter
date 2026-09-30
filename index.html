@@ -30,7 +30,11 @@
     background-size:170px 170px; }
 
   #topbar { position:absolute; top:env(safe-area-inset-top, 0); left:0; right:0;
-    display:flex; align-items:flex-start; padding:10px 12px; gap:10px; }
+    display:flex; align-items:flex-start; padding:10px calc(74px + env(safe-area-inset-right, 0px)) 10px 12px; gap:10px; }
+  /* stats / photo / sound live in the ☰ menu now. On a 375–390px phone those three icons were what
+     pushed the top row past the screen edge and wrapped it unpredictably; the buttons stay in the
+     DOM (the menu fires their existing handlers) — they just no longer take top-bar space. */
+  #statsbtn, #photobtn, #mute { display:none !important; }
   #moneybox { background:linear-gradient(155deg,rgba(44,22,40,.58),rgba(22,10,20,.58)); border-radius:18px; padding:10px 16px; color:#ffe9b3;
     backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
     border:1px solid rgba(255,205,140,.3); box-shadow:0 8px 24px rgba(20,8,16,.45), inset 0 1px 1px rgba(255,255,255,.1); }
@@ -59,9 +63,22 @@
   #mtitle { font-size:11px; color:#ffc966; font-weight:800; text-transform:uppercase; letter-spacing:1px;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   @media (max-width: 560px) {
-    #topbar { flex-wrap:wrap; }
+    #topbar { flex-wrap:wrap; gap:8px; }
     #missionbox { order:5; flex-basis:100%; }
+    #moneybox { padding:8px 13px; }
+    #money { font-size:21px; }
+    #minimap { width:96px !important; height:96px !important; }
   }
+  /* very narrow phones: a seven-figure cash total was wrapping the top bar onto a third row */
+  @media (max-width: 380px) {
+    #money { font-size:18px; }
+    #money::before { font-size:15px; }
+    #moneybox { padding:7px 11px; }
+  }
+  /* While a line of dialogue is up, input is already zeroed — so the action buttons do nothing, yet
+     they sat on top of (and under) the dialogue box. Hide them for the duration instead. */
+  body.dlg .btn, body.dlg #talkbtn, body.dlg #fireBtn, body.dlg #fishBtn, body.dlg #doorbtn {
+    opacity:0 !important; pointer-events:none !important; transition:opacity .15s; }
   #mstep { font-size:14px; font-weight:600; line-height:1.25; }
   #minimap { width:108px; height:108px; border-radius:16px; background:#eef0ea; flex:none;
     border:2px solid rgba(255,255,255,.92); box-shadow:0 8px 22px rgba(20,8,16,.4), inset 0 0 0 1px rgba(0,0,0,.1); }
@@ -184,41 +201,29 @@
   #dtext { font-size:16px; line-height:1.4; margin:4px 0 6px; }
   #dhint { font-size:11px; color:#8fa; text-align:right; opacity:.8; }
 
+  /* title screen: the LIVE city orbits behind a top/bottom scrim — title up top, call to action down low */
   #intro { position:absolute; inset:0; overflow:hidden; z-index:60;
-    display:flex; flex-direction:column; align-items:center; justify-content:flex-start; text-align:center;
-    color:#fff; padding:max(6vh,40px) 24px 24px; gap:13px;
-    background:linear-gradient(180deg,#1e0c33 0%,#52246b 28%,#b5447a 56%,#ff7e46 82%,#ffd589 100%); }
-  /* soft scrim behind the hero so the title/chips/button stay readable over the skyline */
-  #intro .hero::before { content:""; position:absolute; inset:-40px -60px -28px; z-index:-1; border-radius:50%;
-    background:radial-gradient(ellipse 70% 64% at center, rgba(16,6,22,.62) 34%, rgba(16,6,22,0) 74%); }
-  #intro .layer { position:absolute; left:0; right:0; pointer-events:none; }
-  #intro .sun { position:absolute; top:27%; left:50%; width:min(46vw,260px); height:min(46vw,260px);
-    transform:translate(-50%,-50%); border-radius:50%; z-index:0; pointer-events:none;
-    background:radial-gradient(circle,#fff6d2 0%,#ffd368 34%,rgba(255,150,86,.55) 58%,rgba(255,150,86,0) 72%);
-    animation:sunpulse 5s ease-in-out infinite; }
-  @keyframes sunpulse { 0%,100%{transform:translate(-50%,-50%) scale(1);} 50%{transform:translate(-50%,-50%) scale(1.06);} }
-  #intro .skyline { bottom:18%; height:118px; z-index:1; opacity:.8; display:flex; align-items:flex-end; justify-content:center; gap:3px; }
-  #intro .bld { background:#170a27; border-radius:3px 3px 0 0; box-shadow:0 0 22px rgba(150,50,110,.35); position:relative; }
-  #intro .bld i { position:absolute; width:3px; height:3px; background:#ffd98a; border-radius:1px; box-shadow:0 0 4px #ffd98a; opacity:.85; }
-  #intro .sea { bottom:0; height:25%; z-index:1;
-    background:linear-gradient(180deg,rgba(255,150,86,0) 0%,rgba(90,30,70,.5) 45%,rgba(18,8,30,.9) 100%); }
-  #intro .palm { position:absolute; bottom:7%; font-size:min(26vw,130px); line-height:1; z-index:3;
-    filter:drop-shadow(0 6px 10px rgba(0,0,0,.45)); transform-origin:bottom center; }
-  #intro .palm.l { left:1%; animation:swayL 4.6s ease-in-out infinite; }
-  #intro .palm.r { right:1%; animation:swayR 5.3s ease-in-out infinite; }
-  @keyframes swayL { 0%,100%{transform:rotate(-3deg);} 50%{transform:rotate(3deg);} }
-  @keyframes swayR { 0%,100%{transform:scaleX(-1) rotate(-3deg);} 50%{transform:scaleX(-1) rotate(3deg);} }
-  #intro .hero { position:relative; z-index:4; display:flex; flex-direction:column; align-items:center; gap:14px; }
-  #intro h1 { font-size:min(16vw,88px); margin:0; letter-spacing:4px; font-weight:800; font-family:"Baloo 2", -apple-system, sans-serif;
+    display:flex; flex-direction:column; align-items:center; justify-content:space-between; text-align:center;
+    color:#fff; padding:max(7vh,calc(28px + env(safe-area-inset-top,0px))) 20px max(4vh,calc(18px + env(safe-area-inset-bottom,0px)));
+    background:linear-gradient(180deg,rgba(24,8,38,.78) 0%,rgba(40,12,50,.25) 26%,rgba(0,0,0,0) 44%,rgba(0,0,0,0) 52%,rgba(20,6,26,.55) 70%,rgba(12,4,18,.9) 100%); }
+  #ui.intro > :not(#intro) { visibility:hidden !important; }
+  #intro .top { display:flex; flex-direction:column; align-items:center; gap:6px; }
+  #intro .sheen { position:absolute; inset:0; pointer-events:none; z-index:0;
+    background:linear-gradient(115deg,rgba(255,140,90,0) 30%,rgba(255,170,110,.14) 50%,rgba(255,140,90,0) 70%);
+    background-size:300% 100%; animation:sheen 9s linear infinite; }
+  @keyframes sheen { from{background-position:100% 0;} to{background-position:-200% 0;} }
+  #intro .hero { position:relative; z-index:4; display:flex; flex-direction:column; align-items:center; gap:13px; width:100%; max-width:520px; }
+  #intro .top { position:relative; z-index:4; }
+  #intro h1 { font-size:min(17vw,92px); filter:drop-shadow(0 4px 14px rgba(20,6,26,.7)); margin:0; letter-spacing:4px; font-weight:800; font-family:"Baloo 2", -apple-system, sans-serif;
     background:linear-gradient(180deg,#fff6d2 0%,#ffd166 50%,#ff9a4c 100%);
     -webkit-background-clip:text; background-clip:text; color:transparent;
     text-shadow:0 0 28px rgba(255,180,90,.45); animation:titlein .8s cubic-bezier(.2,.8,.2,1) both; }
   @keyframes titlein { from{opacity:0; transform:translateY(22px) scale(.92);} to{opacity:1; transform:none;} }
   #intro .tag { font-size:clamp(13px,3.6vw,17px); font-weight:600; color:#fff0dd; max-width:480px;
-    text-shadow:0 2px 8px rgba(60,20,40,.55); animation:fadeup .8s .2s both; }
+    text-shadow:0 2px 10px rgba(20,6,26,.9); animation:fadeup .8s .2s both; }
   #intro .feats { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; max-width:470px; animation:fadeup .8s .35s both; }
   #intro .feat { font-size:12px; font-weight:700; color:#fff; padding:7px 13px; border-radius:20px; white-space:nowrap;
-    background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.28); backdrop-filter:blur(4px); }
+    background:rgba(20,8,30,.42); border:1px solid rgba(255,255,255,.26); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
   @keyframes fadeup { from{opacity:0; transform:translateY(12px);} to{opacity:1; transform:none;} }
   #intro button { font-size:20px; font-weight:900; letter-spacing:3px; border:none; border-radius:32px; cursor:pointer;
     padding:15px 56px; color:#3d2410; background:linear-gradient(180deg,#ffe08a,#ffc04d);
@@ -256,10 +261,15 @@
   #tutorial { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
     background:rgba(8,10,12,.72); z-index:12; }
   #tutorial .tcard { background:rgba(18,24,20,.98); border-radius:18px; padding:20px 22px 18px;
-    width:min(420px, 90vw); box-shadow:0 12px 34px rgba(0,0,0,.55); animation:pop .2s ease-out; }
+    width:min(420px, calc(100vw - 32px)); box-sizing:border-box; box-shadow:0 12px 34px rgba(0,0,0,.55); animation:pop .2s ease-out; }
   #ttitle { color:#ffd166; font-weight:800; font-size:18px; letter-spacing:2px; text-align:center; margin-bottom:14px; }
-  #tbody .trow { color:#e8efe6; font-size:13px; line-height:1.5; padding:5px 0;
-    border-bottom:1px solid rgba(255,255,255,.07); }
+  #tbody { text-align:center; min-height:176px; }
+  #tbody .ticon { font-size:46px; line-height:1; margin:2px 0 8px; animation:pop .22s ease-out; }
+  #tbody .thead { color:#fff; font-weight:800; font-size:19px; margin-bottom:8px; font-family:"Baloo 2", -apple-system, sans-serif; }
+  #tbody .trow { color:#dfe8dc; font-size:14px; line-height:1.45; padding:6px 4px; }
+  #tbody .tdots { display:flex; gap:7px; justify-content:center; margin-top:12px; }
+  #tbody .tdots i { width:7px; height:7px; border-radius:50%; background:rgba(255,255,255,.25); transition:all .2s; }
+  #tbody .tdots i.on { width:20px; border-radius:4px; background:#ffd166; }
   #tgo { display:block; margin:16px auto 0; font-size:16px; font-weight:800; letter-spacing:1px;
     border:none; border-radius:26px; padding:13px 40px; background:#ffd166; color:#3d2410; }
 
@@ -312,6 +322,13 @@
     background:rgba(20,34,42,.82); color:#d8f0ff; border:1px solid rgba(150,210,255,.5);
     backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); box-shadow:0 6px 20px rgba(8,16,20,.5); }
   #talkbtn:active { transform:translateX(-50%) scale(.95); }
+  /* TALK is centred while PUNCH is right-anchored, and on a phone-width screen those two rects
+     intersect. Park TALK immediately left of PUNCH on the same row. (Must sit after the base rule
+     above — same specificity, so source order decides.) */
+  @media (max-width: 560px) {
+    #talkbtn { left:auto; right:calc(200px + env(safe-area-inset-right, 0px)); transform:none; }
+    #talkbtn:active { transform:scale(.95); }
+  }
   #decorbtn { position:absolute; bottom:calc(86px + env(safe-area-inset-bottom,0px)); left:50%; transform:translateX(-50%);
     display:none; padding:11px 22px; border-radius:26px; font-size:14px; font-weight:800; letter-spacing:1px;
     background:rgba(40,20,46,.82); color:#ffe9b3; border:1px solid rgba(220,160,255,.5);
