@@ -12,6 +12,8 @@ export const JOBS = [
   { id: "courier", label: "📦 Courier", desc: "Cross-town delivery against the clock" },
   { id: "bounty", label: "🎯 Bounty", desc: "A marked car is in traffic — destroy it" },
   { id: "turf", label: "🚩 Turf Takeover", desc: "Hit the nearest gang turf and take it" },
+  { id: "vigil", label: "🚨 Vigilante", desc: "Run down three crooks — each one pays more" },
+  { id: "medic", label: "🚑 Paramedic", desc: "Rush patients to Palm General before it's too late" },
 ];
 
 export function makeJobs(g) {
@@ -34,6 +36,10 @@ export function makeJobs(g) {
       if (!cands.length) { g.toast("No marks in range right now"); return false; }
       const c = cands[(r() * cands.length) | 0]; c.marked = true; c.hp = 90;
       job = { id, t: 120, car: c }; g.banner("BOUNTY", "Destroy the marked car", "JOB", 2.4);
+    } else if (id === "vigil") {
+      job = { id, round: 0, t: 60 }; spawnCrook(); g.banner("VIGILANTE", "Crooks on the loose — catch them", "JOB", 2.4);
+    } else if (id === "medic") {
+      const [x, z] = spot(F.x, F.z, 120, 220); job = { id, stage: 0, x, z, t: 50, saved: 0 }; g.banner("PARAMEDIC", "Pick up the patient, get them to Palm General", "JOB", 2.4);
     } else if (id === "turf") {
       const G = g.gangs.GANGS.filter(G => !g.st.turf[G.id]).sort((a, b) => ((a.x - F.x) ** 2 + (a.z - F.z) ** 2) - ((b.x - F.x) ** 2 + (b.z - F.z) ** 2))[0];
       if (!G) { g.toast("Every turf in the city is already yours"); return false; }
@@ -41,6 +47,21 @@ export function makeJobs(g) {
     }
     g.sound("blip", 0.8);
     return true;
+  }
+  // a fleeing crook (a crowd member with a runner brain)
+  function spawnCrook() {
+    const F = g.focus(), [x, z] = spot(F.x, F.z, 70, 130);
+    const look = Object.assign(randomLook(r), { shirt: 0x1a1a1a, pants: 0x1a1a1a });
+    const p = { gang: true, x, z, yaw: 0, speed: 5, look, phase: 0, style: { stride: 1.1, arm: 1.2 }, pause: 0, knocked: 0, vx: 0, vy: 0, vz: 0, y: 0, spin: 0, dir: 1, t: 0, hp: 40 };
+    p.ai = (q, dt) => {
+      const F2 = g.focus(), dx = q.x - F2.x, dz = q.z - F2.z, d = Math.hypot(dx, dz) || 1;
+      if (d < 70) { q.yaw = Math.atan2(dx, dz) + Math.sin(q.phase * 0.2) * 0.6; const sp = 5 + job.round * 0.6; q.x += Math.sin(q.yaw) * sp * dt; q.z += Math.cos(q.yaw) * sp * dt; q.amt = 2; }
+      else q.amt = 0;
+      const res = g.collider.resolve(q.x, q.z, 0.4); q.x = res.x; q.z = res.z;
+      q.phase += dt * 3.2;
+    };
+    p.onRespawn = q => { q.hidden = true; q.x = 99999; };
+    g.crowd.people.push(p); job.crook = p;
   }
   function done(msg, pay) {
     if (job && job.car) job.car.marked = false;
@@ -105,6 +126,23 @@ export function makeJobs(g) {
       if (job.t <= 0) return done("💨 The mark got away", 0);
     } else if (job.id === "turf") {
       if (g.st.turf[job.G.id]) return done("Turf taken", 1000);
+    } else if (job.id === "vigil") {
+      const c = job.crook;
+      if (c.knocked > 0 || (F.x - c.x) ** 2 + (F.z - c.z) ** 2 < (F.car ? 9 : 2.5)) {
+        if (c.knocked <= 0) g.crowd.knock(c, 0, 2, 0, false);
+        c.onRespawn(c); job.round++;
+        const got = g.earn(250 * job.round); g.toast("🚨 Crook busted · +$" + got, 1.6); g.sound("cash", 0.7);
+        if (job.round >= 3) return done("Streets are safer", 750);
+        job.t = 60; spawnCrook();
+      } else if (job.t <= 0) { c.onRespawn(c); return done("💨 The crook got away", 0); }
+    } else if (job.id === "medic") {
+      if (job.stage === 0 && F.car && (F.x - job.x) ** 2 + (F.z - job.z) ** 2 < 64 && F.car.speed < 4) { job.stage = 1; job.t = 60; const H = g.hospital(); job.x = H.x; job.z = H.z; g.toast("🚑 Patient aboard — rush to Palm General!"); g.sound("blip", 0.8); }
+      else if (job.stage === 1 && (F.x - job.x) ** 2 + (F.z - job.z) ** 2 < 100) {
+        job.saved++; const got = g.earn(300 + job.saved * 150); g.toast("🚑 Patient saved · +$" + got); g.sound("cash", 0.8);
+        if (job.saved >= 3) return done("Three lives saved", 800);
+        const [x, z] = spot(F.x, F.z, 120, 220); job.stage = 0; job.x = x; job.z = z; job.t = 50;
+      }
+      if (job.t <= 0) return done("💀 The patient couldn't wait", 0);
     }
   }
   function objective() {
@@ -113,6 +151,8 @@ export function makeJobs(g) {
     if (job.id === "rampage") return { title: "JOB · Rampage", text: "Wrecked " + job.n + "/5 · " + s + "s" };
     if (job.id === "courier") return { title: "JOB · Courier", text: "Deliver the package · " + s + "s", x: job.x, z: job.z, r: 6, event: true };
     if (job.id === "bounty") return { title: "JOB · Bounty", text: "Destroy the marked car · " + s + "s", x: job.car.x, z: job.car.z, r: 3, event: true };
+    if (job.id === "vigil") return { title: "JOB · Vigilante", text: "Catch crook " + (job.round + 1) + "/3 · " + s + "s", x: job.crook.x, z: job.crook.z, r: 3, event: true };
+    if (job.id === "medic") return { title: "JOB · Paramedic", text: (job.stage ? "Rush the patient to Palm General" : "Pick up the patient (in a car)") + " · " + s + "s · " + job.saved + "/3 saved", x: job.x, z: job.z, r: 6, event: true };
     if (job.id === "turf") return { title: "JOB · Turf Takeover", text: "Wipe out the " + job.G.name + " (" + job.G.kills + "/" + job.G.need + ")", x: job.G.x, z: job.G.z, r: 8, event: true };
     return null;
   }

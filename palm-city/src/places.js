@@ -39,6 +39,11 @@ export const PLACES = {
   guns:       { ...walk(5, 11, "E", -6), label: "AMMU-PALM", bg: "#2a2a2a", fg: "#ff4a3a" },
   hospital:   { ...walk(9, 6, "E", 0), label: "PALM GENERAL", bg: "#f4f4f4", fg: "#c81e1e" },
   police:     { ...walk(4, 4, "S", 0), label: "PCPD", bg: "#10204a", fg: "#ffffff" },
+  gas1:       { ...walk(2, 6, "E", 0), label: "PALM FUEL", bg: "#c81e1e", fg: "#ffffff" },
+  gas2:       { ...walk(11, 6, "W", 0), label: "PALM FUEL", bg: "#c81e1e", fg: "#ffffff" },
+  clothes:    { ...walk(7, 10, "N", 8), label: "THREADS", bg: "#1a1a1a", fg: "#f0d8a0" },
+  barber:     { ...walk(10, 11, "N", -8), label: "FADE CITY", bg: "#2050a0", fg: "#ffffff" },
+  arcade:     { ...walk(4, 7, "E", 6), label: "PALM BOWL", bg: "#3a1060", fg: "#ffd166" },
   // properties
   apartment:  { ...walk(11, 3, "S", 8), label: "APARTMENTS", bg: "#4a4238", fg: "#f0e8d8" },
   condo:      { ...walk(8, 8, "W", 6), label: "PALM CONDOS", bg: "#2a3a4a", fg: "#f4f0e8" },

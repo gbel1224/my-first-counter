@@ -64,8 +64,10 @@ try {
       out.income = G.eco.incomeRate();
       // crime: a punch raises heat; police respond; standing still gets you busted (cash fine only)
       G.st.money = 1000; G.st.bank = 500;
-      const vic = G.crowd.nearest(G.P.x, G.P.z, 60, p => !p.gang);
-      G.P.x = vic.x - Math.sin(G.P.yaw) * 0.9; G.P.z = vic.z - Math.cos(G.P.yaw) * 0.9;
+      const vic = G.crowd.nearest(G.P.x, G.P.z, 400, p => !p.gang && !p.ally);
+      // stage it in the open, on the plaza, where a cruiser on the road can see you
+      G.P.x = G.PLACES.fountain.x + 16; G.P.z = G.PLACES.fountain.z; vic.cross = null; vic.pause = 5;
+      vic.x = G.P.x + Math.sin(G.P.yaw) * 0.9; vic.z = G.P.z + Math.cos(G.P.yaw) * 0.9;
       G.combat.S.cd = 0; G.combat.punch(); out.wanted = G.crime.S.wanted;
       let k = 0; while (G.crime.S.wanted > 0 && k++ < 3600) { talk(); G.step(1 / 60); }
       out.bustedFine = 1000 - Math.round(G.st.money); out.bankKept = G.st.bank;
@@ -82,8 +84,10 @@ try {
       // a full quiet heist: case → wheels → grab → escape → paid
       G.st.mi = 12; G.crime.reset();
       const car = G.cars.find(c => !c.boom && !c.locked && c !== G.P.car) || G.P.car; G.P.x = car.x - 1.6; G.P.z = car.z; if (!G.P.car) G.enterNearest();
+      out.heistCar = G.P.car ? (G.P.car.kind || "car") : "none:" + JSON.stringify([car && car.kind, car && car.locked, car && Math.round(car.x), Math.round(G.P.x)]);
+      if (!G.P.car) return out;
       out.heistStarted = G.startHeist("quiet");
-      const H = () => G.heistsDebug.get(), go = (x, z) => { G.P.car.x = x; G.P.car.z = z; G.P.car.vx = G.P.car.vz = 0; };
+      const H = () => G.heistsDebug.get(), go = (x, z) => { if (!G.P.car) return; G.P.car.x = x; G.P.car.z = z; G.P.car.vx = G.P.car.vz = 0; G.P.car.hp = 100; };
       const stages = [H().stage];
       go(H().tx, H().tz); G.step(1 / 60); stages.push(H().stage);
       go(H().sx, H().sz); G.step(1 / 60); stages.push(H().stage);

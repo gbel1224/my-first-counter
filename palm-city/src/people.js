@@ -151,14 +151,38 @@ export function makeCharacter(look) {
     meshes[k] = m; group.add(m);
   }
   const g = {};
+  // accessories ride on the head / torso: hats, glasses, beards, jackets (see setAcc)
+  const acc = {}, accOff = new THREE.Matrix4(), headM = new THREE.Matrix4(), tmpM = new THREE.Matrix4();
   const pose = (x, y, z, yaw, phase, amt, extra) => {
     gait(phase, amt, g, null);
     if (extra && extra.override) Object.assign(g, extra.override);
-    poseMatrices(x, y, z, yaw, look, g, (k, m) => { meshes[k].matrix.copy(m); }, extra);
+    poseMatrices(x, y, z, yaw, look, g, (k, m) => { meshes[k].matrix.copy(m); if (k === "head") headM.copy(m); }, extra);
+    for (const k in acc) if (acc[k].visible) acc[k].matrix.copy(headM);
     meshes.hair.visible = !look.bald && !look.long;
     meshes.hairL.visible = !look.bald && !!look.long;
   };
-  return { group, pose, look, mats };
+  function setAcc(kind, spec) {
+    if (acc[kind]) { group.remove(acc[kind]); delete acc[kind]; }
+    if (!spec || spec.none) return;
+    const mat = new THREE.MeshStandardMaterial({ color: spec.color, roughness: kind === "glasses" ? 0.15 : 0.7, metalness: kind === "glasses" ? 0.6 : 0 });
+    let geo;
+    if (kind === "hat") {
+      if (spec.type === "cap") { const a = new THREE.SphereGeometry(0.125, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2); a.translate(0, 0.25, 0); const b = new THREE.CylinderGeometry(0.1, 0.1, 0.015, 16, 1, false, -Math.PI / 2, Math.PI); b.translate(0, 0.255, 0.07); geo = merge([paint(a, 0xffffff), paint(b, 0xffffff)]); }
+      else if (spec.type === "beanie") { const a = new THREE.SphereGeometry(0.128, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55); a.scale(1, 1.15, 1); a.translate(0, 0.22, 0); geo = merge([paint(a, 0xffffff)]); }
+      else { const a = new THREE.CylinderGeometry(0.1, 0.11, spec.type === "tophat" ? 0.22 : 0.1, 16); a.translate(0, spec.type === "tophat" ? 0.39 : 0.33, 0); const b = new THREE.CylinderGeometry(0.2, 0.2, 0.015, 20); b.translate(0, 0.285, 0); geo = merge([paint(a, 0xffffff), paint(b, 0xffffff)]); }
+    } else if (kind === "glasses") {
+      const a = new THREE.BoxGeometry(0.075, 0.04, 0.01); a.translate(-0.042, 0.2, 0.11); const b = a.clone(); b.translate(0.084, 0, 0);
+      const br = new THREE.BoxGeometry(0.2, 0.008, 0.008); br.translate(0, 0.21, 0.108);
+      geo = merge([paint(a, 0xffffff), paint(b, 0xffffff), paint(br, 0x333333)]);
+    } else if (kind === "beard") {
+      const a = new THREE.SphereGeometry(0.1, 14, 10, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5); a.scale(spec.type === "goatee" ? 0.5 : 1, spec.type === "mustache" ? 0.25 : 0.9, 1);
+      a.translate(0, spec.type === "mustache" ? 0.165 : 0.15, 0.03); geo = merge([paint(a, 0xffffff)]);
+    }
+    const m = new THREE.Mesh(geo, mat); m.matrixAutoUpdate = false; m.castShadow = true;
+    group.add(m); acc[kind] = m;
+  }
+  function recolor() { for (const k of Object.keys(PART_OF)) meshes[k].material.color.set(look[COLOR_OF[k]]); }
+  return { group, pose, look, mats, setAcc, recolor };
 }
 
 // ---------------------------------------------------------------------------------------------
