@@ -13,6 +13,7 @@ import { initInput, pollInput, I } from "./input.js";
 import { createHUD, askConfirm } from "./hud.js";
 import { makeProps } from "./props.js";
 import { makeSkids } from "./skid.js";
+import { makeDoors } from "./doors.js";
 import { createPlayer, updatePlayerOnFoot, poseOnFoot, spawnCar, syncCar, driveStep, createCamRig, updateCam } from "./play.js";
 import { makeCharacter } from "./people.js";
 import { PLACES, buildSigns, setSignNight, makeBeacon } from "./places.js";
@@ -274,6 +275,7 @@ const props = makeProps(street, {
   movers: () => { const l = []; if (P.car && !P.car.kind) l.push(P.car); for (const t of traffic.cars) if (t.alive) l.push(t); for (const u of crime.units) if (u.active) l.push(u); return l; },
 });
 const skids = makeSkids(scene);
+const doors = makeDoors();
 // haptics: a short buzz on phones when something big hits (explosions, crashes, getting shot)
 let lastShake = 0, buzzCD = 0;
 function haptics(dt) {
@@ -441,7 +443,7 @@ function enterCar(n) {
     hud.toast("🔓 Hot-wired a parked " + t.type, 2.0);
   }
   P.car = c; P.ch.group.visible = !!(c.kind === "bike" || c.kind === "jetski");
-  AudioSys.play("door", 0.7);
+  AudioSys.play("door", 0.7); doors.play(c, "in");
   if (c.kind === "heli") hud.toast("🚁 ▲ (Shift) to lift off, ▼ (Space) to descend · stick flies", 3.5);
   if (c.kind === "plane") hud.toast("✈️ Push forward to build speed, hold ▲ (Shift) to take off", 3.5);
 }
@@ -452,7 +454,7 @@ function exitCar() {
   P.x = c.x + lx * 1.9; P.z = c.z + lz * 1.9; P.yaw = c.h; P.speed = 0;
   const res = collider.resolve(P.x, P.z, 0.4); P.x = res.x; P.z = res.z; P.y = groundY(P.x, P.z);
   P.car = null; P.ch.group.visible = true;
-  AudioSys.play("door", 0.6);
+  AudioSys.play("door", 0.6); if (!c.boom) doors.play(c, "out");
   AudioSys.engine(0);
 }
 
@@ -567,7 +569,7 @@ function update(dt) {
     }
   }
   fx.update(dt);
-  props.update(dt, time); haptics(dt);
+  props.update(dt, time); haptics(dt); doors.update(dt);
   if (greyT > 0) { greyT -= dt; R.grade.uSat.value = 1.1 - Math.min(1, greyT) * 0.95; } else R.grade.uSat.value = 1.1;
   crowd.update(dt, time, focus.x, focus.z, hz);
   traffic.update(dt, time, [P.car ? { x: P.car.x, z: P.car.z, car: true } : { x: focus.x, z: focus.z, car: false }]);
@@ -599,7 +601,11 @@ function render() {
     const seat = c.kind === "bike" ? 0.62 : 0.55;
     P.ch.pose(c.x - Math.sin(c.h) * 0.25, (c.y || 0) + seat - 0.97 + 0.12, c.z - Math.cos(c.h) * 0.25, c.h, 0, 0,
       { tilt: 0, override: { thighL: -1.45, thighR: -1.45, kneeL: 1.5, kneeR: 1.5, armL: -1.1, armR: -1.1, elbowL: -0.3, elbowR: -0.3, lean: 0.35, roll: (c.roll || 0) } });
-  } else if (P.car) P.ch.group.visible = false;
+  } else if (P.car) {
+    const cl = doors.climber(P.car);                  // still ducking in through the door
+    P.ch.group.visible = !!cl;
+    if (cl) P.ch.pose(cl.x, cl.y, cl.z, cl.yaw, time * 7, 0.4 * (1 - cl.duck), { override: { lean: cl.duck * 0.55 } });
+  }
   if (!P.car) {
     let over = combat.pose();
     if (P.swim) over = { tilt: 1.25, armL: Math.sin(time * 4) * 2.6, armR: -Math.sin(time * 4) * 2.6, thighL: Math.sin(time * 8) * 0.3, thighR: -Math.sin(time * 8) * 0.3, kneeL: 0.2, kneeR: 0.2, elbowL: -0.3, elbowR: -0.3 };
