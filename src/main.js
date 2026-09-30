@@ -184,6 +184,9 @@ const crime = makeCrime(scene, {
   },
 });
 const combat = makeCombat(scene, {
+  earn: n => eco.earn(n),
+  onCombo: (x, pts) => { if (x > 1) hud.combo(x, pts); },
+  onComboEnd: (pts, x) => { st.stats.bestRampage = Math.max(st.stats.bestRampage || 0, pts); PH.pushRampage(pts, P.x, P.z); hud.toast("💥 Rampage banked · " + pts + " pts · best " + st.stats.bestRampage); },
   onExplode: (x, z) => { PH.chaosShock(st); if (Math.random() < 0.3) PH.pushRampage(0, x, z); },
   crowd, traffic, parked, crime, fx, collider, st,
   sound: (k, v, r) => AudioSys.play(k, v, r), shake: a => { rig.shake = Math.max(rig.shake, a); }, toast: m => hud.toast(m),
@@ -572,6 +575,7 @@ function render() {
     const key = I.touch ? "Tap" : "Press <b>E</b>";
     hud.prompt(actPrompt ? (actLabel ? actPrompt + (I.touch ? "" : " · <b>E</b>") : actPrompt) : (!P.car && near ? (I.touch ? "Tap <b>DRIVE</b> to get in" : "Press <b>E</b> to drive") : ""));
     hud.level(st.lvl, st.xp, xpNeed(st.lvl), eco.incomeRate());
+    hud.comboTick(combat.S.rampT);
     const w = combat.current();
     hud.vitals(crime.S.health, crime.S.wanted, crime.S.searching, w.name, w.id === "fists" ? null : (st.ammo[w.id] || 0), !P.car);
     hud.hurt(crime.S.flash + (crime.S.health < 25 ? 0.25 + Math.sin(time * 6) * 0.1 : 0));
