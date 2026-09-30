@@ -158,5 +158,5 @@ export function makeEvents(scene, g) {
     }[ev.type];
     return { title: "EVENT · " + t[0], text: t[1] + " · " + s + "s · +$" + ev.reward, x: ev.x, z: ev.z, r: 4, event: true };
   }
-  return { update, objective, active: () => !!ev, _spawn: type => { if (ev) end("", false); start(type); }, get: () => ev, forceIdle: v => { idle = v; } };
+  return { update, objective, active: () => !!ev, _spawn: type => { if (ev) end("", false); start(type); }, get: () => ev, forceIdle: v => { idle = v; }, cancel: () => { if (ev) end("", false); } };
 }
