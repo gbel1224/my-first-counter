@@ -283,8 +283,29 @@ function haptics(dt) {
 }
 const interior = makeInterior(scene, {
   st, sky, get hud() { return hud; }, toast: (m, t) => hud.toast(m, t), sound: (k, v) => AudioSys.play(k, v), save: () => writeSave(),
+  venueAction: (kind, site) => venueAction(kind, site),
   sleep: () => { sky.set(0.3); settings.time = "0.3"; crime.S.health = 100; hud.banner("GOOD MORNING", "You slept like a baby · game saved", "", 2.4); AudioSys.play("jingle", 0.5); writeSave(); },
 });
+// what you can do inside a venue, at the counter
+function venueAction(kind, site) {
+  const pay = n => { if (st.money < n) { hud.toast("You need $" + Math.ceil(n - st.money) + " more"); return false; } st.money -= n; AudioSys.play("cash", 0.5); return true; };
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  if (kind === "eat") { if (pay(15)) { crime.S.health = 100; hud.toast(pick(["🍕 That hit the spot", "🍔 Best in Palm City", "🍟 Greasy. Perfect."]) + " · fully healed"); } }
+  else if (kind === "drink") { if (pay(25)) { crime.S.health = Math.min(100, crime.S.health + 15); rig.shake = Math.max(rig.shake, 0.15); hud.toast(pick(["🍹 Cheers!", "🍸 On the house? Nope. $25.", "🥂 The night is young"])); } }
+  else if (kind === "heal") { if (crime.S.health >= 100) hud.toast("🩺 \"You're in great shape. Next!\""); else if (pay(120)) { crime.S.health = 100; hud.toast("🩺 All patched up"); } }
+  else if (kind === "browse") hud.toast(pick(["🖼 \"Sunset Over Nothing\" · $40,000. You keep walking.", "🖼 A single red square. The card says it's about loss.", "🖼 It's a palm tree. It's very good.", "🗿 The gold one is for sale. Everything's for sale."]), 3.2);
+  else if (kind === "cop") hud.toast(pick(["👮 \"Keep your nose clean, pal.\"", "👮 \"Lost property's round the back.\"", "👮 \"We've got our eye on you.\""]), 3);
+  else if (kind === "office") {
+    const b = BIZ.find(b => b.p === site.p || b.id === site.id), lvl = b && st.owned[b.id];
+    hud.toast(lvl ? "💼 \"Books look great, boss\" · level " + lvl + " · +$" + (b.rate * lvl) + "/min" : pick(["💼 \"We're not hiring right now.\"", "💼 \"Take a number.\"", "💼 \"Leave your card, we'll call you.\""]), 3);
+  }
+}
+// you only go indoors with a clear head: no heat, no job running
+function canGoIn() {
+  if (crime.S.wanted > 0) { hud.toast("Lose the cops first"); return false; }
+  if (heistActive() || jobs.active()) { hud.toast("Not now — finish the job first"); return false; }
+  return true;
+}
 const water = makeWater(scene, {
   st, cars, focus: focusInfo, player: () => P, crime, fx, time: () => time,
   toast: (m, t) => hud.toast(m, t), banner: (a, b, k, t) => hud.banner(a, b, k, t), sound: (k, v) => AudioSys.play(k, v), earn: n => eco.earn(n), save: () => writeSave(),
@@ -486,7 +507,7 @@ function update(dt) {
       }
     } else if (interior.inside) {
       // at home: a room cam, the walls and the furniture; the door takes you back out
-      if (hud.talking() || hud.panelOpen()) { inp.mx = 0; inp.mz = 0; inp.action = false; }
+      if (hud.talking()) { inp.mx = 0; inp.mz = 0; inp.action = false; }
       inp.lookX = inp.lookY = 0; inp.jump = false;
       updatePlayerOnFoot(P, inp, dt, interior.S.yaw || 0, collider);
       interior.confine(P);
@@ -510,7 +531,16 @@ function update(dt) {
       const wact = water.action(P);
       if (inp.action && !hud.talking() && wact) { water.doAction(P); inp.action = false; }
       const lact = life.action();
-      if (inp.action && !hud.talking()) { if (atGuns) openGunShop(); else if (atGarage && !n) extras.garagePanel(); else if (lact && !(act && act.kind !== "bizmax") && (lact[0] !== "TALK" || !n)) lact[2](); else if (act && act.kind === "rest") { if (crime.S.wanted > 0) hud.toast("Lose the cops before you head home"); else interior.enter(act.pr, P); } else if (act && act.kind !== "bizmax") eco.doAction(act, bizNames); else if (n) enterCar(n); }
+      const vid = !(act && act.kind !== "bizmax") && interior.venueAt(P.x, P.z);
+      if (inp.action && !hud.talking()) {
+        if (atGuns) openGunShop();
+        else if (atGarage && !n) extras.garagePanel();
+        else if (lact && !(act && act.kind !== "bizmax") && (lact[0] !== "TALK" || (!n && !vid))) lact[2]();
+        else if (act && act.kind === "rest") { if (canGoIn()) interior.enter(act.pr, P); }
+        else if (act && act.kind !== "bizmax") eco.doAction(act, bizNames);
+        else if (vid) { if (canGoIn()) interior.enterVenue(vid, P); }
+        else if (n) enterCar(n);
+      }
       if (!hud.talking() && !hud.panelOpen()) {
         if (inp.cycle) { const w = combat.cycle(); hud.toast(w.name, 1.2); }
         const w = combat.current();
@@ -606,6 +636,8 @@ function render() {
     }
     const la = !P.car && !act && life.action();
     if (la && !(la[0] === "TALK" && near)) { actLabel = la[0]; if (la[1]) actPrompt = la[1]; hud.buttons(false, !!near, actLabel); hud.prompt(actPrompt + (I.touch ? "" : " · <b>E</b>")); }
+    const vid = !P.car && !interior.inside && !(act && act.kind !== "bizmax") && interior.venueAt(P.x, P.z);
+    if (vid && !(la && la[0] !== "TALK")) { actLabel = "ENTER"; actPrompt = "<b>" + (PLACES[vid].label || vid) + "</b> · walk in"; }
     const wlab = water.action(P);
     hud.buttons(!!P.car, !!near, wlab || actLabel, P.car && P.car.kind);
     if (wlab) hud.prompt(wlab === "CAST" ? "🎣 Stopped on the water — <b>CAST</b> a line" : wlab === "DIVE" ? "💰 Something glitters below — <b>DIVE</b>" : "🎣 Wait for the bite, then <b>REEL</b>");

@@ -4,6 +4,9 @@
 // past the fog, and the city keeps ticking around your front door while you're in.
 import * as THREE from "../vendor/three.module.js";
 import { HALF, clamp } from "./world.js";
+import { VENUES, VENUE_SIZE, buildVenue } from "./venues.js";
+import { makeCharacter, randomLook } from "./people.js";
+import { PLACES } from "./places.js";
 
 const ROOM = { x: HALF + 360, z: -HALF - 220 };
 const SIZES = { apartment: [12, 9], condo: [15, 11], house: [18, 13] };
@@ -32,7 +35,7 @@ function canvasTex(size, draw, rx, ry) {
 }
 const rnd = Math.random;
 const FLOORS = {
-  wood: { rough: 0.5, tex: () => canvasTex(512, (x, s) => {
+  wood: { rough: 0.55, tex: () => canvasTex(512, (x, s) => {
     const rows = 8, h = s / rows;
     for (let r = 0; r < rows; r++) {
       let px = -rnd() * 200;
@@ -46,7 +49,7 @@ const FLOORS = {
       x.fillStyle = "rgba(30,18,8,.6)"; x.fillRect(0, r * h, s, 2);
     }
   }, 3, 3) },
-  tile: { rough: 0.28, tex: () => canvasTex(256, (x, s) => {
+  tile: { rough: 0.42, tex: () => canvasTex(256, (x, s) => {
     const n = 4, g = s / n;
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const v = 196 + rnd() * 20; x.fillStyle = `rgb(${v},${v - 2},${v - 8})`; x.fillRect(i * g, j * g, g, g); for (let k = 0; k < 40; k++) { x.fillStyle = `rgba(120,110,100,${rnd() * 0.08})`; x.fillRect(i * g + rnd() * g, j * g + rnd() * g, 3 + rnd() * 8, 1 + rnd() * 3); } }
     x.strokeStyle = "#8c8680"; x.lineWidth = 3; for (let i = 0; i <= n; i++) { x.beginPath(); x.moveTo(i * g, 0); x.lineTo(i * g, s); x.moveTo(0, i * g); x.lineTo(s, i * g); x.stroke(); }
@@ -55,7 +58,7 @@ const FLOORS = {
     x.fillStyle = "#6c5a52"; x.fillRect(0, 0, s, s);
     for (let i = 0; i < 9000; i++) { const v = rnd(); x.fillStyle = v < 0.5 ? "rgba(90,74,66,.5)" : "rgba(130,112,100,.35)"; x.fillRect(rnd() * s, rnd() * s, 1.5, 1.5); }
   }, 5, 5) },
-  concrete: { rough: 0.38, tex: () => canvasTex(512, (x, s) => {
+  concrete: { rough: 0.55, tex: () => canvasTex(512, (x, s) => {
     x.fillStyle = "#8e8c88"; x.fillRect(0, 0, s, s);
     for (let i = 0; i < 60; i++) { const r = 20 + rnd() * 80, gr = x.createRadialGradient(rnd() * s, rnd() * s, 0, rnd() * s, rnd() * s, r); gr.addColorStop(0, `rgba(${rnd() < 0.5 ? "70,68,64" : "170,168,162"},.12)`); gr.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = gr; x.fillRect(0, 0, s, s); }
     for (let i = 0; i < 3000; i++) { x.fillStyle = `rgba(${rnd() < 0.5 ? "60,60,60" : "200,200,200"},.1)`; x.fillRect(rnd() * s, rnd() * s, 1 + rnd() * 2, 1 + rnd() * 2); }
@@ -87,9 +90,10 @@ export function makeInterior(scene, g) {
   st.decor = Object.assign({}, DECOR_DEFAULT, st.decor || {});
   const root = new THREE.Group(); root.position.set(ROOM.x, 0, ROOM.z); root.visible = false; scene.add(root);
   const fixed = new THREE.Group(), furn = new THREE.Group(); root.add(fixed, furn);
-  const std = (color, rough = 0.8, metal = 0, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, envMapIntensity: 0.35, ...extra });
+  const std = (color, rough = 0.8, metal = 0, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, envMapIntensity: 0.1, ...extra });   // indoors: barely any outdoor sky in the reflections
   const wallMat = std(0xe6dccb, 0.92), trimMat = std(0xf2efe8, 0.5), ceilMat = std(0xf0ece4, 0.95);
-  const floorMat = std(0xffffff, 0.5);
+  // the room sits on the open ground outside town: lift and offset the floor so the terrain never shows through
+  const floorMat = std(0xffffff, 0.5, 0, { polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 });
   const floorTex = {};
   const view = { day: viewTex(false), night: viewTex(true) };
   const viewMat = new THREE.MeshBasicMaterial({ map: view.day });
@@ -102,14 +106,16 @@ export function makeInterior(scene, g) {
 
   let W = 15, D = 11, prop = null, blocks = [];
   const door = () => ({ x: W / 2 - 2.2, z: D / 2 - 0.7 });
-  function buildRoom() {
+  function buildRoom(home) {
     clear(fixed);
-    const floor = M(fixed, new THREE.PlaneGeometry(W, D), floorMat, 0, 0.01, 0); floor.rotation.x = -Math.PI / 2; floor.castShadow = false;
+    const floor = M(fixed, new THREE.PlaneGeometry(W, D), floorMat, 0, 0.04, 0); floor.rotation.x = -Math.PI / 2; floor.castShadow = false;
     const ceil = M(fixed, new THREE.BoxGeometry(W + 0.4, 0.2, D + 0.4), ceilMat, 0, H + 0.1, 0);
     ceil.receiveShadow = false;
     const T = 0.2;
-    // back wall with a window cut in it (built from four pieces around the opening)
-    const wx = -W * 0.08, ww = 3.4, wy0 = 1.0, wy1 = 2.5;
+    // back wall with a window cut in it (built from four pieces around the opening) — venues get a plain wall
+    const wx = -W * 0.08, ww = home ? 3.4 : 0, wy0 = 1.0, wy1 = 2.5;
+    if (!home) B(fixed, W + T * 2, H, T, wallMat, 0, H / 2, -D / 2 - T / 2);
+    else {
     B(fixed, (W / 2 + wx - ww / 2), H, T, wallMat, (-W / 2 + (wx - ww / 2)) / 2, H / 2, -D / 2 - T / 2);
     B(fixed, (W / 2 - wx - ww / 2), H, T, wallMat, (W / 2 + (wx + ww / 2)) / 2, H / 2, -D / 2 - T / 2);
     B(fixed, ww, wy0, T, wallMat, wx, wy0 / 2, -D / 2 - T / 2);
@@ -118,6 +124,7 @@ export function makeInterior(scene, g) {
     for (const [w, h, x, y] of [[ww + 0.2, 0.1, wx, wy0], [ww + 0.2, 0.1, wx, wy1], [0.1, wy1 - wy0, wx - ww / 2, (wy0 + wy1) / 2], [0.1, wy1 - wy0, wx + ww / 2, (wy0 + wy1) / 2], [0.06, wy1 - wy0, wx, (wy0 + wy1) / 2]])
       B(fixed, w, h, 0.14, trimMat, x, y, -D / 2 + 0.02);
     B(fixed, ww + 0.3, 0.06, 0.3, trimMat, wx, wy0 - 0.02, -D / 2 + 0.12);                 // sill
+    }
     // side walls
     B(fixed, T, H, D + T * 2, wallMat, -W / 2 - T / 2, H / 2, 0);
     B(fixed, T, H, D + T * 2, wallMat, W / 2 + T / 2, H / 2, 0);
@@ -130,12 +137,14 @@ export function makeInterior(scene, g) {
     B(fixed, dw - 0.06, 2.26, 0.08, doorMat, dr.x, 1.13, D / 2 + 0.05);
     for (const [w, h, x, y] of [[0.1, 2.35, dr.x - dw / 2, 1.17], [0.1, 2.35, dr.x + dw / 2, 1.17], [dw + 0.2, 0.1, dr.x, 2.33]]) B(fixed, w, h, 0.16, trimMat, x, y, D / 2 - 0.02);
     M(fixed, new THREE.SphereGeometry(0.05, 8, 6), std(0xc8b27a, 0.3, 0.9), dr.x - dw / 2 + 0.18, 1.05, D / 2 - 0.02);
-    const mat = M(fixed, new THREE.PlaneGeometry(1.2, 0.7), std(0x3a3430, 1), dr.x, 0.02, D / 2 - 0.6); mat.rotation.x = -Math.PI / 2;
+    const mat = M(fixed, new THREE.PlaneGeometry(1.2, 0.7), std(0x3a3430, 1), dr.x, 0.06, D / 2 - 0.6); mat.rotation.x = -Math.PI / 2;
     // baseboards
     for (const [w, d, x, z] of [[W, 0.04, 0, -D / 2 + 0.02], [0.04, D, -W / 2 + 0.02, 0], [0.04, D, W / 2 - 0.02, 0]]) B(fixed, w, 0.12, d, trimMat, x, 0.06, z);
     // ceiling light
     const fix = M(fixed, new THREE.CylinderGeometry(0.45, 0.5, 0.08, 20), bulbMat, 0, H - 0.04, 0); fix.castShadow = false;
     light.position.set(0, H - 0.4, 0);
+    blocks = [];
+    if (!home) return;
     // kitchenette along the left wall, near the front
     const cab = std(0x33363a, 0.55), top = std(0xd8d4cc, 0.25), steel = std(0xb8bcc0, 0.3, 0.8);
     const kz0 = 0.4, kz1 = D / 2 - 0.4, kl = kz1 - kz0, kc = (kz0 + kz1) / 2;
@@ -163,7 +172,7 @@ export function makeInterior(scene, g) {
     let o;
     o = opt("rug"); if (!o.none) {
       const c = new THREE.Color(o.c), tex = canvasTex(256, (x, s) => { x.fillStyle = "#" + c.getHexString(); x.fillRect(0, 0, s, s); x.strokeStyle = "rgba(240,230,210,.55)"; x.lineWidth = 8; x.strokeRect(18, 18, s - 36, s - 36); x.lineWidth = 3; x.strokeRect(34, 34, s - 68, s - 68); for (let i = 0; i < 4000; i++) { x.fillStyle = `rgba(0,0,0,${rnd() * 0.08})`; x.fillRect(rnd() * s, rnd() * s, 2, 2); } }, 1, 1);
-      const r = M(furn, new THREE.PlaneGeometry(4.2, 3.0), std(0xffffff, 1, 0, { map: tex }), lx, 0.025, lz); r.rotation.x = -Math.PI / 2; r.rotation.z = Math.PI / 2; r.castShadow = false;
+      const r = M(furn, new THREE.PlaneGeometry(4.2, 3.0), std(0xffffff, 1, 0, { map: tex }), lx, 0.06, lz); r.rotation.x = -Math.PI / 2; r.rotation.z = Math.PI / 2; r.castShadow = false;
     }
     o = opt("sofa"); if (!o.none) {
       const m = std(o.c, 0.95), sx = lx - 2.3;
@@ -226,20 +235,56 @@ export function makeInterior(scene, g) {
   }
   let tvScreen = null, bedPos = null;
 
-  const S = { inside: false, pr: null, camX: 0, camZ: 0 };
+  // people inside venues: whoever's behind the counter, plus dancers at the club
+  const npcs = [];
+  function staff(list) {
+    for (const n of npcs) n.ch.group.visible = false;
+    list.forEach((it, i) => {
+      if (!npcs[i]) { const ch = makeCharacter(randomLook(Math.random)); scene.add(ch.group); npcs[i] = { ch }; }
+      const n = npcs[i]; Object.assign(n, it); n.ch.group.visible = true; n.phase = Math.random() * 6;
+      if (it.look) { Object.assign(n.ch.look, it.look); n.ch.look.armCol = n.ch.look.shirt; n.ch.look.shinCol = n.ch.look.pants; n.ch.recolor(); }
+    });
+    S.npcN = list.length;
+  }
+  let venue = null;
+  const S = { inside: false, pr: null, camX: 0, camZ: 0, npcN: 0 };
   function enter(pr, P) {
-    prop = pr; S.pr = pr; [W, D] = SIZES[pr.id] || SIZES.condo;
-    buildRoom(); buildFurniture();
-    root.visible = true; S.inside = true;
+    prop = pr; S.pr = pr; venue = null; [W, D] = SIZES[pr.id] || SIZES.condo;
+    buildRoom(true); buildFurniture(); staff([]);
+    wallMat.color.setHex((DECOR.wall.opts[st.decor.wall] || DECOR.wall.opts[0]).c);
+    light.color.setHex(0xffd6a0); root.visible = true; S.inside = true;
     light.intensity = 38;
+    arrive(P);
+    g.sound("door", 0.6); g.toast("🏠 " + pr.label + " · walk to the door to leave");
+  }
+  // walk into a business or landmark
+  function enterVenue(id, P) {
+    const place = PLACES[id], theme = VENUES[id];
+    prop = { id, p: place, label: place.label || id }; S.pr = prop; [W, D] = VENUE_SIZE[theme];
+    buildRoom(false); clear(furn); tvScreen = null; bedPos = null; lampLight.intensity = 0;
+    venue = buildVenue(theme, { grp: furn, W, D, B, M, std, place, label: prop.label });
+    venue.theme = theme;
+    wallMat.color.setHex(venue.wall);
+    const ft = venue.floor; floorTex[ft] = floorTex[ft] || FLOORS[ft].tex();
+    floorMat.map = floorTex[ft]; floorMat.roughness = FLOORS[ft].rough; floorMat.needsUpdate = true;
+    blocks = venue.blocks;
+    const people = [];
+    if (venue.clerk) people.push({ ...venue.clerk, idle: true });
+    if (theme === "club") for (let i = 0; i < 4; i++) people.push({ x: 0.3 + (i % 2) * 2.2, z: -1.2 + Math.floor(i / 2) * 2.2, yaw: i * 1.7, dance: true });
+    if (theme === "food" || theme === "hospital") people.push({ x: -W / 2 + 1.0, z: theme === "food" ? 0.4 : -2.2, yaw: Math.PI / 2, sit: true });
+    staff(people);
+    light.color.setHex(venue.light[0]); root.visible = true; S.inside = true; light.intensity = venue.light[1];
+    arrive(P);
+    g.sound("door", 0.6); g.toast("🚪 " + prop.label + " · walk to the door to leave");
+  }
+  function arrive(P) {
     const dr = door();
     P.x = ROOM.x + dr.x; P.z = ROOM.z + dr.z - 0.6; P.y = 0; P.vy = 0; P.yaw = Math.PI; P.speed = 0;
     S.camX = ROOM.x + dr.x; S.camZ = ROOM.z + D / 2 - 0.3; S.snap = true;
-    g.sound("door", 0.6); g.toast("🏠 " + pr.label + " · walk to the door to leave");
   }
   function exit(P) {
     const p = prop.p;
-    S.inside = false; root.visible = false; light.intensity = 0; lampLight.intensity = 0;
+    S.inside = false; root.visible = false; light.intensity = 0; lampLight.intensity = 0; staff([]); venue = null;
     P.x = p.x + Math.sin(p.face) * 2; P.z = p.z + Math.cos(p.face) * 2; P.y = 0; P.yaw = p.face; P.speed = 0;
     g.sound("door", 0.6); g.save();
   }
@@ -271,6 +316,16 @@ export function makeInterior(scene, g) {
     const night = g.sky.state.night;
     viewMat.map = night > 0.5 ? view.night : view.day;
     const b = night > 0.5 ? 1.0 : 1.25 - (g.sky.weatherDim || 0) * 0.4; viewMat.color.setScalar(b);
+    if (venue) {
+      if (venue.update) venue.update(time);
+      for (let i = 0; i < S.npcN; i++) {
+        const n = npcs[i];
+        if (n.dance) n.ch.pose(ROOM.x + n.x, 0, ROOM.z + n.z, n.yaw + Math.sin(time * 1.3 + i) * 0.6, time * 5 + n.phase, 0.5, { override: { armL: -2.4 + Math.sin(time * 5 + i) * 0.5, armR: -2.2 - Math.sin(time * 5 + i) * 0.5, elbowL: -0.6, elbowR: -0.6 } });
+        else if (n.sit) n.ch.pose(ROOM.x + n.x, -0.4, ROOM.z + n.z, n.yaw, 0, 0.04, { override: { thighL: -1.5, thighR: -1.5, kneeL: 1.5, kneeR: 1.5 } });
+        else n.ch.pose(ROOM.x + n.x, 0, ROOM.z + n.z, n.yaw, time * 0.9 + n.phase, 0.04);
+      }
+      return;
+    }
     light.intensity = 26 + night * 14;
     if (tvScreen) { const f = 0.7 + Math.sin(time * 7) * 0.08 + Math.sin(time * 2.3) * 0.12; tvScreen.material.color.setRGB(0.25 * f, 0.45 * f, 0.8 * f); }
   }
@@ -278,6 +333,11 @@ export function makeInterior(scene, g) {
     if (!S.inside) return null;
     const lx = P.x - ROOM.x, lz = P.z - ROOM.z, dr = door();
     if ((lx - dr.x) ** 2 + (lz - dr.z) ** 2 < 1.6) return ["EXIT", "Head back outside", () => exit(P)];
+    if (venue) {
+      const c = venue.counter;
+      if (c && venue.action && (lx - c.x) ** 2 + (lz - c.z) ** 2 < 3.2) return [venue.action[0], venue.action[1], () => g.venueAction(venue.action[2], prop)];
+      return null;
+    }
     if (bedPos && (lx - bedPos.x) ** 2 + (lz - bedPos.z) ** 2 < 5.5) return ["SLEEP", "🛏 Sleep till morning · heals you and saves", () => { g.sleep(); }];
     return ["DECORATE", "🎨 Decorate your <b>" + prop.label + "</b>", () => panel("wall")];
   }
@@ -297,5 +357,6 @@ export function makeInterior(scene, g) {
     g.hud.panel("DECORATE · " + D2.name.toUpperCase(), rows);
   }
   const doorWorld = () => prop ? { x: prop.p.x, z: prop.p.z } : { x: 0, z: 0 };
-  return { S, enter, exit, confine, camera, update, action, panel, doorWorld, ROOM, get inside() { return S.inside; } };
+  const venueAt = (x, z) => { for (const id in VENUES) { const p = PLACES[id]; if (p && (p.x - x) ** 2 + (p.z - z) ** 2 < 5) return id; } return null; };
+  return { S, enter, enterVenue, venueAt, venue: () => venue, exit, confine, camera, update, action, panel, doorWorld, ROOM, get inside() { return S.inside; } };
 }
