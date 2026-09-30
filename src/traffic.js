@@ -1,4 +1,4 @@
-// Palm City 2 — traffic. Cars drive real lanes (right-hand traffic, two lanes each way), turn at
+// Palm City — traffic. Cars drive real lanes (right-hand traffic, two lanes each way), turn at
 // intersections along smooth curves, stop for red lights, queue behind whoever is in front, and
 // brake for you. All of it is instanced: four draw calls per car type for the whole city.
 import * as THREE from "../vendor/three.module.js";

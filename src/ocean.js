@@ -1,4 +1,4 @@
-// Palm City 2 — the sea. A dense grid displaced by a few crossing swells in the vertex shader;
+// Palm City — the sea. A dense grid displaced by a few crossing swells in the vertex shader;
 // the fragment adds fine ripple normals, reflects the actual sky colours (Fresnel), throws a sun
 // glitter path, shades shallow turquoise → deep blue with distance from the beach, and draws a
 // breaking foam line where the swell meets the sand.

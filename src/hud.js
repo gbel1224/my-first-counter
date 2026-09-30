@@ -1,4 +1,4 @@
-// Palm City 2 — HUD: cash, objective card, a round minimap that turns with the camera, the
+// Palm City — HUD: cash, objective card, a round minimap that turns with the camera, the
 // speedometer, context prompt, toasts, and the touch buttons.
 import { N, ROAD, CELL, HALF, SHORE, blockMin, BLOCK, STYLE } from "./world.js";
 

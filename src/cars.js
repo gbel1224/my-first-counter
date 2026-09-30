@@ -1,4 +1,4 @@
-// Palm City 2 — cars. Bodies are real silhouettes: a side profile drawn with curves, extruded to
+// Palm City — cars. Bodies are real silhouettes: a side profile drawn with curves, extruded to
 // the car's width with a generous bevel so every edge is rounded, then a separate glasshouse on
 // top. Paint is a clear-coated physical material, so the sky reflects across the bonnet.
 // Each type is split into four geometries (paint / glass / trim+wheels / lights) so the traffic

@@ -1,4 +1,4 @@
-// Palm City 2 — bootstrap + main loop.
+// Palm City — bootstrap + main loop.
 import * as THREE from "../vendor/three.module.js";
 import { createRenderer, isMobile } from "./render.js";
 import { buildCity, Collider, groundY, district, blockC, blockMin, PLAZA, HALF, ROAD, BLOCK, CURB, mulberry32, clamp } from "./world.js";
@@ -88,7 +88,7 @@ rig.yaw = P.yaw; rig.pitch = 0.22;
 // title screen
 const title = document.createElement("div");
 title.id = "title";
-title.innerHTML = `<div><div class="logo">PALM<br>CITY<span class="two">2</span></div><div class="tag">Sun. Money. No rules.</div></div>
+title.innerHTML = `<div><div class="logo">PALM<br>CITY</div><div class="tag">Sun. Money. No rules.</div></div>
   <div><button class="go">${save ? "CONTINUE" : "PLAY"}</button><div class="sub">${isMobile ? "Left thumb moves · drag right side to look" : "WASD move · Shift run/boost · Space jump/drift · E drive · drag to look"}</div></div>`;
 document.getElementById("ui").appendChild(title);
 function start() {

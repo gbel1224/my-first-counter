@@ -1,4 +1,4 @@
-// Palm City 2 — the clutter that makes a city look lived in: air-con units hung under windows,
+// Palm City — the clutter that makes a city look lived in: air-con units hung under windows,
 // balconies, shop awnings, fire escapes on the brick blocks, traffic signals on mast arms,
 // wooden utility poles with sagging wires, hydrants, bins, newspaper boxes, street signs.
 // Everything is instanced or merged into a handful of draw calls.

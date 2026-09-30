@@ -1,4 +1,4 @@
-// Palm City 2 — sky, sun and lighting. One analytic sky shader (gradient + sun disc + halo +
+// Palm City — sky, sun and lighting. One analytic sky shader (gradient + sun disc + halo +
 // drifting fbm clouds) is both what you see AND, rendered once into a PMREM cube, the image-based
 // light every PBR surface reflects — so car paint and glass towers mirror the actual sky.
 import * as THREE from "../vendor/three.module.js";

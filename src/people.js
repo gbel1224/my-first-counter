@@ -1,4 +1,4 @@
-// Palm City 2 — people. One rig with realistic proportions (7.5 heads tall, soft capsule limbs,
+// Palm City — people. One rig with realistic proportions (7.5 heads tall, soft capsule limbs,
 // real knees and elbows) shared by the player and the whole crowd. The crowd is drawn with ONE instanced mesh
 // per body part, so hundreds of animated pedestrians cost about a dozen draw calls.
 import * as THREE from "../vendor/three.module.js";

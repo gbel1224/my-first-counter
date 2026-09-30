@@ -1,4 +1,4 @@
-// Palm City 2 — renderer + post. The scene renders into a multisampled HDR buffer; a mip-chain
+// Palm City — renderer + post. The scene renders into a multisampled HDR buffer; a mip-chain
 // bloom pulls the highlights out; one composite pass does filmic tone mapping, the colour grade,
 // vignette and grain, then writes sRGB. Resolution is FIXED for the session (no mid-play
 // rescaling — the picture never softens and sharpens as the framerate wobbles).
