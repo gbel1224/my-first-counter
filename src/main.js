@@ -26,6 +26,10 @@ import * as PH from "./phone.js";
 import { initHeists, updateHeists, heistObjective, heistActive, startHeist, abortHeist, _debug as heistsDebug } from "./heists.js";
 import { makeEvents } from "./events.js";
 import { makeJobs } from "./jobs.js";
+import { makeExtras, CIRCUITS } from "./extras.js";
+import { createWeather } from "./weather.js";
+import { createMenu } from "./menu.js";
+import { setSurface } from "./play.js";
 import { AudioSys } from "./audio.js";
 
 const bootBar = document.getElementById("bootbar");
@@ -58,7 +62,7 @@ await step(88);
 // save. The first time you open the new city, progress from the original game comes with you
 // (cash, businesses, homes, story chapter, level).
 const SAVE_KEY = "palmcity_save";
-const SAVE_FIELDS = ["money", "xp", "lvl", "owned", "apt", "home", "house", "mi", "bank", "stats", "weapons", "ammo", "turf", "nem", "term", "shares", "sprice", "sfair", "scost", "ledger"];
+const SAVE_FIELDS = ["money", "xp", "lvl", "owned", "apt", "home", "house", "mi", "bank", "stats", "weapons", "ammo", "turf", "nem", "term", "shares", "sprice", "sfair", "scost", "ledger", "pcars", "mods", "palms", "races", "medals", "ach"];
 let save = null, imported = false;
 try { save = JSON.parse(localStorage.getItem(SAVE_KEY) || localStorage.getItem("palmcity2_save") || "null"); } catch (e) {}
 if ((!save || save.mi === undefined) && !localStorage.getItem("sunset_city_save_v1_imported")) {
@@ -161,8 +165,10 @@ const crime = makeCrime(scene, {
   focus: () => P.car ? { x: P.car.x, z: P.car.z, car: true, speed: P.car.speed } : { x: P.x, z: P.z, car: false, speed: P.speed },
   sound: (k, v, r) => AudioSys.play(k, v, r), toast: m => hud.toast(m), shake: a => { rig.shake = Math.max(rig.shake, a); },
   paused: () => hud.talking() || state.phase !== "play",
+  heatMult: () => (P.car && P.car.heatMult) || 1,
   noHeat: () => story.state().mState === "active" && st.mi === 11,        // no cops during the Grand Race
   onBust: fine => {
+    if (P.car && P.car.fineMult) fine = Math.round(fine * P.car.fineMult);
     st.money = Math.max(0, st.money - fine);
     hud.banner("BUSTED", "Fine $" + fine.toLocaleString() + " · the bank keeps what you saved", "", 3.4, "bad"); greyT = 2.6;
     AudioSys.play("door", 1); respawnAt(PLACES.police); abortHeist("The score's lost."); writeSave();
@@ -229,9 +235,17 @@ const makePhone = () => createPhone({
 function currentObjective() {
   const o = story.objective();
   if (o && o.main) return o;
-  return heistObjectiveNew() || jobs.objective() || events.objective() || o;
+  return (extras && extras.objective()) || heistObjectiveNew() || jobs.objective() || events.objective() || o;
 }
 function heistObjectiveNew() { const h = heistObjective(); return h ? { ...h, r: 5, event: true } : null; }
+const extras = makeExtras(scene, {
+  st, cars, focus: focusInfo, earn: n => eco.earn(n), toast: (m, t) => hud.toast(m, t), banner: (a, b, k, t) => hud.banner(a, b, k, t),
+  sound: (k, v) => AudioSys.play(k, v), save: () => writeSave(), panel: (t, r) => hud.panel(t, r), time: () => time,
+  shake: a => { rig.shake = Math.max(rig.shake, a); },
+  busy: () => heistActive() || jobs.active() || events.active() || (story.state().mState === "active" && st.mi < 12),
+});
+setSurface(extras.rampHeight);
+const weather = createWeather(scene, sky, city);
 function openGunShop() {
   hud.panel("AMMU-PALM", WEAPONS.filter(w => w.id !== "fists").map(w => {
     const owned = combat.own(w);
@@ -257,6 +271,45 @@ for (const c of traffic.cars) traffic.respawnNear(c, P.x, P.z, 30);
 const hud = createHUD(plan);
 initInput(hud.ui);
 phone = makePhone();
+// settings (persisted per device) + the ☰ menu
+const SET_KEY = "palmcity_settings";
+let settings = { quality: "high", cycle: "false", time: "0.63", weather: "0", sound: "true" };
+try { Object.assign(settings, JSON.parse(localStorage.getItem(SET_KEY) || "{}")); } catch (e) {}
+let menuPaused = false, photoMode = false;
+function applySetting(k, v) {
+  settings[k] = v;
+  if (k === "quality") {
+    R.renderer.setPixelRatio(v === "perf" ? 1 : Math.min(devicePixelRatio || 1, 2)); R.resize();
+    const sz = v === "perf" ? 1024 : (isMobile ? 2048 : 4096);
+    if (sky.sun.shadow.mapSize.x !== sz) { sky.sun.shadow.mapSize.set(sz, sz); if (sky.sun.shadow.map) { sky.sun.shadow.map.dispose(); sky.sun.shadow.map = null; } }
+  }
+  if (k === "cycle") sky.state.cycle = v === "true";
+  if (k === "time") { sky.set(+v); settings.cycle = "false"; sky.state.cycle = false; }
+  if (k === "weather") weather.W.mode = +v;
+  if (k === "sound") AudioSys.setMuted(v !== "true");
+  try { localStorage.setItem(SET_KEY, JSON.stringify(settings)); } catch (e) {}
+}
+for (const k of ["quality", "cycle", "weather"]) applySetting(k, settings[k]);
+if (settings.cycle !== "true") sky.set(+settings.time);
+const menu = createMenu({
+  hud, stats: () => extras.statsRows(), objective: () => currentObjective(),
+  player: () => P.car ? { x: P.car.x, z: P.car.z, h: P.car.h } : { x: P.x, z: P.z, h: P.yaw },
+  settings: { get: () => settings, set: applySetting },
+  onPause: on => { menuPaused = on; },
+  photo: on => { photoMode = on; },
+  reset: () => { if (confirm("Start a new game? Your saved city will be erased.")) { try { localStorage.removeItem(SAVE_KEY); localStorage.setItem("sunset_city_save_v1_imported", "1"); } catch (e) {} location.reload(); } },
+  pois: () => {
+    const d = [];
+    for (const G of GANGS) if (!st.turf[G.id]) d.push({ x: G.x, z: G.z, c: "rgba(255,70,50,.25)", big: G.r });
+    for (const b of BIZ) d.push({ x: b.p.x, z: b.p.z, c: st.owned[b.id] ? "#2fae6a" : "#d9962a", t: "$" });
+    for (const pr of PROPS) d.push({ x: pr.p.x, z: pr.p.z, c: st[pr.flag] ? "#2fae6a" : "#7a6ad8", t: "⌂" });
+    d.push({ x: extras.GARAGE.x, z: extras.GARAGE.z, c: "#2f7cff", t: "G" }, { x: PLACES.guns.x, z: PLACES.guns.z, c: "#444", t: "🔫" },
+      { x: PLACES.hospital.x, z: PLACES.hospital.z, c: "#e84040", t: "+" }, { x: PLACES.police.x, z: PLACES.police.z, c: "#10204a", t: "P" });
+    if (st.mi >= 5) d.push({ x: PLACES.depot.x, z: PLACES.depot.z, c: "#8a6a3a", t: "D" });
+    for (const C of CIRCUITS) d.push({ x: C.start.x, z: C.start.z, c: "#222", t: "🏁" });
+    return d;
+  },
+});
 // Vic's taunts land in your messages too
 { const t0 = hud.toast; hud.toast = (m, secs) => { if (/^📱 Vic/.test(m)) phone.vicText(m.replace(/^📱 [^:]+: /, "")); t0(m, secs); }; }
 if (!isMobile) document.body.classList.add("kb");
@@ -293,7 +346,7 @@ let time = 0, last = performance.now(), frozen = false, saveT = 0;
 const sim = { dt: 0 };
 function nearestCar() {
   let best = null, bd = 3.4 * 3.4, traf = null;
-  for (const c of cars) { if (c.boom) continue; const d = (c.x - P.x) ** 2 + (c.z - P.z) ** 2; if (d < bd) { bd = d; best = c; } }
+  for (const c of cars) { if (c.boom || c.locked) continue; const d = (c.x - P.x) ** 2 + (c.z - P.z) ** 2; if (d < bd) { bd = d; best = c; } }
   const t = traffic.nearest(P.x, P.z, 3.4);
   if (t && (t.x - P.x) ** 2 + (t.z - P.z) ** 2 < bd) { best = null; traf = t; bd = (t.x - P.x) ** 2 + (t.z - P.z) ** 2; }
   const pk = parked.nearest(P.x, P.z, 3.4);
@@ -334,9 +387,11 @@ function exitCar() {
 
 const focus0 = () => P.car || P;
 function update(dt) {
+  if (menuPaused) { pollInput(); return; }                       // the city holds still behind the menu
   time += dt;
   hud.update(dt);
   const inp = pollInput();
+  if (photoMode) { inp.mx = 0; inp.mz = 0; inp.action = false; inp.fire = false; inp.fireHeld = false; inp.jump = false; }
   if (state.phase === "play") {
     if (P.car) {
       const c = P.car;
@@ -375,7 +430,8 @@ function update(dt) {
       const act = eco.actionAt(P.x, P.z);
       const n = nearestCar();
       const atGuns = (P.x - PLACES.guns.x) ** 2 + (P.z - PLACES.guns.z) ** 2 < 16;
-      if (inp.action && !hud.talking()) { if (atGuns) openGunShop(); else if (act && act.kind !== "bizmax") eco.doAction(act, bizNames); else if (n) enterCar(n); }
+      const atGarage = (P.x - extras.GARAGE.x) ** 2 + (P.z - extras.GARAGE.z) ** 2 < 400;
+      if (inp.action && !hud.talking()) { if (atGuns) openGunShop(); else if (atGarage && !n) extras.garagePanel(); else if (act && act.kind !== "bizmax") eco.doAction(act, bizNames); else if (n) enterCar(n); }
       if (!hud.talking() && !hud.panelOpen()) {
         if (inp.cycle) { const w = combat.cycle(); hud.toast(w.name, 1.2); }
         const w = combat.current();
@@ -393,7 +449,7 @@ function update(dt) {
   for (const u of crime.units) if (u.active && u.speed > 5) hz.push({ x: u.x, z: u.z, speed: u.speed, vx: u.vx, vz: u.vz });
   if (state.phase === "play" && !hud.talking()) {             // the world holds its breath during dialogue
     crime.update(dt, time); combat.update(dt, time); gangs.update(dt);
-    updateHeists(dt, time); events.update(dt); jobs.update(dt);
+    updateHeists(dt, time); events.update(dt); jobs.update(dt); extras.update(dt);
     if (P.car && P.car.boom && !P.car.charred) {           // your ride went up: you're thrown clear, it's a burnt shell
       const c = P.car; c.charred = true;
       c.group.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.color && o.material.color.set(0x1a1816); o.material.metalness = 0.1; o.material.roughness = 1; } });
@@ -412,6 +468,7 @@ function update(dt) {
   } else if (state.phase === "play") {
     updateCam(rig, dt, P.car ? { x: P.car.x, z: P.car.z, y: P.car.y, h: P.car.h, speed: P.car.speed } : { x: P.x, z: P.z, y: P.y, h: P.yaw, speed: 0 }, inp, collider, !!P.car, time);
   }
+  weather.update(dt, camera);
   sky.update(dt, time, focus, camera);
 }
 
@@ -464,6 +521,7 @@ function render() {
     const w = combat.current();
     hud.vitals(crime.S.health, crime.S.wanted, crime.S.searching, w.name, w.id === "fists" ? null : (st.ammo[w.id] || 0), !P.car);
     hud.hurt(crime.S.flash + (crime.S.health < 25 ? 0.25 + Math.sin(time * 6) * 0.1 : 0));
+    if (!P.car && !near && (P.x - extras.GARAGE.x) ** 2 + (P.z - extras.GARAGE.z) ** 2 < 400 && !act) { hud.buttons(false, false, "GARAGE"); hud.prompt("<b>CITY GARAGE</b> · buy, upgrade & repaint" + (I.touch ? "" : " · <b>E</b>")); }
     if (!P.car && (P.x - PLACES.guns.x) ** 2 + (P.z - PLACES.guns.z) ** 2 < 16 && !act) { actLabel = "SHOP"; actPrompt = "<b>AMMU-PALM</b> · guns & ammo"; hud.buttons(false, !!near, actLabel); hud.prompt(actPrompt); }
     if (obj) {
       hud.objective(obj.title, obj.text);
@@ -492,7 +550,7 @@ requestAnimationFrame(frame);
 
 // debug / test hooks
 globalThis.__pc2 = {
-  THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, P, cars, state, rig, I,
+  THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, P, cars, state, rig, I,
   freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },

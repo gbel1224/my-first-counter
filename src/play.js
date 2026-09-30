@@ -10,6 +10,9 @@ import { makeCar, carSpec } from "./cars.js";
 // which is what lets the back step out), steering authority fades in with speed and softens at
 // the top end, and building hits bounce you off with a thump.
 // ============================================================================================
+// extra drivable surfaces on top of the ground (stunt ramps): fn(x, z) -> height
+let surfaceFn = null;
+export function setSurface(fn) { surfaceFn = fn; }
 export function driveStep(v, inp, dt, collider) {
   const S = v.spec;
   const fx = Math.sin(v.h), fz = Math.cos(v.h);
@@ -63,7 +66,21 @@ export function driveStep(v, inp, dt, collider) {
   const accelVis = thr > 0 ? -0.025 : (thr < 0 && lon > 1 ? 0.05 : 0);
   v.pitch = lerp(v.pitch || 0, accelVis, 1 - Math.exp(-6 * dt));
   v.roll = lerp(v.roll || 0, clamp(-v.yawRate * lon * 0.006, -0.09, 0.09), 1 - Math.exp(-6 * dt));
-  v.y = lerp(v.y || 0, groundY(v.x, v.z), 1 - Math.exp(-18 * dt));
+  // vertical: follow the ground (kerbs, ramps); leave a ramp lip fast enough and you fly
+  const gy = groundY(v.x, v.z) + (surfaceFn ? surfaceFn(v.x, v.z) : 0);
+  const prevY = v.y || 0;
+  v.landed = 0;
+  if (v.air) {
+    v.vy -= 24 * dt; v.y = prevY + v.vy * dt; v.airT += dt;
+    if (v.y <= gy) { v.y = gy; v.air = false; v.landed = v.airT; v.airT = 0; v.vy = 0; }
+  } else if (gy < prevY - 0.35 && v.speed > 7 && (v.climb || 0) > 1) {
+    v.air = true; v.vy = v.climb * 0.9; v.airT = 0; v.y = prevY + v.vy * dt;
+  } else {
+    v.climb = clamp((gy - prevY) / dt, -20, 20);
+    v.y = gy > prevY ? gy : lerp(prevY, gy, 1 - Math.exp(-18 * dt));
+  }
+  if (v.air) v.pitch = clamp(-v.vy * 0.025, -0.35, 0.35);
+  else if (v.climb > 1) v.pitch = -Math.atan2(v.climb, Math.max(4, v.speed)) ;
   return impact;
 }
 

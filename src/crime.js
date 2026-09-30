@@ -168,7 +168,7 @@ export function makeCrime(scene, g) {
       if (!S.searching) { S.wantedCD = Math.max(S.wantedCD, 6); S.onYou = true; }
       else {
         if (S.onYou) { S.onYou = false; g.toast("🔍 Out of sight — they're sweeping the area. Stay hidden!"); }
-        S.wantedCD -= dt;
+        S.wantedCD -= dt * (g.heatMult ? g.heatMult() : 1);
         if (S.wantedCD <= 0) { S.wanted = Math.max(0, S.wanted - 1); S.wantedCD = 8; if (S.wanted === 0) { g.toast("You lost the cops"); g.sound("jingle", 0.5); } }
       }
     } else S.searching = false;

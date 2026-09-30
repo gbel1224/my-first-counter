@@ -81,6 +81,7 @@ export function createHUD(plan) {
   dlg.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); advance(); });
   addEventListener("keydown", e => { if (dlgLines && ["Enter", "Space", "KeyE", "KeyF"].includes(e.code)) { e.preventDefault(); e.stopImmediatePropagation(); advance(); } }, true);
   const H_ = {
+    mapInfo: { canvas: map, X, Z, S },
     dialogue(lines, cb) { dlgLines = lines; dlgI = 0; dlgCb = cb; renderDlg(); dlg.classList.add("on"); document.body.classList.add("talking"); },
     talking: () => !!dlgLines,
     advance,
