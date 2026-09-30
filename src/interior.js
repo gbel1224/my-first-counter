@@ -1,16 +1,24 @@
-// Palm City — home interiors. Walk through the door of a place you own and you're inside a lit,
-// furnished room you decorate yourself (walls, floor, sofa, bed, rug, TV, plant, table, art, lamp),
-// saved with your game. Sleep in the bed to pass the night. The room is staged just outside town,
-// past the fog, and the city keeps ticking around your front door while you're in.
+// Palm City — interiors. Homes you own and the businesses and landmarks around town are real
+// multi-room buildings: walls with doorways, arches and hatches, a floor, ceiling lights and furniture
+// per room (built from layouts.js with the furniture kit), people going about their business, and
+// a camera that cuts to a corner of whichever room you walk into. Your home is decorated from your
+// saved decor choices. Buildings are staged just outside town, past the fog; the street keeps
+// ticking around the front door while you're in.
 import * as THREE from "../vendor/three.module.js";
 import { HALF, clamp } from "./world.js";
-import { VENUES, VENUE_SIZE, buildVenue } from "./venues.js";
 import { makeCharacter, randomLook } from "./people.js";
 import { PLACES } from "./places.js";
+import { makeKit } from "./furniture.js";
+import * as F from "./furniture.js";
+import { PLANS } from "./layouts.js";
 
 const ROOM = { x: HALF + 360, z: -HALF - 220 };
-const SIZES = { apartment: [12, 9], condo: [15, 11], house: [18, 13] };
-const H = 3.2;   // ceiling
+const T = 0.14;          // wall thickness
+// which places you can walk into, and what kind of building each is
+export const VENUES = {
+  pizza: "food", burger: "food", club: "club", gallery: "gallery", hospital: "hospital", police: "police",
+  taxi: "office", marina: "office", studio: "office", prints: "office", depot: "depot",
+};
 
 // same slots and option order as the original game, so imported decor carries straight over
 export const DECOR = {
@@ -84,264 +92,505 @@ function viewTex(night) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
+// more floors for the venues; `scale` is metres per texture repeat (floor UVs are in metres)
+Object.assign(FLOORS, {
+  checker: { rough: 0.3, tex: () => canvasTex(256, (x, s) => { const n = 4, g = s / n; for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { x.fillStyle = (i + j) % 2 ? "#1c1c1e" : "#ecebe6"; x.fillRect(i * g, j * g, g, g); } for (let k = 0; k < 900; k++) { x.fillStyle = `rgba(128,128,128,${rnd() * 0.08})`; x.fillRect(rnd() * s, rnd() * s, 2, 2); } }, 1, 1) },
+  quarry: { rough: 0.6, tex: () => canvasTex(256, (x, s) => { const n = 4, g = s / n; for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const v = rnd() * 16; x.fillStyle = `rgb(${150 + v},${70 + v * 0.5},${50})`; x.fillRect(i * g, j * g, g, g); } x.strokeStyle = "#6a5a50"; x.lineWidth = 4; for (let i = 0; i <= n; i++) { x.beginPath(); x.moveTo(i * g, 0); x.lineTo(i * g, s); x.moveTo(0, i * g); x.lineTo(s, i * g); x.stroke(); } }, 1, 1) },
+  vinyl: { rough: 0.35, tex: () => canvasTex(256, (x, s) => { const n = 4, g = s / n; for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const v = rnd() * 8; x.fillStyle = `rgb(${206 + v},${220 + v},${216 + v})`; x.fillRect(i * g, j * g, g, g); for (let k = 0; k < 30; k++) { x.fillStyle = `rgba(120,140,140,${rnd() * 0.1})`; x.fillRect(i * g + rnd() * g, j * g + rnd() * g, 2, 2); } } x.strokeStyle = "rgba(120,140,140,.35)"; x.lineWidth = 1.5; for (let i = 0; i <= n; i++) { x.beginPath(); x.moveTo(i * g, 0); x.lineTo(i * g, s); x.moveTo(0, i * g); x.lineTo(s, i * g); x.stroke(); } }, 1, 1) },
+  marble: { rough: 0.18, tex: () => canvasTex(512, (x, s) => { x.fillStyle = "#e8e6e0"; x.fillRect(0, 0, s, s); for (let i = 0; i < 40; i++) { x.strokeStyle = `rgba(${140 + rnd() * 40},${140 + rnd() * 40},${150 + rnd() * 30},${0.1 + rnd() * 0.25})`; x.lineWidth = 0.5 + rnd() * 2; x.beginPath(); let px = rnd() * s, py = rnd() * s; x.moveTo(px, py); for (let k = 0; k < 6; k++) { px += (rnd() - 0.3) * 90; py += (rnd() - 0.5) * 60; x.lineTo(px, py); } x.stroke(); } x.strokeStyle = "rgba(90,90,90,.35)"; x.lineWidth = 2; x.strokeRect(0, 0, s / 2, s / 2); x.strokeRect(s / 2, s / 2, s / 2, s / 2); x.strokeRect(0, 0, s, s); }, 1, 1) },
+  darkwood: { rough: 0.45, tex: () => { const t = FLOORS.wood.tex(); const c = t.image, x = c.getContext("2d"); x.fillStyle = "rgba(20,10,4,.55)"; x.fillRect(0, 0, c.width, c.height); t.needsUpdate = true; return t; } },
+  carpetRed: { rough: 0.97, tex: () => canvasTex(256, (x, s) => { x.fillStyle = "#5a1020"; x.fillRect(0, 0, s, s); for (let i = 0; i < 9000; i++) { x.fillStyle = rnd() < 0.5 ? "rgba(90,20,36,.5)" : "rgba(40,6,14,.4)"; x.fillRect(rnd() * s, rnd() * s, 1.5, 1.5); } x.strokeStyle = "rgba(200,160,70,.35)"; x.lineWidth = 3; for (let i = 0; i < 4; i++) { x.beginPath(); x.arc(s / 2, s / 2, 30 + i * 30, 0, 7); x.stroke(); } }, 1, 1) },
+  concreteDark: { rough: 0.5, tex: () => { const t = FLOORS.concrete.tex(); const c = t.image, x = c.getContext("2d"); x.fillStyle = "rgba(10,8,14,.72)"; x.fillRect(0, 0, c.width, c.height); t.needsUpdate = true; return t; } },
+});
+const FLOOR_SCALE = { wood: 2.4, darkwood: 2.4, tile: 2.4, carpet: 2.0, carpetRed: 3.0, concrete: 4.0, concreteDark: 4.0, checker: 1.2, quarry: 1.2, vinyl: 2.4, marble: 2.4 };
+const floorMats = {};
+function floorMat(type) {
+  if (floorMats[type]) return floorMats[type];
+  const tex = FLOORS[type].tex(); tex.repeat.set(1, 1);
+  // the building sits on the open ground outside town: offset the floor so the terrain never shows through
+  return (floorMats[type] = new THREE.MeshStandardMaterial({ map: tex, roughness: FLOORS[type].rough, envMapIntensity: 0.12, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 }));
+}
+function textTex(w, h, draw) {
+  const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+const hex = c => "#" + new THREE.Color(c).getHexString();
+function paintingTex(v) {
+  return textTex(256, 256, (x, w, h) => {
+    const base = v > 64 ? new THREE.Color(v) : new THREE.Color().setHSL((v * 0.137) % 1, 0.5, 0.5);
+    const gr = x.createLinearGradient(0, 0, w * (v % 2 ? 1 : 0.3), h);
+    gr.addColorStop(0, hex(base.clone().offsetHSL(0, 0, 0.22))); gr.addColorStop(1, hex(base.clone().offsetHSL(0.06, 0, -0.25)));
+    x.fillStyle = gr; x.fillRect(0, 0, w, h);
+    const kind = Math.floor(v) % 4;
+    if (kind === 3) { x.fillStyle = hex(base.clone().offsetHSL(0.1, 0.2, 0.25)); x.beginPath(); x.arc(w * 0.62, h * 0.4, w * 0.16, 0, 7); x.fill(); x.fillStyle = "rgba(0,0,0,.45)"; x.fillRect(0, h * 0.62, w, h * 0.38); for (let i = 0; i < 6; i++) { x.fillStyle = "rgba(0,0,0,.6)"; x.fillRect(i * 44 + rnd() * 10, h * 0.62 - rnd() * 60, 6, 80); } }
+    else for (let i = 0; i < 16; i++) {
+      x.fillStyle = hex(new THREE.Color().setHSL(rnd(), 0.55, 0.3 + rnd() * 0.45)); x.globalAlpha = 0.6;
+      if (kind === 0) { x.beginPath(); x.arc(rnd() * w, rnd() * h, 10 + rnd() * 50, 0, 7); x.fill(); }
+      else if (kind === 1) x.fillRect(rnd() * w, rnd() * h, 20 + rnd() * 90, 8 + rnd() * 60);
+      else { x.beginPath(); x.moveTo(rnd() * w, rnd() * h); x.lineTo(rnd() * w, rnd() * h); x.lineTo(rnd() * w, rnd() * h); x.fill(); }
+      x.globalAlpha = 1;
+    }
+  });
+}
+
 export function makeInterior(scene, g) {
-  // g: { st, P, sky, toast, sound, save, hud, earn, rest(), heal() }
+  // g: { st, sky, hud, toast, sound, save, sleep(), venueAction(kind, site) }
   const st = g.st;
   st.decor = Object.assign({}, DECOR_DEFAULT, st.decor || {});
   const root = new THREE.Group(); root.position.set(ROOM.x, 0, ROOM.z); root.visible = false; scene.add(root);
-  const fixed = new THREE.Group(), furn = new THREE.Group(); root.add(fixed, furn);
-  const std = (color, rough = 0.8, metal = 0, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, envMapIntensity: 0.1, ...extra });   // indoors: barely any outdoor sky in the reflections
-  const wallMat = std(0xe6dccb, 0.92), trimMat = std(0xf2efe8, 0.5), ceilMat = std(0xf0ece4, 0.95);
-  // the room sits on the open ground outside town: lift and offset the floor so the terrain never shows through
-  const floorMat = std(0xffffff, 0.5, 0, { polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 });
-  const floorTex = {};
   const view = { day: viewTex(false), night: viewTex(true) };
   const viewMat = new THREE.MeshBasicMaterial({ map: view.day });
-  const light = new THREE.PointLight(0xffd6a0, 0, 30, 1.2); light.castShadow = false; root.add(light);
-  const lampLight = new THREE.PointLight(0xffd08a, 0, 9, 1.5); root.add(lampLight);
-  const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfff2da });
-  const M = (grp, geo, mat, x, y, z, ry = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.y = ry; m.castShadow = m.receiveShadow = true; grp.add(m); return m; };
-  const B = (grp, w, h, d, mat, x, y, z, ry) => M(grp, new THREE.BoxGeometry(w, h, d), mat, x, y, z, ry);
-  const clear = grp => { while (grp.children.length) { const c = grp.children.pop(); c.traverse(o => { if (o.geometry) o.geometry.dispose(); }); } };
+  const ceilMat = new THREE.MeshStandardMaterial({ color: 0xf0ece4, roughness: 0.95, envMapIntensity: 0.1 });
+  const light = new THREE.PointLight(0xffd6a0, 0, 30, 1.2); root.add(light);
+  const light2 = new THREE.PointLight(0xffd6a0, 0, 22, 1.3); root.add(light2);
+  // bounce light: rooms are never pitch black on the side facing away from the lamp
+  const amb = new THREE.AmbientLight(0xfff0e0, 0); root.add(amb);
+  // a pool of people to staff the place
+  const crew = [];
+  const S = { inside: false, pr: null, camX: 0, camZ: 0, camY: 2.6, yaw: 0, room: null, snap: true, fov: 58 };
+  let B = null;                                           // the building you're in
 
-  let W = 15, D = 11, prop = null, blocks = [];
-  const door = () => ({ x: W / 2 - 2.2, z: D / 2 - 0.7 });
-  function buildRoom(home) {
-    clear(fixed);
-    const floor = M(fixed, new THREE.PlaneGeometry(W, D), floorMat, 0, 0.04, 0); floor.rotation.x = -Math.PI / 2; floor.castShadow = false;
-    const ceil = M(fixed, new THREE.BoxGeometry(W + 0.4, 0.2, D + 0.4), ceilMat, 0, H + 0.1, 0);
-    ceil.receiveShadow = false;
-    const T = 0.2;
-    // back wall with a window cut in it (built from four pieces around the opening) — venues get a plain wall
-    const wx = -W * 0.08, ww = home ? 3.4 : 0, wy0 = 1.0, wy1 = 2.5;
-    if (!home) B(fixed, W + T * 2, H, T, wallMat, 0, H / 2, -D / 2 - T / 2);
-    else {
-    B(fixed, (W / 2 + wx - ww / 2), H, T, wallMat, (-W / 2 + (wx - ww / 2)) / 2, H / 2, -D / 2 - T / 2);
-    B(fixed, (W / 2 - wx - ww / 2), H, T, wallMat, (W / 2 + (wx + ww / 2)) / 2, H / 2, -D / 2 - T / 2);
-    B(fixed, ww, wy0, T, wallMat, wx, wy0 / 2, -D / 2 - T / 2);
-    B(fixed, ww, H - wy1, T, wallMat, wx, (H + wy1) / 2, -D / 2 - T / 2);
-    const v = M(fixed, new THREE.PlaneGeometry(ww, wy1 - wy0), viewMat, wx, (wy0 + wy1) / 2, -D / 2 - 0.35); v.castShadow = v.receiveShadow = false;
-    for (const [w, h, x, y] of [[ww + 0.2, 0.1, wx, wy0], [ww + 0.2, 0.1, wx, wy1], [0.1, wy1 - wy0, wx - ww / 2, (wy0 + wy1) / 2], [0.1, wy1 - wy0, wx + ww / 2, (wy0 + wy1) / 2], [0.06, wy1 - wy0, wx, (wy0 + wy1) / 2]])
-      B(fixed, w, h, 0.14, trimMat, x, y, -D / 2 + 0.02);
-    B(fixed, ww + 0.3, 0.06, 0.3, trimMat, wx, wy0 - 0.02, -D / 2 + 0.12);                 // sill
+  // ------------------------------------------------------------------------------------------
+  // building
+  // ------------------------------------------------------------------------------------------
+  function build(plan, opts) {
+    const K = makeKit(), W = plan.W, D = plan.D, H = plan.H;
+    const group = new THREE.Group(), extras = [];
+    const own = [];                                        // textures/materials to dispose on exit
+    const keys = Object.keys(plan.rooms);
+    const R = {}, raw = {};
+    const linkBetween = (a, b) => plan.links.filter(l => (l.a === a && l.b === b) || (l.a === b && l.b === a));
+    const isOpen = (a, b) => linkBetween(a, b).some(l => l.kind === "open");
+    // shared edges between rooms
+    const walls = [];                                      // { axis:'x'|'z', at, from, to, rooms:{key:sign}, openings:[] }
+    for (const k of keys) { const [x0, z0, x1, z1] = plan.rooms[k].r; raw[k] = { x0, z0, x1, z1 }; }
+    for (let i = 0; i < keys.length; i++) for (let j = i + 1; j < keys.length; j++) {
+      const a = raw[keys[i]], b = raw[keys[j]], A = keys[i], Bk = keys[j];
+      for (const [e1, e2, s1] of [[a.x1, b.x0, 1], [a.x0, b.x1, -1]]) if (Math.abs(e1 - e2) < 1e-6) {
+        const from = Math.max(a.z0, b.z0), to = Math.min(a.z1, b.z1);
+        if (to - from > 0.01 && !isOpen(A, Bk)) walls.push({ axis: "z", at: e1, from, to, rooms: { [A]: -s1, [Bk]: s1 }, pair: [A, Bk], openings: [] });
+      }
+      for (const [e1, e2, s1] of [[a.z1, b.z0, 1], [a.z0, b.z1, -1]]) if (Math.abs(e1 - e2) < 1e-6) {
+        const from = Math.max(a.x0, b.x0), to = Math.min(a.x1, b.x1);
+        if (to - from > 0.01 && !isOpen(A, Bk)) walls.push({ axis: "x", at: e1, from, to, rooms: { [A]: -s1, [Bk]: s1 }, pair: [A, Bk], openings: [] });
+      }
     }
-    // side walls
-    B(fixed, T, H, D + T * 2, wallMat, -W / 2 - T / 2, H / 2, 0);
-    B(fixed, T, H, D + T * 2, wallMat, W / 2 + T / 2, H / 2, 0);
-    // front wall with the front door
-    const dr = door(), dw = 1.3;
-    B(fixed, (dr.x - dw / 2) + W / 2, H, T, wallMat, (-W / 2 + dr.x - dw / 2) / 2, H / 2, D / 2 + T / 2);
-    B(fixed, W / 2 - (dr.x + dw / 2), H, T, wallMat, (W / 2 + dr.x + dw / 2) / 2, H / 2, D / 2 + T / 2);
-    B(fixed, dw, H - 2.3, T, wallMat, dr.x, (H + 2.3) / 2, D / 2 + T / 2);
-    const doorMat = std(0x4a3222, 0.6);
-    B(fixed, dw - 0.06, 2.26, 0.08, doorMat, dr.x, 1.13, D / 2 + 0.05);
-    for (const [w, h, x, y] of [[0.1, 2.35, dr.x - dw / 2, 1.17], [0.1, 2.35, dr.x + dw / 2, 1.17], [dw + 0.2, 0.1, dr.x, 2.33]]) B(fixed, w, h, 0.16, trimMat, x, y, D / 2 - 0.02);
-    M(fixed, new THREE.SphereGeometry(0.05, 8, 6), std(0xc8b27a, 0.3, 0.9), dr.x - dw / 2 + 0.18, 1.05, D / 2 - 0.02);
-    const mat = M(fixed, new THREE.PlaneGeometry(1.2, 0.7), std(0x3a3430, 1), dr.x, 0.06, D / 2 - 0.6); mat.rotation.x = -Math.PI / 2;
-    // baseboards
-    for (const [w, d, x, z] of [[W, 0.04, 0, -D / 2 + 0.02], [0.04, D, -W / 2 + 0.02, 0], [0.04, D, W / 2 - 0.02, 0]]) B(fixed, w, 0.12, d, trimMat, x, 0.06, z);
-    // ceiling light
-    const fix = M(fixed, new THREE.CylinderGeometry(0.45, 0.5, 0.08, 20), bulbMat, 0, H - 0.04, 0); fix.castShadow = false;
-    light.position.set(0, H - 0.4, 0);
-    blocks = [];
-    if (!home) return;
-    // kitchenette along the left wall, near the front
-    const cab = std(0x33363a, 0.55), top = std(0xd8d4cc, 0.25), steel = std(0xb8bcc0, 0.3, 0.8);
-    const kz0 = 0.4, kz1 = D / 2 - 0.4, kl = kz1 - kz0, kc = (kz0 + kz1) / 2;
-    B(fixed, 0.65, 0.88, kl - 0.9, cab, -W / 2 + 0.33, 0.44, kc + 0.45);
-    B(fixed, 0.7, 0.05, kl - 0.9, top, -W / 2 + 0.35, 0.9, kc + 0.45);
-    B(fixed, 0.72, 1.9, 0.8, steel, -W / 2 + 0.36, 0.95, kz0 + 0.4);                     // fridge
-    B(fixed, 0.36, 0.7, kl - 0.9, cab, -W / 2 + 0.18, 2.0, kc + 0.45);                     // upper cabinets
-    B(fixed, 0.4, 0.02, 0.6, std(0x151515, 0.3), -W / 2 + 0.36, 0.93, kc + 0.8);            // hob
-    blocks = [[-W / 2, -W / 2 + 0.75, kz0, kz1]];
-    // a bookshelf by the door
-    const shelf = std(0x5a4030, 0.7);
-    B(fixed, 1.6, 2.0, 0.4, shelf, W / 2 - 4.0, 1.0, D / 2 - 0.25);
-    for (let i = 0; i < 4; i++) for (let k = 0; k < 6; k++) if (rnd() < 0.8) B(fixed, 0.14, 0.3 + rnd() * 0.1, 0.26, std([0x7a2e2e, 0x2e4a7a, 0xc8b27a, 0x3a5a3a, 0xd8d0c0][Math.floor(rnd() * 5)], 0.8), W / 2 - 4.65 + k * 0.24, 0.35 + i * 0.47, D / 2 - 0.27);
-    blocks.push([W / 2 - 4.85, W / 2 - 3.15, D / 2 - 0.5, D / 2]);
+    // outer walls: every room side on the perimeter
+    for (const k of keys) {
+      const r = raw[k];
+      if (Math.abs(r.x0 + W / 2) < 1e-6) walls.push({ axis: "z", at: r.x0, from: r.z0, to: r.z1, rooms: { [k]: 1 }, outer: "left", openings: [] });
+      if (Math.abs(r.x1 - W / 2) < 1e-6) walls.push({ axis: "z", at: r.x1, from: r.z0, to: r.z1, rooms: { [k]: -1 }, outer: "right", openings: [] });
+      if (Math.abs(r.z0 + D / 2) < 1e-6) walls.push({ axis: "x", at: r.z0, from: r.x0, to: r.x1, rooms: { [k]: 1 }, outer: "back", openings: [] });
+      if (Math.abs(r.z1 - D / 2) < 1e-6) walls.push({ axis: "x", at: r.z1, from: r.x0, to: r.x1, rooms: { [k]: -1 }, outer: "front", openings: [] });
+    }
+    // which room sides carry a wall (for the usable inner rectangles)
+    for (const k of keys) {
+      const r = raw[k], has = side => walls.some(w => w.rooms[k] !== undefined && (side === "x0" ? w.axis === "z" && Math.abs(w.at - r.x0) < 1e-6 : side === "x1" ? w.axis === "z" && Math.abs(w.at - r.x1) < 1e-6 : side === "z0" ? w.axis === "x" && Math.abs(w.at - r.z0) < 1e-6 : w.axis === "x" && Math.abs(w.at - r.z1) < 1e-6));
+      const t = T / 2;
+      R[k] = { x0: r.x0 + (has("x0") ? t : 0), x1: r.x1 - (has("x1") ? t : 0), z0: r.z0 + (has("z0") ? t : 0), z1: r.z1 - (has("z1") ? t : 0) };
+      Object.assign(R[k], { cx: (R[k].x0 + R[k].x1) / 2, cz: (R[k].z0 + R[k].z1) / 2, w: R[k].x1 - R[k].x0, d: R[k].z1 - R[k].z0, key: k });
+    }
+    // openings from links, the front door and windows
+    const OPEN = { door: [0, 2.15], arch: [0, Math.min(2.6, H - 0.35)], hatch: [1.05, 2.05], window: [1.0, 2.1] };
+    for (const l of plan.links) {
+      if (l.kind === "open") continue;
+      const w = walls.find(w => w.pair && w.pair.includes(l.a) && w.pair.includes(l.b) && l.at > w.from && l.at < w.to);
+      if (!w) { console.warn("no wall for link", l); continue; }
+      const [y0, y1] = OPEN[l.kind];
+      w.openings.push({ c: l.at, w: l.w || (l.kind === "door" ? 0.95 : 1.6), y0, y1, kind: l.kind, link: l });
+    }
+    const front = walls.find(w => w.outer === "front" && plan.door > w.from && plan.door < w.to);
+    front.openings.push({ c: plan.door, w: 1.3, y0: 0, y1: 2.3, kind: "front" });
+    for (const win of plan.windows || []) {
+      const w = walls.find(w => w.outer === win.side && w.rooms[win.room] !== undefined);
+      if (w) w.openings.push({ c: win.at, w: win.w, y0: 0.95, y1: 2.2, kind: "outwin" });
+    }
+    // ---- raise the walls ----
+    const wallCol = opts.wall ?? plan.wall ?? 0xe6dccb, trim = 0xf2efe8;
+    const pieces = [];
+    const seg = (w, a, b, y0, y1) => {
+      if (b - a < 0.005 || y1 - y0 < 0.005) return;
+      const mid = (a + b) / 2, len = b - a, h = y1 - y0;
+      if (w.axis === "x") K.box("matte", len, h, T, mid, (y0 + y1) / 2, w.at, wallCol); else K.box("matte", T, h, len, w.at, (y0 + y1) / 2, mid, wallCol);
+      if (y0 < 0.01 || (y0 > 0.5 && y0 < 1.2)) { if (w.axis === "x") K.block(a, w.at - T / 2, b, w.at + T / 2); else K.block(w.at - T / 2, a, w.at + T / 2, b); }
+      pieces.push({ w, a, b, y0, y1 });
+    };
+    for (const w of walls) {
+      const ops = w.openings.sort((p, q) => p.c - q.c);
+      let cur = w.from;
+      for (const o of ops) {
+        const a = o.c - o.w / 2, b = o.c + o.w / 2;
+        seg(w, cur, a, 0, H);
+        seg(w, a, b, 0, o.y0);                          // below a window / hatch
+        seg(w, a, b, o.y1, H);                          // lintel
+        cur = b;
+        openingDress(w, o);
+      }
+      seg(w, cur, w.to, 0, H);
+    }
+    // skirting boards on every face of every piece that touches the floor
+    const faces = w => Object.entries(w.rooms);
+    for (const p of pieces) if (p.y0 < 0.01) for (const [, s] of faces(p.w)) {
+      const off = p.w.at + s * (T / 2 + 0.01), len = p.b - p.a, mid = (p.a + p.b) / 2;
+      if (p.w.axis === "x") K.box("gloss", len, 0.1, 0.02, mid, 0.05, off, trim); else K.box("gloss", 0.02, 0.1, len, off, 0.05, mid, trim);
+    }
+    // doors, arches, hatches and windows get their joinery
+    function openingDress(w, o) {
+      const along = (u, y, n, lw, lh, ld, col, mat = "wood") => {       // a box at (u along the wall, y, n across it)
+        if (w.axis === "x") K.box(mat, lw, lh, ld, u, y, w.at + n, col); else K.box(mat, ld, lh, lw, w.at + n, y, u, col);
+      };
+      const a = o.c - o.w / 2, b = o.c + o.w / 2;
+      const sides = Object.values(w.rooms);
+      if (o.kind === "door" || o.kind === "arch" || o.kind === "front") {
+        for (const s of sides) {
+          const n = s * (T / 2 + 0.012);
+          along(a - 0.04, o.y1 / 2, n, 0.08, o.y1 + 0.04, 0.025, trim, "gloss"); along(b + 0.04, o.y1 / 2, n, 0.08, o.y1 + 0.04, 0.025, trim, "gloss");
+          along(o.c, o.y1 + 0.04, n, o.w + 0.16, 0.08, 0.025, trim, "gloss");
+        }
+        along(o.c, 0.005, 0, o.w, 0.01, T, 0x8a8278, "matte");                          // threshold
+      }
+      if (o.kind === "door") {
+        // an open door leaf, standing into the room it belongs to, hinged on the near jamb
+        const into = o.link.into || o.link.b, s = w.rooms[into], L = o.w - 0.06;
+        const hingeB = (w.to - b) < (a - w.from);
+        const hx = hingeB ? b - 0.08 : a;
+        const hc = hx + 0.04;                              // the leaf's line along the wall
+        if (w.axis === "x") { K.box("wood", 0.04, 2.08, L, hc - 0.01, 1.05, w.at + s * (T / 2 + L / 2), 0x6a4a30, { r: 0.006 }); K.box("chrome", 0.03, 0.03, 0.12, hc + (hingeB ? -0.05 : 0.05), 1.02, w.at + s * (T / 2 + L - 0.1), 0xc8b27a); K.block(hx, Math.min(w.at + s * T / 2, w.at + s * (T / 2 + L)), hx + 0.08, Math.max(w.at + s * T / 2, w.at + s * (T / 2 + L))); }
+        else { K.box("wood", L, 2.08, 0.04, w.at + s * (T / 2 + L / 2), 1.05, hc - 0.01, 0x6a4a30, { r: 0.006 }); K.box("chrome", 0.12, 0.03, 0.03, w.at + s * (T / 2 + L - 0.1), 1.02, hc + (hingeB ? -0.05 : 0.05), 0xc8b27a); K.block(Math.min(w.at + s * T / 2, w.at + s * (T / 2 + L)), hx, Math.max(w.at + s * T / 2, w.at + s * (T / 2 + L)), hx + 0.08); }
+      }
+      if (o.kind === "front") {
+        along(o.c, 1.15, 0, o.w - 0.06, 2.24, 0.06, 0x3a2618, "wood");
+        for (const s of sides) { along(o.c - o.w / 2 + 0.16, 1.05, s * 0.06, 0.04, 0.04, 0.06, 0xc8b27a, "chrome"); along(o.c - o.w / 2 + 0.16, 1.05, s * 0.09, 0.14, 0.03, 0.03, 0xc8b27a, "chrome"); }
+        for (const [i, s] of sides.entries()) if (i === 0) { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.7), new THREE.MeshStandardMaterial({ color: 0x3a3430, roughness: 1 })); own.push(m.geometry, m.material); m.rotation.x = -Math.PI / 2; if (w.axis === "x") m.position.set(o.c, 0.05, w.at + s * 0.55); else m.position.set(w.at + s * 0.55, 0.05, o.c); extras.push(m); }
+      }
+      if (o.kind === "hatch") for (const s of sides) along(o.c, o.y0 + 0.02, s * 0.12, o.w + 0.1, 0.05, 0.3, 0xd8d4cc, "gloss");
+      if (o.kind === "window" || o.kind === "outwin") {
+        along(o.c, (o.y0 + o.y1) / 2, 0, o.w, o.y1 - o.y0, 0.012, 0xdde8ee, "glass");
+        for (const s of sides) {
+          const n = s * (T / 2 + 0.01);
+          along(o.c, o.y0 - 0.02, n + s * 0.04, o.w + 0.16, 0.05, 0.12, trim, "gloss");        // sill
+          along(o.c, o.y1 + 0.03, n, o.w + 0.12, 0.06, 0.03, trim, "gloss");
+          along(a - 0.03, (o.y0 + o.y1) / 2, n, 0.06, o.y1 - o.y0, 0.03, trim, "gloss"); along(b + 0.03, (o.y0 + o.y1) / 2, n, 0.06, o.y1 - o.y0, 0.03, trim, "gloss");
+          along(o.c, (o.y0 + o.y1) / 2, n, 0.04, o.y1 - o.y0, 0.03, trim, "gloss");
+        }
+        if (o.kind === "outwin") {
+          const s = -sides[0], m = new THREE.Mesh(new THREE.PlaneGeometry(o.w * 1.6, (o.y1 - o.y0) * 1.5), viewMat);
+          if (w.axis === "x") { m.position.set(o.c, (o.y0 + o.y1) / 2, w.at + s * 0.6); m.rotation.y = s > 0 ? Math.PI : 0; }
+          else { m.position.set(w.at + s * 0.6, (o.y0 + o.y1) / 2, o.c); m.rotation.y = s > 0 ? -Math.PI / 2 : Math.PI / 2; }
+          own.push(m.geometry); extras.push(m);
+          // curtains either side, inside
+          const n = sides[0] * (T / 2 + 0.12);
+          for (const u of [a - 0.2, b + 0.2]) along(u, 1.35, n, 0.36, 2.2, 0.05, opts.curtain ?? 0xc8b8a0, "fabric");
+          along(o.c, o.y1 + 0.25, n, o.w + 1.0, 0.03, 0.03, 0x2a2a2e, "metal");
+        }
+      }
+      // door signs
+      if (o.link && o.link.sign) o.link.sign.forEach((txt, i) => {
+        if (!txt) return;
+        const key = i === 0 ? o.link.a : o.link.b, s = w.rooms[key];
+        const tex = textTex(256, 64, (x, W2, H2) => { x.fillStyle = "#1e2226"; x.fillRect(0, 0, W2, H2); x.fillStyle = "#f4f4f0"; x.font = "bold 30px sans-serif"; x.textAlign = "center"; x.fillText(txt, W2 / 2, 43); });
+        const mat = new THREE.MeshBasicMaterial({ map: tex }); own.push(tex, mat);
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.175), mat); own.push(m.geometry);
+        const y = Math.min(H - 0.15, o.y1 + 0.25), off = s * (T / 2 + 0.015);
+        if (w.axis === "x") { m.position.set(o.c, y, w.at + off); m.rotation.y = s > 0 ? 0 : Math.PI; } else { m.position.set(w.at + off, y, o.c); m.rotation.y = s > 0 ? Math.PI / 2 : -Math.PI / 2; }
+        extras.push(m);
+      });
+    }
+    // ---- floors, ceiling, ceiling lights ----
+    for (const k of keys) {
+      const r = raw[k], ft = plan.rooms[k].floor === "@decor" ? opts.floor : plan.rooms[k].floor, sc = FLOOR_SCALE[ft] || 2.4;
+      const geo = new THREE.PlaneGeometry(r.x1 - r.x0, r.z1 - r.z0); geo.rotateX(-Math.PI / 2);
+      const pos = geo.attributes.position, uv = geo.attributes.uv;
+      for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i) + (r.x0 + r.x1) / 2) / sc, (pos.getZ(i) + (r.z0 + r.z1) / 2) / sc);
+      const m = new THREE.Mesh(geo, floorMat(ft)); m.position.set((r.x0 + r.x1) / 2, 0.04, (r.z0 + r.z1) / 2); m.receiveShadow = true;
+      own.push(geo); extras.push(m);
+      const kind = plan.rooms[k].ceil || "round";
+      if (kind !== "none") {
+        const nx = Math.max(1, Math.round((r.x1 - r.x0) / 4.5)), nz = Math.max(1, Math.round((r.z1 - r.z0) / 4.5));
+        for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) F.ceilingLight(K, r.x0 + (i + 0.5) * (r.x1 - r.x0) / nx, r.z0 + (j + 0.5) * (r.z1 - r.z0) / nz, H, kind, plan.rooms[k].light[0]);
+      }
+    }
+    const ceil = new THREE.Mesh(new THREE.BoxGeometry(W + 0.4, 0.2, D + 0.4), ceilMat); ceil.position.y = H + 0.1; ceil.castShadow = true;
+    own.push(ceil.geometry); extras.push(ceil);
+    // ---- furnish ----
+    const spots = [], npcs = [], updates = [];
+    const brand = new THREE.Color(opts.place && opts.place.bg || "#445").getHex();
+    const facing = ry => [Math.sin(ry), Math.cos(ry)];
+    const plane = (x, y, z, ry, w, h, mat, off = 0.012) => { const [nx, nz] = facing(ry); const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat); m.position.set(x + nx * off, y, z + nz * off); m.rotation.y = ry; own.push(m.geometry, mat); if (mat.map) own.push(mat.map); extras.push(m); return m; };
+    const ctx = {
+      K, R, H, brand, fg: opts.place && opts.place.fg || "#fff", label: opts.label || "",
+      P(x, z, ry, fn, y = 0) { K.push(x, z, ry, y); fn(); K.pop(); },
+      spot(x, z, r, label, prompt, act) { spots.push({ x, z, r, label, prompt, act }); },
+      npc(x, z, yaw, pose, look) { npcs.push({ x, z, yaw, pose, look }); },
+      painting(x, y, z, ry, w, h, v, o = {}) {
+        const [nx, nz] = facing(ry), tilt = o.lean || 0;
+        K.push(x + nx * 0.025, z + nz * 0.025, ry, y); K.box("wood", w + 0.08, h + 0.08, 0.04, 0, 0, 0, 0x1e1a14, { rx: -tilt }); K.pop();
+        const m = plane(x + nx * 0.025, y, z + nz * 0.025, ry, w, h, new THREE.MeshStandardMaterial({ map: paintingTex(v), roughness: 0.85, envMapIntensity: 0.1 }), 0.022);
+        m.rotation.x = 0; if (tilt) { m.rotation.order = "YXZ"; m.rotation.x = -tilt; }
+      },
+      rug(x, z, w, d, col, ry = 0) {
+        const c = new THREE.Color(col), tex = textTex(256, 256, (cx, s) => { cx.fillStyle = hex(c); cx.fillRect(0, 0, s, s); cx.strokeStyle = "rgba(240,230,210,.55)"; cx.lineWidth = 8; cx.strokeRect(18, 18, s - 36, s - 36); cx.lineWidth = 3; cx.strokeRect(34, 34, s - 68, s - 68); cx.strokeStyle = "rgba(240,230,210,.3)"; cx.beginPath(); cx.moveTo(s / 2, 50); cx.lineTo(s - 50, s / 2); cx.lineTo(s / 2, s - 50); cx.lineTo(50, s / 2); cx.closePath(); cx.stroke(); for (let i = 0; i < 4000; i++) { cx.fillStyle = `rgba(0,0,0,${rnd() * 0.08})`; cx.fillRect(rnd() * s, rnd() * s, 2, 2); } });
+        const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 1, envMapIntensity: 0.05, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -10 });
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat); m.rotation.set(-Math.PI / 2, 0, ry, "YXZ"); m.rotation.order = "XYZ"; m.rotation.set(-Math.PI / 2, 0, -ry); m.position.set(x, 0.05, z); m.receiveShadow = true;
+        own.push(m.geometry, mat, tex); extras.push(m);
+      },
+      screen(x, y, z, ry, w, h, dz) {
+        const [nx, nz] = facing(ry); const mat = new THREE.MeshBasicMaterial({ color: 0x2a4a7a });
+        const m = plane(x + nx * dz, y, z + nz * dz, ry, w, h, mat, 0);
+        updates.push(t => { const f = 0.7 + Math.sin(t * 7) * 0.08 + Math.sin(t * 2.3) * 0.12; mat.color.setRGB(0.25 * f, 0.45 * f, 0.8 * f); });
+      },
+      dance(cx, cz, n, s) {
+        const geo = new THREE.BoxGeometry(s * 0.96, 0.03, s * 0.96), mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const tiles = new THREE.InstancedMesh(geo, mat, n * n); own.push(geo, mat);
+        const m = new THREE.Matrix4(), c = new THREE.Color();
+        for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { m.makeTranslation(cx + (i - n / 2 + 0.5) * s, 0.06, cz + (j - n / 2 + 0.5) * s); tiles.setMatrixAt(i * n + j, m); tiles.setColorAt(i * n + j, c.set(0x222222)); }
+        extras.push(tiles);
+        const neon = [0xff3b8b, 0x3bd0ff, 0xb44bff, 0xffd23b];
+        updates.push(t => { const beat = Math.floor(t * 2.2); for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const on = ((i * 7 + j * 3 + beat) % 5) < 3; c.setHex(neon[(i + j + beat) % 4]).multiplyScalar(on ? 1.6 : 0.1); tiles.setColorAt(i * n + j, c); } tiles.instanceColor.needsUpdate = true; });
+      },
+      // colour a room's walls: full height (h = 0) or a wainscot / tiled dado up to h
+      paint(key, col, h, mat, o = {}) {
+        for (const p of pieces) {
+          const s = p.w.rooms[key]; if (s === undefined) continue;
+          if (o.accentWall) { const r = raw[key]; if (!(p.w.axis === "x" && Math.abs(p.w.at - r.z0) < 1e-6)) continue; }
+          let y0 = p.y0, y1 = Math.min(p.y1, h || p.y1);
+          if (o.backsplash) { y0 = Math.max(p.y0, 0.92); y1 = Math.min(p.y1, 1.55); }
+          if (y1 - y0 < 0.01) continue;
+          const off = p.w.at + s * (T / 2 + 0.004), len = p.b - p.a, mid = (p.a + p.b) / 2;
+          if (p.w.axis === "x") K.box(mat || "matte", len, y1 - y0, 0.006, mid, (y0 + y1) / 2, off, col); else K.box(mat || "matte", 0.006, y1 - y0, len, off, (y0 + y1) / 2, mid, col);
+          if (h && !o.backsplash && y1 < p.y1 && y1 - y0 > 0.3) { const c2 = o.color2 ?? 0x8a8278, off2 = p.w.at + s * (T / 2 + 0.012); if (p.w.axis === "x") K.box("gloss", len, 0.05, 0.02, mid, y1, off2, c2); else K.box("gloss", 0.02, 0.05, len, off2, y1, mid, c2); }
+        }
+      },
+      pendant(x, z, drop, shade) { F.pendantLamp(K, x, z, H, drop, 0xfff0c8, shade ?? 0x1a1a1c); },
+      neon(x, y, z, ry, text, col) {
+        const tex = textTex(512, 128, (c, w, h) => { c.font = "bold 84px sans-serif"; c.textAlign = "center"; c.shadowColor = hex(col); c.shadowBlur = 18; c.fillStyle = "#ffffff"; c.fillText(text, w / 2, 94); c.fillStyle = hex(col); c.globalAlpha = 0.6; c.fillText(text, w / 2, 94); });
+        const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, color: new THREE.Color(1.8, 1.8, 1.8) });
+        plane(x, y, z, ry, Math.min(3.2, text.length * 0.34), 0.8, mat, 0.03);
+      },
+      poster(x, y, z, ry, w, h, text, bg, fgc = 0xffffff) {
+        const tex = textTex(256, Math.round(256 * h / w), (c, W2, H2) => { c.fillStyle = hex(bg); c.fillRect(0, 0, W2, H2); c.strokeStyle = "rgba(0,0,0,.4)"; c.lineWidth = 6; c.strokeRect(8, 8, W2 - 16, H2 - 16); c.fillStyle = hex(fgc); c.textAlign = "center"; c.font = "bold 34px sans-serif"; text.split(" ").forEach((wd, i, a) => c.fillText(wd, W2 / 2, H2 / 2 - (a.length - 1) * 20 + i * 40 + 10)); if (text === "WANTED" || text === "MISSING") { c.fillStyle = "#6a6258"; c.fillRect(W2 * 0.25, H2 * 0.45, W2 * 0.5, H2 * 0.38); c.fillStyle = "#2a2622"; c.beginPath(); c.arc(W2 / 2, H2 * 0.58, W2 * 0.12, 0, 7); c.fill(); c.fillRect(W2 * 0.32, H2 * 0.68, W2 * 0.36, H2 * 0.15); } });
+        plane(x, y, z, ry, w, h, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8, envMapIntensity: 0.1 }));
+      },
+      banner(x, y, z, ry, w, h, text, bg, fgc) {
+        const tex = textTex(512, Math.round(512 * h / w), (c, W2, H2) => { c.fillStyle = hex(bg); c.fillRect(0, 0, W2, H2); c.fillStyle = typeof fgc === "string" ? fgc : hex(fgc ?? 0xffffff); c.textAlign = "center"; c.font = `bold ${Math.round(H2 * 0.42)}px sans-serif`; c.fillText(text, W2 / 2, H2 * 0.64); });
+        plane(x, y, z, ry, w, h, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6, envMapIntensity: 0.1 }));
+      },
+      menu(x, y, z, ry, w, h) {
+        const label = ctx.label, pizza = label.includes("PIZZA");
+        const tex = textTex(768, Math.round(768 * h / w), (c, W2, H2) => {
+          c.fillStyle = "#16181c"; c.fillRect(0, 0, W2, H2); c.fillStyle = hex(brand); c.fillRect(0, 0, W2, 50);
+          c.fillStyle = ctx.fg; c.font = "bold 34px sans-serif"; c.textAlign = "center"; c.fillText(label, W2 / 2, 37);
+          c.textAlign = "left"; c.font = "bold 26px sans-serif";
+          const items = pizza ? [["Margherita", "8"], ["Pepperoni", "10"], ["Veggie Supreme", "9"], ["Meat Feast", "12"], ["Garlic knots", "4"], ["Soda", "2"]] : [["Big Bun", "9"], ["Double Stack", "12"], ["Chicken Crunch", "8"], ["Fries", "3"], ["Onion rings", "4"], ["Shake", "4"]];
+          items.forEach(([n, p], i) => { const cx = 30 + (i % 2) * 380, cy = 100 + Math.floor(i / 2) * 64; c.fillStyle = "#f0e8d8"; c.fillText(n, cx, cy); c.fillStyle = "#ffcf5a"; c.fillText("$" + p, cx + 290, cy); });
+        });
+        plane(x, y, z, ry, w, h, new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(1.15, 1.15, 1.15) }));
+      },
+      cross(x, y, z, ry) { const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xe02020).multiplyScalar(1.6) }); plane(x, y, z, ry, 0.35, 1.1, mat); plane(x, y, z, ry, 1.1, 0.35, mat.clone()); },
+      seal(x, y, z, ry) {
+        const tex = textTex(256, 256, (c, w) => { c.fillStyle = "#10204a"; c.beginPath(); c.arc(w / 2, w / 2, w / 2 - 4, 0, 7); c.fill(); c.strokeStyle = "#e8c84a"; c.lineWidth = 10; c.stroke(); c.fillStyle = "#e8c84a"; c.font = "bold 64px sans-serif"; c.textAlign = "center"; c.fillText("PCPD", w / 2, w / 2 + 22); });
+        plane(x, y, z, ry, 1.2, 1.2, new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+      },
+      mirror(x, y, z, ry, w, h) { const [nx, nz] = facing(ry); K.push(x + nx * 0.02, z + nz * 0.02, ry, y); K.box("metal", w + 0.08, h + 0.08, 0.03, 0, 0, 0, 0x2a2a2e); K.box("glass", w, h, 0.01, 0, 0, 0.02, 0x101418); K.pop(); },
+    };
+    const d = opts.decor;
+    plan.furnish(ctx, d || {});
+    const kitGroup = K.build(); group.add(kitGroup, ...extras);
+    kitGroup.traverse(o => { if (o.geometry) own.push(o.geometry); });
+    const blocks = K.blocks;
+    // the exit mat, just inside the front door
+    const exit = { x: plan.door, z: D / 2 - 0.75 };
+    // which openings connect which rooms (for the second light)
+    const doors = [];
+    for (const w of walls) for (const o of w.openings) if (o.link) doors.push({ x: w.axis === "x" ? o.c : w.at, z: w.axis === "x" ? w.at : o.c, a: o.link.a, b: o.link.b });
+    for (const l of plan.links) if (l.kind === "open") { const a = raw[l.a], b = raw[l.b]; doors.push({ x: (Math.max(a.x0, b.x0) + Math.min(a.x1, b.x1)) / 2, z: (Math.max(a.z0, b.z0) + Math.min(a.z1, b.z1)) / 2, a: l.a, b: l.b }); }
+    return { group, plan, R, raw, keys, blocks, spots, npcs, updates, exit, doors, own, W, D, H };
+  }
+  function dispose(b) {
+    root.remove(b.group);
+    for (const o of b.own) if (o && o.dispose) o.dispose();
   }
 
-  function buildFurniture() {
-    clear(furn);
-    const d = st.decor, opt = k => DECOR[k].opts[d[k]] || DECOR[k].opts[0];
-    wallMat.color.setHex(opt("wall").c);
-    const ft = opt("floor").tex; floorTex[ft] = floorTex[ft] || FLOORS[ft].tex();
-    floorMat.map = floorTex[ft]; floorMat.roughness = FLOORS[ft].rough; floorMat.needsUpdate = true;
-    const fb = blocks.slice(0, 2);
-    const lx = W / 2 - 3.2, lz = -0.6;                     // the living area, facing the TV on the right wall
-    let o;
-    o = opt("rug"); if (!o.none) {
-      const c = new THREE.Color(o.c), tex = canvasTex(256, (x, s) => { x.fillStyle = "#" + c.getHexString(); x.fillRect(0, 0, s, s); x.strokeStyle = "rgba(240,230,210,.55)"; x.lineWidth = 8; x.strokeRect(18, 18, s - 36, s - 36); x.lineWidth = 3; x.strokeRect(34, 34, s - 68, s - 68); for (let i = 0; i < 4000; i++) { x.fillStyle = `rgba(0,0,0,${rnd() * 0.08})`; x.fillRect(rnd() * s, rnd() * s, 2, 2); } }, 1, 1);
-      const r = M(furn, new THREE.PlaneGeometry(4.2, 3.0), std(0xffffff, 1, 0, { map: tex }), lx, 0.06, lz); r.rotation.x = -Math.PI / 2; r.rotation.z = Math.PI / 2; r.castShadow = false;
-    }
-    o = opt("sofa"); if (!o.none) {
-      const m = std(o.c, 0.95), sx = lx - 2.3;
-      B(furn, 0.95, 0.42, 2.6, m, sx, 0.3, lz); B(furn, 0.28, 0.55, 2.6, m, sx - 0.36, 0.72, lz);
-      for (const z of [-1.2, 1.2]) B(furn, 0.95, 0.62, 0.22, m, sx, 0.4, lz + z);
-      for (const z of [-0.6, 0.6]) B(furn, 0.7, 0.14, 1.12, std(o.c, 1), sx + 0.08, 0.57, lz + z);
-      for (const z of [-1.1, 1.1]) for (const x of [-0.4, 0.4]) B(furn, 0.06, 0.1, 0.06, std(0x222222, 0.5), sx + x, 0.05, lz + z * 1.1);
-      fb.push([sx - 0.5, sx + 0.5, lz - 1.35, lz + 1.35]);
-    }
-    o = opt("table"); if (!o.none) {
-      const glass = d.table === 3, m = glass ? std(o.c, 0.05, 0, { transparent: true, opacity: 0.45 }) : std(o.c, 0.45);
-      B(furn, 0.9, 0.05, 1.5, m, lx - 0.7, 0.42, lz);
-      for (const x of [-0.38, 0.38]) for (const z of [-0.66, 0.66]) B(furn, 0.05, 0.4, 0.05, std(glass ? 0xb0b4b8 : o.c, 0.4, glass ? 0.8 : 0), lx - 0.7 + x, 0.2, lz + z);
-      B(furn, 0.22, 0.03, 0.3, std(0xd8d0c0, 0.8), lx - 0.6, 0.46, lz + 0.3, 0.3);             // a magazine
-      fb.push([lx - 1.2, lx - 0.2, lz - 0.8, lz + 0.8]);
-    }
-    o = opt("tv"); if (!o.none) {
-      const tx = W / 2 - 0.35;
-      B(furn, 0.5, 0.5, 2.2, std(o.c, 0.5), tx, 0.25, lz);
-      B(furn, 0.06, 0.95, 1.7, std(0x0a0a0c, 0.2, 0.3), tx - 0.02, 1.1, lz);
-      const scr = M(furn, new THREE.PlaneGeometry(1.6, 0.86), new THREE.MeshBasicMaterial({ color: 0x2a4a7a }), tx - 0.06, 1.1, lz, -Math.PI / 2); scr.castShadow = false; tvScreen = scr;
-      fb.push([tx - 0.3, W / 2, lz - 1.15, lz + 1.15]);
-    } else tvScreen = null;
-    o = opt("bed"); if (!o.none) {
-      const bx = -W / 2 + 2.1, bz = -D / 2 + 1.3, frame = std(0x4a3626, 0.6);
-      B(furn, 1.9, 0.35, 2.3, frame, bx, 0.18, bz);
-      B(furn, 2.0, 1.1, 0.12, frame, bx, 0.55, -D / 2 + 0.08);                                // headboard
-      B(furn, 1.8, 0.25, 2.15, std(0xf0ece2, 0.9), bx, 0.47, bz + 0.05);                   // mattress
-      B(furn, 1.84, 0.1, 1.5, std(o.c, 0.95), bx, 0.62, bz + 0.38);                          // duvet
-      for (const x of [-0.45, 0.45]) B(furn, 0.7, 0.14, 0.4, std(0xf6f2ea, 0.95), bx + x, 0.66, -D / 2 + 0.45);
-      B(furn, 0.5, 0.5, 0.45, frame, bx + 1.35, 0.25, -D / 2 + 0.3);                          // nightstand
-      bedPos = { x: bx, z: bz };
-      fb.push([bx - 1.0, bx + 1.6, -D / 2, bz + 1.2]);
-    } else bedPos = null;
-    o = opt("plant"); if (!o.none) {
-      const px = W / 2 - 0.6, pz = -D / 2 + 0.6, pot = std(0x7a4a2e, 0.8), leaf = std(o.c, 0.8);
-      M(furn, new THREE.CylinderGeometry(0.28, 0.2, 0.5, 14), pot, px, 0.25, pz);
-      if (d.plant === 3) { M(furn, new THREE.CylinderGeometry(0.12, 0.14, 1.1, 10), leaf, px, 1.0, pz); M(furn, new THREE.CylinderGeometry(0.07, 0.08, 0.5, 8), leaf, px + 0.2, 1.05, pz).rotation.z = -0.9; }
-      else for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2, l = M(furn, new THREE.ConeGeometry(0.16, 0.9, 5), leaf, px + Math.cos(a) * 0.22, 0.95, pz + Math.sin(a) * 0.22); l.rotation.set(Math.sin(a) * 0.7, 0, -Math.cos(a) * 0.7); }
-      fb.push([px - 0.35, px + 0.35, pz - 0.35, pz + 0.35]);
-    }
-    o = opt("art"); if (!o.none) {
-      const c = new THREE.Color(o.c), ax = W / 2 - 3.2, tex = canvasTex(256, (x, s) => {
-        const gr = x.createLinearGradient(0, 0, 0, s); gr.addColorStop(0, "#" + c.clone().offsetHSL(0, 0, 0.2).getHexString()); gr.addColorStop(1, "#" + c.clone().offsetHSL(0.05, 0, -0.2).getHexString()); x.fillStyle = gr; x.fillRect(0, 0, s, s);
-        for (let i = 0; i < 26; i++) { x.fillStyle = `rgba(${rnd() < 0.5 ? "255,255,255" : "0,0,0"},${rnd() * 0.18})`; x.beginPath(); x.arc(rnd() * s, rnd() * s, 10 + rnd() * 60, 0, 7); x.fill(); }
-      }, 1, 1);
-      B(furn, 2.0, 1.3, 0.06, std(0x1e1a14, 0.5), ax, 1.9, -D / 2 + 0.03);
-      M(furn, new THREE.PlaneGeometry(1.84, 1.14), std(0xffffff, 0.9, 0, { map: tex }), ax, 1.9, -D / 2 + 0.07).castShadow = false;
-    }
-    o = opt("lamp"); lampLight.intensity = 0;
-    if (!o.none) {
-      const px = lx - 2.3, pz = lz - 1.75;
-      M(furn, new THREE.CylinderGeometry(0.2, 0.22, 0.05, 16), std(0x1e1e22, 0.4, 0.6), px, 0.03, pz);
-      M(furn, new THREE.CylinderGeometry(0.025, 0.025, 1.6, 8), std(0x1e1e22, 0.4, 0.6), px, 0.8, pz);
-      M(furn, new THREE.CylinderGeometry(0.2, 0.32, 0.4, 16, 1, true), std(0xf0e8d8, 0.9, 0, { side: THREE.DoubleSide, emissive: o.c, emissiveIntensity: 0.6 }), px, 1.7, pz);
-      lampLight.color.setHex(o.c); lampLight.position.set(px, 1.6, pz); lampLight.intensity = 6;
-      fb.push([px - 0.25, px + 0.25, pz - 0.25, pz + 0.25]);
-    }
-    blocks = fb;
+  // ------------------------------------------------------------------------------------------
+  // decor → furniture choices
+  // ------------------------------------------------------------------------------------------
+  function decorSpec() {
+    const d = st.decor, o = k => DECOR[k].opts[d[k]] || DECOR[k].opts[0];
+    const col = k => (o(k).none ? null : o(k).c);
+    const t = o("table");
+    return {
+      spec: {
+        sofa: col("sofa"), bed: col("bed"), rug: col("rug"), tv: col("tv"), art: col("art"), lamp: col("lamp"),
+        plant: o("plant").none ? null : o("plant").n.toLowerCase(),
+        table: t.none ? null : t.n === "Glass" ? { glass: true } : { wood: t.c },
+        accent: col("lamp") || 0xd8cfb8,
+      },
+      wall: o("wall").c, floor: o("floor").tex,
+    };
   }
-  let tvScreen = null, bedPos = null;
 
-  // people inside venues: whoever's behind the counter, plus dancers at the club
-  const npcs = [];
-  function staff(list) {
-    for (const n of npcs) n.ch.group.visible = false;
-    list.forEach((it, i) => {
-      if (!npcs[i]) { const ch = makeCharacter(randomLook(Math.random)); scene.add(ch.group); npcs[i] = { ch }; }
-      const n = npcs[i]; Object.assign(n, it); n.ch.group.visible = true; n.phase = Math.random() * 6;
-      if (it.look) { Object.assign(n.ch.look, it.look); n.ch.look.armCol = n.ch.look.shirt; n.ch.look.shinCol = n.ch.look.pants; n.ch.recolor(); }
-    });
-    S.npcN = list.length;
+  // ------------------------------------------------------------------------------------------
+  // enter / leave
+  // ------------------------------------------------------------------------------------------
+  let prop = null;
+  function open(plan, opts, P) {
+    if (B) dispose(B);
+    B = build(plan, opts);
+    root.add(B.group); root.visible = true; S.inside = true; S.room = null;
+    staff(B.npcs);
+    const e = B.exit; P.x = ROOM.x + e.x; P.z = ROOM.z + e.z - 0.3; P.y = 0; P.vy = 0; P.yaw = Math.PI; P.speed = 0;
+    S.snap = true;
   }
-  let venue = null;
-  const S = { inside: false, pr: null, camX: 0, camZ: 0, npcN: 0 };
   function enter(pr, P) {
-    prop = pr; S.pr = pr; venue = null; [W, D] = SIZES[pr.id] || SIZES.condo;
-    buildRoom(true); buildFurniture(); staff([]);
-    wallMat.color.setHex((DECOR.wall.opts[st.decor.wall] || DECOR.wall.opts[0]).c);
-    light.color.setHex(0xffd6a0); root.visible = true; S.inside = true;
-    light.intensity = 38;
-    arrive(P);
-    g.sound("door", 0.6); g.toast("🏠 " + pr.label + " · walk to the door to leave");
+    prop = pr; S.pr = pr;
+    const ds = decorSpec();
+    open(PLANS[pr.id] || PLANS.condo, { decor: ds.spec, wall: ds.wall, floor: ds.floor, label: pr.label }, P);
+    g.sound("door", 0.6); g.toast("🏠 " + pr.label + " · the front door takes you back out");
   }
-  // walk into a business or landmark
   function enterVenue(id, P) {
     const place = PLACES[id], theme = VENUES[id];
-    prop = { id, p: place, label: place.label || id }; S.pr = prop; [W, D] = VENUE_SIZE[theme];
-    buildRoom(false); clear(furn); tvScreen = null; bedPos = null; lampLight.intensity = 0;
-    venue = buildVenue(theme, { grp: furn, W, D, B, M, std, place, label: prop.label });
-    venue.theme = theme;
-    wallMat.color.setHex(venue.wall);
-    const ft = venue.floor; floorTex[ft] = floorTex[ft] || FLOORS[ft].tex();
-    floorMat.map = floorTex[ft]; floorMat.roughness = FLOORS[ft].rough; floorMat.needsUpdate = true;
-    blocks = venue.blocks;
-    const people = [];
-    if (venue.clerk) people.push({ ...venue.clerk, idle: true });
-    if (theme === "club") for (let i = 0; i < 4; i++) people.push({ x: 0.3 + (i % 2) * 2.2, z: -1.2 + Math.floor(i / 2) * 2.2, yaw: i * 1.7, dance: true });
-    if (theme === "food" || theme === "hospital") people.push({ x: -W / 2 + 1.0, z: theme === "food" ? 0.4 : -2.2, yaw: Math.PI / 2, sit: true });
-    staff(people);
-    light.color.setHex(venue.light[0]); root.visible = true; S.inside = true; light.intensity = venue.light[1];
-    arrive(P);
-    g.sound("door", 0.6); g.toast("🚪 " + prop.label + " · walk to the door to leave");
-  }
-  function arrive(P) {
-    const dr = door();
-    P.x = ROOM.x + dr.x; P.z = ROOM.z + dr.z - 0.6; P.y = 0; P.vy = 0; P.yaw = Math.PI; P.speed = 0;
-    S.camX = ROOM.x + dr.x; S.camZ = ROOM.z + D / 2 - 0.3; S.snap = true;
+    prop = { id, p: place, label: place.label || id, theme }; S.pr = prop;
+    open(PLANS[theme], { place, label: prop.label }, P);
+    g.sound("door", 0.6); g.toast("🚪 " + prop.label + " · the front door takes you back out");
   }
   function exit(P) {
     const p = prop.p;
-    S.inside = false; root.visible = false; light.intensity = 0; lampLight.intensity = 0; staff([]); venue = null;
+    S.inside = false; root.visible = false; light.intensity = 0; light2.intensity = 0; amb.intensity = 0; staff([]);
+    if (B) { dispose(B); B = null; }
     P.x = p.x + Math.sin(p.face) * 2; P.z = p.z + Math.cos(p.face) * 2; P.y = 0; P.yaw = p.face; P.speed = 0;
     g.sound("door", 0.6); g.save();
   }
-  // keep the player inside the walls and out of the furniture
+  // redecorating rebuilds the home around you, keeping you where you stand
+  function rebuildHome(P) {
+    const x = P.x, z = P.z, yaw = P.yaw, room = S.room;
+    enter(prop, P); P.x = x; P.z = z; P.yaw = yaw; S.room = room;
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // people
+  // ------------------------------------------------------------------------------------------
+  function staff(list) {
+    for (const n of crew) n.ch.group.visible = false;
+    list.forEach((it, i) => {
+      if (!crew[i]) { const ch = makeCharacter(randomLook(Math.random)); scene.add(ch.group); crew[i] = { ch, base: { ...ch.look } }; }
+      const n = crew[i]; Object.assign(n, { x: it.x, z: it.z, yaw: it.yaw, pose: it.pose, phase: Math.random() * 6 });
+      Object.assign(n.ch.look, n.base, it.look || {}); n.ch.look.armCol = n.ch.look.sleeveless ? n.ch.look.skin : n.ch.look.shirt; n.ch.look.shinCol = n.ch.look.shorts ? n.ch.look.skin : n.ch.look.pants; n.ch.recolor();
+      n.ch.group.visible = true;
+    });
+    S.npcN = list.length;
+  }
+  const SIT = { thighL: -1.5, thighR: -1.5, kneeL: 1.5, kneeR: 1.5 };
+  function poseCrew(time) {
+    for (let i = 0; i < S.npcN; i++) {
+      const n = crew[i], x = ROOM.x + n.x, z = ROOM.z + n.z, t = time + n.phase;
+      if (n.pose === "dance") n.ch.pose(x, 0.06, z, n.yaw + Math.sin(t * 1.3) * 0.7, t * 5, 0.5, { override: { armL: -2.3 + Math.sin(t * 5) * 0.6, armR: -2.1 - Math.sin(t * 5) * 0.6, elbowL: -0.7, elbowR: -0.7 } });
+      else if (n.pose === "dj") n.ch.pose(x, 0, z, n.yaw, t * 0.9, 0.04, { override: { armL: -1.0 + Math.sin(t * 4.4) * 0.15, armR: -1.1, elbowL: -0.9, elbowR: -1.0, lean: 0.25 + Math.sin(t * 4.4) * 0.08 }, headPitch: Math.sin(t * 8.8) * 0.18 });
+      else if (n.pose === "sit") n.ch.pose(x, -0.42, z, n.yaw, 0, 0.04, { override: { ...SIT, armL: -0.35, armR: -0.3, elbowL: -1.05, elbowR: -1.1, lean: -0.05 } });
+      else if (n.pose === "sitlow") n.ch.pose(x, -0.36, z, n.yaw, 0, 0.04, { override: { ...SIT, lean: 0.35, armL: -0.3, armR: -0.3, elbowL: -1.3, elbowR: -1.3 } });
+      else if (n.pose === "perch") n.ch.pose(x, -0.12, z, n.yaw, 0, 0.04, { override: { thighL: -1.35, thighR: -1.35, kneeL: 1.6, kneeR: 1.4, armL: -0.9, armR: -0.7, elbowL: -1.0, elbowR: -1.1 } });
+      else if (n.pose === "lie") n.ch.pose(x, 0.58, z, n.yaw, 0, 0.0, { tilt: -1.45, override: { bob: -0.72, thighL: 0, thighR: 0, kneeL: 0.1, kneeR: 0.1, armL: 0, armR: 0, elbowL: -0.2, elbowR: -0.2, lean: 0 } });
+      else n.ch.pose(x, 0, z, n.yaw, t * 0.9, 0.04);
+    }
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // play: walls & furniture, the room cam, lights, actions
+  // ------------------------------------------------------------------------------------------
+  function roomAt(lx, lz) {
+    for (const k of B.keys) { const r = B.raw[k]; if (lx >= r.x0 - 0.01 && lx <= r.x1 + 0.01 && lz >= r.z0 - 0.01 && lz <= r.z1 + 0.01) return k; }
+    return B.keys[0];
+  }
   function confine(P) {
+    if (!B) return;
     let lx = P.x - ROOM.x, lz = P.z - ROOM.z;
-    const r = 0.32;
-    lx = clamp(lx, -W / 2 + r, W / 2 - r); lz = clamp(lz, -D / 2 + r, D / 2 - r);
-    for (const [x0, x1, z0, z1] of blocks) {
+    const r = 0.3;
+    lx = clamp(lx, -B.W / 2 + T / 2 + r, B.W / 2 - T / 2 - r); lz = clamp(lz, -B.D / 2 + T / 2 + r, B.D / 2 - T / 2 - r);
+    for (let pass = 0; pass < 2; pass++) for (const [x0, x1, z0, z1] of B.blocks) {
       if (lx > x0 - r && lx < x1 + r && lz > z0 - r && lz < z1 + r) {
         const pl = lx - (x0 - r), pr = (x1 + r) - lx, pb = lz - (z0 - r), pf = (z1 + r) - lz, m = Math.min(pl, pr, pb, pf);
         if (m === pl) lx = x0 - r; else if (m === pr) lx = x1 + r; else if (m === pb) lz = z0 - r; else lz = z1 + r;
       }
     }
-    P.x = ROOM.x + lx; P.z = ROOM.z + lz; P.y = 0; P.grounded = true; P.vy = Math.min(P.vy, 0);
+    P.x = ROOM.x + lx; P.z = ROOM.z + lz; P.y = 0.04; P.grounded = true; P.vy = Math.min(P.vy, 0);
   }
-  // corner camera across the room from you, looking in
+  // a camera up in a corner of the room you're in: it cuts when you walk through a doorway, set on
+  // the wall you came in by and sliding along it to keep you framed
   function camera(cam, P, dt) {
-    const lx = P.x - ROOM.x;
-    const tx = ROOM.x + clamp(-lx * 0.7, -W / 2 + 0.7, W / 2 - 0.7), tz = ROOM.z + D / 2 - 0.35;
-    const k = S.snap ? 1 : 1 - Math.exp(-dt * 2.5); S.snap = false;
-    S.camX += (tx - S.camX) * k; S.camZ += (tz - S.camZ) * k;
-    cam.position.set(S.camX, H - 0.35, S.camZ);
-    cam.lookAt(P.x, 1.0, P.z);
-    return Math.atan2(P.x - S.camX, P.z - S.camZ);          // "forward" for the stick
+    const lx = P.x - ROOM.x, lz = P.z - ROOM.z, k = roomAt(lx, lz), r = B.R[k];
+    if (k !== S.room) {
+      S.room = k; S.snap = true;
+      const dists = [["x0", lx - r.x0], ["x1", r.x1 - lx], ["z0", lz - r.z0], ["z1", r.z1 - lz]];
+      S.side = pickSide(r, lx, lz, P);
+      const m = Math.min(r.w, r.d); S.fov = m < 3.8 ? 74 : m < 5 ? 66 : 58;
+      const L = B.plan.rooms[k].light; light.color.setHex(L[0]); light.position.set(r.cx, B.H - 0.45, r.cz);
+      S.light = L[1];
+      // the neighbour through the nearest opening gets the fill light
+      let best = null, bd = Infinity;
+      for (const dr of B.doors) if (dr.a === k || dr.b === k) { const dd = (dr.x - lx) ** 2 + (dr.z - lz) ** 2; if (dd < bd) { bd = dd; best = dr; } }
+      if (best) { const o = B.R[best.a === k ? best.b : best.a], L2 = B.plan.rooms[best.a === k ? best.b : best.a].light; light2.color.setHex(L2[0]); light2.position.set(o.cx, B.H - 0.45, o.cz); S.light2 = L2[1] * 0.7; } else S.light2 = 0;
+    }
+    // something got in the way for a moment: cut to a better wall
+    S.occT = (S.occT || 0) + dt;
+    if (S.occT > 0.35) { S.occT = 0; S.blockedT = occluded(S.side, r, lx, lz, P) ? (S.blockedT || 0) + 0.35 : 0; if (S.blockedT > 0.7) { S.blockedT = 0; const ns = pickSide(r, lx, lz, P); if (ns !== S.side) { S.side = ns; S.snap = true; } } }
+    let [tx, tz] = camSpot(S.side, r, lx, lz);
+    // big halls: don't let the camera sit miles away
+    const dd = Math.hypot(tx - lx, tz - lz), max = 8.5;
+    if (dd > max) { tx = lx + (tx - lx) * max / dd; tz = lz + (tz - lz) * max / dd; }
+    const kk = S.snap ? 1 : 1 - Math.exp(-dt * 3);
+    S.camX += (ROOM.x + tx - S.camX) * kk; S.camZ += (ROOM.z + tz - S.camZ) * kk; S.snap = false;
+    // higher when you're far away, lower up close: a three-quarter view rather than looking down on your head
+    const y = camY(tx, tz, lx, lz);
+    S.camY += (y - S.camY) * (kk === 1 ? 1 : kk);
+    cam.position.set(S.camX, S.camY, S.camZ);
+    cam.lookAt(P.x, 1.05, P.z);
+    if (cam.fov !== S.fov) { cam.fov = S.fov; cam.updateProjectionMatrix(); }
+    return Math.atan2(P.x - S.camX, P.z - S.camZ);
+  }
+  // the nearest wall that sits a comfortable distance away and actually has a clear view of you
+  function pickSide(r, lx, lz, P) {
+    const c = [["x0", lx - r.x0], ["x1", r.x1 - lx], ["z0", lz - r.z0], ["z1", r.z1 - lz]].filter(([s]) => (s[0] === "x" ? r.d : r.w) > 2.2);
+    const score = ([, d]) => (d < 1.9 ? 10 + (1.9 - d) : 0) + d * 0.1;
+    c.sort((a, b) => score(a) - score(b));
+    for (const [s] of c) if (!occluded(s, r, lx, lz, P)) return s;
+    return c[0][0];
+  }
+  const rc = new THREE.Raycaster(), _o = new THREE.Vector3(), _d = new THREE.Vector3();
+  function camY(tx, tz, lx, lz) { return clamp(1.75 + Math.hypot(tx - lx, tz - lz) * 0.26, 2.05, Math.min(B.H - 0.3, 3.4)); }
+  function occluded(side, r, lx, lz, P) {
+    const [tx, tz] = camSpot(side, r, lx, lz);
+    _o.set(ROOM.x + tx, camY(tx, tz, lx, lz), ROOM.z + tz); _d.set(P.x, 1.35, P.z).sub(_o);
+    const dist = _d.length(); _d.normalize();
+    rc.set(_o, _d); rc.far = dist - 0.35;
+    B.group.updateMatrixWorld(true);
+    return rc.intersectObject(B.group, true).some(h => !(h.object.material && h.object.material.transparent) && !h.object.isInstancedMesh);
+  }
+  function camSpot(side, r, lx, lz) {
+    const inset = 0.28;
+    if (side === "z0" || side === "z1") return [clamp(r.cx - (lx - r.cx) * 0.6, r.x0 + inset, r.x1 - inset), side === "z0" ? r.z0 + inset : r.z1 - inset];
+    return [side === "x0" ? r.x0 + inset : r.x1 - inset, clamp(r.cz - (lz - r.cz) * 0.6, r.z0 + inset, r.z1 - inset)];
   }
   function update(dt, time) {
-    if (!S.inside) return;
+    if (!S.inside || !B) return;
     const night = g.sky.state.night;
     viewMat.map = night > 0.5 ? view.night : view.day;
-    const b = night > 0.5 ? 1.0 : 1.25 - (g.sky.weatherDim || 0) * 0.4; viewMat.color.setScalar(b);
-    if (venue) {
-      if (venue.update) venue.update(time);
-      for (let i = 0; i < S.npcN; i++) {
-        const n = npcs[i];
-        if (n.dance) n.ch.pose(ROOM.x + n.x, 0, ROOM.z + n.z, n.yaw + Math.sin(time * 1.3 + i) * 0.6, time * 5 + n.phase, 0.5, { override: { armL: -2.4 + Math.sin(time * 5 + i) * 0.5, armR: -2.2 - Math.sin(time * 5 + i) * 0.5, elbowL: -0.6, elbowR: -0.6 } });
-        else if (n.sit) n.ch.pose(ROOM.x + n.x, -0.4, ROOM.z + n.z, n.yaw, 0, 0.04, { override: { thighL: -1.5, thighR: -1.5, kneeL: 1.5, kneeR: 1.5 } });
-        else n.ch.pose(ROOM.x + n.x, 0, ROOM.z + n.z, n.yaw, time * 0.9 + n.phase, 0.04);
-      }
-      return;
-    }
-    light.intensity = 26 + night * 14;
-    if (tvScreen) { const f = 0.7 + Math.sin(time * 7) * 0.08 + Math.sin(time * 2.3) * 0.12; tvScreen.material.color.setRGB(0.25 * f, 0.45 * f, 0.8 * f); }
+    viewMat.color.setScalar(night > 0.5 ? 1.0 : 1.25 - (g.sky.weatherDim || 0) * 0.4);
+    light.intensity = (S.light || 20) * (1 + night * 0.3); light2.intensity = (S.light2 || 0) * (1 + night * 0.3);
+    amb.intensity = B.plan.ambient ?? 0.6;
+    for (const u of B.updates) u(time);
+    poseCrew(time);
   }
   function action(P) {
-    if (!S.inside) return null;
-    const lx = P.x - ROOM.x, lz = P.z - ROOM.z, dr = door();
-    if ((lx - dr.x) ** 2 + (lz - dr.z) ** 2 < 1.6) return ["EXIT", "Head back outside", () => exit(P)];
-    if (venue) {
-      const c = venue.counter;
-      if (c && venue.action && (lx - c.x) ** 2 + (lz - c.z) ** 2 < 3.2) return [venue.action[0], venue.action[1], () => g.venueAction(venue.action[2], prop)];
-      return null;
-    }
-    if (bedPos && (lx - bedPos.x) ** 2 + (lz - bedPos.z) ** 2 < 5.5) return ["SLEEP", "🛏 Sleep till morning · heals you and saves", () => { g.sleep(); }];
-    return ["DECORATE", "🎨 Decorate your <b>" + prop.label + "</b>", () => panel("wall")];
+    if (!S.inside || !B) return null;
+    const lx = P.x - ROOM.x, lz = P.z - ROOM.z;
+    if ((lx - B.exit.x) ** 2 + (lz - B.exit.z) ** 2 < 1.4) return ["EXIT", "Head back outside", () => exit(P)];
+    let best = null, bd = Infinity;
+    for (const s of B.spots) { const d2 = (lx - s.x) ** 2 + (lz - s.z) ** 2; if (d2 < s.r * s.r && d2 < bd) { bd = d2; best = s; } }
+    if (!best) return null;
+    if (best.act === "sleep") return [best.label, best.prompt, () => g.sleep()];
+    if (best.act === "decorate") return [best.label, "🎨 Decorate your <b>" + prop.label + "</b>", () => panel("wall")];
+    return [best.label, best.prompt, () => g.venueAction(best.act, prop)];
   }
-  // the decorate panel: one slot at a time, with tabs across the top as rows
+  // the decorate panel: one slot at a time, a row to step to the next slot
   function panel(slot) {
     const rows = [];
     rows.push({ label: "ROOM", sub: Object.keys(DECOR).map(k => (k === slot ? "▸ " : "") + DECOR[k].name).join(" · "), btn: "NEXT ▸", onClick: () => { const ks = Object.keys(DECOR); panel(ks[(ks.indexOf(slot) + 1) % ks.length]); } });
@@ -351,12 +600,19 @@ export function makeInterior(scene, g) {
       rows.push({ label: D2.name.toUpperCase() + " · " + o.n + (on ? "  ✓" : ""), sub: o.none ? "Clear it out" : "$" + cost, btn: on ? "PLACED" : o.none ? "REMOVE" : "BUY", disabled: on,
         onClick: () => {
           if (cost && st.money < cost) { g.toast("You need $" + Math.ceil(cost - st.money) + " more"); return; }
-          st.money -= cost; st.decor[slot] = i; buildFurniture(); g.sound("cash", 0.5); g.save(); panel(slot);
+          st.money -= cost; st.decor[slot] = i; g.sound("cash", 0.5); g.save();
+          if (S.inside && prop && !prop.theme && g.player) rebuildHome(g.player());
+          panel(slot);
         } });
     });
     g.hud.panel("DECORATE · " + D2.name.toUpperCase(), rows);
   }
-  const doorWorld = () => prop ? { x: prop.p.x, z: prop.p.z } : { x: 0, z: 0 };
   const venueAt = (x, z) => { for (const id in VENUES) { const p = PLACES[id]; if (p && (p.x - x) ** 2 + (p.z - z) ** 2 < 5) return id; } return null; };
-  return { S, enter, enterVenue, venueAt, venue: () => venue, exit, confine, camera, update, action, panel, doorWorld, ROOM, get inside() { return S.inside; } };
+  const doorWorld = () => prop ? { x: prop.p.x, z: prop.p.z } : { x: 0, z: 0 };
+  return {
+    S, enter, enterVenue, venueAt, exit, confine, camera, update, action, panel, doorWorld, ROOM,
+    venue: () => B && prop && prop.theme ? { theme: prop.theme, spots: B.spots, R: B.R } : null,
+    building: () => B,
+    get inside() { return S.inside; },
+  };
 }
