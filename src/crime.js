@@ -6,6 +6,7 @@ import * as THREE from "../vendor/three.module.js";
 import { clamp, lerpAngle, HALF, N, CELL, ROAD, roadC, nearestRoad, groundY } from "./world.js";
 import { makeCar, carSpec } from "./cars.js";
 import { driveStep, syncCar } from "./play.js";
+import { buildCraft } from "./craft.js";
 
 export const COP_SIGHT = 90;
 const MAX_UNITS = 6;
@@ -31,12 +32,47 @@ function makeCruiser(scene) {
     active: false, sees: false, losCD: 0, barMatR, barMatB, hp: 100, shootCD: 1 };
 }
 
+// 5★: an armoured SWAT tank — slow, near-unstoppable, and its cannon shells blow up whatever you're in
+function makeTank(scene) {
+  const group = new THREE.Group(), chassis = new THREE.Group(); group.add(chassis);
+  const armor = new THREE.MeshStandardMaterial({ color: 0x23282c, roughness: 0.75, metalness: 0.35 });
+  const tread = new THREE.MeshStandardMaterial({ color: 0x0d0d0e, roughness: 0.95 });
+  const M = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; chassis.add(m); return m; };
+  M(new THREE.BoxGeometry(2.9, 0.9, 5.8), armor, 0, 1.05, 0);
+  M(new THREE.BoxGeometry(2.6, 0.5, 1.2), armor, 0, 0.95, 3.2).rotation.x = -0.45;
+  for (const x of [-1.55, 1.55]) M(new THREE.BoxGeometry(0.7, 0.95, 6.1), tread, x, 0.5, 0);
+  const turret = new THREE.Group(); turret.position.set(0, 1.75, -0.3); chassis.add(turret);
+  const tm = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.25, 0.75, 14), armor); tm.castShadow = true; turret.add(tm);
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 3.6, 10), armor); barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0.1, 2.3); turret.add(barrel);
+  const barMatR = new THREE.MeshBasicMaterial({ color: 0xff2020, toneMapped: false }), barMatB = new THREE.MeshBasicMaterial({ color: 0x2050ff, toneMapped: false });
+  const r = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.14, 0.3), barMatR), b = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.14, 0.3), barMatB);
+  r.position.set(-0.35, 0.45, -0.3); b.position.set(0.35, 0.45, -0.3); turret.add(r, b);
+  group.visible = false; scene.add(group);
+  return { group, chassis, body: tm, turret, tank: true, type: "suv", x: 0, z: 0, h: 0, vx: 0, vz: 0, y: 0, steer: 0, yawRate: 0, speed: 0,
+    spec: { ...carSpec("suv"), top: 26, accel: 9, grip: 12, turn: 1.6, len: 6, wid: 3 }, active: false, sees: false, losCD: 0, barMatR, barMatB, hp: 700, shootCD: 3 };
+}
+
+// 4★: the police helicopter. It sees you from above — buildings don't hide you, only cover does —
+// sweeps a searchlight, and a marksman leans out the door. Outrun it or shoot it down.
+function makeHeli(scene) {
+  const C = buildCraft("heli", 0x16233c);
+  const coneMat = new THREE.MeshBasicMaterial({ color: 0xfff4d8, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+  const cone = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 0.25, 1, 20, 1, true), coneMat);
+  cone.geometry.translate(0, 0.5, 0); cone.geometry.rotateX(-Math.PI / 2);   // apex at origin, opens along -Z… then aimed with lookAt
+  const spotMat = new THREE.MeshBasicMaterial({ color: 0xfff0c8, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false });
+  const spot = new THREE.Mesh(new THREE.CircleGeometry(4.5, 28), spotMat); spot.rotation.x = -Math.PI / 2;
+  scene.add(C.group, cone, spot); C.group.visible = cone.visible = spot.visible = false;
+  return { ...C, cone, coneMat, spot, spotMat, active: false, x: 0, y: 40, z: 0, h: 0, hp: 260, shootCD: 2, orbit: Math.random() * 6, lx: 0, lz: 0, fall: 0, cool: 0, sees: false };
+}
+
 export function makeCrime(scene, g) {
   // g: { collider, focus() -> {x,z,car}, fx, sound, toast, banner, onBust(fine), onWasted(fine), inside(), paused(), fxParticles }
   const S = { wanted: 0, wantedCD: 0, crimeCD: 0, searching: false, searchT: 0, onYou: false, health: 100, hurtCD: 0, bustT: 0, flash: 0 };
   const belief = { x: 0, z: 0 };
   const units = [];
   for (let i = 0; i < MAX_UNITS; i++) units.push(makeCruiser(scene));
+  units.push(makeTank(scene));                         // the last slot is the tank — only rolls out at 5★
+  const heli = makeHeli(scene);
 
   function los(x, z, tx, tz, max) {
     const d = Math.hypot(tx - x, tz - z);
@@ -60,6 +96,73 @@ export function makeCrime(scene, g) {
   function reset() {
     S.wanted = 0; S.wantedCD = 0; S.crimeCD = 0; S.searching = false; S.searchT = 0; S.onYou = false; S.bustT = 0;
     for (const u of units) { u.active = false; u.group.visible = false; }
+    heliOff();
+  }
+  function heliOff() { heli.active = false; heli.fall = 0; heli.group.visible = heli.cone.visible = heli.spot.visible = false; }
+  // shots / blasts at the chopper; returns true when it goes down
+  function hitHeli(n) {
+    if (!heli.active || heli.fall) return false;
+    heli.hp -= n; g.fxParticles.sparks(heli.x, heli.y + 1.5, heli.z, 4);
+    if (heli.hp <= 0) { heli.fall = 1; heli.vy = 0; g.fxParticles.explosion(heli.x, heli.y + 1.5, heli.z, 0.8); g.sound("boom", 0.8); addCrime(1); g.toast("🚁 Chopper down!"); return true; }
+    return false;
+  }
+  function updateHeli(dt, time, px, pz, heat, seenByCars) {
+    const H = heli;
+    if (H.cool > 0) H.cool -= dt;
+    if (H.fall) {                                        // spinning down, trailing smoke, then it's a fireball
+      H.vy -= 14 * dt; H.y += H.vy * dt; H.h += dt * 5; H.x += Math.sin(H.h) * dt * 6;
+      g.fxParticles.smoke(H.x, H.y + 1.5, H.z, 1.4); if (Math.random() < 0.5) g.fxParticles.fire(H.x, H.y + 1.6, H.z);
+      H.group.position.set(H.x, H.y, H.z); H.group.rotation.set(0.3, H.h, 0.4); H.cone.visible = H.spot.visible = false;
+      if (H.y <= groundY(H.x, H.z)) {
+        g.fxParticles.explosion(H.x, 1.5, H.z, 1.6); g.sound("boom", 1); g.shake(0.8);
+        if (g.onHeliCrash) g.onHeliCrash(H.x, H.z);
+        heliOff(); H.cool = 40;
+      }
+      return false;
+    }
+    const want = heat >= 4 && H.cool <= 0;
+    if (want && !H.active) {                             // clatters in from out of view
+      const a = Math.random() * Math.PI * 2;
+      H.x = clamp(belief.x + Math.cos(a) * 160, -HALF, HALF); H.z = clamp(belief.z + Math.sin(a) * 160, -HALF, HALF + 300);
+      H.y = 42; H.hp = 260; H.active = true; H.lx = belief.x; H.lz = belief.z; H.group.visible = H.cone.visible = H.spot.visible = true;
+      g.toast("🚁 Police chopper overhead!");
+    } else if (!want && H.active) { heliOff(); return false; }
+    if (!H.active) return false;
+    // sight: from up here only real cover hides you (a tunnel, a garage, indoors)
+    const dH = Math.hypot(px - H.x, pz - H.z);
+    const covered = g.inside && g.inside();
+    H.sees = !covered && dH < 75;
+    const tx = H.sees || seenByCars ? px : belief.x, tz = H.sees || seenByCars ? pz : belief.z;
+    // orbit the target at a stand-off radius, a lazy circle when searching
+    H.orbit += dt * 0.35;
+    const R = H.sees ? 20 : 34;
+    const gx = tx + Math.cos(H.orbit) * R, gz = tz + Math.sin(H.orbit) * R;
+    const dx = gx - H.x, dz = gz - H.z, d = Math.hypot(dx, dz) || 1, sp = Math.min(30, d * 0.9);
+    H.x += dx / d * sp * dt; H.z += dz / d * sp * dt; H.y += (36 + Math.sin(time * 0.7) * 2 - H.y) * Math.min(1, dt);
+    H.h = lerpAngle(H.h, Math.atan2(tx - H.x, tz - H.z), Math.min(1, dt * 1.5));
+    H.group.position.set(H.x, H.y, H.z); H.group.rotation.set(Math.min(0.25, sp / 120), H.h, 0);
+    H.parts.rotor.rotation.y += dt * 38; H.parts.tailRotor.rotation.x += dt * 50;
+    // searchlight: lags onto you, sweeps when it's lost you
+    const sx = H.sees ? px : tx + Math.sin(time * 0.9) * 14, sz = H.sees ? pz : tz + Math.cos(time * 0.6) * 14;
+    H.lx += (sx - H.lx) * Math.min(1, dt * 2.5); H.lz += (sz - H.lz) * Math.min(1, dt * 2.5);
+    const gy = groundY(H.lx, H.lz) + 0.08;
+    const len = Math.hypot(H.lx - H.x, gy - H.y + 0.6, H.lz - H.z);
+    H.cone.position.set(H.x, H.y + 0.6, H.z); H.cone.scale.set(1, 1, len); H.cone.lookAt(H.lx, gy, H.lz); H.cone.rotateY(Math.PI);
+    H.spot.position.set(H.lx, gy, H.lz);
+    const night = g.night ? g.night() : 0;
+    H.coneMat.opacity = 0.04 + night * 0.14; H.spotMat.opacity = 0.12 + night * 0.35;
+    // the door gunner
+    if (!g.paused() && H.sees && dH < 60) {
+      H.shootCD -= dt;
+      if (H.shootCD <= 0) {
+        H.shootCD = 1.4 + Math.random();
+        g.fxParticles.tracer(H.x, H.y + 1.2, H.z, px + (Math.random() - 0.5) * 3, 1.1, pz + (Math.random() - 0.5) * 3);
+        g.sound("gun", 0.35);
+        const f = g.focus();
+        if (Math.random() < (f.speed > 8 ? 0.15 : 0.32)) hurt(f.car ? 5 : 8);
+      }
+    }
+    return H.sees;
   }
   function busted() {
     const fine = 100 + 80 * S.wanted;
@@ -102,19 +205,21 @@ export function makeCrime(scene, g) {
         if (u.sees) seen = true;
       }
     }
+    if (updateHeli(dt, time, px, pz, heat, seen)) seen = true;
     if (seen) { belief.x = px; belief.z = pz; S.searchT = 0; } else S.searchT += dt;
     S.searching = heat > 0 && !seen && S.searchT > 1.3;
     let grabbing = false;
     for (let i = 0; i < units.length; i++) {
       const u = units[i];
-      const want = i < Math.min(MAX_UNITS, heat + (heat >= 3 ? 1 : 0));
+      const want = u.tank ? heat >= 5 : i < Math.min(MAX_UNITS, heat + (heat >= 3 ? 1 : 0));
       if (want && !u.active) {
         // new units roll in toward where dispatch THINKS you are, from out of sight, on a road
         const a = Math.random() * Math.PI * 2;
         const bx = seen ? px : belief.x, bz = seen ? pz : belief.z;
         const sx = clamp(bx + Math.cos(a) * 110, -HALF + 10, HALF - 10), sz = clamp(bz + Math.sin(a) * 110, -HALF + 10, HALF - 10);
         if (Math.random() < 0.5) { u.x = roadC(nearestRoad(sx)); u.z = sz; } else { u.x = sx; u.z = roadC(nearestRoad(sz)); }
-        u.h = Math.atan2(bx - u.x, bz - u.z); u.vx = u.vz = 0; u.speed = 0; u.active = true; u.reverseT = 0; u.stuckT = 0; u.boom = false; u.charred = false; u.sees = false; u.sx = undefined; u.hp = 100;
+        u.h = Math.atan2(bx - u.x, bz - u.z); u.vx = u.vz = 0; u.speed = 0; u.active = true; u.reverseT = 0; u.stuckT = 0; u.boom = false; u.charred = false; u.sees = false; u.sx = undefined; u.hp = u.tank ? 700 : 100;
+        if (u.tank) g.toast("⚠️ SWAT tank deployed!");
         u.group.visible = true;
       } else if (!want && u.active) { u.active = false; u.group.visible = false; }
       if (!u.active) continue;
@@ -148,8 +253,20 @@ export function makeCrime(scene, g) {
       if (F.car && d < 3.4 && u.speed > 5 && !u.pitCD) { u.pitCD = 1; hurt(18); g.shake(0.6); g.sound("door", 0.9, 0.5); }
       if (u.pitCD) u.pitCD = Math.max(0, u.pitCD - dt);
       if (!F.car && d < 4.5 && !S.searching && u.speed < 6) grabbing = true;
+      if (u.tank) {                                     // the turret tracks you; the cannon fires shells
+        u.turret.rotation.y = lerpAngle(u.turret.rotation.y, Math.atan2(px - u.x, pz - u.z) - u.h, Math.min(1, dt * 2));
+        u.shootCD -= dt;
+        if (!g.paused() && u.sees && d > 10 && d < 70 && u.shootCD <= 0 && g.shell) {
+          u.shootCD = 3.2 + Math.random() * 1.5;
+          const a = u.h + u.turret.rotation.y, mx = u.x + Math.sin(a) * 4.4, mz = u.z + Math.cos(a) * 4.4;
+          g.fxParticles.muzzle(mx, 1.9, mz, Math.sin(a), Math.cos(a)); g.shake(0.25);
+          g.shell(mx, mz, px + (Math.random() - 0.5) * 4, pz + (Math.random() - 0.5) * 4, u);
+        }
+        // it doesn't stop for traffic — it rolls over it
+        if (g.crush) g.crush(u);
+      }
       // from 3 stars they shoot — only with their own line of sight
-      if (!g.paused() && heat >= 3 && u.sees && d > 5 && d < 45) {
+      else if (!g.paused() && heat >= 3 && u.sees && d > 5 && d < 45) {
         u.shootCD -= dt;
         if (u.shootCD <= 0) {
           u.shootCD = 0.9 + Math.random() * 0.8;
@@ -173,5 +290,5 @@ export function makeCrime(scene, g) {
       }
     } else S.searching = false;
   }
-  return { S, units, belief, addCrime, hurt, reset, update, los: (x, z, tx, tz) => los(x, z, tx, tz, COP_SIGHT), busted, wasted };
+  return { S, units, heli, hitHeli, belief, addCrime, hurt, reset, update, los: (x, z, tx, tz) => los(x, z, tx, tz, COP_SIGHT), busted, wasted };
 }

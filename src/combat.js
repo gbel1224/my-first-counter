@@ -25,22 +25,32 @@ export function makeCombat(scene, g) {
   if (!g.st.ammo) g.st.ammo = {};
 
   const own = w => !!g.st.weapons[w.id];
+  // damage the police do themselves (tank shells, crushed cars) earns you nothing and adds no heat
+  let copsDid = false;
+  const asCops = fn => { copsDid = true; try { fn(); } finally { copsDid = false; } };
   // ---- rockets & grenades: real projectiles that fly to where you aimed, then go off ----
   const projs = [];
   const projMat = new THREE.MeshStandardMaterial({ color: 0x3a4030, roughness: 0.6, metalness: 0.4 });
-  function launch(kind, x, y, z, dx, dz, T) {
+  function launch(kind, x, y, z, dx, dz, T, owner) {
     const m = new THREE.Mesh(kind === "rocket" ? new THREE.CylinderGeometry(0.07, 0.07, 0.7, 8) : new THREE.SphereGeometry(0.11, 10, 8), projMat);
     if (kind === "rocket") m.rotation.set(Math.PI / 2, Math.atan2(dx, dz), 0, "YXZ");
     scene.add(m);
     const sp = kind === "rocket" ? 55 : 22;
     const dist = T ? T.d : (kind === "rocket" ? 120 : 30);
-    projs.push({ kind, m, x, y, z, vx: dx * sp, vy: kind === "rocket" ? (T ? (1.1 - y) / (dist / sp) : 0) : 6 + dist * 0.12, vz: dz * sp, t: 0, fuse: kind === "grenade" ? 2.4 : 4 });
+    if (kind === "rocket") {                             // straight line in 3D at the target point (or level)
+      const rise = T ? (T.y || 1.1) - y : 0, D = Math.hypot(dist, rise), k = dist / D;
+      projs.push({ kind, m, x, y, z, owner, vx: dx * sp * k, vy: sp * rise / D, vz: dz * sp * k, t: 0, fuse: 4, tgt: T && T.kind === "heli" ? T.o : null });
+    } else projs.push({ kind, m, x, y, z, owner, vx: dx * sp, vy: 6 + dist * 0.12, vz: dz * sp, t: 0, fuse: 2.4 });
   }
   function stepProjs(dt) {
     for (let i = projs.length - 1; i >= 0; i--) {
       const p = projs[i];
       p.t += dt;
       if (p.kind === "grenade") p.vy -= 18 * dt;
+      else if (p.tgt && p.tgt.active && !p.tgt.fall) {     // lock-on: bend toward the chopper
+        const sp = Math.hypot(p.vx, p.vy, p.vz), tx = p.tgt.x - p.x, ty = p.tgt.y + 1.5 - p.y, tz = p.tgt.z - p.z, td = Math.hypot(tx, ty, tz) || 1, k = Math.min(1, dt * 4);
+        p.vx += (tx / td * sp - p.vx) * k; p.vy += (ty / td * sp - p.vy) * k; p.vz += (tz / td * sp - p.vz) * k;
+      }
       p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
       p.m.position.set(p.x, p.y, p.z);
       if (p.kind === "rocket" && Math.random() < 0.8) g.fx.smoke(p.x, p.y, p.z, 0.6);
@@ -48,14 +58,23 @@ export function makeCombat(scene, g) {
       if (p.y < 0.12) { if (p.kind === "grenade") { p.y = 0.12; p.vy *= -0.35; p.vx *= 0.6; p.vz *= 0.6; } else boom = true; }
       if (!boom && p.kind === "rocket") {
         if (g.collider.segmentHit(p.x - p.vx * dt, p.z - p.vz * dt, p.x, p.z, p.y) < 1) boom = true;
-        for (const c of g.traffic.cars) if (c.alive && (c.x - p.x) ** 2 + (c.z - p.z) ** 2 < 6) { boom = true; p.hit = [c, "traffic"]; }
-        for (const u of g.crime.units) if (u.active && (u.x - p.x) ** 2 + (u.z - p.z) ** 2 < 6) { boom = true; p.hit = [u, "cop"]; }
+        const low = p.y < 3;                              // cars only stop a rocket that's down at car height
+        if (low) for (const c of g.traffic.cars) if (c.alive && (c.x - p.x) ** 2 + (c.z - p.z) ** 2 < 6) { boom = true; p.hit = [c, "traffic"]; }
+        if (low) for (const u of g.crime.units) if (u.active && u !== p.owner && (u.x - p.x) ** 2 + (u.z - p.z) ** 2 < 6) { boom = true; p.hit = [u, "cop"]; }
+        const H = g.crime.heli;
+        if (H.active && !H.fall && (H.x - p.x) ** 2 + (H.y + 1.5 - p.y) ** 2 + (H.z - p.z) ** 2 < 16) { boom = true; p.hit = [H, "heli"]; }
+        if (p.owner) { const P = g.player(); if ((P.x - p.x) ** 2 + (P.z - p.z) ** 2 < 5 && p.y < 3) boom = true; }
       }
       if (boom) {
         scene.remove(p.m); projs.splice(i, 1);
         g.fx.explosion(p.x, Math.max(0.6, p.y), p.z, 1.1); g.sound("boom", 1); g.shake(0.5);
-        if (p.hit) damageCar(p.hit[0], 400, p.hit[1]);   // a direct hit always wrecks
-        blast(p.x, p.z, 8, 135, null); g.crime.addCrime(1);
+        const go = () => {
+          if (p.hit && p.hit[1] === "heli") { if (g.crime.hitHeli(400)) mayhem(5); }
+          else if (p.hit) damageCar(p.hit[0], 400, p.hit[1]);   // a direct hit always wrecks
+          if (p.y < 6) blast(p.x, p.z, p.owner ? 6 : 8, 135, p.owner || null);
+        };
+        if (p.owner) asCops(go); else go();
+        if (!p.owner) g.crime.addCrime(1);
       }
     }
   }
@@ -91,7 +110,7 @@ export function makeCombat(scene, g) {
   }
   function explodeCar(c, kind) {
     c.boom = true;
-    if (kind !== "player") { S.wrecked = (S.wrecked || 0) + 1; mayhem(kind === "cop" ? 3 : 2); }
+    if (kind !== "player" && !copsDid) { S.wrecked = (S.wrecked || 0) + 1; mayhem(kind === "cop" ? 3 : 2); }
     if (g.onExplode) g.onExplode(c.x, c.z);
     const x = c.x, z = c.z;
     g.fx.explosion(x, 1, z, 1.2); g.sound("boom", 1); g.shake(Math.max(0.2, 1 - Math.hypot(x - g.player().x, z - g.player().z) / 60));
@@ -107,7 +126,7 @@ export function makeCombat(scene, g) {
       if (wrecks.length > 14) { const w = wrecks.shift(); scene.remove(w.g); }
     }
     blast(x, z, 7, 70, c);
-    g.crime.addCrime(kind === "cop" ? 2 : 1);
+    if (!copsDid) g.crime.addCrime(kind === "cop" ? 2 : 1);
   }
   // radial blast: knocks people flat, wrecks cars close in, hurts you
   function blast(x, z, r, dmg, source) {
@@ -128,7 +147,7 @@ export function makeCombat(scene, g) {
 
   // ---- targeting: whatever is nearest the aim line, inside the weapon's range ----
   const tmp = { x: 0, z: 0 };
-  function findTarget(x, z, dirX, dirZ, range, cone) {
+  function findTarget(x, z, dirX, dirZ, range, cone, preferAir) {
     let best = null, bs = Infinity;
     const consider = (o, tx, tz, kind, w = 1) => {
       const dx = tx - x, dz = tz - z, d = Math.hypot(dx, dz);
@@ -142,6 +161,12 @@ export function makeCombat(scene, g) {
     for (const p of g.crowd.people) if (!p.hidden && p.knocked <= 0 && (p.x - x) ** 2 + (p.z - z) ** 2 < range * range) consider(p, p.x, p.z, "ped", p.gang ? 0.4 : 1);
     for (const c of g.traffic.cars) if (c.alive && (c.x - x) ** 2 + (c.z - z) ** 2 < range * range) consider(c, c.x, c.z, "traffic");
     if (g.extraTargets) for (const t of g.extraTargets()) consider(t, t.x, t.z, t.kind);
+    // the chopper: up above the rooftops, so no wall gets in the way — it wins over street targets when aimed near
+    const H = g.crime.heli;
+    if (H.active && !H.fall) {
+      const hx = H.x - x, hz = H.z - z, d = Math.hypot(hx, hz);
+      if (d < range && d > 1 && (hx * dirX + hz * dirZ) / d > cone - 0.15 && (!best || preferAir || d * 0.5 < bs)) best = { o: H, x: H.x, z: H.z, y: H.y + 1.5, kind: "heli", d };
+    }
     return best;
   }
 
@@ -180,7 +205,7 @@ export function makeCombat(scene, g) {
     const P = g.player();
     if (w.proj) {
       let dx = Math.sin(aimYaw), dz = Math.cos(aimYaw);
-      const T = findTarget(P.x, P.z, dx, dz, w.range, 0.9);
+      const T = findTarget(P.x, P.z, dx, dz, w.range, 0.9, w.proj === "rocket");
       if (T) { dx = (T.x - P.x) / T.d; dz = (T.z - P.z) / T.d; P.yaw = Math.atan2(dx, dz); }
       launch(w.proj, P.x + dx * 0.8, (P.y || 0) + 1.5, P.z + dz * 0.8, dx, dz, T);
       g.sound(w.proj === "rocket" ? "boom" : "gun", 0.4); g.shake(0.2); g.crowd.scare(P.x, P.z, 40, 8);
@@ -199,20 +224,21 @@ export function makeCombat(scene, g) {
       const a = Math.atan2(dx, dz) + (Math.random() - 0.5) * w.spread * 2;
       const sx = Math.sin(a), sz = Math.cos(a);
       // hit test: the targeted thing if the pellet stays on it, else fly to the first wall
-      let hitD = w.range * g.collider.segmentHit(ox, oz, ox + sx * w.range, oz + sz * w.range, oy);
+      let hitD = T && T.kind === "heli" ? w.range : w.range * g.collider.segmentHit(ox, oz, ox + sx * w.range, oz + sz * w.range, oy);
       let hit = null;
       if (T && T.d < hitD) {
         const lat = Math.abs((T.x - ox) * sz - (T.z - oz) * sx);
         if (lat < (T.kind === "ped" ? 0.7 : 1.4) && Math.random() < clamp(1.05 - T.d / w.range * 0.5, 0.3, 1)) { hit = T; hitD = T.d; }
       }
       const hx = ox + sx * hitD, hz = oz + sz * hitD;
-      g.fx.tracer(ox + sx * 0.8, oy, oz + sz * 0.8, hx, hit ? 1.1 : oy - 0.1, hz);
+      g.fx.tracer(ox + sx * 0.8, oy, oz + sz * 0.8, hx, hit ? hit.y || 1.1 : oy - 0.1, hz);
       if (!hit) { g.fx.sparks(hx, oy - 0.2, hz, 4); continue; }
       if (hit.kind === "ped") {
         const o = hit.o;
         if (o.hp !== undefined) { o.hp -= w.dmg; if (o.hp > 0) { o.x += sx * 0.3; o.z += sz * 0.3; g.fx.sparks(hit.x, 1.2, hit.z, 2); continue; } }
         g.crowd.knock(o, sx * 3, 1.5, sz * 3, true); g.fx.sparks(hit.x, 1.2, hit.z, 2); if (o.gang) mayhem(1);
       }
+      else if (hit.kind === "heli") { if (g.crime.hitHeli(w.dmg * 0.6)) mayhem(5); }
       else if (hit.kind === "cop") { damageCar(hit.o, w.dmg * 0.9, "cop"); g.fx.sparks(hit.x, 1, hit.z, 6); }
       else if (hit.kind === "traffic") { damageCar(hit.o, w.dmg * 0.9, "traffic"); hit.o.stun = 3; g.fx.sparks(hit.x, 1, hit.z, 6); }
       else if (hit.o.hit) hit.o.hit(w.dmg, sx, sz);
@@ -249,5 +275,5 @@ export function makeCombat(scene, g) {
     return right ? { armR: -1.55 * ext, elbowR: -0.2 - (1 - ext) * 1.2, armL: -0.5, elbowL: -1.8, twist: -0.25 * ext }
                  : { armL: -1.55 * ext, elbowL: -0.2 - (1 - ext) * 1.2, armR: -0.5, elbowR: -1.8, twist: 0.25 * ext };
   }
-  return { S, WEAPONS, current, cycle, buy, own, fire, punch, update, pose, damageCar, explodeCar, blast, wrecks };
+  return { S, WEAPONS, current, cycle, buy, own, fire, punch, update, pose, damageCar, explodeCar, blast, wrecks, launch, asCops, projs };
 }

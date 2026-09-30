@@ -18,7 +18,7 @@ const KEYS = [
 const _c1 = new THREE.Color(), _c2 = new THREE.Color();
 function sample(e, key, out) {
   let a = KEYS[0], b = KEYS[KEYS.length - 1];
-  if (e <= a.e) return out.set(a[key]);
+  if (e <= a.e) return typeof a[key] === "number" && out ? out.set(a[key]) : a[key];   // deep night: hold the lowest key
   for (let i = 1; i < KEYS.length; i++) if (KEYS[i].e >= e) { a = KEYS[i - 1]; b = KEYS[i]; break; }
   const t = clamp((e - a.e) / (b.e - a.e), 0, 1);
   if (typeof a[key] === "number" && key !== "si" && key !== "hemi" && key !== "e") return out.copy(_c1.set(a[key])).lerp(_c2.set(b[key]), t);
