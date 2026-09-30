@@ -10,15 +10,15 @@ export function createWeather(scene, sky, city) {
   const lines = new THREE.LineSegments(geo, mat); lines.frustumCulled = false; scene.add(lines);
   for (let i = 0; i < N; i++) { vel[i] = 22 + Math.random() * 10; pos[i * 6] = pos[i * 6 + 3] = (Math.random() - 0.5) * 80; pos[i * 6 + 1] = Math.random() * 40; pos[i * 6 + 2] = pos[i * 6 + 5] = (Math.random() - 0.5) * 80; }
   const W = { mode: 0, rain: 0, target: 0, t: 90 };   // mode 0 auto · 1 rain · 2 clear
-  function update(dt, cam) {
+  function update(dt, cam, indoors) {
     if (W.mode === 1) W.target = 1; else if (W.mode === 2) W.target = 0;
     else { W.t -= dt; if (W.t <= 0) { W.target = W.target > 0.5 ? 0 : (Math.random() < 0.35 ? 1 : 0); W.t = W.target ? 60 + Math.random() * 60 : 120 + Math.random() * 180; } }
     W.rain += (W.target - W.rain) * Math.min(1, dt * 0.25);
     const r = W.rain;
     sky.uniforms.uCloud.value = 0.5 + r * 1.6;
-    city.U.uWet.value = Math.min(1, r * 1.3);
+    city.U.uWet.value = indoors ? 0 : Math.min(1, r * 1.3);   // (no wet sheen on your floor)
     mat.opacity = r * 0.7;
-    lines.visible = r > 0.02;
+    lines.visible = r > 0.02 && !indoors;
     sky.weatherDim = r;
     if (!lines.visible) return;
     const cx = cam.position.x, cy = cam.position.y, cz = cam.position.z;
