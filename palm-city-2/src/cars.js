@@ -57,6 +57,20 @@ function extrudeProfile(pts, width, bevel) {
   g.computeVertexNormals();
   return g;
 }
+// real cars aren't extruded slabs: the flanks lean in toward the roof (tumblehome) and the corners
+// round off in plan. Warp every vertex of the painted body + glass by the same rule.
+function shapeCar(g, T) {
+  const p = g.attributes.position, halfL = T.len / 2, shoulder = T.ride + 0.55;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const tumble = 1 - Math.min(1, Math.max(0, (y - shoulder) / 0.9)) * 0.2;
+    const plan = 1 - Math.pow(Math.min(1, Math.abs(z) / halfL), 5) * 0.12;
+    const belly = 1 - Math.max(0, (T.ride + 0.3 - y)) * 0.12;       // tuck the sills under
+    p.setX(i, x * tumble * plan * belly);
+  }
+  // keep the extrusion's smooth normals (recomputing on merged, non-indexed data would facet it)
+  return g;
+}
 const cache = {};
 export function carGeometries(type) {
   if (cache[type]) return cache[type];
@@ -64,7 +78,7 @@ export function carGeometries(type) {
   const bodyPts = T.body.map(([x, y]) => [x, y + T.ride - 0.18]);
   const cabPts = [[T.cabin[0][0], T.cabin[0][1] - 0.02], ...T.cabin.slice(1)].map(([x, y]) => [x, y + T.ride - 0.18]);
   // paint: the lower body shell, plus a thin painted ROOF slab and pillars over a glass greenhouse
-  const body = paint(extrudeProfile(bodyPts, T.wid, 0.16), 0xffffff);
+  const body = paint(extrudeProfile(bodyPts, T.wid, 0.12), 0xffffff);
   const glassG = extrudeProfile(cabPts, T.wid * 0.84, 0.1);
   const [c0, c1, c2, c3] = cabPts;
   const roofT = 0.07;
@@ -83,8 +97,8 @@ export function carGeometries(type) {
     const mx = (c1[0] + c2[0]) / 2 - 0.1;
     pillars.push(place(pil(mx, c0[1], mx, c1[1], 0.08), zx, 0, 0));
   }
-  const paintGeo = merge([body, roof, ...pillars]);
-  const glass = merge([paint(glassG, 0xffffff)]);
+  const paintGeo = shapeCar(merge([body, roof, ...pillars]), T);
+  const glass = shapeCar(merge([paint(glassG, 0xffffff)]), T);
   // trim: tyres, rims, bumpers, grille, mirrors, arch shadows
   const trim = [];
   const wx = T.wid / 2 - 0.06, fz = T.wb / 2, R = T.wheelR;
@@ -123,6 +137,8 @@ export const MAT = {
   lights: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
 };
 
+// real-world paint mix: mostly silver, white, black and grey, a few colours
+export const REAL_PAINTS = [0xb8bcc0, 0xc6c9cc, 0xe8e8e6, 0xf2f2f0, 0x1a1b1d, 0x222428, 0x5a5e62, 0x6b6f73, 0x1f2d4a, 0x2a3a5c, 0x5a1a1e, 0x7a1c20, 0xb9a98c, 0x2a3a2e, 0x8a2a1c, 0x3a4c6a, 0x9aa0a4, 0x2c2c2e];
 export const PAINTS = [0xd7263d, 0x1b998b, 0xf46036, 0x2e294e, 0xe8e8e8, 0x111111, 0x3a86ff, 0xffbe0b, 0x8338ec, 0x6c757d, 0x2ec4b6, 0xa7c957, 0xf7f7ff, 0x9d0208];
 
 // a single drivable car as a scene-graph Group (player cars): wheels are separate so they spin and steer

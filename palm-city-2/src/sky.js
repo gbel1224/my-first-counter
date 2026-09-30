@@ -11,9 +11,9 @@ const KEYS = [
   { e: -0.05, zen: 0x16244e, hor: 0xc86a52, sun: 0xff6a3a, si: 0.3, hemi: 0.22, sky: 0x6a6a9a, gnd: 0x2a1e1c, fog: 0x7a5a5c },
   { e: 0.06, zen: 0x2a58a0, hor: 0xf2a070, sun: 0xff9050, si: 2.6, hemi: 0.26, sky: 0x98a8cc, gnd: 0x5a4030, fog: 0xd8a888 },
   // day: deep saturated blue overhead, a pale humid haze at the horizon, a hot hard sun
-  { e: 0.22, zen: 0x1c56b4, hor: 0xe6d6bc, sun: 0xffd6a0, si: 3.6, hemi: 0.26, sky: 0x96b4dc, gnd: 0x6a5440, fog: 0xd8d0c0 },
-  { e: 0.60, zen: 0x1650b8, hor: 0xd4dcdc, sun: 0xfff0dc, si: 4.0, hemi: 0.28, sky: 0x9cbce6, gnd: 0x6e5a44, fog: 0xcfd6d4 },
-  { e: 1.40, zen: 0x124cb8, hor: 0xcad8e0, sun: 0xffffff, si: 4.2, hemi: 0.28, sky: 0xa4c2ea, gnd: 0x70604c, fog: 0xc8d4d8 },
+  { e: 0.22, zen: 0x1c56b4, hor: 0xe6d6bc, sun: 0xffd6a0, si: 3.6, hemi: 0.42, sky: 0x9ab2d4, gnd: 0x9a7e60, fog: 0xd8d0c0 },
+  { e: 0.60, zen: 0x1650b8, hor: 0xd4dcdc, sun: 0xfff0dc, si: 4.0, hemi: 0.45, sky: 0xa0b8dc, gnd: 0xa08466, fog: 0xcfd6d4 },
+  { e: 1.40, zen: 0x124cb8, hor: 0xcad8e0, sun: 0xffffff, si: 4.2, hemi: 0.45, sky: 0xa6bee0, gnd: 0xa08a6c, fog: 0xc8d4d8 },
 ];
 const _c1 = new THREE.Color(), _c2 = new THREE.Color();
 function sample(e, key, out) {

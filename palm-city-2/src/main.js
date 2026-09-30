@@ -1,12 +1,13 @@
 // Palm City 2 — bootstrap + main loop.
 import * as THREE from "../vendor/three.module.js";
 import { createRenderer, isMobile } from "./render.js";
-import { buildCity, Collider, groundY, blockC, blockMin, PLAZA, HALF, ROAD, BLOCK, CURB, mulberry32, clamp } from "./world.js";
+import { buildCity, Collider, groundY, district, blockC, blockMin, PLAZA, HALF, ROAD, BLOCK, CURB, mulberry32, clamp } from "./world.js";
 import { createSky } from "./sky.js";
 import { createCity } from "./city.js";
 import { createOcean } from "./ocean.js";
 import { Crowd, randomLook } from "./people.js";
-import { Traffic } from "./traffic.js";
+import { Traffic, SIGNAL, Parked } from "./traffic.js";
+import { buildFacadeDetail, buildStreetDetail, updateSignals } from "./detail.js";
 import { PAINTS } from "./cars.js";
 import { initInput, pollInput, I } from "./input.js";
 import { createHUD } from "./hud.js";
@@ -28,12 +29,15 @@ await step(20);
 const sky = createSky(scene, R.renderer);
 await step(35);
 const city = createCity(scene, plan, groundY);
+const facade = buildFacadeDetail(scene, plan);
+const street = buildStreetDetail(scene, plan);
 await step(55);
 const ocean = createOcean(scene, sky);
 await step(65);
 const crowd = new Crowd(scene, plan, isMobile ? 380 : 520);
 await step(78);
 const traffic = new Traffic(scene, isMobile ? 110 : 150);
+const parked = new Parked(scene, district);
 await step(88);
 
 // ---------------------------------------------------------------------------------------------
@@ -55,11 +59,11 @@ const cars = [];
 {
   // parked on the plaza's paved edge (not in a traffic lane, so the city can still flow round them)
   const e = px + 21.5;
-  cars.push(spawnCar(scene, "sports", 0xd7263d, e, pz - 8, Math.PI));
-  cars.push(spawnCar(scene, "compact", 0x2ec4b6, e, pz + 3, Math.PI));
-  cars.push(spawnCar(scene, "suv", 0x2e294e, e, pz + 14, Math.PI));
+  cars.push(spawnCar(scene, "sports", 0x9d0f14, e, pz - 8, Math.PI));
+  cars.push(spawnCar(scene, "compact", 0x3a4c6a, e, pz + 3, Math.PI));
+  cars.push(spawnCar(scene, "suv", 0x1a1b1d, e, pz + 14, Math.PI));
   const s = pz + 21.5;
-  cars.push(spawnCar(scene, "sedan", 0xffbe0b, px + 10, s, -Math.PI / 2));
+  cars.push(spawnCar(scene, "sedan", 0xc6c9cc, px + 10, s, -Math.PI / 2));
 }
 
 // gather the crowd and traffic around the spawn point so the very first view is lively
@@ -84,7 +88,7 @@ rig.yaw = P.yaw; rig.pitch = 0.22;
 // title screen
 const title = document.createElement("div");
 title.id = "title";
-title.innerHTML = `<div><div class="logo">PALM<br>CITY<span class="two">2</span></div><div class="tag">Same city. All-new everything.</div></div>
+title.innerHTML = `<div><div class="logo">PALM<br>CITY<span class="two">2</span></div><div class="tag">Sun. Money. No rules.</div></div>
   <div><button class="go">${save ? "CONTINUE" : "PLAY"}</button><div class="sub">${isMobile ? "Left thumb moves · drag right side to look" : "WASD move · Shift run/boost · Space jump/drift · E drive · drag to look"}</div></div>`;
 document.getElementById("ui").appendChild(title);
 function start() {
@@ -106,8 +110,11 @@ function nearestCar() {
   let best = null, bd = 3.4 * 3.4, traf = null;
   for (const c of cars) { const d = (c.x - P.x) ** 2 + (c.z - P.z) ** 2; if (d < bd) { bd = d; best = c; } }
   const t = traffic.nearest(P.x, P.z, 3.4);
-  if (t && (t.x - P.x) ** 2 + (t.z - P.z) ** 2 < bd) { best = null; traf = t; }
-  return best || traf ? { car: best, traf } : null;
+  if (t && (t.x - P.x) ** 2 + (t.z - P.z) ** 2 < bd) { best = null; traf = t; bd = (t.x - P.x) ** 2 + (t.z - P.z) ** 2; }
+  const pk = parked.nearest(P.x, P.z, 3.4);
+  let park = null;
+  if (pk && (pk.x - P.x) ** 2 + (pk.z - P.z) ** 2 < bd) { best = null; traf = null; park = pk; }
+  return best || traf || park ? { car: best, traf, park } : null;
 }
 function enterCar(n) {
   let c = n.car;
@@ -117,6 +124,12 @@ function enterCar(n) {
     c.vx = Math.sin(t.h) * t.speed * 0.3; c.vz = Math.cos(t.h) * t.speed * 0.3;
     cars.push(c);
     hud.toast("🚗 Borrowed a " + t.type + " — no questions asked", 2.2);
+  }
+  if (n.park) {                                     // break into a parked one
+    const t = n.park; parked.take(t);
+    c = spawnCar(scene, t.type, t.color, t.x, t.z, t.h);
+    cars.push(c);
+    hud.toast("🔓 Hot-wired a parked " + t.type, 2.0);
   }
   P.car = c; P.ch.group.visible = false;
   AudioSys.play("door", 0.7);
@@ -138,7 +151,7 @@ function update(dt) {
   if (state.phase === "play") {
     if (P.car) {
       const c = P.car;
-      const impact = driveStep(c, inp, dt, collider);
+      const impact = Math.max(driveStep(c, inp, dt, collider), parked.collide(c));
       if (impact > 4) { rig.shake = Math.min(1, impact / 18); AudioSys.play("door", Math.min(1, impact / 20), 0.6); }
       // shunt traffic you hit
       for (const t of traffic.cars) {
@@ -168,7 +181,6 @@ function update(dt) {
   crowd.update(dt, time, focus.x, focus.z, hz);
   traffic.update(dt, time, [P.car ? { x: P.car.x, z: P.car.z, car: true } : { x: P.x, z: P.z, car: false }]);
   if (state.phase === "title") {
-    // slow cinematic orbit over the plaza
     // slow cinematic orbit over the plaza, high enough to clear the rooftops
     const a = 0.7 + time * 0.03, r = 150 + Math.sin(time * 0.1) * 20;
     camera.position.set(px + Math.sin(a) * r, 82 + Math.sin(time * 0.07) * 10, pz + Math.cos(a) * r);
@@ -191,7 +203,9 @@ function render() {
   if (!P.car) poseOnFoot(P, time);
   crowd.render(camera.position.x * 0.5 + focus.x * 0.5, camera.position.z * 0.5 + focus.z * 0.5, camera);
   traffic.render(focus.x, focus.z, sky.state.night);
+  parked.render(focus.x, focus.z);
   city.update(time, sky.state.night);
+  updateSignals(street.lampMats, SIGNAL.phase);
   ocean.update(time, scene.fog);
   if (state.phase === "play") {
     const near = !P.car && nearestCar();
@@ -212,7 +226,7 @@ requestAnimationFrame(frame);
 
 // debug / test hooks
 globalThis.__pc2 = {
-  THREE, scene, camera, R, sky, city, plan, collider, crowd, traffic, P, cars, state, rig, I,
+  THREE, scene, camera, R, sky, city, plan, facade, parked, collider, crowd, traffic, P, cars, state, rig, I,
   freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },

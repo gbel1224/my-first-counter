@@ -300,7 +300,7 @@ function groundMaterial(U) {
             float cn = vnoise(p * 0.7) * 0.55 + vnoise(p * 2.9) * 0.3 + vnoise(p * 9.0) * 0.15;
             float crack = 1.0 - smoothstep(0.0, fwidth(cn) * 0.9 + 0.0015, abs(cn - 0.5));
             crack *= smoothstep(0.55, 0.75, vnoise(p * 0.07 + 7.0));
-            col *= 1.0 - crack * 0.35;
+            col *= 1.0 - crack * 0.22;
             vec2 l = mod(p + HALF, CELL);
             bool ns = l.x < ROAD, ew = l.y < ROAD;
             float c = ns ? l.x - ROAD * 0.5 : l.y - ROAD * 0.5;   // across-road coordinate (-8..8)
@@ -312,13 +312,13 @@ function groundMaterial(U) {
               float nearX = step(along, ROAD + 4.6) + step(CELL - 4.6, along);   // crosswalk zones
               // tyre tracks
               float lanePos = abs(c);
-              col *= 1.0 - 0.07 * (line1(lanePos, 1.3, 2.7) + line1(lanePos, 5.3, 6.7));
+              col *= 1.0 - 0.08 * (line1(lanePos, 1.1, 2.5) + line1(lanePos, 4.2, 5.6));
               if (nearX < 0.5) {
                 float y = line1(abs(c), 0.12, 0.32);
                 mk = max(mk, y); mc = mix(mc, paintY, y);
-                float dash = line1(abs(c), 3.9, 4.1) * band(a / 7.0, 0.0, 0.5);
+                float dash = line1(abs(c), 3.25, 3.45) * band(a / 7.0, 0.0, 0.5);
                 mk = max(mk, dash);
-                mk = max(mk, line1(abs(c), 7.25, 7.45));
+                mk = max(mk, line1(abs(c), 6.2, 6.35));                       // parking-strip line
               } else {
                 // zebra crossing + stop line
                 float inZ = line1(along, ROAD + 1.0, ROAD + 4.0) + line1(along, CELL - 4.0, CELL - 1.0);
@@ -337,7 +337,7 @@ function groundMaterial(U) {
             mk *= 0.45 + 0.4 * vnoise(p * 2.3) + 0.15 * vnoise(p * 9.0);   // worn, sun-faded paint
             // oil drips down the middle of each lane, darker near junctions where cars wait
             if (ns != ew) {
-              float mid = line1(abs(c), 1.2, 2.8) + line1(abs(c), 5.2, 6.8);
+              float mid = line1(abs(c), 1.1, 2.5) + line1(abs(c), 4.2, 5.6);
               float oil = smoothstep(0.62, 0.8, vnoise(p * vec2(0.9, 0.9) + 31.0)) * mid;
               oil *= 0.5 + 0.8 * (step(along, ROAD + 12.0) + step(CELL - 12.0, along));
               col *= 1.0 - clamp(oil, 0.0, 1.0) * 0.45;
@@ -388,8 +388,10 @@ function blockMaterial() {
             vec2 gq = vWP.xz * 4.0; vec2 gi = floor(gq);
             float gum = step(0.985, h12(gi)) * (1.0 - smoothstep(0.08, 0.16, length(fract(gq) - 0.5)));
             col *= 1.0 - gum * 0.5;
-            float cn = vnoise(vWP.xz * 1.4 + 3.0) * 0.7 + vnoise(vWP.xz * 6.0) * 0.3;
-            col *= 1.0 - (1.0 - smoothstep(0.0, fwidth(cn) * 0.9 + 0.0015, abs(cn - 0.5))) * step(0.7, h12(floor(t) + 4.0)) * 0.3;
+            // a few slabs cracked corner to corner (straight, the way concrete actually breaks)
+            vec2 ft = fract(t) - 0.5;
+            float diag = abs(ft.x * 0.8 - ft.y + (h12(floor(t) + 9.0) - 0.5) * 0.3);
+            col *= 1.0 - (1.0 - smoothstep(0.0, fwidth(diag) * 1.2 + 0.004, diag)) * step(0.88, h12(floor(t) + 4.0)) * 0.35;
             // granite kerbstone; now and then painted yellow for no-parking
             float kerb = line1(edge, 0.0, 0.32);
             vec3 kc = mix(vec3(0.52, 0.5, 0.47), vec3(0.72, 0.6, 0.22), step(0.8, h12(floor(vWP.xz / 12.0))));

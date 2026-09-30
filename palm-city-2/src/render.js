@@ -77,8 +77,8 @@ export function createRenderer(canvas) {
     uniforms: {
       tScene: { value: null }, tBloom: { value: null }, uBloom: { value: 0.07 }, uExposure: { value: 0.95 },
       uTime: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uVignette: { value: 0.38 },
-      uLift: { value: new THREE.Vector3(0.0, 0.014, 0.024) }, uGain: { value: new THREE.Vector3(1.06, 1.0, 0.9) },
-      uSat: { value: 1.02 }, uWarm: { value: 0.0 }, uContrast: { value: 0.45 }, uGrain: { value: 0.045 },
+      uLift: { value: new THREE.Vector3(0.004, 0.012, 0.018) }, uGain: { value: new THREE.Vector3(1.09, 1.01, 0.86) },
+      uSat: { value: 1.1 }, uWarm: { value: 0.0 }, uContrast: { value: 0.45 }, uGrain: { value: 0.045 },
     },
     vertexShader: FS_VERT,
     fragmentShader: `
