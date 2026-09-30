@@ -125,3 +125,36 @@ body.talking #bA, body.talking #bB, body.talking #bC, body.talking #bD, body.tal
 #banner.chapter .k { color: var(--sun); }
 #title .newg { display: block; margin: 12px auto 0; background: transparent; border: 1.5px solid rgba(255,255,255,.55); color: #fff; font-weight: 800;
   letter-spacing: 2px; font-size: 12px; padding: 9px 22px; border-radius: 24px; cursor: pointer; }
+
+/* ---------- combat HUD ---------- */
+#bF { width: 70px; height: 70px; right: calc(112px + var(--safe-r)); bottom: calc(112px + var(--safe-b)); font-size: 26px; }
+#bW { width: 44px; height: 44px; right: calc(190px + var(--safe-r)); bottom: calc(40px + var(--safe-b)); font-size: 16px; }
+#bD { right: calc(190px + var(--safe-r)); bottom: calc(96px + var(--safe-b)); }
+#vit { position: absolute; right: calc(14px + var(--safe-r)); top: calc(152px + var(--safe-t)); width: 132px; text-align: right; }
+#vit .hp { height: 6px; border-radius: 3px; background: rgba(0,0,0,.45); overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+#vit .hp i { display: block; height: 100%; width: 100%; transition: width .2s; }
+#vit .stars { margin-top: 6px; font-size: 20px; letter-spacing: 2px; color: #fff; text-shadow: 0 0 8px rgba(255,255,255,.6), 0 2px 4px #000; min-height: 22px; }
+#vit .stars .srch { opacity: .75; }
+#vit .wpn { font-size: 11.5px; font-weight: 800; color: #fff; text-shadow: 0 1px 4px #000; }
+@media (max-width: 420px) { #vit { width: 108px; top: calc(128px + var(--safe-t)); } }
+#hurt { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .15s;
+  background: radial-gradient(ellipse at center, rgba(160,0,0,0) 45%, rgba(170,0,0,.75) 100%); }
+#panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-46%); width: min(92vw, 420px); max-height: 76vh; overflow: auto;
+  padding: 14px; opacity: 0; pointer-events: none !important; transition: opacity .2s, transform .2s; z-index: 40; }
+#panel.on { opacity: 1; transform: translate(-50%,-50%); pointer-events: auto !important; }
+#panel .ph { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+#panel .ph b { font-size: 17px; letter-spacing: 1.5px; color: var(--sun); }
+#panel .x { background: none; border: none; color: #fff; font-size: 18px; cursor: pointer; }
+#panel .prow { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 4px; border-top: 1px solid rgba(255,255,255,.08); }
+#panel .pl { font-weight: 800; font-size: 14.5px; }
+#panel .ps { font-size: 11.5px; color: var(--ink-dim); margin-top: 2px; }
+#panel .prow button { flex: none; border: none; border-radius: 18px; padding: 9px 14px; font-weight: 800; font-size: 12.5px; color: #3a1d06;
+  background: linear-gradient(180deg, #ffe39a, var(--sun)); cursor: pointer; }
+#panel .prow button:disabled { opacity: .45; }
+#banner.bad .big { color: #ff3b3b; text-shadow: 0 3px 0 #3a0000, 0 6px 30px rgba(0,0,0,.8); font-size: min(14vw, 72px); letter-spacing: 3px; }
+body.talking #bF, body.talking #bW { opacity: 0 !important; pointer-events: none !important; }
+#bossbar { position: absolute; left: 50%; top: calc(14px + var(--safe-t)); transform: translateX(-50%); width: min(46vw, 320px); text-align: center; display: none; }
+#bossbar.on { display: block; }
+#bossbar .bn { font-size: 12px; font-weight: 900; letter-spacing: 1px; color: #ffb0c8; text-shadow: 0 1px 4px #000; margin-bottom: 4px; }
+#bossbar .bb { height: 8px; border-radius: 4px; background: rgba(0,0,0,.5); overflow: hidden; border: 1px solid rgba(255,255,255,.2); }
+#bossbar .bb i { display: block; height: 100%; background: linear-gradient(90deg, #ff2a6a, #ff8a3a); }

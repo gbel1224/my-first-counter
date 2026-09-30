@@ -26,13 +26,15 @@ try {
       localStorage.removeItem("palmcity_save"); localStorage.setItem("sunset_city_save_v1_imported", "1");
       const out = { phase0: G.state.phase };
       G.start(); out.phase1 = G.state.phase;
+      const talk0 = () => { let k = 0; while (G.hud.talking() && k++ < 80) { G.hud.advance(); G.hud.advance(); } };
+      for (let i = 0; i < 90; i++) G.step(1 / 60); talk0();
       // walk forward for 2 s
       const x0 = G.P.x, z0 = G.P.z;
       for (let i = 0; i < 120; i++) { G.I.mz = 1; G.I.mx = 0; G.step(1 / 60); }
       G.I.mz = 0; out.walked = Math.hypot(G.P.x - x0, G.P.z - z0);
       // get in the sports car and drive
       const c = G.cars[0]; G.P.x = c.x - 1.5; G.P.z = c.z; G.P.car = null;
-      out.entered = G.enterNearest() && !!G.P.car;
+      out.entered = G.enterNearest() && !!G.P.car; talk0();
       for (let i = 0; i < 90; i++) { G.I.mz = 1; G.step(1 / 60); }
       out.carSpeed = G.P.car ? G.P.car.speed : 0;
       G.I.mz = 0; for (let i = 0; i < 30; i++) G.step(1 / 60);
@@ -60,6 +62,15 @@ try {
       G.eco.doAction(G.eco.actionAt(G.P.x, G.P.z), {}); out.brokeOwned = !!G.st.owned.dogs;
       G.st.money = 600; G.eco.doAction(G.eco.actionAt(G.P.x, G.P.z), { dogs: "Sunny Dogs" }); out.owned = G.st.owned.dogs; out.left = Math.round(G.st.money);
       out.income = G.eco.incomeRate();
+      // crime: a punch raises heat; police respond; standing still gets you busted (cash fine only)
+      G.st.money = 1000; G.st.bank = 500;
+      const vic = G.crowd.nearest(G.P.x, G.P.z, 60, p => !p.gang);
+      G.P.x = vic.x - Math.sin(G.P.yaw) * 0.9; G.P.z = vic.z - Math.cos(G.P.yaw) * 0.9;
+      G.combat.S.cd = 0; G.combat.punch(); out.wanted = G.crime.S.wanted;
+      let k = 0; while (G.crime.S.wanted > 0 && k++ < 3600) { talk(); G.step(1 / 60); }
+      out.bustedFine = 1000 - Math.round(G.st.money); out.bankKept = G.st.bank;
+      // guns: buy a pistol, it fires and spends ammo
+      G.st.money = 2000; G.combat.buy(G.combat.WEAPONS[1]); const a0 = G.st.ammo.pistol; G.combat.S.cd = 0; G.combat.fire(0); out.ammoUsed = a0 - G.st.ammo.pistol;
       return out;
     });
     ok("starts on the title", r.phase0 === "title", r);
@@ -77,6 +88,9 @@ try {
     ok("chapter 1 completes and pays", r.ch1 === 1 && r.paid >= 100, r);
     ok("can't buy a business you can't afford", !r.brokeOwned, r);
     ok("buying a business works and earns", r.owned === 1 && r.left === 100 && r.income >= 30, r);
+    ok("punching someone gets you a star", r.wanted >= 1, r);
+    ok("police catch you: busted with a cash fine, bank untouched", r.bustedFine > 0 && r.bankKept === 500, r);
+    ok("guns fire and use ammo", r.ammoUsed === 1, r);
     ok("no page errors", errs.length === 0, errs.slice(0, 3));
     await pg.close();
   }

@@ -17,6 +17,10 @@ import { PLACES, buildSigns, setSignNight, makeBeacon } from "./places.js";
 import { BIZ, PROPS, newState, makeEconomy, xpNeed } from "./economy.js";
 import { makeStory } from "./story.js";
 import { STORY } from "./strings.js";
+import { createFX } from "./fx.js";
+import { makeCrime } from "./crime.js";
+import { makeCombat, WEAPONS } from "./combat.js";
+import { makeGangs, GANGS } from "./gangs.js";
 import { AudioSys } from "./audio.js";
 
 const bootBar = document.getElementById("bootbar");
@@ -49,7 +53,7 @@ await step(88);
 // save. The first time you open the new city, progress from the original game comes with you
 // (cash, businesses, homes, story chapter, level).
 const SAVE_KEY = "palmcity_save";
-const SAVE_FIELDS = ["money", "xp", "lvl", "owned", "apt", "home", "house", "mi", "bank", "stats"];
+const SAVE_FIELDS = ["money", "xp", "lvl", "owned", "apt", "home", "house", "mi", "bank", "stats", "weapons", "ammo", "turf", "nem"];
 let save = null, imported = false;
 try { save = JSON.parse(localStorage.getItem(SAVE_KEY) || localStorage.getItem("palmcity2_save") || "null"); } catch (e) {}
 if ((!save || save.mi === undefined) && !localStorage.getItem("sunset_city_save_v1_imported")) {
@@ -137,13 +141,60 @@ const story = makeStory({
   },
 });
 
+// ---------------------------------------------------------------------------------------------
+// heat + fighting
+const fx = createFX(scene);
+let greyT = 0;
+function respawnAt(place, label) {
+  if (P.car) { const c = P.car; P.car = null; P.ch.group.visible = true; c.vx = c.vz = 0; }
+  P.x = place.x + Math.sin(place.face) * 2; P.z = place.z + Math.cos(place.face) * 2; P.y = groundY(P.x, P.z); P.speed = 0; P.yaw = place.face;
+  rig.init = false; rig.yaw = place.face + Math.PI;
+}
+const crime = makeCrime(scene, {
+  collider, fxParticles: fx,
+  focus: () => P.car ? { x: P.car.x, z: P.car.z, car: true, speed: P.car.speed } : { x: P.x, z: P.z, car: false, speed: P.speed },
+  sound: (k, v, r) => AudioSys.play(k, v, r), toast: m => hud.toast(m), shake: a => { rig.shake = Math.max(rig.shake, a); },
+  paused: () => hud.talking() || state.phase !== "play",
+  noHeat: () => story.state().mState === "active" && st.mi === 11,        // no cops during the Grand Race
+  onBust: fine => {
+    st.money = Math.max(0, st.money - fine);
+    hud.banner("BUSTED", "Fine $" + fine.toLocaleString() + " · the bank keeps what you saved", "", 3.4, "bad"); greyT = 2.6;
+    AudioSys.play("door", 1); respawnAt(PLACES.police); writeSave();
+  },
+  onWasted: fine => {
+    st.money = Math.max(0, st.money - fine);
+    hud.banner("WASTED", "Patched up at Palm General · fine $" + fine.toLocaleString(), "", 3.4, "bad"); greyT = 2.6;
+    AudioSys.play("boom", 0.7); const h = eco.home(); respawnAt(h ? h.p : PLACES.hospital); writeSave();
+  },
+});
+const combat = makeCombat(scene, {
+  crowd, traffic, parked, crime, fx, collider, st,
+  sound: (k, v, r) => AudioSys.play(k, v, r), shake: a => { rig.shake = Math.max(rig.shake, a); }, toast: m => hud.toast(m),
+  player: () => P.car ? { x: P.car.x, z: P.car.z, y: P.car.y, car: P.car, yaw: P.car.h } : P,
+});
+const gangs = makeGangs({
+  crowd, crime, fx, st, collider, toast: (m, t) => hud.toast(m, t), banner: (a, b, k, t) => hud.banner(a, b, k, t), sound: (k, v) => AudioSys.play(k, v),
+  earn: n => eco.earn(n), paused: () => hud.talking() || state.phase !== "play",
+  player: () => P.car ? { x: P.car.x, z: P.car.z, car: true, speed: P.car.speed } : { x: P.x, z: P.z, car: false, speed: P.speed },
+  boss: (on, name, frac) => hud.boss(on, name, frac),
+});
+{ const add = crime.addCrime; crime.addCrime = n => { add(n); gangs.grudge(3 * (n || 1)); }; }
+function openGunShop() {
+  hud.panel("AMMU-PALM", WEAPONS.filter(w => w.id !== "fists").map(w => {
+    const owned = combat.own(w);
+    return { label: w.name + (owned ? "  ✓" : ""), sub: owned ? "Ammo: " + (st.ammo[w.id] || 0) + " · +" + w.ammo + " rounds" : "Damage " + w.dmg + " · range " + w.range + " m",
+      btn: owned ? "AMMO $" + w.ammoCost : "BUY $" + w.cost.toLocaleString(),
+      onClick: () => { const err = combat.buy(w); if (err) { hud.toast(err); AudioSys.play("door", 0.3); } else { AudioSys.play("cash", 0.8); writeSave(); } openGunShop(); } };
+  }));
+}
+
 // gather the crowd and traffic around the spawn point so the very first view is lively
-for (const p of crowd.people) if (!p.beach) crowd.respawnNear(p, P.x, P.z);
+for (const p of crowd.people) if (!p.beach && !p.gang) crowd.respawnNear(p, P.x, P.z);
 {
   // half the crowd right around the plaza (the respawn skips the nearest ring, so seed it directly)
   let k = 0;
   for (const p of crowd.people) {
-    if (p.beach || k++ % 2) continue;
+    if (p.beach || p.gang || k++ % 2) continue;
     p.bi = PLAZA.i + ((crowd.r() * 3) | 0) - 1; p.bj = PLAZA.j + ((crowd.r() * 3) | 0) - 1; p.t = crowd.r() * 4; crowd.place(p);
   }
 }
@@ -186,7 +237,7 @@ let time = 0, last = performance.now(), frozen = false, saveT = 0;
 const sim = { dt: 0 };
 function nearestCar() {
   let best = null, bd = 3.4 * 3.4, traf = null;
-  for (const c of cars) { const d = (c.x - P.x) ** 2 + (c.z - P.z) ** 2; if (d < bd) { bd = d; best = c; } }
+  for (const c of cars) { if (c.boom) continue; const d = (c.x - P.x) ** 2 + (c.z - P.z) ** 2; if (d < bd) { bd = d; best = c; } }
   const t = traffic.nearest(P.x, P.z, 3.4);
   if (t && (t.x - P.x) ** 2 + (t.z - P.z) ** 2 < bd) { best = null; traf = t; bd = (t.x - P.x) ** 2 + (t.z - P.z) ** 2; }
   const pk = parked.nearest(P.x, P.z, 3.4);
@@ -201,7 +252,9 @@ function enterCar(n) {
     c = spawnCar(scene, t.type, t.color, t.x, t.z, t.h);
     c.vx = Math.sin(t.h) * t.speed * 0.3; c.vz = Math.cos(t.h) * t.speed * 0.3;
     cars.push(c);
-    hud.toast("🚗 Borrowed a " + t.type + " — no questions asked", 2.2);
+    hud.toast("🚗 Car jacked", 1.6);
+    crowd.scare(t.x, t.z, 12, 4);
+    if (crime.units.some(u => u.active && crime.los(u.x, u.z, t.x, t.z))) crime.addCrime(1);
   }
   if (n.park) {                                     // break into a parked one
     const t = n.park; parked.take(t);
@@ -230,15 +283,27 @@ function update(dt) {
   if (state.phase === "play") {
     if (P.car) {
       const c = P.car;
+      if (hud.talking()) { inp.mz = 0; inp.mx = 0; }
       const impact = Math.max(driveStep(c, inp, dt, collider), parked.collide(c));
-      if (impact > 4) { rig.shake = Math.min(1, impact / 18); AudioSys.play("door", Math.min(1, impact / 20), 0.6); }
+      if (impact > 4) { rig.shake = Math.min(1, impact / 18); AudioSys.play("door", Math.min(1, impact / 20), 0.6); fx.sparks(c.x + Math.sin(c.h) * 2, 0.8, c.z + Math.cos(c.h) * 2, 8); }
+      if (impact > 9) combat.damageCar(c, (impact - 8) * 2.2, "player");
+      // ram the cops: it's a crime, and it hurts both of you
+      for (const u of crime.units) {
+        if (!u.active) continue;
+        const dx = u.x - c.x, dz = u.z - c.z, d2 = dx * dx + dz * dz;
+        if (d2 < 10) {
+          const d = Math.sqrt(d2) || 1, nx = dx / d, nz = dz / d, rel = (c.vx - u.vx) * nx + (c.vz - u.vz) * nz;
+          if (rel > 0) { c.vx -= nx * rel * 0.7; c.vz -= nz * rel * 0.7; u.vx += nx * rel * 0.7; u.vz += nz * rel * 0.7; if (rel > 6) { crime.addCrime(1); combat.damageCar(u, rel * 1.5, "cop"); } }
+          c.x -= nx * (3.2 - d) * 0.5; c.z -= nz * (3.2 - d) * 0.5; u.x += nx * (3.2 - d) * 0.5; u.z += nz * (3.2 - d) * 0.5;
+        }
+      }
       // shunt traffic you hit
       for (const t of traffic.cars) {
         if (!t.alive) continue;
         const dx = t.x - c.x, dz = t.z - c.z, d2 = dx * dx + dz * dz;
         if (d2 < 9) {
           const d = Math.sqrt(d2) || 1, nx = dx / d, nz = dz / d, rel = c.vx * nx + c.vz * nz;
-          if (rel > 0) { c.vx -= nx * rel * 1.2; c.vz -= nz * rel * 1.2; t.stun = 2.5; t.speed = 0; if (rel > 5) { rig.shake = Math.min(1, rel / 20); AudioSys.play("door", 0.8, 0.5); } }
+          if (rel > 0) { c.vx -= nx * rel * 1.2; c.vz -= nz * rel * 1.2; t.stun = 2.5; t.speed = 0; if (rel > 5) { rig.shake = Math.min(1, rel / 20); AudioSys.play("door", 0.8, 0.5); combat.damageCar(t, rel * 2, "traffic"); combat.damageCar(c, rel * 0.8, "player"); } }
           c.x -= nx * (3 - d) * 0.5; c.z -= nz * (3 - d) * 0.5;
         }
       }
@@ -252,7 +317,13 @@ function update(dt) {
       updatePlayerOnFoot(P, inp, dt, rig.yaw, collider);
       const act = eco.actionAt(P.x, P.z);
       const n = nearestCar();
-      if (inp.action) { if (act && act.kind !== "bizmax") eco.doAction(act, bizNames); else if (n) enterCar(n); }
+      const atGuns = (P.x - PLACES.guns.x) ** 2 + (P.z - PLACES.guns.z) ** 2 < 16;
+      if (inp.action && !hud.talking()) { if (atGuns) openGunShop(); else if (act && act.kind !== "bizmax") eco.doAction(act, bizNames); else if (n) enterCar(n); }
+      if (!hud.talking() && !hud.panelOpen()) {
+        if (inp.cycle) { const w = combat.cycle(); hud.toast(w.name, 1.2); }
+        const w = combat.current();
+        if (inp.fire || (inp.fireHeld && w.id !== "fists" && w.id !== "pistol" && w.id !== "shotgun")) combat.fire(rig.yaw);
+      }
     }
     eco.tick(dt, P.x, P.z, !P.car);
     story.update(dt);
@@ -260,7 +331,18 @@ function update(dt) {
   }
   // world sim
   const focus = P.car || P;
-  const hz = P.car ? [{ x: P.car.x, z: P.car.z, speed: P.car.speed, vx: P.car.vx, vz: P.car.vz, onHit: (p, sp) => { rig.shake = 0.35; AudioSys.play("door", 0.5, 0.8); } }] : [];
+  const hz = P.car ? [{ x: P.car.x, z: P.car.z, speed: P.car.speed, vx: P.car.vx, vz: P.car.vz, onHit: (p, sp) => { rig.shake = 0.35; AudioSys.play("door", 0.5, 0.8); if (sp > 9) { crime.addCrime(1); if (sp > 16) p.dead = true, p.knocked = 22; } } }] : [];
+  for (const u of crime.units) if (u.active && u.speed > 5) hz.push({ x: u.x, z: u.z, speed: u.speed, vx: u.vx, vz: u.vz });
+  if (state.phase === "play" && !hud.talking()) {             // the world holds its breath during dialogue
+    crime.update(dt, time); combat.update(dt, time); gangs.update(dt);
+    if (P.car && P.car.boom && !P.car.charred) {           // your ride went up: you're thrown clear, it's a burnt shell
+      const c = P.car; c.charred = true;
+      c.group.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.color && o.material.color.set(0x1a1816); o.material.metalness = 0.1; o.material.roughness = 1; } });
+      exitCar(); cars.splice(cars.indexOf(c), 1);
+    }
+  }
+  fx.update(dt);
+  if (greyT > 0) { greyT -= dt; R.grade.uSat.value = 1.1 - Math.min(1, greyT) * 0.95; } else R.grade.uSat.value = 1.1;
   crowd.update(dt, time, focus.x, focus.z, hz);
   traffic.update(dt, time, [P.car ? { x: P.car.x, z: P.car.z, car: true } : { x: P.x, z: P.z, car: false }]);
   if (state.phase === "title") {
@@ -283,7 +365,11 @@ function frame(now) {
 }
 function render() {
   const focus = P.car || P;
-  if (!P.car) poseOnFoot(P, time);
+  if (!P.car) {
+    let over = combat.pose();
+    if (!over && combat.current().id !== "fists") over = { armR: -1.45, elbowR: -0.1, armL: -1.2, elbowL: -0.5 };   // weapon up
+    poseOnFoot(P, time, over);
+  }
   crowd.render(camera.position.x * 0.5 + focus.x * 0.5, camera.position.z * 0.5 + focus.z * 0.5, camera);
   traffic.render(focus.x, focus.z, sky.state.night);
   parked.render(focus.x, focus.z);
@@ -316,6 +402,10 @@ function render() {
     const key = I.touch ? "Tap" : "Press <b>E</b>";
     hud.prompt(actPrompt ? (actLabel ? actPrompt + (I.touch ? "" : " · <b>E</b>") : actPrompt) : (!P.car && near ? (I.touch ? "Tap <b>DRIVE</b> to get in" : "Press <b>E</b> to drive") : ""));
     hud.level(st.lvl, st.xp, xpNeed(st.lvl), eco.incomeRate());
+    const w = combat.current();
+    hud.vitals(crime.S.health, crime.S.wanted, crime.S.searching, w.name, w.id === "fists" ? null : (st.ammo[w.id] || 0), !P.car);
+    hud.hurt(crime.S.flash + (crime.S.health < 25 ? 0.25 + Math.sin(time * 6) * 0.1 : 0));
+    if (!P.car && (P.x - PLACES.guns.x) ** 2 + (P.z - PLACES.guns.z) ** 2 < 16 && !act) { actLabel = "SHOP"; actPrompt = "<b>AMMU-PALM</b> · guns & ammo"; hud.buttons(false, !!near, actLabel); hud.prompt(actPrompt); }
     if (obj) {
       hud.objective(obj.title, obj.text);
       const f = P.car || P;
@@ -328,6 +418,9 @@ function render() {
     for (const pr of PROPS) dots.push({ x: pr.p.x, z: pr.p.z, c: st[pr.flag] ? "#2fae6a" : "#7a6ad8", r: 5, t: "⌂" });
     if (st.mi >= 5) dots.push({ x: PLACES.depot.x, z: PLACES.depot.z, c: "#8a6a3a", r: 5, t: "D" });
     for (const c of cars) if (c !== P.car) dots.push({ x: c.x, z: c.z, c: "#2f7cff", r: 3 });
+    for (const G of GANGS) if (!st.turf[G.id]) dots.unshift({ x: G.x, z: G.z, c: ["rgba(200,40,40,.22)", "rgba(40,80,200,.22)", "rgba(40,150,70,.22)"][GANGS.indexOf(G)], r: G.r * 0.5 });
+    for (const u of crime.units) if (u.active) dots.push({ x: u.x, z: u.z, c: Math.floor(time * 6) % 2 ? "#ff3030" : "#3060ff", r: 3.5 });
+    for (const p of gangs.members) if (!p.hidden && p.knocked <= 0 && (p.goon || (p.x - focus.x) ** 2 + (p.z - focus.z) ** 2 < 3600)) dots.push({ x: p.x, z: p.z, c: p.boss ? "#ff00aa" : "#ff5a3a", r: p.boss ? 4 : 2.5 });
     hud.minimap(focus.x, focus.z, P.car ? P.car.h : P.yaw, rig.yaw, dots, obj && obj.x !== undefined ? { x: obj.x, z: obj.z, c: obj.side ? "#ff8a4c" : "#ffc861" } : null);
   }
   R.render(scene, camera, time);
@@ -340,7 +433,7 @@ requestAnimationFrame(frame);
 
 // debug / test hooks
 globalThis.__pc2 = {
-  THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, collider, crowd, traffic, P, cars, state, rig, I,
+  THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, collider, crowd, traffic, P, cars, state, rig, I,
   freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },

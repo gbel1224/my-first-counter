@@ -28,6 +28,16 @@ export function createHUD(plan) {
   const bB = el("button", "bB", "btn", hud, "JUMP");
   const bC = el("button", "bC", "btn", hud, "RUN");
   const bD = el("button", "bD", "btn hide", hud, "📯");
+  const bF = el("button", "bF", "btn", hud, "👊");
+  const bW = el("button", "bW", "btn", hud, "⇄");
+  // health, wanted stars, weapon
+  const vit = el("div", "vit", "", hud, '<div class="hp"><i></i></div><div class="stars"></div><div class="wpn"></div>');
+  const hpBar = vit.querySelector(".hp i"), starsEl = vit.querySelector(".stars"), wpnEl = vit.querySelector(".wpn");
+  const hurtEl = el("div", "hurt", "", document.getElementById("ui"));
+  const bossEl = el("div", "bossbar", "", hud, '<div class="bn"></div><div class="bb"><i></i></div>');
+  // modal panel (shops)
+  const panel = el("div", "panel", "chip pe", document.getElementById("ui"), '<div class="ph"><b></b><button class="x">✕</button></div><div class="pb"></div>');
+  panel.querySelector(".x").addEventListener("click", () => panel.classList.remove("on"));
 
   // ---- the city map, drawn once into an offscreen canvas (1 px = 2 m) ----
   const S = 0.5, W = Math.ceil((HALF * 2 + 200) * S), H = Math.ceil((HALF * 2 + 260) * S);
@@ -84,7 +94,31 @@ export function createHUD(plan) {
       incEl.textContent = inc > 0 ? "+$" + inc.toLocaleString() + "/min" : "";
     },
     objDistance(d) { objDist.textContent = d == null ? "" : (d < 1000 ? Math.round(d) + " m" : (d / 1000).toFixed(1) + " km"); },
-    ui: { joy, knob: joy.querySelector("i"), bA, bB, bC, bD },
+    ui: { joy, knob: joy.querySelector("i"), bA, bB, bC, bD, bF, bW },
+    vitals(hp, stars, searching, wpn, ammo, onFoot) {
+      hpBar.style.width = hp + "%"; hpBar.style.background = hp < 30 ? "#ff5d5d" : "linear-gradient(90deg,#5ff0b0,#9ef08a)";
+      starsEl.innerHTML = stars > 0 ? (searching ? '<span class="srch">' + "☆".repeat(stars) + " 🔍</span>" : "★".repeat(stars)) : "";
+      wpnEl.textContent = wpn ? wpn + (ammo !== null ? " · " + ammo : "") : "";
+      bF.textContent = !onFoot ? "" : (wpn && wpn !== "Fists" ? "🔫" : "👊");
+      bF.classList.toggle("hide", !onFoot); bW.classList.toggle("hide", !onFoot);
+    },
+    hurt(a) { hurtEl.style.opacity = Math.min(0.85, a); },
+    boss(on, name, frac) { bossEl.classList.toggle("on", !!on); if (on) { bossEl.querySelector(".bn").textContent = name; bossEl.querySelector("i").style.width = (frac * 100) + "%"; } },
+    panel(titleText, rows) {
+      panel.querySelector(".ph b").textContent = titleText;
+      const pb = panel.querySelector(".pb"); pb.innerHTML = "";
+      for (const r of rows) {
+        const row = document.createElement("div"); row.className = "prow";
+        row.innerHTML = '<div><div class="pl"></div><div class="ps"></div></div><button></button>';
+        row.querySelector(".pl").textContent = r.label; row.querySelector(".ps").textContent = r.sub || "";
+        const b = row.querySelector("button"); b.textContent = r.btn; b.disabled = !!r.disabled;
+        b.addEventListener("click", () => r.onClick());
+        pb.appendChild(row);
+      }
+      panel.classList.add("on");
+    },
+    closePanel() { panel.classList.remove("on"); },
+    panelOpen: () => panel.classList.contains("on"),
     show(on) { hud.classList.toggle("hidden", !on); },
     cash(v) { amt.textContent = "$" + Math.floor(v).toLocaleString(); },
     objective(t, d) { obj.style.display = t ? "" : "none"; obj.querySelector(".t").textContent = t || ""; obj.querySelector(".d").textContent = d || ""; },
