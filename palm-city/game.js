@@ -4942,7 +4942,8 @@ let phoneErr = null, phoneErrT = 0;
 // whole screen, so an <input>'s own value would be wiped on each tap.
 // price chart as inline SVG: a line plus a soft fill under it, green if the window closed up, red if down
 function sparkSVG(h, w, ht, fill) {
-  if (!h || h.length < 2) return "<svg width='" + w + "' height='" + ht + "'></svg>";
+  if (!h || !h.length) return "<svg width='" + w + "' height='" + ht + "'></svg>";
+  if (h.length === 1) h = [h[0], h[0]];   // first seconds after load: one print — draw it flat, not blank
   let lo = Math.min(...h), hi = Math.max(...h);
   const pad = (hi - lo) * 0.12 || hi * 0.01; lo -= pad; hi += pad;
   const up = h[h.length - 1] >= h[0], col = up ? "#6ee08a" : "#ff7b7b";
