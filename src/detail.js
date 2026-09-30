@@ -225,16 +225,16 @@ export function buildStreetDetail(scene, plan) {
     // a street-name sign on each corner
     sign.push([b.x0 + 1.2, CURB, b.z0 + 1.2, r() * 6.28]);
   }
-  inst(scene, merge([
+  const hydM = inst(scene, merge([
     place(paint(new THREE.CylinderGeometry(0.16, 0.2, 0.62, 10), 0xc8a21e), 0, 0.31, 0),
     place(paint(new THREE.SphereGeometry(0.17, 10, 6, 0, 6.3, 0, 1.6), 0xc8a21e), 0, 0.62, 0),
     place(paint(new THREE.CylinderGeometry(0.07, 0.07, 0.48, 6), 0xb0901a), 0, 0.42, 0, 0, 0, Math.PI / 2),
   ]), vcMaterial({ roughness: 0.6, metalness: 0.2 }), hyd);
-  inst(scene, merge([
+  const binM = inst(scene, merge([
     place(paint(new THREE.CylinderGeometry(0.3, 0.27, 0.95, 12), 0x2f4538), 0, 0.48, 0),
     place(paint(new THREE.CylinderGeometry(0.32, 0.32, 0.06, 12), 0x243428), 0, 0.97, 0),
   ]), vcMaterial({ roughness: 0.7, metalness: 0.3 }), bin);
-  inst(scene, merge([
+  const newsM = inst(scene, merge([
     place(paint(new THREE.BoxGeometry(0.5, 0.95, 0.45), 0x2250a0), 0, 0.62, 0),
     place(paint(new THREE.BoxGeometry(0.4, 0.3, 0.02), 0xd8dde0), 0, 0.85, 0.23),
     place(paint(new THREE.BoxGeometry(0.06, 0.2, 0.06), 0x333333), -0.18, 0.1, 0), place(paint(new THREE.BoxGeometry(0.06, 0.2, 0.06), 0x333333), 0.18, 0.1, 0),
@@ -245,7 +245,8 @@ export function buildStreetDetail(scene, plan) {
     place(paint(new THREE.BoxGeometry(0.02, 0.2, 0.9), 0x1f6a3a), 0, 2.72, 0),
   ]), vcMaterial({ roughness: 0.5, metalness: 0.4 }), sign);
 
-  return { lampMats };
+  // the loose stuff a car can send flying (see props.js)
+  return { lampMats, props: [["hydrant", hydM, hyd], ["bin", binM, bin], ["news", newsM, news]] };
 }
 
 // light the signal lamps for the current phase (0 NS green, 1 NS amber, 2 EW green, 3 EW amber)

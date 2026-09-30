@@ -10,7 +10,9 @@ import { Traffic, SIGNAL, Parked } from "./traffic.js";
 import { buildFacadeDetail, buildStreetDetail, updateSignals } from "./detail.js";
 import { PAINTS } from "./cars.js";
 import { initInput, pollInput, I } from "./input.js";
-import { createHUD } from "./hud.js";
+import { createHUD, askConfirm } from "./hud.js";
+import { makeProps } from "./props.js";
+import { makeSkids } from "./skid.js";
 import { createPlayer, updatePlayerOnFoot, poseOnFoot, spawnCar, syncCar, driveStep, createCamRig, updateCam } from "./play.js";
 import { makeCharacter } from "./people.js";
 import { PLACES, buildSigns, setSignNight, makeBeacon } from "./places.js";
@@ -195,7 +197,7 @@ const combat = makeCombat(scene, {
   onCombo: (x, pts) => { if (x > 1) hud.combo(x, pts); },
   onComboEnd: (pts, x) => { st.stats.bestRampage = Math.max(st.stats.bestRampage || 0, pts); PH.pushRampage(pts, P.x, P.z); hud.toast("💥 Rampage banked · " + pts + " pts · best " + st.stats.bestRampage); },
   onExplode: (x, z) => { PH.chaosShock(st); if (Math.random() < 0.3) PH.pushRampage(0, x, z); },
-  crowd, traffic, parked, crime, fx, collider, st,
+  crowd, traffic, parked, crime, fx, collider, st, propsBlast: (x, z, r) => props.blast(x, z, r),
   sound: (k, v, r) => AudioSys.play(k, v, r), shake: a => { rig.shake = Math.max(rig.shake, a); }, toast: m => hud.toast(m),
   player: () => P.car ? { x: P.car.x, z: P.car.z, y: P.car.y, car: P.car, yaw: P.car.h } : P,
 });
@@ -266,6 +268,19 @@ const life = makeLife(scene, {
   get hud() { return hud; }, earn: n => eco.earn(n), toast: (m, t) => hud.toast(m, t), banner: (a, b, k, t) => hud.banner(a, b, k, t),
   sound: (k, v, r) => AudioSys.play(k, v, r), save: () => writeSave(), shake: a => { rig.shake = Math.max(rig.shake, a); },
 });
+const props = makeProps(street, {
+  fx, sound: (k, v, r) => AudioSys.play(k, v, r), shake: a => { rig.shake = Math.max(rig.shake, a); },
+  focus: () => P.car || P, playerCar: () => P.car,
+  movers: () => { const l = []; if (P.car && !P.car.kind) l.push(P.car); for (const t of traffic.cars) if (t.alive) l.push(t); for (const u of crime.units) if (u.active) l.push(u); return l; },
+});
+const skids = makeSkids(scene);
+// haptics: a short buzz on phones when something big hits (explosions, crashes, getting shot)
+let lastShake = 0, buzzCD = 0;
+function haptics(dt) {
+  buzzCD -= dt;
+  const jump = rig.shake - lastShake; lastShake = rig.shake;
+  if (jump > 0.22 && buzzCD <= 0 && I.touch && navigator.vibrate) { try { navigator.vibrate(Math.round(15 + rig.shake * 45)); } catch (e) {} buzzCD = 0.25; }
+}
 const interior = makeInterior(scene, {
   st, sky, get hud() { return hud; }, toast: (m, t) => hud.toast(m, t), sound: (k, v) => AudioSys.play(k, v), save: () => writeSave(),
   sleep: () => { sky.set(0.3); settings.time = "0.3"; crime.S.health = 100; hud.banner("GOOD MORNING", "You slept like a baby · game saved", "", 2.4); AudioSys.play("jingle", 0.5); writeSave(); },
@@ -325,7 +340,7 @@ const menu = createMenu({
   settings: { get: () => settings, set: applySetting },
   onPause: on => { menuPaused = on; },
   photo: on => { photoMode = on; },
-  reset: () => { if (confirm("Start a new game? Your saved city will be erased.")) { try { localStorage.removeItem(SAVE_KEY); localStorage.setItem("sunset_city_save_v1_imported", "1"); } catch (e) {} location.reload(); } },
+  reset: () => askConfirm("Start a new game? Your saved city will be erased.", "Erase & restart", () => { try { localStorage.removeItem(SAVE_KEY); localStorage.setItem("sunset_city_save_v1_imported", "1"); } catch (e) {} location.reload(); }),
   pois: () => {
     const d = [];
     for (const G of GANGS) if (!st.turf[G.id]) d.push({ x: G.x, z: G.z, c: "rgba(255,70,50,.25)", big: G.r });
@@ -363,11 +378,10 @@ function start() {
 }
 title.querySelector(".go").addEventListener("click", start);
 const newg = title.querySelector(".newg");
-if (newg) newg.addEventListener("click", () => {
-  if (!confirm("Start a new game? Your saved city will be erased.")) return;
+if (newg) newg.addEventListener("click", () => askConfirm("Start a new game? Your saved city will be erased.", "Erase & restart", () => {
   try { localStorage.removeItem(SAVE_KEY); localStorage.removeItem("palmcity2_save"); localStorage.setItem("sunset_city_save_v1_imported", "1"); } catch (e) {}
   location.reload();
-});
+}));
 addEventListener("keydown", e => { if (e.code === "Enter" && state.phase === "title") start(); });
 
 // ---------------------------------------------------------------------------------------------
@@ -437,7 +451,7 @@ function update(dt) {
       if (c.kind === "boat" || c.kind === "jetski") waterStep(c, inp, dt, time, fx);
       else if (c.kind === "heli") heliStep(c, inp, dt, time, collider);
       else if (c.kind === "plane") { planeStep(c, inp, dt, time, collider); if (c.crash && !c.boom) combat.explodeCar(c, "player"); }
-      else impact = Math.max(driveStep(c, inp, dt, collider), parked.collide(c));
+      else { impact = Math.max(driveStep(c, inp, dt, collider), parked.collide(c)); skids.track(c, (c.drift > 3.8 || (inp.handbrakeHeld && Math.abs(c.speed) > 6)) && !c.air, groundY(c.x, c.z) + 0.02); }
       if (impact > 4) { rig.shake = Math.min(1, impact / 18); AudioSys.play("door", Math.min(1, impact / 20), 0.6); fx.sparks(c.x + Math.sin(c.h) * 2, 0.8, c.z + Math.cos(c.h) * 2, 8); }
       if (impact > 9) combat.damageCar(c, (impact - 8) * 2.2, "player");
       // ram the cops: it's a crime, and it hurts both of you
@@ -523,6 +537,7 @@ function update(dt) {
     }
   }
   fx.update(dt);
+  props.update(dt, time); haptics(dt);
   if (greyT > 0) { greyT -= dt; R.grade.uSat.value = 1.1 - Math.min(1, greyT) * 0.95; } else R.grade.uSat.value = 1.1;
   crowd.update(dt, time, focus.x, focus.z, hz);
   traffic.update(dt, time, [P.car ? { x: P.car.x, z: P.car.z, car: true } : { x: focus.x, z: focus.z, car: false }]);
@@ -633,7 +648,7 @@ requestAnimationFrame(frame);
 // debug / test hooks
 globalThis.__pc2 = {
   THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, P, cars, state, rig, I,
-  interior, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
+  interior, props, skids, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },
 };

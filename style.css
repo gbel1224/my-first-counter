@@ -275,3 +275,11 @@ body.photo #hud, body.photo #phone, body.photo #notif { display: none !important
 #combo small { font-size: 11px; font-weight: 800; letter-spacing: 2px; color: #fff; text-shadow: 0 1px 4px #000; }
 #combo i { display: block; width: 90px; height: 4px; border-radius: 2px; background: rgba(0,0,0,.4); margin-top: 3px; overflow: hidden; }
 #combo u { display: block; height: 100%; background: #ff7a3a; }
+/* in-game confirm */
+#confirm { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: rgba(4,6,12,.55); opacity: 0; pointer-events: none; transition: opacity .18s; padding: 16px; }
+#confirm.on { opacity: 1; pointer-events: auto; }
+#confirm .cb { max-width: 340px; width: 100%; background: rgba(18,20,28,.96); border: 1px solid rgba(255,255,255,.1); border-radius: 20px; padding: 20px 18px 16px; color: #fff; font: 600 15px/1.4 system-ui, sans-serif; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+#confirm .cr { display: flex; gap: 10px; margin-top: 16px; }
+#confirm button { flex: 1; border: none; border-radius: 14px; padding: 12px; font-weight: 800; font-size: 14px; cursor: pointer; }
+#confirm .no { background: rgba(255,255,255,.1); color: #fff; }
+#confirm .yes { background: linear-gradient(180deg, #ff6a5a, #d8322a); color: #fff; }
