@@ -23,7 +23,7 @@ try {
     await pg.waitForFunction("window.__pc2", { timeout: 240000 });
     const r = await pg.evaluate(() => {
       const G = window.__pc2; G.freeze(true);
-      localStorage.removeItem("palmcity2_save");
+      localStorage.removeItem("palmcity_save"); localStorage.setItem("sunset_city_save_v1_imported", "1");
       const out = { phase0: G.state.phase };
       G.start(); out.phase1 = G.state.phase;
       // walk forward for 2 s
@@ -46,7 +46,20 @@ try {
       const near = G.crowd.people.filter(p => (p.x - G.P.x) ** 2 + (p.z - G.P.z) ** 2 < 150 * 150).length;
       out.crowdNear = near;
       G.renderOnce();
-      out.saved = !!localStorage.getItem("palmcity2_save");
+      out.saved = !!localStorage.getItem("palmcity_save");
+      // story: chapter 1 (walk to Marco) completes and pays
+      const talk = () => { let k = 0; while (G.hud.talking() && k++ < 80) { G.hud.advance(); G.hud.advance(); } };
+      if (G.P.car) G.exitCar();
+      talk(); for (let i = 0; i < 120; i++) G.step(1 / 60); talk(); for (let i = 0; i < 5; i++) G.step(1 / 60);
+      const o = G.story.objective(); out.obj1 = o && o.text;
+      const m0 = G.st.money;
+      G.P.x = G.PLACES.fountain.x; G.P.z = G.PLACES.fountain.z; for (let i = 0; i < 5; i++) G.step(1 / 60); talk(); for (let i = 0; i < 5; i++) G.step(1 / 60);
+      out.ch1 = G.st.mi; out.paid = G.st.money - m0;
+      // economy: can't buy the hot-dog cart broke; can once you have the cash; income starts
+      G.P.x = G.PLACES.dogs.x; G.P.z = G.PLACES.dogs.z; G.st.money = 100;
+      G.eco.doAction(G.eco.actionAt(G.P.x, G.P.z), {}); out.brokeOwned = !!G.st.owned.dogs;
+      G.st.money = 600; G.eco.doAction(G.eco.actionAt(G.P.x, G.P.z), { dogs: "Sunny Dogs" }); out.owned = G.st.owned.dogs; out.left = Math.round(G.st.money);
+      out.income = G.eco.incomeRate();
       return out;
     });
     ok("starts on the title", r.phase0 === "title", r);
@@ -60,6 +73,10 @@ try {
     ok("crowd positions valid", r.crowdBad === 0, r);
     ok("streets around the player are busy", r.crowdNear > 150, r);
     ok("progress saves", r.saved, r);
+    ok("chapter 1 objective shows", /Marco/.test(r.obj1 || ""), r);
+    ok("chapter 1 completes and pays", r.ch1 === 1 && r.paid >= 100, r);
+    ok("can't buy a business you can't afford", !r.brokeOwned, r);
+    ok("buying a business works and earns", r.owned === 1 && r.left === 100 && r.income >= 30, r);
     ok("no page errors", errs.length === 0, errs.slice(0, 3));
     await pg.close();
   }

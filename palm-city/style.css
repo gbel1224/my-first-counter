@@ -99,3 +99,29 @@ body.kb .btn, body.kb #joy { display: none !important; }
 #title .sub { margin-top: 14px; font-size: 12px; color: var(--ink-dim); }
 @keyframes pulse { 50% { transform: scale(1.04); box-shadow: 0 14px 38px rgba(255,160,80,.6); } }
 @media (max-width: 420px) { #mapwrap { width: 108px; height: 108px; } #cash .amt { font-size: 19px; } }
+
+/* ---------- economy / story UI ---------- */
+#cash { align-items: center; }
+#cash .sub { display: flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 700; color: var(--ink-dim); margin-top: 1px; }
+#cash .lv { color: var(--sky); letter-spacing: .5px; }
+#cash .xp { display: block; width: 46px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.15); overflow: hidden; }
+#cash .xp b { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--sky), #b28cff); }
+#cash .inc { color: var(--mint); }
+#obj .dist { font-size: 11px; font-weight: 800; color: var(--sun); margin-top: 2px; }
+#dlg { position: absolute; left: 50%; bottom: calc(26px + var(--safe-b)); transform: translate(-50%, 20px); width: min(92vw, 560px); padding: 14px 18px 12px;
+  opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 30; }
+#dlg.on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+#dlg .who { font-weight: 900; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; }
+#dlg .txt { font-size: 16.5px; line-height: 1.42; margin: 5px 0 6px; min-height: 2.8em; }
+#dlg .hint { font-size: 10.5px; text-align: right; color: var(--ink-dim); }
+body.talking #bA, body.talking #bB, body.talking #bC, body.talking #bD, body.talking #prompt { opacity: 0 !important; pointer-events: none !important; }
+#banner { position: absolute; left: 0; right: 0; top: 30%; text-align: center; pointer-events: none; opacity: 0; transform: scale(1.06); transition: opacity .35s, transform .35s; z-index: 25; }
+#banner.on { opacity: 1; transform: none; }
+#banner .k { font-size: 13px; font-weight: 800; letter-spacing: 4px; color: rgba(255,255,255,.8); text-shadow: 0 2px 10px rgba(0,0,0,.7); }
+#banner .big { font-size: min(11vw, 58px); font-weight: 900; letter-spacing: 1px; line-height: 1.05; color: #ffd76a;
+  text-shadow: 0 3px 0 #6a3d06, 0 6px 24px rgba(0,0,0,.65); }
+#banner .small { margin-top: 6px; font-size: 15px; font-weight: 700; color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.8); padding: 0 20px; }
+#banner.chapter .big { color: #fff; text-shadow: 0 4px 26px rgba(0,0,0,.7); }
+#banner.chapter .k { color: var(--sun); }
+#title .newg { display: block; margin: 12px auto 0; background: transparent; border: 1.5px solid rgba(255,255,255,.55); color: #fff; font-weight: 800;
+  letter-spacing: 2px; font-size: 12px; padding: 9px 22px; border-radius: 24px; cursor: pointer; }
