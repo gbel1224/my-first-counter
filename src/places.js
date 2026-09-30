@@ -35,6 +35,10 @@ export const PLACES = {
   club:       { ...walk(12, 1, "S", 0), label: "NEON PALMS", bg: "#16081e", fg: "#ff5ec8" },
   taxi:       { ...walk(7, 12, "N", 0), label: "PALM TAXI CO.", bg: "#f0c020", fg: "#1a1a1a" },
   marina:     { ...walk(9, 13, "S", 0), label: "BAYSIDE MARINA", bg: "#0e4a6e", fg: "#e8f8ff" },
+  // services
+  guns:       { ...walk(5, 11, "E", -6), label: "AMMU-PALM", bg: "#2a2a2a", fg: "#ff4a3a" },
+  hospital:   { ...walk(9, 6, "E", 0), label: "PALM GENERAL", bg: "#f4f4f4", fg: "#c81e1e" },
+  police:     { ...walk(4, 4, "S", 0), label: "PCPD", bg: "#10204a", fg: "#ffffff" },
   // properties
   apartment:  { ...walk(11, 3, "S", 8), label: "APARTMENTS", bg: "#4a4238", fg: "#f0e8d8" },
   condo:      { ...walk(8, 8, "W", 6), label: "PALM CONDOS", bg: "#2a3a4a", fg: "#f4f0e8" },

@@ -228,16 +228,23 @@ export class Crowd {
   update(dt, time, fx, fz, hazards) {
     const r = this.r;
     for (const p of this.people) {
-      if (!p.beach && (p.x - fx) ** 2 + (p.z - fz) ** 2 > 200 * 200) { this.respawnNear(p, fx, fz); continue; }
+      if (p.hidden) continue;
+      if (!p.beach && !p.gang && (p.x - fx) ** 2 + (p.z - fz) ** 2 > 200 * 200) { this.respawnNear(p, fx, fz); continue; }
       if (p.knocked > 0) {                        // sent flying by a car: tumble, lie there, get up
         p.knocked -= dt;
         if (p.y > 0 || p.vy > 0) { p.vy -= 22 * dt; p.x += p.vx * dt; p.z += p.vz * dt; p.y = Math.max(0, p.y + p.vy * dt); p.spin += dt * 9; if (p.y === 0) { p.vx *= 0.3; p.vz *= 0.3; } }
-        if (p.knocked <= 0) { p.y = 0; p.spin = 0; if (!p.beach) this.snapToRing(p); }
+        if (p.knocked <= 0) {
+          p.y = 0; p.spin = 0;
+          if (p.dead) { p.dead = false; if (p.gang) { if (p.onRespawn) p.onRespawn(p); } else if (!p.beach) this.respawnNear(p, fx, fz); }   // the body is gone; someone new walks the city
+          else if (!p.beach && !p.gang) this.snapToRing(p);
+        }
         continue;
       }
+      if (p.ai) { p.ai(p, dt); continue; }
       if (p.pause > 0) { p.pause -= dt; continue; }
       // flee anything fast coming at them
-      let fleeing = false;
+      if (p.fear > 0) p.fear -= dt;
+      let fleeing = p.fear > 0;
       for (const h of hazards) {
         const dx = p.x - h.x, dz = p.z - h.z, d2 = dx * dx + dz * dz;
         if (h.speed > 4 && d2 < 2.2) {             // hit!
@@ -278,6 +285,26 @@ export class Crowd {
       p.phase += sp * dt * (p.amt > 1.5 ? 3.2 : 2.6) / Math.max(0.9, p.look.h);
     }
   }
+  // knock someone down (a punch, a bullet, a blast). dead: they don't get up
+  knock(p, vx, vy, vz, dead) {
+    if (dead && !p.dead && p.onDeath) p.onDeath(p);
+    p.knocked = dead ? 22 : 3.5 + this.r() * 2; p.dead = !!dead;
+    p.vx = vx; p.vy = vy; p.vz = vz; p.y = Math.max(0.01, p.y || 0); p.cross = null; p.pause = 0;
+  }
+  // gunfire, explosions: everyone nearby bolts
+  scare(x, z, r, t = 6) {
+    for (const p of this.people) if (!p.gang && p.knocked <= 0 && (p.x - x) ** 2 + (p.z - z) ** 2 < r * r) p.fear = t;
+  }
+  // the nearest standing person matching a filter
+  nearest(x, z, maxD, filter) {
+    let best = null, bd = maxD * maxD;
+    for (const p of this.people) {
+      if (p.knocked > 0 || p.hidden) continue;
+      const d = (p.x - x) ** 2 + (p.z - z) ** 2;
+      if (d < bd && (!filter || filter(p, d))) { bd = d; best = p; }
+    }
+    return best;
+  }
   snapToRing(p) {
     // after a knock-down, rejoin the nearest point of their ring
     const x0 = blockMin(p.bi), z0 = blockMin(p.bj);
@@ -308,6 +335,7 @@ export class Crowd {
   render(fx, fz, camera) {
     const near = this.near; near.length = 0;
     for (const p of this.people) {
+      if (p.hidden) continue;
       const dx = p.x - fx, dz = p.z - fz, d2 = dx * dx + dz * dz;
       if (d2 < 150 * 150) { p._d2 = d2; near.push(p); }
     }

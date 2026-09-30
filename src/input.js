@@ -9,15 +9,17 @@ export const I = {
   touch: false,
 };
 const keys = new Set();
-let actionQ = false, jumpQ = false;
+let actionQ = false, jumpQ = false, cycleQ = false, fireQ = false;
 
 export function initInput(ui) {
   addEventListener("keydown", e => {
     if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
     if (e.repeat) { if (["Space", "ArrowUp", "ArrowDown"].includes(e.code)) e.preventDefault(); return; }
     keys.add(e.code);
-    if (e.code === "KeyE" || e.code === "KeyF" || e.code === "Enter") actionQ = true;
+    if (e.code === "KeyE" || e.code === "Enter") actionQ = true;
     if (e.code === "Space") { jumpQ = true; e.preventDefault(); }
+    if (e.code === "KeyQ" || e.code === "Tab") { cycleQ = true; e.preventDefault(); }
+    if (e.code === "KeyF" || e.code === "KeyJ") fireQ = true;
     if (e.code.startsWith("Arrow")) e.preventDefault();
     document.body.classList.add("kb");
   });
@@ -75,6 +77,9 @@ export function initInput(ui) {
   hold(ui.bB, "handbrake");      // on foot: jump (edge-triggered below); in a car: handbrake
   ui.bB.addEventListener("pointerdown", () => { jumpQ = true; });
   hold(ui.bC, "boostBtn");
+  hold(ui.bF, "fireBtn");
+  ui.bF.addEventListener("pointerdown", () => { fireQ = true; });
+  ui.bW.addEventListener("pointerdown", e => { e.preventDefault(); cycleQ = true; });
   hold(ui.bD, "hornBtn");
 }
 
@@ -102,6 +107,8 @@ export function pollInput() {
     if (b) hb = true;
     if (gp.buttons[2] && gp.buttons[2].pressed) sprintKb = true;
     if (gp.buttons[10] && gp.buttons[10].pressed) horn = true;
+    if (gp.buttons[5] && gp.buttons[5].pressed) I.padFire = true; else I.padFire = false;
+    if (gp.buttons[4] && gp.buttons[4].pressed && !I._padLB) cycleQ = true; I._padLB = !!(gp.buttons[4] && gp.buttons[4].pressed);
   }
   if (kb || gpMove) { I.mx = mx; I.mz = mz; I._kb = true; }
   else if (I._kb) { I.mx = 0; I.mz = 0; I._kb = false; }
@@ -110,5 +117,8 @@ export function pollInput() {
   I.hornHeld = horn || !!I.hornBtn;
   I.action = actionQ; actionQ = false;
   I.jump = jumpQ; jumpQ = false;
+  I.cycle = cycleQ; cycleQ = false;
+  I.fire = fireQ; fireQ = false;
+  I.fireHeld = keys.has("KeyF") || keys.has("KeyJ") || !!I.fireBtn || !!I.padFire;
   return I;
 }

@@ -109,8 +109,9 @@ export function updatePlayerOnFoot(P, inp, dt, camYaw, collider) {
   P.vx = vx; P.vz = vz;
 }
 
-export function poseOnFoot(P, time) {
-  const extra = !P.grounded ? { override: { thighL: -0.7, thighR: 0.3, kneeL: 1.1, kneeR: 0.4, armL: -0.9, armR: 0.6 } } : null;
+export function poseOnFoot(P, time, over) {
+  let extra = !P.grounded ? { override: { thighL: -0.7, thighR: 0.3, kneeL: 1.1, kneeR: 0.4, armL: -0.9, armR: 0.6 } } : null;
+  if (over) extra = { override: Object.assign({}, extra ? extra.override : {}, over) };
   // idle: breathe and shift weight
   const amt = P.amt;
   const phase = amt < 0.05 ? time * 0.9 : P.phase;
