@@ -34,6 +34,7 @@ export function createHUD(plan) {
   const vit = el("div", "vit", "", hud, '<div class="hp"><i></i></div><div class="stars"></div><div class="wpn"></div>');
   const hpBar = vit.querySelector(".hp i"), starsEl = vit.querySelector(".stars"), wpnEl = vit.querySelector(".wpn");
   const hurtEl = el("div", "hurt", "", document.getElementById("ui"));
+  const comboEl = el("div", "combo", "", hud, '<b></b><small>MAYHEM</small><i><u></u></i>');
   const bossEl = el("div", "bossbar", "", hud, '<div class="bn"></div><div class="bb"><i></i></div>');
   // modal panel (shops)
   const panel = el("div", "panel", "chip pe", document.getElementById("ui"), '<div class="ph"><b></b><button class="x">✕</button></div><div class="pb"></div>');
@@ -104,6 +105,8 @@ export function createHUD(plan) {
       bF.classList.toggle("hide", !onFoot); bW.classList.toggle("hide", !onFoot);
     },
     hurt(a) { hurtEl.style.opacity = Math.min(0.85, a); },
+    combo(x, pts) { comboEl.classList.add("on"); comboEl.querySelector("b").textContent = "x" + x; comboEl.querySelector("small").textContent = "MAYHEM · " + pts; },
+    comboTick(t) { if (t <= 0) comboEl.classList.remove("on"); else comboEl.querySelector("u").style.width = (t / 5 * 100) + "%"; },
     boss(on, name, frac) { bossEl.classList.toggle("on", !!on); if (on) { bossEl.querySelector(".bn").textContent = name; bossEl.querySelector("i").style.width = (frac * 100) + "%"; } },
     panel(titleText, rows) {
       panel.querySelector(".ph b").textContent = titleText;

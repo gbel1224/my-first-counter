@@ -10,6 +10,10 @@ export const WEAPONS = [
   { id: "smg", name: "Micro SMG", cost: 2200, dmg: 20, rate: 0.085, range: 45, spread: 0.06, pellets: 1, ammo: 150, ammoCost: 120 },
   { id: "shotgun", name: "Shotgun", cost: 3500, dmg: 22, rate: 0.85, range: 22, spread: 0.14, pellets: 7, ammo: 24, ammoCost: 150 },
   { id: "rifle", name: "Assault Rifle", cost: 6000, dmg: 30, rate: 0.12, range: 75, spread: 0.025, pellets: 1, ammo: 120, ammoCost: 200 },
+  { id: "sniper", name: "Sniper Rifle", cost: 9000, dmg: 150, rate: 1.2, range: 160, spread: 0.002, pellets: 1, ammo: 20, ammoCost: 250 },
+  { id: "minigun", name: "Minigun", cost: 25000, dmg: 18, rate: 0.045, range: 55, spread: 0.07, pellets: 1, ammo: 500, ammoCost: 400 },
+  { id: "gl", name: "Grenade Launcher", cost: 18000, dmg: 0, rate: 1.0, range: 45, spread: 0, pellets: 0, ammo: 12, ammoCost: 350, proj: "grenade" },
+  { id: "rpg", name: "RPG", cost: 30000, dmg: 0, rate: 1.6, range: 120, spread: 0, pellets: 0, ammo: 6, ammoCost: 500, proj: "rocket" },
 ];
 
 export function makeCombat(scene, g) {
@@ -21,6 +25,47 @@ export function makeCombat(scene, g) {
   if (!g.st.ammo) g.st.ammo = {};
 
   const own = w => !!g.st.weapons[w.id];
+  // ---- rockets & grenades: real projectiles that fly to where you aimed, then go off ----
+  const projs = [];
+  const projMat = new THREE.MeshStandardMaterial({ color: 0x3a4030, roughness: 0.6, metalness: 0.4 });
+  function launch(kind, x, y, z, dx, dz, T) {
+    const m = new THREE.Mesh(kind === "rocket" ? new THREE.CylinderGeometry(0.07, 0.07, 0.7, 8) : new THREE.SphereGeometry(0.11, 10, 8), projMat);
+    if (kind === "rocket") m.rotation.set(Math.PI / 2, Math.atan2(dx, dz), 0, "YXZ");
+    scene.add(m);
+    const sp = kind === "rocket" ? 55 : 22;
+    const dist = T ? T.d : (kind === "rocket" ? 120 : 30);
+    projs.push({ kind, m, x, y, z, vx: dx * sp, vy: kind === "rocket" ? (T ? (1.1 - y) / (dist / sp) : 0) : 6 + dist * 0.12, vz: dz * sp, t: 0, fuse: kind === "grenade" ? 2.4 : 4 });
+  }
+  function stepProjs(dt) {
+    for (let i = projs.length - 1; i >= 0; i--) {
+      const p = projs[i];
+      p.t += dt;
+      if (p.kind === "grenade") p.vy -= 18 * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+      p.m.position.set(p.x, p.y, p.z);
+      if (p.kind === "rocket" && Math.random() < 0.8) g.fx.smoke(p.x, p.y, p.z, 0.6);
+      let boom = p.t > p.fuse;
+      if (p.y < 0.12) { if (p.kind === "grenade") { p.y = 0.12; p.vy *= -0.35; p.vx *= 0.6; p.vz *= 0.6; } else boom = true; }
+      if (!boom && p.kind === "rocket") {
+        if (g.collider.segmentHit(p.x - p.vx * dt, p.z - p.vz * dt, p.x, p.z, p.y) < 1) boom = true;
+        for (const c of g.traffic.cars) if (c.alive && (c.x - p.x) ** 2 + (c.z - p.z) ** 2 < 6) { boom = true; p.hit = [c, "traffic"]; }
+        for (const u of g.crime.units) if (u.active && (u.x - p.x) ** 2 + (u.z - p.z) ** 2 < 6) { boom = true; p.hit = [u, "cop"]; }
+      }
+      if (boom) {
+        scene.remove(p.m); projs.splice(i, 1);
+        g.fx.explosion(p.x, Math.max(0.6, p.y), p.z, 1.1); g.sound("boom", 1); g.shake(0.5);
+        if (p.hit) damageCar(p.hit[0], 400, p.hit[1]);   // a direct hit always wrecks
+        blast(p.x, p.z, 8, 135, null); g.crime.addCrime(1);
+      }
+    }
+  }
+  // ---- rampage combo: chain mayhem fast and every payout from it multiplies ----
+  S.ramp = 0; S.rampX = 1; S.rampT = 0;
+  function mayhem(pts) {
+    S.rampT = 5; S.ramp += pts; S.rampX = Math.min(8, 1 + Math.floor(S.ramp / 3));
+    if (g.earn) g.earn(Math.round(pts * 15 * S.rampX));
+    if (g.onCombo) g.onCombo(S.rampX, S.ramp);
+  }
   function current() { return WEAPONS[S.weapon]; }
   function cycle() {
     for (let k = 1; k <= WEAPONS.length; k++) {
@@ -46,7 +91,7 @@ export function makeCombat(scene, g) {
   }
   function explodeCar(c, kind) {
     c.boom = true;
-    if (kind !== "player") S.wrecked = (S.wrecked || 0) + 1;
+    if (kind !== "player") { S.wrecked = (S.wrecked || 0) + 1; mayhem(kind === "cop" ? 3 : 2); }
     if (g.onExplode) g.onExplode(c.x, c.z);
     const x = c.x, z = c.z;
     g.fx.explosion(x, 1, z, 1.2); g.sound("boom", 1); g.shake(Math.max(0.2, 1 - Math.hypot(x - g.player().x, z - g.player().z) / 60));
@@ -133,6 +178,14 @@ export function makeCombat(scene, g) {
     if ((g.st.ammo[w.id] || 0) <= 0) { S.cd = 0.4; g.sound("blip", 0.3, 0.5); g.toast && g.toast("Out of ammo — buy more at the gun shop"); return false; }
     S.cd = w.rate; g.st.ammo[w.id]--;
     const P = g.player();
+    if (w.proj) {
+      let dx = Math.sin(aimYaw), dz = Math.cos(aimYaw);
+      const T = findTarget(P.x, P.z, dx, dz, w.range, 0.9);
+      if (T) { dx = (T.x - P.x) / T.d; dz = (T.z - P.z) / T.d; P.yaw = Math.atan2(dx, dz); }
+      launch(w.proj, P.x + dx * 0.8, (P.y || 0) + 1.5, P.z + dz * 0.8, dx, dz, T);
+      g.sound(w.proj === "rocket" ? "boom" : "gun", 0.4); g.shake(0.2); g.crowd.scare(P.x, P.z, 40, 8);
+      return true;
+    }
     const ox = P.x, oz = P.z, oy = (P.y || 0) + 1.35;
     let dx = Math.sin(aimYaw), dz = Math.cos(aimYaw);
     const T = findTarget(ox, oz, dx, dz, w.range, 0.82);
@@ -158,7 +211,7 @@ export function makeCombat(scene, g) {
       if (hit.kind === "ped") {
         const o = hit.o;
         if (o.hp !== undefined) { o.hp -= w.dmg; if (o.hp > 0) { o.x += sx * 0.3; o.z += sz * 0.3; g.fx.sparks(hit.x, 1.2, hit.z, 2); continue; } }
-        g.crowd.knock(o, sx * 3, 1.5, sz * 3, true); g.fx.sparks(hit.x, 1.2, hit.z, 2);
+        g.crowd.knock(o, sx * 3, 1.5, sz * 3, true); g.fx.sparks(hit.x, 1.2, hit.z, 2); if (o.gang) mayhem(1);
       }
       else if (hit.kind === "cop") { damageCar(hit.o, w.dmg * 0.9, "cop"); g.fx.sparks(hit.x, 1, hit.z, 6); }
       else if (hit.kind === "traffic") { damageCar(hit.o, w.dmg * 0.9, "traffic"); hit.o.stun = 3; g.fx.sparks(hit.x, 1, hit.z, 6); }
@@ -168,6 +221,8 @@ export function makeCombat(scene, g) {
   }
 
   function update(dt, time) {
+    stepProjs(dt);
+    if (S.rampT > 0) { S.rampT -= dt; if (S.rampT <= 0) { if (S.ramp >= 6 && g.onComboEnd) g.onComboEnd(S.ramp, S.rampX); S.ramp = 0; S.rampX = 1; } }
     if (S.cd > 0) S.cd -= dt;
     if (S.comboT > 0) S.comboT -= dt;
     if (S.punchT > 0) S.punchT -= dt;
