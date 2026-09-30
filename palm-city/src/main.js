@@ -30,6 +30,9 @@ import { makeExtras, CIRCUITS } from "./extras.js";
 import { createWeather } from "./weather.js";
 import { createMenu } from "./menu.js";
 import { setSurface } from "./play.js";
+import { makeWater } from "./water.js";
+import { inWater, waterStep, heliStep, planeStep } from "./craft.js";
+import { SEA_Y } from "./ocean.js";
 import { AudioSys } from "./audio.js";
 
 const bootBar = document.getElementById("bootbar");
@@ -62,7 +65,7 @@ await step(88);
 // save. The first time you open the new city, progress from the original game comes with you
 // (cash, businesses, homes, story chapter, level).
 const SAVE_KEY = "palmcity_save";
-const SAVE_FIELDS = ["money", "xp", "lvl", "owned", "apt", "home", "house", "mi", "bank", "stats", "weapons", "ammo", "turf", "nem", "term", "shares", "sprice", "sfair", "scost", "ledger", "pcars", "mods", "palms", "races", "medals", "ach"];
+const SAVE_FIELDS = ["money", "xp", "lvl", "owned", "apt", "home", "house", "mi", "bank", "stats", "weapons", "ammo", "turf", "nem", "term", "shares", "sprice", "sfair", "scost", "ledger", "pcars", "mods", "palms", "races", "medals", "ach", "treasure", "jetpack"];
 let save = null, imported = false;
 try { save = JSON.parse(localStorage.getItem(SAVE_KEY) || localStorage.getItem("palmcity2_save") || "null"); } catch (e) {}
 if ((!save || save.mi === undefined) && !localStorage.getItem("sunset_city_save_v1_imported")) {
@@ -246,6 +249,10 @@ const extras = makeExtras(scene, {
 });
 setSurface(extras.rampHeight);
 const weather = createWeather(scene, sky, city);
+const water = makeWater(scene, {
+  st, cars, focus: focusInfo, player: () => P, crime, fx, time: () => time,
+  toast: (m, t) => hud.toast(m, t), banner: (a, b, k, t) => hud.banner(a, b, k, t), sound: (k, v) => AudioSys.play(k, v), earn: n => eco.earn(n), save: () => writeSave(),
+});
 function openGunShop() {
   hud.panel("AMMU-PALM", WEAPONS.filter(w => w.id !== "fists").map(w => {
     const owned = combat.own(w);
@@ -346,7 +353,12 @@ let time = 0, last = performance.now(), frozen = false, saveT = 0;
 const sim = { dt: 0 };
 function nearestCar() {
   let best = null, bd = 3.4 * 3.4, traf = null;
-  for (const c of cars) { if (c.boom || c.locked) continue; const d = (c.x - P.x) ** 2 + (c.z - P.z) ** 2; if (d < bd) { bd = d; best = c; } }
+  for (const c of cars) {
+    if (c.boom || c.locked) continue;
+    const reach = { plane: 6.5, heli: 5.5, boat: 5 }[c.kind] || 3.4;
+    const d = (c.x - P.x) ** 2 + (c.z - P.z) ** 2;
+    if (d < reach * reach && d < bd + (reach * reach - 3.4 * 3.4)) { bd = Math.min(d, bd); best = c; }
+  }
   const t = traffic.nearest(P.x, P.z, 3.4);
   if (t && (t.x - P.x) ** 2 + (t.z - P.z) ** 2 < bd) { best = null; traf = t; bd = (t.x - P.x) ** 2 + (t.z - P.z) ** 2; }
   const pk = parked.nearest(P.x, P.z, 3.4);
@@ -371,8 +383,10 @@ function enterCar(n) {
     cars.push(c);
     hud.toast("🔓 Hot-wired a parked " + t.type, 2.0);
   }
-  P.car = c; P.ch.group.visible = false;
+  P.car = c; P.ch.group.visible = !!(c.kind === "bike" || c.kind === "jetski");
   AudioSys.play("door", 0.7);
+  if (c.kind === "heli") hud.toast("🚁 ▲ (Shift) to lift off, ▼ (Space) to descend · stick flies", 3.5);
+  if (c.kind === "plane") hud.toast("✈️ Push forward to build speed, hold ▲ (Shift) to take off", 3.5);
 }
 function exitCar() {
   const c = P.car;
@@ -396,7 +410,11 @@ function update(dt) {
     if (P.car) {
       const c = P.car;
       if (hud.talking()) { inp.mz = 0; inp.mx = 0; }
-      const impact = Math.max(driveStep(c, inp, dt, collider), parked.collide(c));
+      let impact = 0;
+      if (c.kind === "boat" || c.kind === "jetski") waterStep(c, inp, dt, time, fx);
+      else if (c.kind === "heli") heliStep(c, inp, dt, time, collider);
+      else if (c.kind === "plane") { planeStep(c, inp, dt, time, collider); if (c.crash && !c.boom) combat.explodeCar(c, "player"); }
+      else impact = Math.max(driveStep(c, inp, dt, collider), parked.collide(c));
       if (impact > 4) { rig.shake = Math.min(1, impact / 18); AudioSys.play("door", Math.min(1, impact / 20), 0.6); fx.sparks(c.x + Math.sin(c.h) * 2, 0.8, c.z + Math.cos(c.h) * 2, 8); }
       if (impact > 9) combat.damageCar(c, (impact - 8) * 2.2, "player");
       // ram the cops: it's a crime, and it hurts both of you
@@ -420,17 +438,32 @@ function update(dt) {
         }
       }
       syncCar(c);
-      AudioSys.engine(c.speed / c.spec.top);
+      AudioSys.engine(isFinite(c.speed) ? c.speed / c.spec.top : 0);
       AudioSys.skid(clamp((c.drift - 3) / 8, 0, 1));
       if (inp.hornHeld) AudioSys.horn();
-      if (inp.action && !hud.talking()) exitCar();
+      if (inp.action && !hud.talking()) {
+        const wact = water.action(P);
+        if (wact) water.doAction(P);
+        else if ((c.kind === "heli" || c.kind === "plane") && c.y > groundY(c.x, c.z) + 2) hud.toast("Land first");
+        else exitCar();
+      }
     } else {
       if (hud.talking()) { inp.mx = 0; inp.mz = 0; inp.jump = false; inp.action = false; }
+      if (inWater(P.x, P.z)) { inp.sprintHeld = false; inp.jump = false; }
       updatePlayerOnFoot(P, inp, dt, rig.yaw, collider);
+      P.swim = inWater(P.x, P.z);
+      if (P.swim) { P.speed = Math.min(P.speed, 2.3); P.y = SEA_Y - 1.05 + Math.sin(time * 1.6) * 0.06; P.vy = 0; P.grounded = true; }
+      else if (st.jetpack && I.sprintHeld && (!P.grounded || inp.jump || P.jetOn)) {
+        // jetpack: hold RUN/Shift once you're off the ground
+        P.jetOn = true; P.grounded = false; P.vy = Math.min(7, P.vy + 28 * dt);
+        if (Math.random() < dt * 40) fx.fire(P.x - Math.sin(P.yaw) * 0.3, P.y + 0.7, P.z - Math.cos(P.yaw) * 0.3);
+      } else if (P.grounded) P.jetOn = false;
       const act = eco.actionAt(P.x, P.z);
       const n = nearestCar();
       const atGuns = (P.x - PLACES.guns.x) ** 2 + (P.z - PLACES.guns.z) ** 2 < 16;
       const atGarage = (P.x - extras.GARAGE.x) ** 2 + (P.z - extras.GARAGE.z) ** 2 < 400;
+      const wact = water.action(P);
+      if (inp.action && !hud.talking() && wact) { water.doAction(P); inp.action = false; }
       if (inp.action && !hud.talking()) { if (atGuns) openGunShop(); else if (atGarage && !n) extras.garagePanel(); else if (act && act.kind !== "bizmax") eco.doAction(act, bizNames); else if (n) enterCar(n); }
       if (!hud.talking() && !hud.panelOpen()) {
         if (inp.cycle) { const w = combat.cycle(); hud.toast(w.name, 1.2); }
@@ -481,8 +514,15 @@ function frame(now) {
 }
 function render() {
   const focus = P.car || P;
+  if (P.car && (P.car.kind === "bike" || P.car.kind === "jetski")) {
+    const c = P.car; P.ch.group.visible = true;
+    const seat = c.kind === "bike" ? 0.62 : 0.55;
+    P.ch.pose(c.x - Math.sin(c.h) * 0.25, (c.y || 0) + seat - 0.97 + 0.12, c.z - Math.cos(c.h) * 0.25, c.h, 0, 0,
+      { tilt: 0, override: { thighL: -1.45, thighR: -1.45, kneeL: 1.5, kneeR: 1.5, armL: -1.1, armR: -1.1, elbowL: -0.3, elbowR: -0.3, lean: 0.35, roll: (c.roll || 0) } });
+  } else if (P.car) P.ch.group.visible = false;
   if (!P.car) {
     let over = combat.pose();
+    if (P.swim) over = { tilt: 1.25, armL: Math.sin(time * 4) * 2.6, armR: -Math.sin(time * 4) * 2.6, thighL: Math.sin(time * 8) * 0.3, thighR: -Math.sin(time * 8) * 0.3, kneeL: 0.2, kneeR: 0.2, elbowL: -0.3, elbowR: -0.3 };
     if (!over && combat.current().id !== "fists") over = { armR: -1.45, elbowR: -0.1, armL: -1.2, elbowL: -0.5 };   // weapon up
     poseOnFoot(P, time, over);
   }
@@ -514,7 +554,9 @@ function render() {
       else if (act.kind === "rest") { actLabel = "REST"; actPrompt = "Your <b>" + act.pr.label + "</b> · rest to pass time"; }
       else if (act.kind === "bizmax") actPrompt = "<b>" + bizNames[act.b.id] + "</b> · max level · +$" + (act.b.rate * 3) + "/min";
     }
-    hud.buttons(!!P.car, !!near, actLabel);
+    const wlab = water.action(P);
+    hud.buttons(!!P.car, !!near, wlab || actLabel, P.car && P.car.kind);
+    if (wlab) hud.prompt(wlab === "CAST" ? "🎣 Stopped on the water — <b>CAST</b> a line" : wlab === "DIVE" ? "💰 Something glitters below — <b>DIVE</b>" : "🎣 Wait for the bite, then <b>REEL</b>");
     const key = I.touch ? "Tap" : "Press <b>E</b>";
     hud.prompt(actPrompt ? (actLabel ? actPrompt + (I.touch ? "" : " · <b>E</b>") : actPrompt) : (!P.car && near ? (I.touch ? "Tap <b>DRIVE</b> to get in" : "Press <b>E</b> to drive") : ""));
     hud.level(st.lvl, st.xp, xpNeed(st.lvl), eco.incomeRate());
@@ -550,7 +592,7 @@ requestAnimationFrame(frame);
 
 // debug / test hooks
 globalThis.__pc2 = {
-  THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, P, cars, state, rig, I,
+  THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, P, cars, state, rig, I,
   freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },

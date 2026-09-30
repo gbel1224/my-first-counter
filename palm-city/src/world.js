@@ -231,6 +231,15 @@ export class Collider {
     }
     return { x, z, hit, nx, nz };
   }
+  // same, but only against buildings taller than height y (for things that fly)
+  resolveY(x, z, rad, y) {
+    const saved = this.near;
+    const all = this.near(x, z).filter(b => b.h > y);
+    this.near = () => all;
+    const r = this.resolve(x, z, rad);
+    this.near = saved;
+    return r;
+  }
   // does the segment (ax,az)->(bx,bz) at height y pass through a building? (camera + line of sight)
   segmentHit(ax, az, bx, bz, y) {
     const steps = Math.ceil(Math.hypot(bx - ax, bz - az) / 1.5);
