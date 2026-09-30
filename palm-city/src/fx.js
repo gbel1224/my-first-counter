@@ -75,6 +75,11 @@ export function createFX(scene) {
       burst(glow, x, y, z, 30, 16, 6, 0.8, 0.15, 5, 3, 1.2, 1, 20);
       burst(smoke, x, y + 1, z, 22 * s, 4 * s, 3, 3.2, 2.6 * s, 0.16, 0.15, 0.15, 0.8, -0.4, 2.2);
     },
+    // a burst water main: white spray thrown up and falling back
+    spray(x, y, z) {
+      emit(smoke, { x: x + rnd(-0.1, 0.1), y, z: z + rnd(-0.1, 0.1), vx: rnd(-1.2, 1.2), vy: rnd(6, 9), vz: rnd(-1.2, 1.2), life: rnd(0.9, 1.3), size: rnd(0.35, 0.6),
+        r: 0.85, g: 0.9, b: 0.95, a: 0.5, grav: 12, grow: 1.2 });
+    },
     tracer(x0, y0, z0, x1, y1, z1) {
       const n = Math.min(12, Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 3));
       for (let i = 1; i <= n; i++) {

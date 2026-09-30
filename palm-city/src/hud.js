@@ -175,3 +175,19 @@ export function createHUD(plan) {
   };
   return H_;
 }
+
+// in-game Yes/No (native confirm() is blocked in some embedded browsers and looks out of place)
+export function askConfirm(msg, yes, onYes) {
+  let box = document.getElementById("confirm");
+  if (!box) {
+    box = document.createElement("div"); box.id = "confirm";
+    box.innerHTML = '<div class="cb"><div class="cm"></div><div class="cr"><button class="no">Cancel</button><button class="yes"></button></div></div>';
+    document.body.appendChild(box);
+    box.addEventListener("click", e => { if (e.target === box) box.classList.remove("on"); });
+    box.querySelector(".no").addEventListener("click", () => box.classList.remove("on"));
+  }
+  box.querySelector(".cm").textContent = msg;
+  const y = box.querySelector(".yes"); y.textContent = yes;
+  y.onclick = () => { box.classList.remove("on"); onYes(); };
+  box.classList.add("on");
+}

@@ -131,6 +131,7 @@ export function makeCombat(scene, g) {
   // radial blast: knocks people flat, wrecks cars close in, hurts you
   function blast(x, z, r, dmg, source) {
     g.crowd.scare(x, z, 45, 8);
+    if (g.propsBlast) g.propsBlast(x, z, r + 2);
     for (const p of g.crowd.people) {
       if (p.knocked > 0) continue;
       const dx = p.x - x, dz = p.z - z, d = Math.hypot(dx, dz);
