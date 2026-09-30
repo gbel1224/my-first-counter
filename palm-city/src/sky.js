@@ -112,6 +112,8 @@ export function createSky(scene, renderer) {
   let envRT = null, envAt = -1;
 
   const sunDir = new THREE.Vector3();
+  const base = { si: 3, hemi: 0.4, fog: new THREE.Color() }, grey = new THREE.Color(0x8a9096);
+  const out = {};
   const state = { t: 0.63, cycle: false, night: 0, elev: 0, cloud: 0.5 };
 
   function set(t) {
@@ -129,6 +131,7 @@ export function createSky(scene, renderer) {
     sample(el, "sky", hemi.color); sample(el, "gnd", hemi.groundColor);
     hemi.intensity = sample(el, "hemi");
     sample(el, "fog", scene.fog.color);
+    base.si = sun.intensity; base.hemi = hemi.intensity; base.fog.copy(scene.fog.color);
     groundMat.color.copy(hemi.groundColor).multiplyScalar(0.8);
     // moonlight: keep a faint cool key light so night isn't pitch black
     if (el < 0) { sun.color.set(0x8fa6e0); sun.intensity = 0.35; sunDir.set(0.3, 0.8, -0.4).normalize(); }
@@ -145,6 +148,10 @@ export function createSky(scene, renderer) {
   function update(dt, time, focus, camera) {
     U.uTime.value = time;
     if (state.cycle) set(state.t + dt / 960);            // a full day in 16 minutes
+    // weather: a shower dims the sun, flattens the light, thickens and greys the haze
+    const w = out.weatherDim || 0;
+    sun.intensity = base.si * (1 - 0.78 * w); hemi.intensity = base.hemi * (1 + 0.15 * w);
+    scene.fog.density = 0.0021 * (1 + w * 1.4); scene.fog.color.copy(base.fog).lerp(grey, w * 0.7);
     dome.position.copy(camera.position);
     // shadow frustum follows the action, snapped to whole texels so edges don't crawl
     const tex = (R * 2) / SM;
@@ -153,5 +160,5 @@ export function createSky(scene, renderer) {
     sun.position.set(fx + sunDir.x * 300, Math.max(40, sunDir.y * 300), fz + sunDir.z * 300);
   }
 
-  return { set, update, state, sun, hemi, uniforms: U, sunDir };
+  return Object.assign(out, { set, update, state, sun, hemi, uniforms: U, sunDir });
 }

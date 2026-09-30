@@ -81,7 +81,7 @@ try {
       ph.show(false);
       // a full quiet heist: case → wheels → grab → escape → paid
       G.st.mi = 12; G.crime.reset();
-      const car = G.cars.find(c => !c.boom); G.P.x = car.x - 1.6; G.P.z = car.z; if (!G.P.car) G.enterNearest();
+      const car = G.cars.find(c => !c.boom && !c.locked && c !== G.P.car) || G.P.car; G.P.x = car.x - 1.6; G.P.z = car.z; if (!G.P.car) G.enterNearest();
       out.heistStarted = G.startHeist("quiet");
       const H = () => G.heistsDebug.get(), go = (x, z) => { G.P.car.x = x; G.P.car.z = z; G.P.car.vx = G.P.car.vz = 0; };
       const stages = [H().stage];
