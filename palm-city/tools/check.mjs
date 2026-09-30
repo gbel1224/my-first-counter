@@ -96,7 +96,7 @@ try {
       const stages = [H().stage];
       go(H().tx, H().tz); G.step(1 / 60); stages.push(H().stage);
       go(H().sx, H().sz); G.step(1 / 60); stages.push(H().stage);
-      for (let i = 0; i < 60 * 14 && H() && H().stage === "grab"; i++) { go(H().tx, H().tz); G.crime.S.health = 100; G.step(1 / 60); }
+      for (let i = 0; i < 60 * 14 && H() && H().stage === "grab"; i++) { go(H().tx, H().tz); G.crime.S.health = 100; G.crime.S.wanted = Math.min(G.crime.S.wanted, 3); G.step(1 / 60); }   // (≤3★: this tests the heist, not the tank)
       stages.push(H() && H().stage);
       const hm = G.st.money; go(H().sx, H().sz); G.step(1 / 60);
       out.heistStages = stages.join(); out.heistPaid = !H() && G.st.money > hm;
@@ -124,6 +124,57 @@ try {
     ok("phone bank deposit works", Math.round(r.bankDep) === 1000, r);
     ok("heist runs case→wheels→grab→escape", r.heistStarted && r.heistStages === "case,wheels,grab,escape", r);
     ok("heist pays at the drop", r.heistPaid, r);
+    // the newer systems: heavy weapons, air & armour at high heat, homes, venues, the water race, props
+    const r2 = await pg.evaluate(async () => {
+      const G = window.__pc2, run = n => { for (let i = 0; i < n; i++) { G.crime.S.health = 100; G.step(1 / 60); G.crime.S.bustT = 0; } }, o = {};
+      if (G.P.car) G.exitCar(); G.crime.reset(); G.st.mi = 12; G.st.money = 200000; G.hud.closePanel();
+      // RPG: a rocket at a traffic car wrecks it
+      const W = id => G.combat.WEAPONS.find(w => w.id === id);
+      G.combat.buy(W("rpg")); G.combat.S.weapon = G.combat.WEAPONS.indexOf(W("rpg"));
+      const tc = G.traffic.cars.find(c => c.alive);
+      // stand 16 m down the car's own road and fire straight at it (a few tries: auto-aim may grab a passer-by)
+      for (let k = 0; k < 3 && tc.alive; k++) {
+        G.P.x = tc.x + Math.sin(tc.h) * 16; G.P.z = tc.z + Math.cos(tc.h) * 16; tc.speed = 0; tc.stun = 30; G.combat.S.cd = 0;
+        G.combat.fire(Math.atan2(tc.x - G.P.x, tc.z - G.P.z)); run(60);
+      }
+      o.rpgWreck = !tc.alive;
+      // 4★ brings the chopper, 5★ the tank
+      G.crime.reset(); G.P.x = G.PLACES.fountain.x + 16; G.P.z = G.PLACES.fountain.z;
+      G.crime.S.crimeCD = 0; G.crime.addCrime(4); run(5); o.heli = G.crime.heli.active;
+      G.crime.S.crimeCD = 0; G.crime.addCrime(1); run(5); o.tank = G.crime.units.some(u => u.tank && u.active);
+      G.crime.reset(); run(2); o.cleared = !G.crime.heli.active && !G.crime.units.some(u => u.active);
+      // home: enter your condo, buy a sofa, walk out the door
+      G.st.home = true; G.P.x = G.PLACES.condo.x; G.P.z = G.PLACES.condo.z; run(1);
+      const act = G.eco.actionAt(G.P.x, G.P.z); if (act && act.kind === "rest") G.interior.enter(act.pr, G.P);
+      o.home = G.interior.inside;
+      G.interior.panel("sofa"); const m0 = G.st.money; [...document.querySelectorAll("#panel .prow button")][3].click(); G.hud.closePanel();
+      o.decor = G.st.decor.sofa === 2 && G.st.money < m0;
+      G.interior.exit(G.P); o.homeOut = !G.interior.inside;
+      // venue: walk into the burger joint, eat at the counter, leave
+      G.interior.enterVenue("burger", G.P); const R = G.interior.ROOM, v = G.interior.venue();
+      G.P.x = R.x + v.counter.x; G.P.z = R.z + v.counter.z; G.crime.S.health = 30;
+      const ea = G.interior.action(G.P); if (ea) ea[2](); o.ate = ea && ea[0] === "EAT" && G.crime.S.health === 100;
+      G.interior.exit(G.P); o.venueOut = !G.interior.inside && Math.hypot(G.P.x - G.PLACES.burger.x, G.P.z - G.PLACES.burger.z) < 4;
+      // Wake Breaker on a jet ski
+      const { CIRCUITS } = await import("/src/extras.js"); const C = CIRCUITS.find(c => c.id === "wake");
+      const js = G.cars.find(c => c.kind === "jetski"); G.P.x = js.x - 1.5; G.P.z = js.z; run(1); G.enterNearest();
+      const tp = p => { const c = G.P.car; c.x = p.x; c.z = p.z; c.vx = c.vz = 0; };
+      G.events.forceIdle(true); G.events.cancel();       // races don't start while a street event is running
+      if (G.P.car) { tp(C.start); run(6); for (const cp of C.cps) { tp(cp); run(6); } }
+      o.wake = (G.st.medals.wake || 0) > 0; if (G.P.car) G.exitCar();
+      // props: a car through a hydrant sends it flying
+      const hyd = G.props.items.find(i => i.kind === "hydrant" && !i.loose);
+      const car = G.cars.find(c => !c.kind && !c.locked && !c.boom); G.P.x = car.x - 1.6; G.P.z = car.z; run(1); G.enterNearest();
+      if (G.P.car) { const c = G.P.car; c.h = 0; c.x = hyd.x0; c.z = hyd.z0 - 6; c.vx = 0; c.vz = 14; c.speed = 14; run(30); G.exitCar(); }
+      o.prop = hyd.loose;
+      return o;
+    });
+    ok("RPG rocket wrecks a car", r2.rpgWreck, r2);
+    ok("police chopper at 4★, tank at 5★, both stand down on reset", r2.heli && r2.tank && r2.cleared, r2);
+    ok("enter your home and decorate it", r2.home && r2.decor && r2.homeOut, r2);
+    ok("walk into a venue, eat at the counter, walk out", r2.ate && r2.venueOut, r2);
+    ok("Wake Breaker water race pays a medal", r2.wake, r2);
+    ok("cars knock street props flying", r2.prop, r2);
     ok("no page errors", errs.length === 0, errs.slice(0, 3));
     await pg.close();
   }
