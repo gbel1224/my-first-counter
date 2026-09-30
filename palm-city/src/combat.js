@@ -46,6 +46,8 @@ export function makeCombat(scene, g) {
   }
   function explodeCar(c, kind) {
     c.boom = true;
+    if (kind !== "player") S.wrecked = (S.wrecked || 0) + 1;
+    if (g.onExplode) g.onExplode(c.x, c.z);
     const x = c.x, z = c.z;
     g.fx.explosion(x, 1, z, 1.2); g.sound("boom", 1); g.shake(Math.max(0.2, 1 - Math.hypot(x - g.player().x, z - g.player().z) / 60));
     // leave a burnt shell (traffic / parked / cop) — the player's own car burns where it stands

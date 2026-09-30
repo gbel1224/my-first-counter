@@ -55,6 +55,25 @@ export function makeGangs(g) {
   const goons = [], suit = { shirt: 0x17181c, pants: 0x0d0e11, skin: 0xcf9a72, hair: 0x0c0a08, sleeveless: false, shorts: false, bald: false, long: false, h: 1.02, bulk: 1.05 };
   for (let k = 0; k < 6; k++) { const p = make({ ...suit }, 99999, 0, { goon: true, hidden: true, hp: 80 }); goons.push(p); }
   const boss = make({ ...suit, shirt: 0xe6dcb6, pants: 0x1a1c22, skin: 0xd99c6e, h: 1.1, bulk: 1.2 }, 99999, 0, { goon: true, boss: true, hidden: true, hp: 520 });
+  // pick-up crews for street shootouts
+  const crewPool = [];
+  for (let k = 0; k < 6; k++) {
+    const look = Object.assign(randomLook(r), { shirt: [0x3a2a1a, 0x4a1a3a, 0x2a2a2a][k % 3], shorts: false });
+    const p = make(look, 99999, 0, { crew: true, hidden: true, hp: 60 });
+    p.onRespawn = q => { q.hidden = true; q.x = 99999; };
+    crewPool.push(p);
+  }
+  function crew(x, z, n) {
+    const out = [];
+    for (const p of crewPool) {
+      if (out.length >= n) break;
+      if (!p.hidden) continue;
+      const a = r() * 6.28; placeGoon(p, x + Math.cos(a) * 5, z + Math.sin(a) * 5, 60); p.home = { x, z };
+      out.push(p);
+    }
+    return out;
+  }
+  function dismiss(list) { for (const p of list) { p.hidden = true; p.x = 99999; p.knocked = 0; p.dead = false; } }
   const YARD = { x: blockC(3), z: HALF + 20 };   // on the sand below the promenade
   let squadCD = 40, showdown = false;
 
@@ -98,7 +117,7 @@ export function makeGangs(g) {
     if (p.hidden) return;
     const P = g.player(), dx = P.x - p.x, dz = P.z - p.z, d = Math.hypot(dx, dz) || 1;
     const turfHostile = p.G && !st.turf[p.G.id] && ((P.x - p.G.x) ** 2 + (P.z - p.G.z) ** 2 < p.G.r * p.G.r || d < 26);
-    const aggro = !g.paused() && (p.goon || turfHostile);
+    const aggro = !g.paused() && (p.goon || turfHostile || (p.crew && d < 70));
     if (p.goon && !p.boss && !showdown && d > 170) { p.hidden = true; p.x = 99999; return; }   // lost the squad
     if (aggro && d < 110) {
       p.yaw = Math.atan2(dx, dz);
@@ -134,5 +153,5 @@ export function makeGangs(g) {
     }
     if (showdown) g.boss(true, NEM_NAME, Math.max(0, boss.hp) / (520 + N.defeated * 120));
   }
-  return { update, grudge, GANGS, boss, goons, YARD, showdown: () => showdown, members };
+  return { update, grudge, GANGS, boss, goons, YARD, showdown: () => showdown, members, crew, dismiss };
 }

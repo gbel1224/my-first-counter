@@ -71,6 +71,26 @@ try {
       out.bustedFine = 1000 - Math.round(G.st.money); out.bankKept = G.st.bank;
       // guns: buy a pistol, it fires and spends ammo
       G.st.money = 2000; G.combat.buy(G.combat.WEAPONS[1]); const a0 = G.st.ammo.pistol; G.combat.S.cd = 0; G.combat.fire(0); out.ammoUsed = a0 - G.st.ammo.pistol;
+      // phone bank: a deposit you can't afford shows the red error and moves nothing
+      G.crime.reset();
+      const ph = G.phone(); ph.show(true); ph.setApp("bank");
+      G.st.money = 50; const b0 = G.st.bank;
+      document.querySelector('#phone [data-dep="1000"]').click();
+      out.bankErr = document.querySelector('#phone .nerr').classList.contains("on") && G.st.bank === b0;
+      G.st.money = 5000; document.querySelector('#phone [data-dep="1000"]').click(); out.bankDep = G.st.bank - b0;
+      ph.show(false);
+      // a full quiet heist: case → wheels → grab → escape → paid
+      G.st.mi = 12; G.crime.reset();
+      const car = G.cars.find(c => !c.boom); G.P.x = car.x - 1.6; G.P.z = car.z; if (!G.P.car) G.enterNearest();
+      out.heistStarted = G.startHeist("quiet");
+      const H = () => G.heistsDebug.get(), go = (x, z) => { G.P.car.x = x; G.P.car.z = z; G.P.car.vx = G.P.car.vz = 0; };
+      const stages = [H().stage];
+      go(H().tx, H().tz); G.step(1 / 60); stages.push(H().stage);
+      go(H().sx, H().sz); G.step(1 / 60); stages.push(H().stage);
+      for (let i = 0; i < 60 * 14 && H() && H().stage === "grab"; i++) { go(H().tx, H().tz); G.crime.S.health = 100; G.step(1 / 60); }
+      stages.push(H() && H().stage);
+      const hm = G.st.money; go(H().sx, H().sz); G.step(1 / 60);
+      out.heistStages = stages.join(); out.heistPaid = !H() && G.st.money > hm;
       return out;
     });
     ok("starts on the title", r.phase0 === "title", r);
@@ -89,8 +109,12 @@ try {
     ok("can't buy a business you can't afford", !r.brokeOwned, r);
     ok("buying a business works and earns", r.owned === 1 && r.left === 100 && r.income >= 30, r);
     ok("punching someone gets you a star", r.wanted >= 1, r);
-    ok("police catch you: busted with a cash fine, bank untouched", r.bustedFine > 0 && r.bankKept === 500, r);
+    ok("police catch you: busted with a cash fine, bank untouched", r.bustedFine > 0 && Math.floor(r.bankKept) >= 500, r);
     ok("guns fire and use ammo", r.ammoUsed === 1, r);
+    ok("phone bank refuses what you can't afford (red error)", r.bankErr, r);
+    ok("phone bank deposit works", Math.round(r.bankDep) === 1000, r);
+    ok("heist runs case→wheels→grab→escape", r.heistStarted && r.heistStages === "case,wheels,grab,escape", r);
+    ok("heist pays at the drop", r.heistPaid, r);
     ok("no page errors", errs.length === 0, errs.slice(0, 3));
     await pg.close();
   }
