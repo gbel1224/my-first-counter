@@ -5,6 +5,8 @@ import * as THREE from "../vendor/three.module.js";
 import { roadC, blockC, blockMin, HALF, BLOCK, CURB, PLAZA, clamp, groundY } from "./world.js";
 import { carSpec } from "./cars.js";
 import { spawnCar, syncCar } from "./play.js";
+import { PLACES } from "./places.js";
+import { SEA_Y } from "./ocean.js";
 
 export const PCARS = [
   { id: "coral", name: "Coral Cruiser", type: "compact", color: 0xc8503e, price: 1500, perk: "Showtime — +50% stunt-jump cash", mult: { top: 1.0, accel: 1.05, turn: 1.0 }, jumpMult: 1.5 },
@@ -29,6 +31,13 @@ export const CIRCUITS = [
   { id: "outer", name: "Outer Ring", start: [1, 1], cps: [[13, 1], [13, 12], [1, 12], [1, 1]], limit: 95, reward: 900 },
   { id: "harbor", name: "Harbor Dash", start: [8, 10], cps: [[12, 10], [12, 13], [4, 13], [4, 10], [8, 10]], limit: 60, reward: 600 },
 ].map(C => ({ ...C, start: { x: roadC(C.start[0]), z: roadC(C.start[1]) }, cps: C.cps.map(([i, j]) => ({ x: roadC(i), z: roadC(j) })) }));
+// the water circuit: grab a jet ski (or the boat) at the marina and slalom the bay
+{
+  const mx = PLACES.marina.x, cx = x => clamp(x, -HALF + 40, HALF - 40);
+  CIRCUITS.push({ id: "wake", name: "Wake Breaker", water: true, limit: 80, reward: 900, start: { x: cx(mx - 6), z: HALF + 86 },
+    cps: [[mx - 90, 110], [mx - 200, 160], [mx - 70, 215], [mx + 110, 165], [mx + 190, 110], [mx - 6, 86]].map(([x, z]) => ({ x: cx(x), z: HALF + z })) });
+}
+const isWaterCraft = c => c && (c.kind === "boat" || c.kind === "jetski");
 const medalFor = (C, t) => t <= C.limit * 0.5 ? 3 : t <= C.limit * 0.65 ? 2 : t <= C.limit * 0.82 ? 1 : 0;
 
 export function makeExtras(scene, g) {
@@ -129,7 +138,10 @@ export function makeExtras(scene, g) {
     const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
     const banner = new THREE.Mesh(new THREE.BoxGeometry(16.5, 1.2, 0.2), new THREE.MeshStandardMaterial({ map: tex }));
     banner.position.y = 7; grp.add(banner);
-    grp.position.set(C.start.x, 0, C.start.z); scene.add(grp);
+    if (C.water) {                                     // floating start line: buoys under the posts
+      for (const x of [-8, 8]) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 1.2, 14), new THREE.MeshStandardMaterial({ color: 0xff6a1a, roughness: 0.6 })); b.position.set(x, 0, 0); grp.add(b); }
+    }
+    grp.position.set(C.start.x, C.water ? SEA_Y : 0, C.start.z); scene.add(grp);
     return grp;
   });
   const cpGate = makeGate(0x40ff90);
@@ -140,9 +152,10 @@ export function makeExtras(scene, g) {
     if (!race) {
       if (!F.car || raceCD > 0 || g.busy()) return;
       for (const C of CIRCUITS) {
-        if ((F.x - C.start.x) ** 2 + (F.z - C.start.z) ** 2 < 64) {
+        if (!!C.water !== isWaterCraft(F.car) || (!C.water && F.car.kind && F.car.kind !== "bike")) continue;   // boats race the bay, cars the streets
+        if ((F.x - C.start.x) ** 2 + (F.z - C.start.z) ** 2 < (C.water ? 100 : 64)) {
           race = { C, i: 0, t: C.limit, el: 0 };
-          g.banner("GO!", C.name + " · gold under " + Math.ceil(C.limit * 0.5) + "s", "STREET RACE", 1.8); g.sound("jingle", 0.7);
+          g.banner("GO!", C.name + " · gold under " + Math.ceil(C.limit * 0.5) + "s", C.water ? "WATER RACE" : "STREET RACE", 1.8); g.sound("jingle", 0.7);
           break;
         }
       }
@@ -150,9 +163,9 @@ export function makeExtras(scene, g) {
     }
     race.t -= dt; race.el += dt;
     const cp = race.C.cps[race.i];
-    cpGate.visible = true; cpGate.position.set(cp.x, 0, cp.z); cpGate.rotation.y = g.time() * 0.6;
-    if (!F.car) { g.toast("🏁 Race abandoned — you left the car"); race = null; cpGate.visible = false; raceCD = 4; return; }
-    if ((F.x - cp.x) ** 2 + (F.z - cp.z) ** 2 < 100) {
+    cpGate.visible = true; cpGate.position.set(cp.x, race.C.water ? SEA_Y : 0, cp.z); cpGate.rotation.y = g.time() * 0.6;
+    if (!F.car) { g.toast("🏁 Race abandoned — you left the " + (race.C.water ? "jet ski" : "car")); race = null; cpGate.visible = false; raceCD = 4; return; }
+    if ((F.x - cp.x) ** 2 + (F.z - cp.z) ** 2 < (race.C.water ? 144 : 100)) {
       race.i++; g.sound("blip", 0.8);
       if (race.i >= race.C.cps.length) {
         const C = race.C, t = race.el, medal = medalFor(C, t);
@@ -176,7 +189,7 @@ export function makeExtras(scene, g) {
     ["palms12", "Palm Hunter", "Collect all 12 Golden Palms", () => st.palms.length >= 12],
     ["jump1", "Daredevil", "Land a 1.0s+ stunt jump", () => (S.bestJump || 0) >= 1],
     ["race1", "Speed Demon", "Win a street race", () => Object.keys(st.races).length > 0],
-    ["goldrush", "Gold Rush", "Gold on all 3 circuits", () => CIRCUITS.every(C => (st.medals[C.id] || 0) >= 3)],
+    ["goldrush", "Gold Rush", "Gold on every circuit", () => CIRCUITS.every(C => (st.medals[C.id] || 0) >= 3)],
     ["homeowner", "Homeowner", "Buy a home", () => st.apt || st.home || st.house],
     ["turf3", "Kingpin", "Take all 3 gang turfs", () => Object.keys(st.turf || {}).length >= 3],
     ["shark", "Shark Hunter", "Defeat Vic 'The Shark' Moreno", () => ((st.nem && st.nem.defeated) || 0) >= 1],
