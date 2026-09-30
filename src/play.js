@@ -43,7 +43,7 @@ export function driveStep(v, inp, dt, collider) {
   const nfx = Math.sin(v.h), nfz = Math.cos(v.h), nrx = Math.cos(v.h), nrz = -Math.sin(v.h);
   v.vx = nfx * lon + nrx * lat; v.vz = nfz * lon + nrz * lat;
   v.x += v.vx * dt; v.z += v.vz * dt;
-  v.x = clamp(v.x, -HALF - 300, HALF + 300); v.z = clamp(v.z, -HALF - 300, SHORE - 6);
+  v.x = clamp(v.x, -HALF - 420, HALF + 420); v.z = clamp(v.z, -HALF - 300, SHORE - 6);
   // collision: two circles along the body
   let impact = 0;
   const half = S.len * 0.3, rad = S.wid * 0.55;
@@ -115,7 +115,7 @@ export function updatePlayerOnFoot(P, inp, dt, camYaw, collider) {
   P.x += vx * dt; P.z += vz * dt;
   const res = collider.resolve(P.x, P.z, 0.38);
   P.x = res.x; P.z = res.z;
-  P.x = clamp(P.x, -HALF - 280, HALF + 280); P.z = clamp(P.z, -HALF - 280, SHORE - 2);
+  P.x = clamp(P.x, -HALF - 420, HALF + 420); P.z = clamp(P.z, -HALF - 280, HALF + 600);
   // jumping / kerbs
   const gy = groundY(P.x, P.z);
   if (inp.jump && P.grounded) { P.vy = 5.4; P.grounded = false; }
@@ -128,7 +128,7 @@ export function updatePlayerOnFoot(P, inp, dt, camYaw, collider) {
 
 export function poseOnFoot(P, time, over) {
   let extra = !P.grounded ? { override: { thighL: -0.7, thighR: 0.3, kneeL: 1.1, kneeR: 0.4, armL: -0.9, armR: 0.6 } } : null;
-  if (over) extra = { override: Object.assign({}, extra ? extra.override : {}, over) };
+  if (over) { extra = { override: Object.assign({}, extra ? extra.override : {}, over) }; if (over.tilt !== undefined) extra.tilt = over.tilt; }
   // idle: breathe and shift weight
   const amt = P.amt;
   const phase = amt < 0.05 ? time * 0.9 : P.phase;

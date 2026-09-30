@@ -126,11 +126,12 @@ export function createHUD(plan) {
     prompt(html) { if (html) prompt.innerHTML = html; prompt.classList.toggle("on", !!html); },
     toast(msg, secs = 2.6) { toastEl.textContent = msg; toastEl.classList.add("on"); toastT = secs; },
     speed(kmh, on) { speed.classList.toggle("on", on); if (on) speedV.textContent = Math.round(kmh); },
-    buttons(driving, nearCar, actLabel) {
-      bA.textContent = driving ? "EXIT" : actLabel || (nearCar ? "DRIVE" : "GO");
+    buttons(driving, nearCar, actLabel, kind) {
+      bA.textContent = driving ? (actLabel || "EXIT") : actLabel || (nearCar ? "DRIVE" : "GO");
       bA.classList.toggle("hide", !driving && !nearCar && !actLabel);
-      bB.textContent = driving ? "DRIFT" : "JUMP";
-      bC.textContent = driving ? "BOOST" : "RUN";
+      const air = kind === "heli" || kind === "plane";
+      bB.textContent = driving ? (air ? "▼" : kind === "boat" || kind === "jetski" ? "BRAKE" : "DRIFT") : "JUMP";
+      bC.textContent = driving ? (air ? "▲" : "BOOST") : "RUN";
       bD.classList.toggle("hide", !driving);
     },
     update(dt) {
