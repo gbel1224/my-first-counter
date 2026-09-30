@@ -1,4 +1,4 @@
-// Palm City 2 — the city plan. Pure data, no three.js: every other system (rendering, traffic,
+// Palm City — the city plan. Pure data, no three.js: every other system (rendering, traffic,
 // crowd, collision, minimap) reads the same layout from here, so they can never disagree about
 // where a road or a wall is.
 //

@@ -1,4 +1,4 @@
-// Palm City 2 — geometry helpers: paint a geometry with a vertex colour, transform it, and merge
+// Palm City — geometry helpers: paint a geometry with a vertex colour, transform it, and merge
 // many pieces into one buffer (one draw call per model, however many parts it's built from).
 import * as THREE from "../vendor/three.module.js";
 

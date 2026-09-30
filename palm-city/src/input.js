@@ -1,4 +1,4 @@
-// Palm City 2 — input. Touch: a floating joystick anywhere on the left half, drag the right half
+// Palm City — input. Touch: a floating joystick anywhere on the left half, drag the right half
 // to look around, context buttons bottom-right. Keyboard: WASD/arrows + Shift/Space/E/H.
 // Gamepad: left stick, right stick look, A/B/X/Y + triggers. Everything lands in one `I` object.
 export const I = {

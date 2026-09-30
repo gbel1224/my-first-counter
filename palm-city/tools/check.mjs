@@ -1,4 +1,4 @@
-// Palm City 2 — browser check: boots the game headless and exercises the core loop.
+// Palm City — browser check: boots the game headless and exercises the core loop.
 //   node tools/check.mjs
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";

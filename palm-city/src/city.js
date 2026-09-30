@@ -1,4 +1,4 @@
-// Palm City 2 — the city, drawn. Every building, block and road is ONE instanced/merged mesh with
+// Palm City — the city, drawn. Every building, block and road is ONE instanced/merged mesh with
 // its detail generated in the fragment shader: windows, mullions, brick courses, storefronts,
 // paving joints, lane lines and crosswalks are all computed per pixel from world position. That
 // means detail is resolution-independent — as crisp on a 4K monitor as on a phone — with zero

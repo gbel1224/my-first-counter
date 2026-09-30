@@ -1,4 +1,4 @@
-// Palm City 2 — the player: walking, sprinting, jumping, getting in and out of cars, driving
+// Palm City — the player: walking, sprinting, jumping, getting in and out of cars, driving
 // physics, and the camera that follows it all.
 import * as THREE from "../vendor/three.module.js";
 import { clamp, lerp, lerpAngle, groundY, HALF, SHORE } from "./world.js";
