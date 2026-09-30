@@ -9,9 +9,13 @@ const el = (tag, id, cls, parent, html) => {
 
 export function createHUD(plan) {
   const hud = el("div", "hud", "hidden");
-  const cash = el("div", "cash", "chip", hud, '<div class="coin">$</div><div class="amt">0</div>');
-  const amt = cash.querySelector(".amt");
-  const obj = el("div", "obj", "chip", hud, '<div class="t"></div><div class="d"></div>');
+  const cash = el("div", "cash", "chip", hud, '<div class="coin">$</div><div><div class="amt">0</div><div class="sub"><span class="lv">LV 1</span><i class="xp"><b></b></i><span class="inc"></span></div></div>');
+  const amt = cash.querySelector(".amt"), lvEl = cash.querySelector(".lv"), xpEl = cash.querySelector(".xp b"), incEl = cash.querySelector(".inc");
+  const obj = el("div", "obj", "chip", hud, '<div class="t"></div><div class="d"></div><div class="dist"></div>');
+  const objDist = obj.querySelector(".dist");
+  // story dialogue: speaker, typed-out line, tap anywhere on the card to continue
+  const dlg = el("div", "dlg", "chip pe", document.getElementById("ui"), '<div class="who"></div><div class="txt"></div><div class="hint">tap to continue ▸</div>');
+  const banner = el("div", "banner", "", document.getElementById("ui"), '<div class="k"></div><div class="big"></div><div class="small"></div>');
   const mapwrap = el("div", "mapwrap", "chip", hud, '<canvas id="minimap" width="264" height="264"></canvas><div class="n">N</div>');
   const mm = mapwrap.querySelector("canvas"), mctx = mm.getContext("2d");
   const north = mapwrap.querySelector(".n");
@@ -48,8 +52,38 @@ export function createHUD(plan) {
     c.fillRect(X(b.x - b.w / 2), Z(b.z - b.d / 2), b.w * S, b.d * S);
   }
 
-  let toastT = 0;
+  let toastT = 0, bannerT = 0;
+  let dlgLines = null, dlgI = 0, dlgCb = null, dlgShown = 0, dlgFull = "";
+  const WHO = { marco: ["Marco", "#ffc861"], rosa: ["Rosa", "#ff8fc8"], vince: ["Vince Sterling", "#ff6a5a"], narrator: ["Palm City", "#9fd8ff"], you: ["You", "#b8f0a0"] };
+  function renderDlg() {
+    const [who, text] = dlgLines[dlgI];
+    const w = WHO[who] || [who, "#fff"];
+    dlg.querySelector(".who").textContent = w[0]; dlg.querySelector(".who").style.color = w[1];
+    dlgFull = text; dlgShown = 0; dlg.querySelector(".txt").textContent = "";
+  }
+  function advance() {
+    if (!dlgLines) return;
+    if (dlgShown < dlgFull.length) { dlgShown = dlgFull.length; dlg.querySelector(".txt").textContent = dlgFull; return; }   // first tap finishes the line
+    dlgI++;
+    if (dlgI >= dlgLines.length) { dlgLines = null; dlg.classList.remove("on"); document.body.classList.remove("talking"); const cb = dlgCb; dlgCb = null; if (cb) cb(); }
+    else renderDlg();
+  }
+  dlg.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); advance(); });
+  addEventListener("keydown", e => { if (dlgLines && ["Enter", "Space", "KeyE", "KeyF"].includes(e.code)) { e.preventDefault(); e.stopImmediatePropagation(); advance(); } }, true);
   const H_ = {
+    dialogue(lines, cb) { dlgLines = lines; dlgI = 0; dlgCb = cb; renderDlg(); dlg.classList.add("on"); document.body.classList.add("talking"); },
+    talking: () => !!dlgLines,
+    advance,
+    banner(big, small, kicker = "", secs = 3.6, cls = "") {
+      banner.className = "on " + cls;
+      banner.querySelector(".k").textContent = kicker; banner.querySelector(".big").textContent = big; banner.querySelector(".small").textContent = small || "";
+      bannerT = secs;
+    },
+    level(lv, xp, need, inc) {
+      lvEl.textContent = "LV " + lv; xpEl.style.width = Math.min(100, xp / need * 100) + "%";
+      incEl.textContent = inc > 0 ? "+$" + inc.toLocaleString() + "/min" : "";
+    },
+    objDistance(d) { objDist.textContent = d == null ? "" : (d < 1000 ? Math.round(d) + " m" : (d / 1000).toFixed(1) + " km"); },
     ui: { joy, knob: joy.querySelector("i"), bA, bB, bC, bD },
     show(on) { hud.classList.toggle("hidden", !on); },
     cash(v) { amt.textContent = "$" + Math.floor(v).toLocaleString(); },
@@ -57,14 +91,18 @@ export function createHUD(plan) {
     prompt(html) { if (html) prompt.innerHTML = html; prompt.classList.toggle("on", !!html); },
     toast(msg, secs = 2.6) { toastEl.textContent = msg; toastEl.classList.add("on"); toastT = secs; },
     speed(kmh, on) { speed.classList.toggle("on", on); if (on) speedV.textContent = Math.round(kmh); },
-    buttons(driving, nearCar) {
-      bA.textContent = driving ? "EXIT" : nearCar ? "DRIVE" : "GO";
-      bA.classList.toggle("hide", !driving && !nearCar);
+    buttons(driving, nearCar, actLabel) {
+      bA.textContent = driving ? "EXIT" : actLabel || (nearCar ? "DRIVE" : "GO");
+      bA.classList.toggle("hide", !driving && !nearCar && !actLabel);
       bB.textContent = driving ? "DRIFT" : "JUMP";
       bC.textContent = driving ? "BOOST" : "RUN";
       bD.classList.toggle("hide", !driving);
     },
-    update(dt) { if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.classList.remove("on"); } },
+    update(dt) {
+      if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.classList.remove("on"); }
+      if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) banner.classList.remove("on"); }
+      if (dlgLines && dlgShown < dlgFull.length) { dlgShown = Math.min(dlgFull.length, dlgShown + dt * 55); dlg.querySelector(".txt").textContent = dlgFull.slice(0, Math.floor(dlgShown)); }
+    },
     minimap(px, pz, heading, camYaw, dots, marker) {
       const w = mm.width, h = mm.height, ctx = mctx, zoom = 1.25;
       ctx.save();
@@ -73,10 +111,17 @@ export function createHUD(plan) {
       ctx.rotate(camYaw + Math.PI);                  // camera-up = map-up
       ctx.scale(zoom, zoom);
       ctx.drawImage(map, -X(px), -Z(pz));
-      for (const d of dots) { ctx.fillStyle = d.c; ctx.beginPath(); ctx.arc((d.x - px) * S, (d.z - pz) * S, d.r || 2.4, 0, 6.3); ctx.fill(); }
+      for (const d of dots) {
+        ctx.fillStyle = d.c; ctx.beginPath(); ctx.arc((d.x - px) * S, (d.z - pz) * S, d.r || 2.4, 0, 6.3); ctx.fill();
+        if (d.t) { ctx.save(); ctx.translate((d.x - px) * S, (d.z - pz) * S); ctx.rotate(-(camYaw + Math.PI)); ctx.scale(1 / zoom, 1 / zoom); ctx.fillStyle = "#fff"; ctx.font = "bold 11px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(d.t, 0, 0.5); ctx.restore(); }
+      }
       if (marker) {
-        ctx.fillStyle = "#ffc861"; ctx.strokeStyle = "#7a4a10"; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc((marker.x - px) * S, (marker.z - pz) * S, 5, 0, 6.3); ctx.fill(); ctx.stroke();
+        // clamp the objective to the rim when it's off the map, so you always know which way to go
+        let mx = (marker.x - px) * S, mz = (marker.z - pz) * S;
+        const lim = (w / 2 - 12) / zoom, d = Math.hypot(mx, mz);
+        if (d > lim) { mx *= lim / d; mz *= lim / d; }
+        ctx.fillStyle = marker.c || "#ffc861"; ctx.strokeStyle = "#3a2206"; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(mx, mz, 6 / zoom * 1.2, 0, 6.3); ctx.fill(); ctx.stroke();
       }
       ctx.restore();
       // player arrow (points where the player/car faces, relative to the camera)
