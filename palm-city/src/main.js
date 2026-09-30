@@ -285,7 +285,7 @@ function haptics(dt) {
 }
 const interior = makeInterior(scene, {
   st, sky, get hud() { return hud; }, toast: (m, t) => hud.toast(m, t), sound: (k, v) => AudioSys.play(k, v), save: () => writeSave(),
-  venueAction: (kind, site) => venueAction(kind, site),
+  venueAction: (kind, site) => venueAction(kind, site), player: () => P,
   sleep: () => { sky.set(0.3); settings.time = "0.3"; crime.S.health = 100; hud.banner("GOOD MORNING", "You slept like a baby · game saved", "", 2.4); AudioSys.play("jingle", 0.5); writeSave(); },
 });
 // what you can do inside a venue, at the counter
@@ -296,6 +296,11 @@ function venueAction(kind, site) {
   else if (kind === "drink") { if (pay(25)) { crime.S.health = Math.min(100, crime.S.health + 15); rig.shake = Math.max(rig.shake, 0.15); hud.toast(pick(["🍹 Cheers!", "🍸 On the house? Nope. $25.", "🥂 The night is young"])); } }
   else if (kind === "heal") { if (crime.S.health >= 100) hud.toast("🩺 \"You're in great shape. Next!\""); else if (pay(120)) { crime.S.health = 100; hud.toast("🩺 All patched up"); } }
   else if (kind === "browse") hud.toast(pick(["🖼 \"Sunset Over Nothing\" · $40,000. You keep walking.", "🖼 A single red square. The card says it's about loss.", "🖼 It's a palm tree. It's very good.", "🗿 The gold one is for sale. Everything's for sale."]), 3.2);
+  else if (kind === "snack") { crime.S.health = Math.min(100, crime.S.health + 25); hud.toast(pick(["🥪 A sandwich. Life is good.", "🍎 Healthy choice", "🧃 Juice box. No regrets."]) + " · +25 health"); AudioSys.play("blip", 0.4); }
+  else if (kind === "wash") hud.toast(pick(["🧼 Squeaky clean", "🚿 You look like a new person", "🪞 Looking sharp"]));
+  else if (kind === "dance") { P.danceT = 6; hud.toast(pick(["🕺 Nobody's watching. Everybody's watching.", "💃 The DJ nods at you", "🕺 Moves like that should be illegal"]), 3); }
+  else if (kind === "vip") hud.toast(st.money >= 50000 ? "🥂 \"Right this way, you're on the list.\"" : "🥂 \"Nice try. VIP starts at $50,000 in the bank.\"", 3);
+  else if (kind === "visit") { crime.S.health = Math.min(100, crime.S.health + 10); hud.toast(pick(["💐 The patients appreciate the company", "💐 \"You're the best visitor we've had all week\""])); }
   else if (kind === "cop") hud.toast(pick(["👮 \"Keep your nose clean, pal.\"", "👮 \"Lost property's round the back.\"", "👮 \"We've got our eye on you.\""]), 3);
   else if (kind === "office") {
     const b = BIZ.find(b => b.p === site.p || b.id === site.id), lvl = b && st.owned[b.id];
@@ -513,6 +518,7 @@ function update(dt) {
       inp.lookX = inp.lookY = 0; inp.jump = false;
       updatePlayerOnFoot(P, inp, dt, interior.S.yaw || 0, collider);
       interior.confine(P);
+      if (P.danceT > 0) { P.danceT -= dt; if (P.speed > 0.5) P.danceT = 0; }
       const ia = interior.action(P);
       if (inp.action && ia) { ia[2](); if (!interior.inside) rig.init = false; }
     } else {
@@ -610,6 +616,7 @@ function render() {
     let over = combat.pose();
     if (P.swim) over = { tilt: 1.25, armL: Math.sin(time * 4) * 2.6, armR: -Math.sin(time * 4) * 2.6, thighL: Math.sin(time * 8) * 0.3, thighR: -Math.sin(time * 8) * 0.3, kneeL: 0.2, kneeR: 0.2, elbowL: -0.3, elbowR: -0.3 };
     if (!over && combat.current().id !== "fists") over = { armR: -1.45, elbowR: -0.1, armL: -1.2, elbowL: -0.5 };   // weapon up
+    if (P.danceT > 0 && P.speed < 0.3) over = { armL: -2.3 + Math.sin(time * 5) * 0.6, armR: -2.1 - Math.sin(time * 5) * 0.6, elbowL: -0.7, elbowR: -0.7, thighL: Math.max(0, Math.sin(time * 5)) * -0.5, thighR: Math.max(0, -Math.sin(time * 5)) * -0.5, kneeL: Math.max(0, Math.sin(time * 5)) * 0.8, kneeR: Math.max(0, -Math.sin(time * 5)) * 0.8 };
     poseOnFoot(P, time, over);
   }
   crowd.render(camera.position.x * 0.5 + focus.x * 0.5, camera.position.z * 0.5 + focus.z * 0.5, camera);

@@ -152,7 +152,7 @@ try {
       G.interior.exit(G.P); o.homeOut = !G.interior.inside;
       // venue: walk into the burger joint, eat at the counter, leave
       G.interior.enterVenue("burger", G.P); const R = G.interior.ROOM, v = G.interior.venue();
-      G.P.x = R.x + v.counter.x; G.P.z = R.z + v.counter.z; G.crime.S.health = 30;
+      const sp = v.spots.find(s => s.act === "eat"); G.P.x = R.x + sp.x; G.P.z = R.z + sp.z; G.crime.S.health = 30;
       const ea = G.interior.action(G.P); if (ea) ea[2](); o.ate = ea && ea[0] === "EAT" && G.crime.S.health === 100;
       G.interior.exit(G.P); o.venueOut = !G.interior.inside && Math.hypot(G.P.x - G.PLACES.burger.x, G.P.z - G.PLACES.burger.z) < 4;
       // Wake Breaker on a jet ski
