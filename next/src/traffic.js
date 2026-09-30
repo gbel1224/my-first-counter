@@ -3,12 +3,12 @@
 // brake for you. All of it is instanced: four draw calls per car type for the whole city.
 import * as THREE from "../vendor/three.module.js";
 import { N, ROAD, CELL, HALF, roadC, clamp, lerp, mulberry32 } from "./world.js";
-import { CAR_TYPES, carGeometries, MAT, PAINTS } from "./cars.js";
+import { CAR_TYPES, carGeometries, MAT, PAINTS, REAL_PAINTS } from "./cars.js";
 
 // lane offset from the road centre line for a travel direction. Axis "z" = N-S road.
 // Right-hand traffic: heading +z (south) keeps to -x; heading +x (east) keeps to +z.
 export function laneOffset(axis, dir, lane) {
-  const o = lane === 0 ? 2 : 6;
+  const o = lane === 0 ? 1.8 : 4.9;          // two 3 m lanes each way, then the parking strip at 6.95
   return axis === "z" ? -dir * o : dir * o;
 }
 // signal phase: 0 = N-S green, 1 = N-S amber, 2 = E-W green, 3 = E-W amber
@@ -29,7 +29,7 @@ export class Traffic {
       const lane = r() < 0.5 ? 0 : 1;
       const type = CAR_TYPES[(r() * CAR_TYPES.length) | 0];
       const c = {
-        type, color: PAINTS[(r() * PAINTS.length) | 0], axis, dir, road, lane,
+        type, color: REAL_PAINTS[(r() * REAL_PAINTS.length) | 0], axis, dir, road, lane,
         s: -HALF + 30 + r() * (HALF * 2 - 60), speed: 0, vmax: 10 + r() * 5, brake: false,
         turn: null, x: 0, z: 0, h: 0, stun: 0, alive: true, honk: 0,
       };
@@ -223,5 +223,98 @@ export class Traffic {
     let best = null, bd = maxD * maxD;
     for (const c of this.cars) { if (!c.alive) continue; const d = (c.x - x) ** 2 + (c.z - z) ** 2; if (d < bd) { bd = d; best = c; } }
     return best;
+  }
+}
+
+// ============================================================================================
+// parked cars: every kerb has a parking strip; thousands of slots, the nearest ~140 are drawn.
+// Any of them can be broken into (the player gets a real car) or shunted by a hit.
+// ============================================================================================
+const PMAX = 150;
+export class Parked {
+  constructor(scene, districtOf) {
+    const r = mulberry32(0x9A2CED);
+    this.cars = [];
+    for (let i = 0; i <= N; i++) for (const axis of ["x", "z"]) for (const side of [-1, 1]) {
+      if ((i === 0 && side < 0) || (i === N && side > 0)) continue;      // no kerb outside the city
+      for (let run = 0; run < N; run++) {
+        const kind = districtOf(axis === "z" ? i - (side < 0 ? 1 : 0) : run, axis === "z" ? run : i - (side < 0 ? 1 : 0));
+        if (kind === "plaza") continue;
+        const fill = kind === "downtown" ? 0.62 : kind === "suburb" ? 0.3 : kind === "park" ? 0.25 : 0.5;
+        const s0 = roadC(run) + ROAD / 2 + 7.5, s1 = roadC(run + 1) - ROAD / 2 - 7.5;
+        for (let s = s0; s < s1; s += 6.4) {
+          if (r() > fill) continue;
+          const off = side * 6.95, cl = roadC(i) + off;
+          const type = CAR_TYPES[(r() * CAR_TYPES.length) | 0];
+          const jitter = (r() - 0.5) * 0.6;
+          const c = { type, color: REAL_PAINTS[(r() * REAL_PAINTS.length) | 0], alive: true };
+          if (axis === "z") { c.x = cl + (r() - 0.5) * 0.15; c.z = s + jitter; c.h = side < 0 ? 0 : Math.PI; }
+          else { c.x = s + jitter; c.z = cl + (r() - 0.5) * 0.15; c.h = side > 0 ? Math.PI / 2 : -Math.PI / 2; }
+          c.h += (r() - 0.5) * 0.04;
+          this.cars.push(c);
+        }
+      }
+    }
+    // static grid for collisions / lookups
+    this.grid = new Map();
+    for (const c of this.cars) this.gridAdd(c);
+    this.mesh = {};
+    for (const t of CAR_TYPES) {
+      const G = carGeometries(t);
+      const mk = (geo, mat, shadow) => { const m = new THREE.InstancedMesh(geo, mat, PMAX); m.castShadow = shadow; m.receiveShadow = true; m.frustumCulled = false; m.count = 0; scene.add(m); return m; };
+      const paintM = mk(G.paint, MAT.paint, true);
+      paintM.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(PMAX * 3), 3);
+      const lightsM = mk(G.lights, MAT.lights, false);
+      lightsM.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(PMAX * 3), 3);
+      this.mesh[t] = { paint: paintM, glass: mk(G.glass, MAT.glass, false), trim: mk(G.trim, MAT.trim, true), lights: lightsM };
+    }
+    this._m = new THREE.Matrix4(); this._c = new THREE.Color(); this._q = new THREE.Quaternion(); this._v = new THREE.Vector3(); this._s = new THREE.Vector3(1, 1, 1); this._y = new THREE.Vector3(0, 1, 0);
+    this.near = [];
+  }
+  key(x, z) { return ((x / 20) | 0) + "," + ((z / 20) | 0); }
+  gridAdd(c) { const k = this.key(c.x, c.z); let a = this.grid.get(k); if (!a) this.grid.set(k, a = []); a.push(c); c._k = k; }
+  around(x, z) {
+    const gx = (x / 20) | 0, gz = (z / 20) | 0, out = [];
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const l = this.grid.get((gx + a) + "," + (gz + b)); if (l) for (const c of l) if (c.alive) out.push(c); }
+    return out;
+  }
+  nearest(x, z, maxD) {
+    let best = null, bd = maxD * maxD;
+    for (const c of this.around(x, z)) { const d = (c.x - x) ** 2 + (c.z - z) ** 2; if (d < bd) { bd = d; best = c; } }
+    return best;
+  }
+  take(c) { c.alive = false; }
+  // a moving car (player) hitting parked ones: shove them and bounce the car; returns impact speed
+  collide(v) {
+    let impact = 0;
+    for (const c of this.around(v.x, v.z)) {
+      const fx = Math.sin(c.h), fz = Math.cos(c.h);
+      for (const o of [-1.1, 1.1]) {
+        const cx = c.x + fx * o, cz = c.z + fz * o;
+        const dx = v.x - cx, dz = v.z - cz, d2 = dx * dx + dz * dz, R = 2.05;
+        if (d2 > R * R || d2 < 1e-6) continue;
+        const d = Math.sqrt(d2), nx = dx / d, nz = dz / d, vn = v.vx * nx + v.vz * nz;
+        v.x += nx * (R - d) * 0.6; v.z += nz * (R - d) * 0.6;
+        c.x -= nx * (R - d) * 0.4; c.z -= nz * (R - d) * 0.4;
+        if (vn < 0) { impact = Math.max(impact, -vn); v.vx -= nx * vn * 1.3; v.vz -= nz * vn * 1.3; v.vx *= 0.85; v.vz *= 0.85; c.h += (Math.random() - 0.5) * Math.min(0.4, -vn * 0.02); }
+      }
+    }
+    return impact;
+  }
+  render(fx, fz) {
+    const near = this.near; near.length = 0;
+    for (const c of this.cars) { if (!c.alive) continue; const d = (c.x - fx) ** 2 + (c.z - fz) ** 2; if (d < 230 * 230) { c._d = d; near.push(c); } }
+    if (near.length > PMAX) { near.sort((a, b) => a._d - b._d); near.length = PMAX; }
+    const counts = {}; for (const t of CAR_TYPES) counts[t] = 0;
+    for (const c of near) {
+      const M = this.mesh[c.type], i = counts[c.type]++;
+      if (i >= PMAX) continue;
+      this._q.setFromAxisAngle(this._y, c.h);
+      this._m.compose(this._v.set(c.x, 0, c.z), this._q, this._s);
+      M.paint.setMatrixAt(i, this._m); M.glass.setMatrixAt(i, this._m); M.trim.setMatrixAt(i, this._m); M.lights.setMatrixAt(i, this._m);
+      this._c.set(c.color); M.paint.setColorAt(i, this._c);
+      this._c.setRGB(0.35, 0.35, 0.35); M.lights.setColorAt(i, this._c);     // engine off: lamps dark
+    }
+    for (const t of CAR_TYPES) { const M = this.mesh[t]; for (const k in M) { M[k].count = Math.min(PMAX, counts[t]); M[k].instanceMatrix.needsUpdate = true; if (M[k].instanceColor) M[k].instanceColor.needsUpdate = true; } }
   }
 }

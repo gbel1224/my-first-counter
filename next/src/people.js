@@ -1,5 +1,5 @@
-// Palm City 2 — people. One stylised rig (slightly big head, soft capsule limbs, real knees and
-// elbows) shared by the player and the whole crowd. The crowd is drawn with ONE instanced mesh
+// Palm City 2 — people. One rig with realistic proportions (7.5 heads tall, soft capsule limbs,
+// real knees and elbows) shared by the player and the whole crowd. The crowd is drawn with ONE instanced mesh
 // per body part, so hundreds of animated pedestrians cost about a dozen draw calls.
 import * as THREE from "../vendor/three.module.js";
 import { limb, paint, merge, place } from "./geo.js";
@@ -8,47 +8,54 @@ import { mulberry32, clamp, lerp, lerpAngle, N, ROAD, BLOCK, WALK, CELL, CURB, H
 // ---------------------------------------------------------------------------------------------
 // rig dimensions (metres). Joint pivots are at the TOP of each limb segment.
 export const RIG = {
-  hipY: 0.94, hipW: 0.11, shoulderY: 0.5, shoulderW: 0.21,  // shoulder height is relative to the hips
-  thigh: 0.44, shin: 0.44, upper: 0.29, fore: 0.27,
+  hipY: 0.97, hipW: 0.1, shoulderY: 0.53, shoulderW: 0.2,   // shoulder height is relative to the hips
+  thigh: 0.46, shin: 0.46, upper: 0.3, fore: 0.27,
 };
 // part geometries, each painted WHITE where the instance colour (shirt / pants / skin / hair)
 // should show through, and darker where it's a fixed shade (shoes, belt)
 function buildParts() {
   const P = {};
-  // torso: a soft tapered capsule, slightly flattened front-to-back; a belt band at the bottom
+  // torso: a tapered capsule, broader through the chest, flattened front-to-back; belt at the waist
   {
-    const t = new THREE.CapsuleGeometry(0.19, 0.3, 4, 12);
-    t.scale(1.12, 1, 0.68); t.translate(0, 0.28, 0);
+    const t = new THREE.CapsuleGeometry(0.165, 0.32, 4, 12);
+    const tp = t.attributes.position;
+    for (let i = 0; i < tp.count; i++) { const y = tp.getY(i); tp.setX(i, tp.getX(i) * (1.12 + Math.max(0, y) * 0.35)); tp.setZ(i, tp.getZ(i) * (0.66 + Math.max(0, y) * 0.12)); }
+    t.computeVertexNormals(); t.translate(0, 0.29, 0);
     const g = paint(t, 0xffffff);
-    const belt = paint(new THREE.CylinderGeometry(0.2, 0.2, 0.06, 14), 0x3a3a3a); belt.scale(1.12, 1, 0.72);
+    const belt = paint(new THREE.CylinderGeometry(0.19, 0.19, 0.05, 14), 0x3a3a3a); belt.scale(1.1, 1, 0.68);
     P.torso = merge([g, belt]);
   }
-  P.hips = merge([place(paint(new THREE.SphereGeometry(0.18, 12, 8), 0xffffff), 0, 0, 0, 0, 0, 0, 1.08, 0.62, 0.72)]);
+  P.hips = merge([place(paint(new THREE.SphereGeometry(0.17, 12, 8), 0xffffff), 0, 0, 0, 0, 0, 0, 1.1, 0.62, 0.7)]);
   {
-    const head = paint(new THREE.SphereGeometry(0.155, 18, 14), 0xffffff); head.scale(0.95, 1.06, 1.0); head.translate(0, 0.2, 0);
-    const neck = paint(new THREE.CylinderGeometry(0.055, 0.065, 0.12, 8), 0xe8e8e8); neck.translate(0, 0.05, 0);
-    const nose = paint(new THREE.SphereGeometry(0.03, 6, 5), 0xf2f2f2); nose.translate(0, 0.19, 0.15);
-    const eyes = [-0.055, 0.055].map(x => place(paint(new THREE.SphereGeometry(0.022, 8, 6), 0x1a1a1a), x, 0.23, 0.135));
-    const ears = [-0.15, 0.15].map(x => place(paint(new THREE.SphereGeometry(0.035, 6, 5), 0xf0f0f0), x, 0.2, 0.0, 0, 0, 0, 0.6, 1, 1));
-    P.head = merge([head, neck, nose, ...eyes, ...ears]);
+    // head: egg-shaped and life-sized — no cartoon eyes; a nose, brow and jaw give the silhouette
+    const head = paint(new THREE.SphereGeometry(0.112, 18, 14), 0xffffff); head.scale(0.88, 1.14, 1.0); head.translate(0, 0.19, 0.005);
+    const jaw = place(paint(new THREE.SphereGeometry(0.075, 12, 8), 0xf4f4f4), 0, 0.12, 0.035, 0, 0, 0, 1.0, 0.8, 1.0);
+    const neck = paint(new THREE.CylinderGeometry(0.048, 0.056, 0.13, 8), 0xe8e8e8); neck.translate(0, 0.05, 0);
+    const nose = place(paint(new THREE.ConeGeometry(0.018, 0.045, 5), 0xf0f0f0), 0, 0.185, 0.108, Math.PI / 2, 0, 0);
+    const brow = place(paint(new THREE.BoxGeometry(0.12, 0.018, 0.02), 0xd8d8d8), 0, 0.22, 0.098);
+    const ears = [-0.1, 0.1].map(x => place(paint(new THREE.SphereGeometry(0.025, 6, 5), 0xf0f0f0), x, 0.19, 0.0, 0, 0, 0, 0.55, 1, 1));
+    P.head = merge([head, jaw, neck, nose, brow, ...ears]);
   }
   {
-    // hair: a cap over the top/back of the head
-    const h = new THREE.SphereGeometry(0.165, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55);
-    h.scale(0.98, 1.05, 1.05); h.translate(0, 0.215, -0.012);
+    // short hair: a close cap over the top and back
+    const h = new THREE.SphereGeometry(0.118, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.52);
+    h.scale(0.92, 1.1, 1.06); h.translate(0, 0.205, -0.012);
     P.hair = merge([paint(h, 0xffffff)]);
+    // long hair: the cap plus a fall down the back to the shoulders
+    const back = new THREE.CapsuleGeometry(0.1, 0.2, 3, 10); back.scale(1.05, 1, 0.55); back.translate(0, 0.1, -0.07);
+    P.hairL = merge([paint(h.clone(), 0xffffff), paint(back, 0xffffff)]);
   }
-  P.upper = merge([paint(limb(0.068, 0.058, RIG.upper, 10), 0xffffff)]);
+  P.upper = merge([paint(limb(0.06, 0.05, RIG.upper, 10), 0xffffff)]);
   {
-    const f = paint(limb(0.055, 0.045, RIG.fore, 10), 0xffffff);
-    const hand = place(paint(new THREE.SphereGeometry(0.058, 10, 8), 0xffffff), 0, -RIG.fore - 0.04, 0.0, 0, 0, 0, 0.8, 1.1, 0.9);
+    const f = paint(limb(0.048, 0.038, RIG.fore, 10), 0xffffff);
+    const hand = place(paint(new THREE.SphereGeometry(0.045, 10, 8), 0xf2f2f2), 0, -RIG.fore - 0.045, 0.0, 0, 0, 0, 0.7, 1.35, 0.95);
     P.fore = merge([f, hand]);
   }
-  P.thigh = merge([paint(limb(0.095, 0.075, RIG.thigh, 10), 0xffffff)]);
+  P.thigh = merge([paint(limb(0.085, 0.062, RIG.thigh, 10), 0xffffff)]);
   {
-    const s = paint(limb(0.07, 0.058, RIG.shin, 10), 0xffffff);
-    const shoe = new THREE.CapsuleGeometry(0.058, 0.14, 3, 8); shoe.rotateX(Math.PI / 2); shoe.scale(1.1, 0.8, 1);
-    P.shin = merge([s, place(paint(shoe, 0x2a2a2e), 0, -RIG.shin - 0.035, 0.05)]);
+    const s = paint(limb(0.058, 0.042, RIG.shin, 10), 0xffffff);
+    const shoe = new THREE.CapsuleGeometry(0.048, 0.16, 3, 8); shoe.rotateX(Math.PI / 2); shoe.scale(1.05, 0.72, 1);
+    P.shin = merge([s, place(paint(shoe, 0x26262a), 0, -RIG.shin - 0.035, 0.05)]);
   }
   return P;
 }
@@ -56,13 +63,22 @@ export const PARTS = buildParts();
 
 // ---------------------------------------------------------------------------------------------
 // looks
-const SKIN = [0xf1c9a5, 0xe0ac7e, 0xc68a5c, 0x9b6440, 0x6f4429, 0xf5d6bd, 0xd9a07a];
-const HAIR = [0x1c1410, 0x3a2416, 0x6b4423, 0xc49a5a, 0xe5c77e, 0x2a2a2a, 0x8a3a1c, 0xdadada];
-const SHIRT = [0xff6f61, 0x2ec4b6, 0xffd166, 0x3a86ff, 0xf7f7f2, 0xff8fab, 0x8ac926, 0x6a4c93, 0x1d3557, 0xe76f51, 0xf4a261, 0x222222];
-const PANTS = [0x2b3a55, 0x3d405b, 0x8d6e53, 0xd4c4a8, 0x222222, 0x4a5a3a, 0x5a6e8c, 0xe9e4d8];
+const SKIN = [0xe8bf9c, 0xd4a07a, 0xb57a52, 0x8a5a3a, 0x5e3a24, 0xf0d0b4, 0xc88e64, 0x9c6a48];
+const HAIR = [0x16100c, 0x2a1c12, 0x4a3220, 0x6a4a2c, 0x9a7a52, 0x1a1a1a, 0x5a3a24, 0xa8a49c];
+// real street clothing: lots of white, grey, black, navy, denim, olive, a few faded colours
+const SHIRT = [0xe8e6e0, 0xd8d8d4, 0x2a2a2c, 0x1e2a44, 0x5a6a7a, 0x4a5236, 0x6a2a2a, 0xb8a888, 0x8a9aa8, 0xc88a7a, 0x3a5a6a, 0x9a8a6a, 0xf2f0ea, 0x505458];
+const PANTS = [0x2a3a52, 0x3a4a66, 0x1e1e22, 0x5a5a5e, 0xa89a7a, 0x4a4a3a, 0x6a7a8a, 0x8a7a62, 0x303848];
 export function randomLook(r) {
   const p = a => a[(r() * a.length) | 0];
-  return { skin: p(SKIN), hair: p(HAIR), shirt: p(SHIRT), pants: p(PANTS), bald: r() < 0.08, h: 0.92 + r() * 0.16, bulk: 0.9 + r() * 0.25 };
+  const look = { skin: p(SKIN), hair: p(HAIR), shirt: p(SHIRT), pants: p(PANTS), bald: r() < 0.1, long: r() < 0.35,
+    sleeveless: r() < 0.18, shorts: r() < 0.3, h: 0.92 + r() * 0.14, bulk: 0.9 + r() * 0.22 };
+  return finishLook(look);
+}
+// derived colours: bare arms for tank tops, bare shins for shorts
+export function finishLook(look) {
+  look.armCol = look.sleeveless ? look.skin : look.shirt;
+  look.shinCol = look.shorts ? look.skin : look.pants;
+  return look;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -102,7 +118,7 @@ export function poseMatrices(x, y, z, yaw, look, g, emit, extra) {
   emit("torso", _torso);
   _j.copy(_torso).multiply(_t.makeTranslation(0, RIG.shoulderY + 0.07, 0)).multiply(rot(-g.lean * 0.6 + (extra && extra.headPitch || 0), -g.twist, 0));
   emit("head", _j);
-  if (!look.bald) emit("hair", _j);
+  if (!look.bald) emit(look.long ? "hairL" : "hair", _j);
   for (const side of [-1, 1]) {
     const L = side < 0;
     // arms hang from the shoulders, swing opposite the legs, elbows bend
@@ -117,12 +133,13 @@ export function poseMatrices(x, y, z, yaw, look, g, emit, extra) {
     emit(L ? "shinL" : "shinR", _m);
   }
 }
-const PART_OF = { hips: "hips", torso: "torso", head: "head", hair: "hair", upperL: "upper", upperR: "upper", foreL: "fore", foreR: "fore", thighL: "thigh", thighR: "thigh", shinL: "shin", shinR: "shin" };
-const COLOR_OF = { hips: "pants", torso: "shirt", head: "skin", hair: "hair", upperL: "shirt", upperR: "shirt", foreL: "skin", foreR: "skin", thighL: "pants", thighR: "pants", shinL: "pants", shinR: "pants" };
+const PART_OF = { hips: "hips", torso: "torso", head: "head", hair: "hair", hairL: "hairL", upperL: "upper", upperR: "upper", foreL: "fore", foreR: "fore", thighL: "thigh", thighR: "thigh", shinL: "shin", shinR: "shin" };
+const COLOR_OF = { hips: "pants", torso: "shirt", head: "skin", hair: "hair", hairL: "hair", upperL: "armCol", upperR: "armCol", foreL: "skin", foreR: "skin", thighL: "pants", thighR: "pants", shinL: "shinCol", shinR: "shinCol" };
 
 // ---------------------------------------------------------------------------------------------
 // a single character as a scene-graph Group (the player): same parts, own materials
 export function makeCharacter(look) {
+  finishLook(look);
   const group = new THREE.Group();
   const mats = {};
   const meshes = {};
@@ -138,7 +155,8 @@ export function makeCharacter(look) {
     gait(phase, amt, g, null);
     if (extra && extra.override) Object.assign(g, extra.override);
     poseMatrices(x, y, z, yaw, look, g, (k, m) => { meshes[k].matrix.copy(m); }, extra);
-    meshes.hair.visible = !look.bald;
+    meshes.hair.visible = !look.bald && !look.long;
+    meshes.hairL.visible = !look.bald && !!look.long;
   };
   return { group, pose, look, mats };
 }
@@ -312,7 +330,9 @@ export class Crowd {
         const col = p.look[COLOR_OF[k]];
         c.set(col); M[k].setColorAt(i, c);
       }
-      if (p.look.bald) { _m.makeScale(0, 0, 0); M.hair.setMatrixAt(i, _m); }
+      _m.makeScale(0, 0, 0);                              // hide whichever hair part this person doesn't wear
+      if (p.look.bald || p.look.long) M.hair.setMatrixAt(i, _m);
+      if (p.look.bald || !p.look.long) M.hairL.setMatrixAt(i, _m);
       i++;
     }
     for (const k in M) { M[k].count = i; M[k].instanceMatrix.needsUpdate = true; if (M[k].instanceColor) M[k].instanceColor.needsUpdate = true; }

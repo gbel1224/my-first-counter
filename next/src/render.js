@@ -75,14 +75,14 @@ export function createRenderer(canvas) {
   });
   const compMat = new THREE.ShaderMaterial({
     uniforms: {
-      tScene: { value: null }, tBloom: { value: null }, uBloom: { value: 0.06 }, uExposure: { value: 1.0 },
-      uTime: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uVignette: { value: 0.32 },
-      uLift: { value: new THREE.Vector3(0.012, 0.006, 0.02) }, uGain: { value: new THREE.Vector3(1.04, 1.0, 0.95) },
-      uSat: { value: 1.12 }, uWarm: { value: 0.0 },
+      tScene: { value: null }, tBloom: { value: null }, uBloom: { value: 0.07 }, uExposure: { value: 0.95 },
+      uTime: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uVignette: { value: 0.38 },
+      uLift: { value: new THREE.Vector3(0.004, 0.012, 0.018) }, uGain: { value: new THREE.Vector3(1.09, 1.01, 0.86) },
+      uSat: { value: 1.1 }, uWarm: { value: 0.0 }, uContrast: { value: 0.45 }, uGrain: { value: 0.045 },
     },
     vertexShader: FS_VERT,
     fragmentShader: `
-      uniform sampler2D tScene, tBloom; uniform float uBloom, uExposure, uTime, uVignette, uSat, uWarm;
+      uniform sampler2D tScene, tBloom; uniform float uBloom, uExposure, uTime, uVignette, uSat, uWarm, uContrast, uGrain;
       uniform vec2 uRes; uniform vec3 uLift, uGain; varying vec2 vUv;
       // ACES fitted (Stephen Hill) — filmic shoulder so the sun and neon roll off instead of clipping
       vec3 RRTAndODTFit(vec3 v){ vec3 a = v*(v+0.0245786)-0.000090537; vec3 b = v*(0.983729*v+0.4329510)+0.238081; return a/b; }
@@ -94,20 +94,30 @@ export function createRenderer(canvas) {
       float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
       vec3 toSRGB(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0/2.4)) - 0.055, step(0.0031308, c)); }
       void main(){
-        vec3 col = texture2D(tScene, vUv).rgb;
+        // a touch of lateral chromatic aberration toward the frame edges (real lens, not a filter)
+        vec2 q0 = vUv - 0.5;
+        vec2 ca = q0 * dot(q0, q0) * 0.012;
+        vec3 col = vec3(texture2D(tScene, vUv + ca).r, texture2D(tScene, vUv).g, texture2D(tScene, vUv - ca).b);
         vec3 bl = texture2D(tBloom, vUv).rgb;
         col = mix(col, bl, uBloom) + bl * uBloom * 0.35;
         col *= uExposure;
         col = ACES(col);
-        // grade: gentle lift in the shadows (teal-violet), warm gain in the highlights
-        col = col * uGain + uLift * (1.0 - col);
+        // filmic contrast: an S-curve on luminance, then split-tone (teal shadows, warm highlights)
+        float l0 = dot(col, vec3(0.2126, 0.7152, 0.0722));
+        float lS = l0 * l0 * (3.0 - 2.0 * l0);
+        col *= mix(1.0, lS / max(l0, 1e-4), uContrast);
+        float lw = dot(col, vec3(0.2126, 0.7152, 0.0722));
+        col += uLift * (1.0 - smoothstep(0.0, 0.45, lw));
+        col *= mix(vec3(1.0), uGain, smoothstep(0.35, 1.0, lw));
         col.r += uWarm * 0.03; col.b -= uWarm * 0.02;
         float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
         col = mix(vec3(l), col, uSat);
-        vec2 q = vUv - 0.5; q.x *= uRes.x / uRes.y;
-        col *= 1.0 - uVignette * smoothstep(0.35, 1.05, length(q));
+        vec2 q = q0; q.x *= uRes.x / uRes.y;
+        col *= 1.0 - uVignette * smoothstep(0.3, 1.0, length(q));
         col = toSRGB(clamp(col, 0.0, 1.0));
-        col += (hash(vUv * uRes + fract(uTime) * 91.0) - 0.5) / 255.0 * 1.6;   // dither: no banding in the sky
+        // film grain: luminance-weighted, strongest in the mids like real stock
+        float g = hash(vUv * uRes + fract(uTime * 7.13) * 91.0) - 0.5;
+        col += g * uGrain * (0.6 + 0.4 * (1.0 - abs(l - 0.5) * 2.0));
         gl_FragColor = vec4(col, 1.0);
       }`,
     depthTest: false, depthWrite: false,

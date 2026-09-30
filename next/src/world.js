@@ -62,11 +62,12 @@ export function district(i, j) {
 // with a tower set back on top). Everything is an axis-aligned box so collision stays exact.
 export const STYLE = { GLASS: 0, PASTEL: 1, BRICK: 2, HOUSE: 3, CONCRETE: 4 };
 
-const PASTELS = [0xf2c6b4, 0xf6e1a8, 0xbfe3d0, 0xc9d8f0, 0xf3c9d9, 0xe9e2d0, 0xd8f0e8, 0xfad4a6, 0xb8dcd9];
-const GLASS = [0x7fa6c4, 0x8ab4c8, 0x9fb7cf, 0x6e93b0, 0x8fc0c9, 0xa9b9c9];
-const BRICK = [0xa6604a, 0x8f5a48, 0xb07a5a, 0x7e5d52, 0x9c6b50];
-const HOUSE = [0xf4efe4, 0xf2dcc2, 0xdfe9ef, 0xf6e7b8, 0xe7d3de, 0xd9ead6];
-const CONC = [0xcfc8bd, 0xbfb6a8, 0xd9d2c5];
+// sun-bleached stucco: off-whites, sand, faded salmon / mint / butter / sky — nothing candy-bright
+const PASTELS = [0xe4ddcf, 0xd8cbb4, 0xcfb9a4, 0xd9b3a0, 0xb9c9bb, 0xd8cb9c, 0xa9b8c2, 0xe6e0d6, 0xc7b8a6, 0xbfa58c, 0xd3c4b0];
+const GLASS = [0x4a6272, 0x55707c, 0x3e5664, 0x6b6456, 0x5a6a70, 0x7c7462];   // tinted blue-green and bronze
+const BRICK = [0x7e4a3a, 0x6e4638, 0x8a5c46, 0x5e4a42, 0x74503e];
+const HOUSE = [0xe8e2d6, 0xdccdb6, 0xc8d0cc, 0xe0d4ac, 0xd4c0b4, 0xc2ccba];
+const CONC = [0xb4ada2, 0xa49d92, 0xbfb8ac];
 
 export function buildCity(seed = 0x9A1C17) {
   const r = mulberry32(seed);
@@ -171,7 +172,27 @@ export function buildCity(seed = 0x9A1C17) {
     if (r() < 0.35) benches.push([x + 8, HALF + 10, 0]);
   }
 
-  return { buildings, blocks, palms, trees, lamps, benches };
+  // shrubs hug the base of buildings, fill front gardens and clump in parks (own stream: adding
+  // them doesn't reshuffle the rest of the city)
+  const sr = mulberry32(seed ^ 0x5A5A);
+  const shrubs = [];
+  for (const b of buildings) {
+    if (b.y > 0.5 || b.style === STYLE.GLASS) continue;
+    const many = b.style === STYLE.HOUSE ? 0.8 : 0.3;
+    for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      if (sr() > many) continue;
+      const len = nx ? b.d : b.w, n = 2 + ((sr() * len / 4) | 0);
+      for (let k = 0; k < n; k++) {
+        const t = (k + 0.5) / n - 0.5 + (sr() - 0.5) * 0.1;
+        const x = b.x + (nx ? nx * (b.w / 2 + 0.9) : t * (b.w - 2)), z = b.z + (nz ? nz * (b.d / 2 + 0.9) : t * (b.d - 2));
+        shrubs.push([x, z, 0.7 + sr() * 0.6]);
+      }
+    }
+  }
+  for (const bl of blocks) if (bl.kind === "park") {
+    for (let k = 0; k < 30; k++) shrubs.push([bl.x0 + WALK + 2 + sr() * (BLOCK - WALK * 2 - 4), bl.z0 + WALK + 2 + sr() * (BLOCK - WALK * 2 - 4), 0.8 + sr() * 0.8]);
+  }
+  return { buildings, blocks, palms, trees, lamps, benches, shrubs };
 }
 
 // ---------------------------------------------------------------------------------------------

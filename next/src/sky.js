@@ -7,12 +7,13 @@ import { isMobile } from "./render.js";
 
 // Palette keyed by sun elevation (radians). Colours are linear-ish scene values.
 const KEYS = [
-  { e: -0.30, zen: 0x0b1030, hor: 0x1b2146, sun: 0x000000, si: 0.0, hemi: 0.2, sky: 0x2a3560, gnd: 0x151018, fog: 0x1c2240 },
-  { e: -0.05, zen: 0x1c2a5c, hor: 0xd8746a, sun: 0xff6a3a, si: 0.3, hemi: 0.3, sky: 0x6a6a9a, gnd: 0x3a2a28, fog: 0x8a6a78 },
-  { e: 0.06, zen: 0x3a64a8, hor: 0xffa46a, sun: 0xff9a5a, si: 2.2, hemi: 0.35, sky: 0xa8b8d8, gnd: 0x6a5040, fog: 0xf0b088 },
-  { e: 0.22, zen: 0x4a82c4, hor: 0xf6cda0, sun: 0xffc98e, si: 3.3, hemi: 0.4, sky: 0xc0c8e0, gnd: 0x8a6c50, fog: 0xecd0b4 },
-  { e: 0.60, zen: 0x3a7ccc, hor: 0xe6e0d8, sun: 0xffe2bc, si: 3.8, hemi: 0.45, sky: 0xc9d4e6, gnd: 0x9a8468, fog: 0xe4ddd4 },
-  { e: 1.40, zen: 0x3276d4, hor: 0xc4dcf2, sun: 0xffffff, si: 4.0, hemi: 0.45, sky: 0xd8e8f8, gnd: 0x8a7c68, fog: 0xd4e4f2 },
+  { e: -0.30, zen: 0x070b1c, hor: 0x141a30, sun: 0x000000, si: 0.0, hemi: 0.16, sky: 0x2a3560, gnd: 0x100c10, fog: 0x121a2c },
+  { e: -0.05, zen: 0x16244e, hor: 0xc86a52, sun: 0xff6a3a, si: 0.3, hemi: 0.22, sky: 0x6a6a9a, gnd: 0x2a1e1c, fog: 0x7a5a5c },
+  { e: 0.06, zen: 0x2a58a0, hor: 0xf2a070, sun: 0xff9050, si: 2.6, hemi: 0.26, sky: 0x98a8cc, gnd: 0x5a4030, fog: 0xd8a888 },
+  // day: deep saturated blue overhead, a pale humid haze at the horizon, a hot hard sun
+  { e: 0.22, zen: 0x1c56b4, hor: 0xe6d6bc, sun: 0xffd6a0, si: 3.6, hemi: 0.42, sky: 0x9ab2d4, gnd: 0x9a7e60, fog: 0xd8d0c0 },
+  { e: 0.60, zen: 0x1650b8, hor: 0xd4dcdc, sun: 0xfff0dc, si: 4.0, hemi: 0.45, sky: 0xa0b8dc, gnd: 0xa08466, fog: 0xcfd6d4 },
+  { e: 1.40, zen: 0x124cb8, hor: 0xcad8e0, sun: 0xffffff, si: 4.2, hemi: 0.45, sky: 0xa6bee0, gnd: 0xa08a6c, fog: 0xc8d4d8 },
 ];
 const _c1 = new THREE.Color(), _c2 = new THREE.Color();
 function sample(e, key, out) {
@@ -34,7 +35,7 @@ const SKY_FRAG = `
   void main(){
     vec3 d = normalize(vDir);
     float h = d.y;
-    float up = pow(clamp(h, 0.0, 1.0), 0.42);
+    float up = pow(clamp(h, 0.0, 1.0), 0.55);
     vec3 col = mix(uHor, uZen, up);
     // below the horizon: haze fading to a darker band (only ever seen over the sea)
     col = mix(col, uHor * 0.72, smoothstep(0.0, -0.25, h));
@@ -42,15 +43,17 @@ const SKY_FRAG = `
     // atmospheric glow around the sun, stronger near the horizon (low sun = big warm halo)
     float hz = 1.0 - clamp(uSunDir.y * 2.0, 0.0, 1.0);
     col += uSunCol * (pow(sd, 6.0) * (0.18 + 0.5 * hz) + pow(sd, 48.0) * 0.6) * (1.0 - uEnv * 0.7);
-    // clouds on a virtual plane — soft cumulus bands, lit from the sun side, darker underneath
+    // clouds: towering humid cumulus banked toward the horizon, bright sunlit tops, blue-grey bases
     if (h > 0.0) {
-      vec2 p = d.xz / (h + 0.12) * 1.3 + vec2(uTime * 0.004, uTime * 0.0015);
-      float n = fbm(p * 1.6);
-      float cov = smoothstep(0.62 - uCloud * 0.2, 0.9, n);
-      float lit = 0.55 + 0.45 * smoothstep(0.2, 1.0, fbm(p * 1.6 + uSunDir.xz * 0.35));
-      vec3 cc = mix(uHor, vec3(1.0), 0.7) * lit * 1.05 + uSunCol * pow(sd, 3.0) * 0.6;
-      cc = mix(cc, uHor * 0.35, uNight * 0.85);
-      col = mix(col, cc, cov * smoothstep(0.0, 0.12, h) * 0.9);
+      vec2 p = d.xz / (h + 0.08) * 1.1 + vec2(uTime * 0.003, uTime * 0.001);
+      float n = fbm(p * 1.3) * 0.7 + fbm(p * 4.1) * 0.3;
+      float bank = 1.0 - smoothstep(0.05, 0.55, h);            // more cloud near the horizon
+      float cov = smoothstep(0.58 - bank * 0.18 - uCloud * 0.1, 0.8, n);
+      float top = smoothstep(0.35, 0.9, fbm(p * 1.3 + uSunDir.xz * 0.25 + vec2(0.0, 0.3)));
+      vec3 base = mix(uZen * 0.5 + uHor * 0.35, uHor * 0.8, 0.4);
+      vec3 cc = mix(base, vec3(1.05, 1.02, 0.98), 0.35 + 0.65 * top) + uSunCol * pow(sd, 4.0) * 0.5;
+      cc = mix(cc, uHor * 0.3, uNight * 0.85);
+      col = mix(col, cc, cov * smoothstep(0.0, 0.05, h) * 0.95);
     }
     // the sun disc itself — HDR bright so the bloom picks it up
     col += uSunCol * smoothstep(0.99955, 0.99975, sd) * 26.0 * (1.0 - uNight) * (1.0 - uEnv);   // the sun is the key light's job, not the IBL's
@@ -84,11 +87,11 @@ export function createSky(scene, renderer) {
   const R = isMobile ? 80 : 110;
   Object.assign(sun.shadow.camera, { left: -R, right: R, top: R, bottom: -R, near: 1, far: 600 });
   sun.shadow.camera.updateProjectionMatrix();
-  sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.04;
+  sun.shadow.bias = -0.0002; sun.shadow.normalBias = 0.03; sun.shadow.radius = 2;
   scene.add(sun, sun.target);
   const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
   scene.add(hemi);
-  scene.fog = new THREE.Fog(0xffffff, 260, 900);
+  scene.fog = new THREE.FogExp2(0xffffff, 0.0021);   // humid air: haze thickens with distance, never a hard wall
 
   // environment map: the same sky, rendered once into a prefiltered cube for PBR reflections
   const envScene = new THREE.Scene();
@@ -109,7 +112,7 @@ export function createSky(scene, renderer) {
   let envRT = null, envAt = -1;
 
   const sunDir = new THREE.Vector3();
-  const state = { t: 0.66, cycle: false, night: 0, elev: 0, cloud: 0.5 };
+  const state = { t: 0.63, cycle: false, night: 0, elev: 0, cloud: 0.5 };
 
   function set(t) {
     state.t = ((t % 1) + 1) % 1;
@@ -121,7 +124,7 @@ export function createSky(scene, renderer) {
     state.night = clamp((-el + 0.02) / 0.25, 0, 1);
     sample(el, "zen", U.uZen.value); sample(el, "hor", U.uHor.value); sample(el, "sun", U.uSunCol.value);
     U.uSunDir.value.copy(sunDir); U.uNight.value = state.night;
-    sun.color.copy(U.uSunCol.value).lerp(new THREE.Color(0xffffff), 0.25);
+    sun.color.copy(U.uSunCol.value).lerp(new THREE.Color(0xffffff), 0.1);
     sun.intensity = sample(el, "si");
     sample(el, "sky", hemi.color); sample(el, "gnd", hemi.groundColor);
     hemi.intensity = sample(el, "hemi");

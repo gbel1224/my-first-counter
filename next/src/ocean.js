@@ -10,7 +10,7 @@ export const SEA_Y = -0.55;
 export function createOcean(scene, sky) {
   const U = {
     uTime: { value: 0 }, uZen: sky.uniforms.uZen, uHor: sky.uniforms.uHor, uSunCol: sky.uniforms.uSunCol, uSunDir: sky.uniforms.uSunDir,
-    uNight: sky.uniforms.uNight, uFogCol: { value: new THREE.Color() }, uFogNear: { value: 200 }, uFogFar: { value: 900 },
+    uNight: sky.uniforms.uNight, uFogCol: { value: new THREE.Color() }, uFogD: { value: 0.002 },
     uShore: { value: HALF + 44 },
   };
   const mat = new THREE.ShaderMaterial({
@@ -28,7 +28,7 @@ export function createOcean(scene, sky) {
         gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
       }`,
     fragmentShader: `
-      uniform float uTime, uNight, uFogNear, uFogFar, uShore; uniform vec3 uZen, uHor, uSunCol, uSunDir, uFogCol;
+      uniform float uTime, uNight, uFogD, uShore; uniform vec3 uZen, uHor, uSunCol, uSunDir, uFogCol;
       varying vec3 vWP; varying float vH;
       float h12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
       float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
@@ -70,7 +70,7 @@ export function createOcean(scene, sky) {
         col = mix(col, vec3(0.95, 0.97, 0.98) * (0.4 + 0.6 * max(uSunDir.y, 0.15)), clamp(foam, 0.0, 1.0));
         // fog to the horizon
         float d = length(cameraPosition - vWP);
-        col = mix(col, uFogCol, smoothstep(uFogNear, uFogFar, d));
+        col = mix(col, uFogCol, 1.0 - exp(-uFogD * uFogD * d * d));
         gl_FragColor = vec4(col, 1.0);
       }`,
   });
@@ -83,7 +83,7 @@ export function createOcean(scene, sky) {
   scene.add(mesh);
   function update(time, fog) {
     U.uTime.value = time;
-    U.uFogCol.value.copy(fog.color); U.uFogNear.value = fog.near; U.uFogFar.value = fog.far;
+    U.uFogCol.value.copy(fog.color); U.uFogD.value = fog.density;
   }
   return { update, mesh };
 }
