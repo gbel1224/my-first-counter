@@ -2558,11 +2558,14 @@ const sideReward = () => 75 + 25 * Object.keys(state.owned).length;
 // ---------- dialogue ----------
 let dlgLines = null, dlgIdx = 0, dlgCb = null;
 const elD = dom("dialogue"), elWho = dom("dwho"), elText = dom("dtext");
+// guarded like every other DOM touch here: the headless smoke harness stubs the DOM without classList
+const bodyClass = (c, on) => { const cl = document.body && document.body.classList; if (cl) cl[on ? "add" : "remove"](c); };
 dom("dhint").textContent = STR.tapToContinue;
 function showDialogue(lines, cb) {
   dlgLines = lines; dlgIdx = 0; dlgCb = cb;
   renderDlg();
   elD.style.display = "block";
+  bodyClass("dlg", true);
 }
 function renderDlg() {
   const [who, text] = dlgLines[dlgIdx];
@@ -2575,6 +2578,7 @@ function advanceDialogue() {
   if (dlgIdx >= dlgLines.length) {
     dlgLines = null;
     elD.style.display = "none";
+    bodyClass("dlg", false);
     const cb = dlgCb; dlgCb = null;
     if (cb) cb();
   } else renderDlg();
@@ -3895,6 +3899,8 @@ addEventListener("keydown", e => {
     if (e.code === "Escape") ae.blur();
     return;
   }
+  if (state.phase === "intro" && e.code === "Enter") { beginPlay(); e.preventDefault(); return; }
+  if (tutOpen && (e.code === "Enter" || e.code === "Space")) { advanceTut(); e.preventDefault(); return; }
   if (e.code === "Enter" || (e.code === "Space" && dlgLines)) { advanceDialogue(); e.preventDefault(); return; }
   if (e.code === "KeyE") actA = true;
   if (e.code === "KeyB") actB = true;
@@ -4198,7 +4204,9 @@ function currentObjective() {
     if (sideUnlocked()) return { title: STR.freeplay, text: STR.sideJobAt, x: DEPOT.x, z: DEPOT.z };
     return { title: STR.freeplay, text: "", x: undefined };
   }
-  return { title: state.mi < M.length ? STR.missionTag(state.mi + 1) + " · " + M[state.mi].title : "", text: "…" };
+  // between the intro dialogue and the first step there's no active step — preview it instead of "…"
+  const next = state.mi < M.length && M[state.mi].steps && M[state.mi].steps[0];
+  return { title: state.mi < M.length ? STR.missionTag(state.mi + 1) + " · " + M[state.mi].title : "", text: next || "Tap the dialogue to begin" };
 }
 
 function updateHUD() {
@@ -4217,6 +4225,7 @@ function updateHUD() {
     if (p100 !== lastXpShown) { elLvlFill.style.width = p100 + "%"; lastXpShown = p100; }
   }
   refreshPhoneBadge();
+  layoutHud();
   const heat = heatActive();
   // stars go hollow while the force is searching \u2014 the player has to be able to read "they've lost
   // me, keep still" at a glance, or the whole hide-and-seek layer is invisible
@@ -4515,46 +4524,45 @@ function resetGame() { askConfirm(STR.confirmReset, () => { try { localStorage.r
 const TUT_KEY = "palm_city_tut";
 let tutOpen = false;
 const elTut = dom("tutorial");
-{
+let tutPage = 0;
+const TUT_PAGES = STR.tutPages[isMobile ? "touch" : "keys"];
+function renderTut() {
+  const P = TUT_PAGES[tutPage], last = tutPage === TUT_PAGES.length - 1;
   dom("ttitle").textContent = STR.tutTitle;
-  dom("tbody").innerHTML = STR.tutLines.map(s => '<div class="trow">' + s + "</div>").join("");
-  const go = dom("tgo"); go.textContent = STR.tutBtn;
-  go.addEventListener("click", () => { tutOpen = false; elTut.style.display = "none"; try { localStorage.setItem(TUT_KEY, "1"); } catch (e) {} });
+  dom("tbody").innerHTML = '<div class="ticon">' + P.icon + '</div><div class="thead">' + P.head + "</div>"
+    + P.lines.map(l => '<div class="trow">' + l + "</div>").join("")
+    + '<div class="tdots">' + TUT_PAGES.map((_, i) => '<i class="' + (i === tutPage ? "on" : "") + '"></i>').join("") + "</div>";
+  dom("tgo").textContent = last ? STR.tutBtn : STR.tutNext;
 }
+function closeTut() { tutOpen = false; elTut.style.display = "none"; try { localStorage.setItem(TUT_KEY, "1"); } catch (e) {} }
+function advanceTut() {
+  if (tutPage < TUT_PAGES.length - 1) { tutPage++; renderTut(); AudioSys.play("blip", 0.4); }
+  else closeTut();
+}
+dom("tgo").addEventListener("click", advanceTut);
+renderTut();
 function maybeTutorial() {
   let seen = false; try { seen = localStorage.getItem(TUT_KEY) === "1"; } catch (e) {}
-  if (!seen) { tutOpen = true; elTut.style.display = "flex"; }
+  if (!seen) { tutPage = 0; renderTut(); tutOpen = true; elTut.style.display = "flex"; }
 }
 
 // ---------- intro overlay ----------
 const elIntro = dom("intro");
+const uiClass = (c, on) => { const u = dom("ui"), cl = u && u.classList; if (cl) cl[on ? "add" : "remove"](c); };
 function buildIntro() {
   elIntro.innerHTML = "";
+  uiClass("intro", true);   // the title floats over the live city — keep the gameplay HUD out of that shot
   const mk = (cls, parent) => { const e = document.createElement("div"); if (cls) e.className = cls; if (parent) parent.append(e); return e; };
-  const rnd = (a, b) => a + Math.random() * (b - a);
 
-  // ---- cinematic backdrop: glowing sun, lit city skyline, sea, swaying palms ----
-  mk("sun", elIntro);
-  const skyline = mk("layer skyline", elIntro);
-  for (let i = 0; i < 16; i++) {
-    const b = mk("bld", skyline);
-    const w = Math.round(rnd(16, 34)), h = Math.round(rnd(40, 132));
-    b.style.width = w + "px"; b.style.height = h + "px";
-    const cols = Math.max(1, Math.floor(w / 9)), rows = Math.floor(h / 14);
-    for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++)
-      if (Math.random() < 0.5) { const win = mk("", b); win.style.cssText = "position:absolute;width:3px;height:3px;background:#ffd98a;border-radius:1px;box-shadow:0 0 4px #ffd98a;left:" + (5 + c * 8) + "px;bottom:" + (8 + r * 12) + "px"; }
-  }
-  mk("layer sea", elIntro);
-  const pl = mk("palm l", elIntro); pl.textContent = "🌴";
-  const pr = mk("palm r", elIntro); pr.textContent = "🌴";
+  mk("sheen", elIntro);   // the backdrop is the real city, orbiting live behind this (see introCam)
 
   // ---- hero content ----
+  const top = mk("top", elIntro);
+  const h1 = document.createElement("h1"); h1.textContent = STR.title; top.append(h1);
+  const tag = mk("tag", top); tag.textContent = STR.tagline;
   const hero = mk("hero", elIntro);
-  const h1 = document.createElement("h1"); h1.textContent = STR.title;
-  const tag = mk("tag", hero); tag.textContent = STR.tagline;
   const feats = mk("feats", hero);
   feats.innerHTML = STR.features.map(f => '<span class="feat">' + f + "</span>").join("");
-  hero.insertBefore(h1, tag);
   const start = document.createElement("button");
   start.textContent = hasSave ? STR.continueGame : STR.start;
   start.addEventListener("click", () => beginPlay());
@@ -4565,13 +4573,14 @@ function buildIntro() {
     reset.addEventListener("click", resetGame);
     hero.append(reset);
   }
-  const hint = mk("hint", hero); hint.textContent = STR.controlsHint;
+  const hint = mk("hint", hero); hint.textContent = isMobile ? STR.touchHint : STR.controlsHint;
 }
 function beginPlay() {
   if (hasSave) { load(); applyOwnership(); }
   NEM.defeated = state.bossWins || 0;   // carry the nemesis NG+ difficulty across sessions
   refreshAch(false);           // seed already-earned achievements without re-announcing them
   elIntro.style.display = "none";
+  uiClass("intro", false);
   state.phase = "play";
   AudioSys.init();
   if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
@@ -5262,29 +5271,62 @@ function updateNotif(dt) {
 }
 // a quiet unread dot, so the feed is something you notice rather than something you remember to check
 let phoneBadgeShown = -1;
+// The wanted stars sat at a fixed top:58px — the middle of the top bar on desktop, and directly under
+// the notification banner at every width (which fires precisely when your heat changes). The top bar's
+// real height depends on the screen: one row on desktop, two on a phone, more if a long cash figure
+// wraps it. So measure where it actually ends and hang the stars (and the health bar) below that.
+//
+// This is driven by a ResizeObserver on the top bar, not a timer. A polled version left the stars at
+// a stale position for up to 400ms whenever an objective's text wrapped onto a second line — measured
+// at y=152, sitting on the mission banner, before correcting to 199. The observer fires on exactly the
+// frame the bar changes size, so there's no stale window. The slow poll survives only as a fallback
+// for environments without ResizeObserver (the headless harness).
+let hudLayoutAt = 0;
+function placeUnderTopbar() {
+  const tb = dom("topbar");
+  if (!tb || !tb.getBoundingClientRect) return;
+  const y = Math.round(tb.getBoundingClientRect().bottom);
+  if (y <= 0) return;                            // hidden (photo mode) — leave them be
+  elWanted.style.top = (y + 2) + "px";
+  if (elHealth) elHealth.style.top = (y + 40) + "px";
+}
+const hudRO = typeof ResizeObserver !== "undefined" && dom("topbar")
+  ? new ResizeObserver(placeUnderTopbar) : null;
+if (hudRO) hudRO.observe(dom("topbar"));
+function layoutHud() {
+  if (hudRO) return;                             // the observer owns it
+  const now = performance.now();
+  if (now < hudLayoutAt) return;
+  hudLayoutAt = now + 400;
+  placeUnderTopbar();
+}
+addEventListener("resize", () => { hudLayoutAt = 0; placeUnderTopbar(); });
 function refreshPhoneBadge() {
   const n = unread();
   if (n === phoneBadgeShown) return;
   phoneBadgeShown = n;
-  phoneBtn.textContent = n > 0 ? "📱" : "📱";
-  phoneBtn.style.boxShadow = n > 0 ? "0 0 0 2px rgba(255,77,77,.85), 0 0 12px rgba(255,77,77,.5)" : "";
+  phoneBtn.innerHTML = "📱" + (n > 0 ? "<span style='position:absolute;top:-3px;right:-3px;min-width:19px;height:19px;padding:0 5px;border-radius:10px;background:#ff3b30;color:#fff;font-size:11px;font-weight:800;line-height:19px;border:2px solid rgba(20,12,24,.9);box-sizing:border-box'>" + (n > 9 ? "9+" : n) + "</span>" : "");
 }
 phoneEl.addEventListener("click", e => { if (e.target === phoneEl) closePhone(); });
 
 // ---------- consolidated HUD menu: one ☰ button replaces the floating 🔫/📱/🗺 buttons ----------
 if (wpnBtn.style) wpnBtn.style.display = "none";
-if (phoneBtn.style) phoneBtn.style.display = "none";
+// The phone came back out of the menu: it holds five apps and an unread badge now, and a badge on a
+// hidden button is no badge at all (it was glowing on display:none for two releases).
+if (phoneBtn.style) phoneBtn.style.cssText = "position:absolute;right:calc(12px + env(safe-area-inset-right,0px));top:calc(66px + env(safe-area-inset-top,0px));width:50px;height:50px;border-radius:50%;font-size:21px;background:linear-gradient(160deg,rgba(50,42,60,.82),rgba(26,18,32,.82));backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#fff;border:1px solid rgba(255,205,140,.34);box-shadow:0 5px 16px rgba(8,4,12,.5),inset 0 1px 1px rgba(255,255,255,.14);z-index:25;";
 let menuOpen = false;
 const menuBtn = dom("menubtn"), hudMenu = dom("hudmenu"), hudMenuCard = dom("hudmenucard");
 menuBtn.textContent = "☰";
-if (menuBtn.style) menuBtn.style.cssText = "position:absolute;right:16px;top:108px;width:50px;height:50px;border-radius:50%;font-size:22px;background:linear-gradient(160deg,rgba(50,42,60,.82),rgba(26,18,32,.82));backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#fff;border:1px solid rgba(255,205,140,.34);box-shadow:0 5px 16px rgba(8,4,12,.5),inset 0 1px 1px rgba(255,255,255,.14);z-index:25;";
+if (menuBtn.style) menuBtn.style.cssText = "position:absolute;right:calc(12px + env(safe-area-inset-right,0px));top:calc(10px + env(safe-area-inset-top,0px));width:50px;height:50px;border-radius:50%;font-size:22px;background:linear-gradient(160deg,rgba(50,42,60,.82),rgba(26,18,32,.82));backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#fff;border:1px solid rgba(255,205,140,.34);box-shadow:0 5px 16px rgba(8,4,12,.5),inset 0 1px 1px rgba(255,255,255,.14);z-index:25;";
 if (hudMenu.style) hudMenu.style.cssText = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(10,6,14,.42),rgba(6,3,10,.62));backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:72;";
 if (hudMenuCard.style) hudMenuCard.style.cssText = "display:flex;flex-direction:column;gap:9px;width:240px;padding:20px;background:linear-gradient(165deg,rgba(40,32,50,.95),rgba(20,14,24,.96));backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-radius:22px;border:1px solid rgba(255,205,140,.32);box-shadow:0 20px 54px rgba(6,3,10,.62),inset 0 1px 1px rgba(255,255,255,.14);";
 function closeMenu() { menuOpen = false; hudMenu.style.display = "none"; }
 function openMenu() {
   if (state.phase !== "play" || dlgLines) return;
   hudMenuCard.innerHTML = "";
-  [["🔫 Weapons", openWheel], ["📱 Jobs", openPhone], ["🗺 Map", openMap]].forEach(([label, fn]) => {
+  [["📱 Phone", openPhone], ["🔫 Weapons", openWheel], ["🗺 Map", openMap],
+   ["🏆 Stats", () => dom("statsbtn").click()], ["📷 Photo mode", () => dom("photobtn").click()],
+   [(AudioSys.muted ? "🔇 Sound: off" : "🔊 Sound: on"), () => { muteBtn.click(); }]].forEach(([label, fn]) => {
     const b = document.createElement("button"); b.className = "pe popbtn"; b.textContent = label;
     b.style.cssText = "padding:13px;border-radius:14px;font-size:15px;font-weight:600;color:#fff;background:linear-gradient(165deg,rgba(58,50,70,.96),rgba(36,30,46,.96));box-shadow:0 3px 9px rgba(0,0,0,.32),inset 0 1px 1px rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.14);";
     b.addEventListener("click", () => { closeMenu(); fn(); });
@@ -5384,6 +5426,56 @@ function doActionB() {
 const tmpM = new THREE.Matrix4(), tmpP = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpS = new THREE.Vector3(1, 1, 1);
 let simTime = 0, achTimer = 1, sprintT = 0, npcScanBucket = 0, swimming = false, swimSplashT = 0;
 const SPRINT_RAMP = 2.5;   // seconds of holding sprint to reach top running speed
+
+// instanced blob shadows under everything that moves (one matrix per entity, rebuilt each tick)
+function syncBlobShadows() {
+  let si = 0;
+  const put = (x, y, z, r) => {
+    tmpP.set(x, y + 0.06, z); tmpS.set(r, 1, r);
+    tmpM.compose(tmpP, tmpQ, tmpS);
+    shadowIM.setMatrixAt(si++, tmpM);
+  };
+  if (!driving) put(player.x, player.y, player.z, 0.55); else put(0, -10, 0, 0.01);
+  for (const c of cars) put(c.x, c.mesh.position.y, c.z, 2.2);
+  for (const t of traffic) put(t.x, t.mesh.position.y, t.z, 2.2);
+  for (const p of police) { if (p.active) put(p.x, p.mesh.position.y, p.z, 2.2); else put(0, -10, 0, 0.01); }
+  for (const n of npcs) put(n.x, groundY(n.x, n.z), n.z, 0.5);
+  put(marco.position.x, CURB, marco.position.z, 0.5);
+  if (rosa.visible) put(rosa.position.x, CURB, rosa.position.z, 0.5); else put(0, -10, 0, 0.01);
+  if (vince.visible) put(vince.position.x, CURB, vince.position.z, 0.5); else put(0, -10, 0, 0.01);
+  shadowIM.instanceMatrix.needsUpdate = true;
+}
+
+// ---------- title-screen flyover ----------
+// The title sits over the REAL city, slowly orbiting the plaza. The moving population is normally
+// placed by update(), which doesn't run until START — so on the first title frame every car and
+// pedestrian would still be piled at the world origin. Stage them once where they already stand
+// (reads positions, no rng, no sim step: the determinism checksum can't see this), then the
+// camera is the only thing that moves. update() re-runs its own LOD on the first play tick.
+let introStaged = false;
+function stageIntroCity() {
+  introStaged = true;
+  const R2 = 430 * 430;
+  const put = (o, m, y) => {
+    if (!m) return;
+    m.visible = dist2(o.x, o.z, PLAZA.x, PLAZA.z) < R2;
+    if (m.visible) { m.position.set(o.x, y === undefined ? groundY(o.x, o.z) : y, o.z); m.rotation.y = o.h || 0; }
+  };
+  for (const t of traffic) put(t, t.mesh);
+  for (const n of npcs) put(n, n.mesh);
+  for (const c of cars) put(c, c.mesh, c.boat || c.jetski ? 0.1 : groundY(c.x, c.z) + (c.y || 0));
+  for (const p of police) p.mesh.position.set(0, -9999, 0);
+  for (const g of gangsters) { if (g.mesh) { if (g.alive) put(g, g.mesh); else g.mesh.visible = false; } }
+  syncBlobShadows();
+  envUpdate();   // sky, sun disc & lighting are otherwise first set by the play tick — the sun sprite sat unplaced mid-city
+}
+function introCam(now) {
+  if (!introStaged) stageIntroCity();
+  const t = now / 1000, a = 0.6 + t * 0.045, r = 105 + Math.sin(t * 0.11) * 18;
+  camera.position.set(PLAZA.x + Math.sin(a) * r, 40 + Math.sin(t * 0.07) * 9, PLAZA.z + Math.cos(a) * r);
+  camera.lookAt(PLAZA.x, 4, PLAZA.z);
+  skyGroup.position.copy(camera.position);
+}
 
 function update(dt) {
   simTime += dt;
@@ -6087,22 +6179,7 @@ function update(dt) {
   missionMarker.ring.scale.setScalar(pulse);
   sideMarker.ring.scale.setScalar(pulse);
 
-  // blob shadows
-  let si = 0;
-  const put = (x, y, z, r) => {
-    tmpP.set(x, y + 0.06, z); tmpS.set(r, 1, r);
-    tmpM.compose(tmpP, tmpQ, tmpS);
-    shadowIM.setMatrixAt(si++, tmpM);
-  };
-  if (!driving) put(player.x, player.y, player.z, 0.55); else put(0, -10, 0, 0.01);
-  for (const c of cars) put(c.x, c.mesh.position.y, c.z, 2.2);
-  for (const t of traffic) put(t.x, t.mesh.position.y, t.z, 2.2);
-  for (const p of police) { if (p.active) put(p.x, p.mesh.position.y, p.z, 2.2); else put(0, -10, 0, 0.01); }
-  for (const n of npcs) put(n.x, groundY(n.x, n.z), n.z, 0.5);
-  put(marco.position.x, CURB, marco.position.z, 0.5);
-  if (rosa.visible) put(rosa.position.x, CURB, rosa.position.z, 0.5); else put(0, -10, 0, 0.01);
-  if (vince.visible) put(vince.position.x, CURB, vince.position.z, 0.5); else put(0, -10, 0, 0.01);
-  shadowIM.instanceMatrix.needsUpdate = true;
+  syncBlobShadows();
 
   if (colCD > 0) colCD -= dt;
   updateParticles(dt);
@@ -6236,8 +6313,8 @@ function frame(now) {
     updateHUD();
     drawMinimap(now / 1000);
     if (mapOpen) drawFullMap();
-  } else acc = 0;
-  if (state.phase === "play") updateSunShadow();
+  } else { acc = 0; if (state.phase === "intro") introCam(now); }
+  if (state.phase === "play" || state.phase === "intro") updateSunShadow();
   renderFrame();
   // adaptive resolution: ONLY in Performance mode (for genuinely weak devices). Quality mode is
   // pinned dead-flat at full resolution (PR_CAP) — no mid-gameplay rescaling, so the picture never
