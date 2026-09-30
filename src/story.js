@@ -60,6 +60,7 @@ export function makeStory(g) {
   }
   function update(dt) {
     if (g.fx.talking()) return;
+    if (g.st.mi >= MISSIONS.length && mState !== "done" && mState !== "outro") mState = "done";   // story already finished
     if (mState === "wait") { mTimer -= dt; if (mTimer <= 0) start(g.st.mi); }
     else if (mState === "active") {
       const mis = MISSIONS[g.st.mi], step = mis.steps[mStep];

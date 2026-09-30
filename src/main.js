@@ -21,6 +21,11 @@ import { createFX } from "./fx.js";
 import { makeCrime } from "./crime.js";
 import { makeCombat, WEAPONS } from "./combat.js";
 import { makeGangs, GANGS } from "./gangs.js";
+import { createPhone } from "./phoneui.js";
+import * as PH from "./phone.js";
+import { initHeists, updateHeists, heistObjective, heistActive, startHeist, abortHeist, _debug as heistsDebug } from "./heists.js";
+import { makeEvents } from "./events.js";
+import { makeJobs } from "./jobs.js";
 import { AudioSys } from "./audio.js";
 
 const bootBar = document.getElementById("bootbar");
@@ -53,7 +58,7 @@ await step(88);
 // save. The first time you open the new city, progress from the original game comes with you
 // (cash, businesses, homes, story chapter, level).
 const SAVE_KEY = "palmcity_save";
-const SAVE_FIELDS = ["money", "xp", "lvl", "owned", "apt", "home", "house", "mi", "bank", "stats", "weapons", "ammo", "turf", "nem"];
+const SAVE_FIELDS = ["money", "xp", "lvl", "owned", "apt", "home", "house", "mi", "bank", "stats", "weapons", "ammo", "turf", "nem", "term", "shares", "sprice", "sfair", "scost", "ledger"];
 let save = null, imported = false;
 try { save = JSON.parse(localStorage.getItem(SAVE_KEY) || localStorage.getItem("palmcity2_save") || "null"); } catch (e) {}
 if ((!save || save.mi === undefined) && !localStorage.getItem("sunset_city_save_v1_imported")) {
@@ -130,6 +135,7 @@ showNpc("marco", PLACES.fountain);
 const eco = makeEconomy(st, {
   toast: m => hud.toast(m), banner: (a, b) => hud.banner(a, b), sound: (k, v) => AudioSys.play(k, v), save: () => writeSave(),
   rest: () => sky.set(sky.state.t + 0.12),
+  onLevel: l => PH.pushLevel(l),
 });
 const story = makeStory({
   st, pos: () => P.car ? [P.car.x, P.car.z] : [P.x, P.z], driving: () => P.car, marcoCar: () => cars.find(c => c.marco && c !== P.car) || (P.car && P.car.marco ? P.car : null),
@@ -159,15 +165,16 @@ const crime = makeCrime(scene, {
   onBust: fine => {
     st.money = Math.max(0, st.money - fine);
     hud.banner("BUSTED", "Fine $" + fine.toLocaleString() + " · the bank keeps what you saved", "", 3.4, "bad"); greyT = 2.6;
-    AudioSys.play("door", 1); respawnAt(PLACES.police); writeSave();
+    AudioSys.play("door", 1); respawnAt(PLACES.police); abortHeist("The score's lost."); writeSave();
   },
   onWasted: fine => {
     st.money = Math.max(0, st.money - fine);
     hud.banner("WASTED", "Patched up at Palm General · fine $" + fine.toLocaleString(), "", 3.4, "bad"); greyT = 2.6;
-    AudioSys.play("boom", 0.7); const h = eco.home(); respawnAt(h ? h.p : PLACES.hospital); writeSave();
+    AudioSys.play("boom", 0.7); const h = eco.home(); respawnAt(h ? h.p : PLACES.hospital); abortHeist("The score's lost."); writeSave();
   },
 });
 const combat = makeCombat(scene, {
+  onExplode: (x, z) => { PH.chaosShock(st); if (Math.random() < 0.3) PH.pushRampage(0, x, z); },
   crowd, traffic, parked, crime, fx, collider, st,
   sound: (k, v, r) => AudioSys.play(k, v, r), shake: a => { rig.shake = Math.max(rig.shake, a); }, toast: m => hud.toast(m),
   player: () => P.car ? { x: P.car.x, z: P.car.z, y: P.car.y, car: P.car, yaw: P.car.h } : P,
@@ -179,6 +186,52 @@ const gangs = makeGangs({
   boss: (on, name, frac) => hud.boss(on, name, frac),
 });
 { const add = crime.addCrime; crime.addCrime = n => { add(n); gangs.grudge(3 * (n || 1)); }; }
+// ---------------------------------------------------------------------------------------------
+// phone, heists, street events, jobs
+const focusInfo = () => P.car ? { x: P.car.x, z: P.car.z, car: P.car, driving: true, speed: P.car.speed } : { x: P.x, z: P.z, car: null, driving: false, speed: P.speed };
+const freeplay = () => st.mi >= 12 && !hud.talking();
+const HEIST_TARGETS = [
+  ["club", "Neon Palms Club"], ["marina", "Bayside Marina"], ["burger", "Big Bun Burgers"], ["taxi", "Palm Taxi Co."], ["wash", "Marina Car Wash"], ["depot", "the Depot"], ["gallery", "Palm Gallery"],
+].map(([k, name]) => ({ x: PLACES[k].x, z: PLACES[k].z, name }));
+initHeists(scene, {
+  toast: m => hud.toast(m), canStart: freeplay, targets: () => HEIST_TARGETS, focus: focusInfo, buzz: () => {},
+  wanted: () => crime.S.wanted, copSearching: () => crime.S.searching, earn: n => eco.earn(n), addHeat: n => crime.addCrime(n),
+  burst: (x, y, z) => fx.explosion(x, y, z, 0.5), addShake: a => { rig.shake = Math.max(rig.shake, a); },
+  onScore: name => { PH.pushHeist(name); PH.shockByName(st, name, -0.22); }, save: () => writeSave(),
+});
+const events = makeEvents(scene, {
+  focus: focusInfo, crowd, gangs, fx, crime, combat, collider, time: () => time,
+  sound: (k, v, r) => AudioSys.play(k, v, r), toast: (m, t) => hud.toast(m, t), banner: (a, b, k, t) => hud.banner(a, b, k, t),
+  earn: n => eco.earn(n), save: () => writeSave(), shake: a => { rig.shake = Math.max(rig.shake, a); },
+  canStart: () => freeplay() && !heistActive() && !jobs.active() && crime.S.wanted === 0,
+});
+const jobs = makeJobs({
+  focus: focusInfo, traffic, crowd, gangs, crime, combat, fx, collider, st,
+  toast: m => hud.toast(m), banner: (a, b, k, t) => hud.banner(a, b, k, t), sound: (k, v) => AudioSys.play(k, v), earn: n => eco.earn(n), save: () => writeSave(),
+});
+function mechanic() {
+  if (st.money < 500) return "Cash up front, cuz. $500.";
+  if (P.car) return "You're already driving something.";
+  st.money -= 500;
+  const a = P.yaw + Math.PI / 2, x = P.x + Math.sin(a) * 4, z = P.z + Math.cos(a) * 4;
+  const c = spawnCar(scene, ["sports", "sedan", "suv"][(Math.random() * 3) | 0], [0x9d0f14, 0x1a1b1d, 0xc6c9cc, 0x1f2d4a][(Math.random() * 4) | 0], x, z, P.yaw);
+  const q = collider.resolve(c.x, c.z, 2.2); c.x = q.x; c.z = q.z; syncCar(c); cars.push(c);
+  AudioSys.play("door", 0.6); writeSave();
+  return null;
+}
+let phone = null;
+const makePhone = () => createPhone({
+  st, clock: () => { const t = sky.state.t, m = Math.floor(t * 1440), h = Math.floor(m / 60); return (h % 12 || 12) + ":" + String(m % 60).padStart(2, "0") + (h < 12 ? " AM" : " PM"); },
+  objective: () => currentObjective(), focus: focusInfo, jobs, heists: { active: heistActive }, startHeist: a => startHeist(a),
+  hire: () => jobs.hire(), mechanic, toast: m => hud.toast(m), sound: (k, v) => AudioSys.play(k, v), save: () => writeSave(),
+});
+
+function currentObjective() {
+  const o = story.objective();
+  if (o && o.main) return o;
+  return heistObjectiveNew() || jobs.objective() || events.objective() || o;
+}
+function heistObjectiveNew() { const h = heistObjective(); return h ? { ...h, r: 5, event: true } : null; }
 function openGunShop() {
   hud.panel("AMMU-PALM", WEAPONS.filter(w => w.id !== "fists").map(w => {
     const owned = combat.own(w);
@@ -203,6 +256,9 @@ for (const c of traffic.cars) traffic.respawnNear(c, P.x, P.z, 30);
 // ---------------------------------------------------------------------------------------------
 const hud = createHUD(plan);
 initInput(hud.ui);
+phone = makePhone();
+// Vic's taunts land in your messages too
+{ const t0 = hud.toast; hud.toast = (m, secs) => { if (/^📱 Vic/.test(m)) phone.vicText(m.replace(/^📱 [^:]+: /, "")); t0(m, secs); }; }
 if (!isMobile) document.body.classList.add("kb");
 const rig = createCamRig(camera);
 rig.yaw = P.yaw; rig.pitch = 0.22;
@@ -276,6 +332,7 @@ function exitCar() {
   AudioSys.engine(0);
 }
 
+const focus0 = () => P.car || P;
 function update(dt) {
   time += dt;
   hud.update(dt);
@@ -326,6 +383,7 @@ function update(dt) {
       }
     }
     eco.tick(dt, P.x, P.z, !P.car);
+    phone.update(dt, { wanted: crime.S.wanted, searching: crime.S.searching, x: focus0().x, z: focus0().z });
     story.update(dt);
     saveT += dt; if (saveT > 5) { saveT = 0; writeSave(); }
   }
@@ -335,6 +393,7 @@ function update(dt) {
   for (const u of crime.units) if (u.active && u.speed > 5) hz.push({ x: u.x, z: u.z, speed: u.speed, vx: u.vx, vz: u.vz });
   if (state.phase === "play" && !hud.talking()) {             // the world holds its breath during dialogue
     crime.update(dt, time); combat.update(dt, time); gangs.update(dt);
+    updateHeists(dt, time); events.update(dt); jobs.update(dt);
     if (P.car && P.car.boom && !P.car.charred) {           // your ride went up: you're thrown clear, it's a burnt shell
       const c = P.car; c.charred = true;
       c.group.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.color && o.material.color.set(0x1a1816); o.material.metalness = 0.1; o.material.roughness = 1; } });
@@ -383,8 +442,8 @@ function render() {
     n.ch.pose(n.at.x, groundY(n.at.x, n.at.z), n.at.z, n.yaw, time * 0.9, 0.04, null);
   }
   setSignNight(signs, sky.state.night);
-  const obj = state.phase === "play" ? story.objective() : null;
-  beacon.set(obj && obj.main && obj.x !== undefined ? { x: obj.x, z: obj.z } : null, obj ? obj.r : 3);
+  const obj = state.phase === "play" ? currentObjective() : null;
+  beacon.set(obj && (obj.main || obj.event) && obj.x !== undefined ? { x: obj.x, z: obj.z } : null, obj ? obj.r : 3);
   sideBeacon.set(obj && obj.side ? { x: obj.x, z: obj.z } : null, 3);
   beacon.update(time, obj && obj.x !== undefined ? Math.hypot(camera.position.x - obj.x, camera.position.z - obj.z) : 0);
   sideBeacon.update(time, 200);
@@ -433,7 +492,7 @@ requestAnimationFrame(frame);
 
 // debug / test hooks
 globalThis.__pc2 = {
-  THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, collider, crowd, traffic, P, cars, state, rig, I,
+  THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, P, cars, state, rig, I,
   freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },
