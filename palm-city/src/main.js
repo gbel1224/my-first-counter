@@ -171,6 +171,12 @@ const crime = makeCrime(scene, {
   paused: () => hud.talking() || state.phase !== "play",
   heatMult: () => (P.car && P.car.heatMult) || 1,
   noHeat: () => story.state().mState === "active" && st.mi === 11,        // no cops during the Grand Race
+  night: () => sky.state.night,
+  // the SWAT tank's cannon: a shell flies at where it saw you
+  shell: (x, z, tx, tz, owner) => { const d = Math.hypot(tx - x, tz - z) || 1; combat.launch("rocket", x, 1.9, z, (tx - x) / d, (tz - z) / d, { d, y: 1.0 }, owner); AudioSys.play("boom", 0.5, 0.6); },
+  // …and it rolls straight over traffic
+  crush: u => combat.asCops(() => { for (const t of traffic.cars) if (t.alive && (t.x - u.x) ** 2 + (t.z - u.z) ** 2 < 9) combat.damageCar(t, 200, "traffic"); for (const c of parked.around(u.x, u.z)) if (!c.boom && (c.x - u.x) ** 2 + (c.z - u.z) ** 2 < 9) combat.damageCar(c, 200, "parked"); }),
+  onHeliCrash: (x, z) => combat.blast(x, z, 9, 120, null),
   onBust: fine => {
     if (P.car && P.car.fineMult) fine = Math.round(fine * P.car.fineMult);
     st.money = Math.max(0, st.money - fine);
@@ -595,6 +601,7 @@ function render() {
     for (const c of cars) if (c !== P.car) dots.push({ x: c.x, z: c.z, c: "#2f7cff", r: 3 });
     for (const G of GANGS) if (!st.turf[G.id]) dots.unshift({ x: G.x, z: G.z, c: ["rgba(200,40,40,.22)", "rgba(40,80,200,.22)", "rgba(40,150,70,.22)"][GANGS.indexOf(G)], r: G.r * 0.5 });
     for (const u of crime.units) if (u.active) dots.push({ x: u.x, z: u.z, c: Math.floor(time * 6) % 2 ? "#ff3030" : "#3060ff", r: 3.5 });
+    if (crime.heli.active) dots.push({ x: crime.heli.x, z: crime.heli.z, c: "#ffffff", r: 4.5 });
     for (const p of gangs.members) if (!p.hidden && p.knocked <= 0 && (p.goon || (p.x - focus.x) ** 2 + (p.z - focus.z) ** 2 < 3600)) dots.push({ x: p.x, z: p.z, c: p.boss ? "#ff00aa" : "#ff5a3a", r: p.boss ? 4 : 2.5 });
     hud.minimap(focus.x, focus.z, P.car ? P.car.h : P.yaw, rig.yaw, dots, obj && obj.x !== undefined ? { x: obj.x, z: obj.z, c: obj.side ? "#ff8a4c" : "#ffc861" } : null);
   }
