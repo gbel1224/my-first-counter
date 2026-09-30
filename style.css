@@ -260,3 +260,12 @@ body.talking #bF, body.talking #bW { opacity: 0 !important; pointer-events: none
 body.photo #hud, body.photo #phone, body.photo #notif { display: none !important; }
 #photoHint { position: absolute; left: 50%; bottom: calc(18px + var(--safe-b)); transform: translateX(-50%); padding: 9px 16px; font-size: 13px; display: none; cursor: pointer; }
 #photoHint.on { display: block; }
+#arcade { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(8,8,14,.8); z-index: 70; pointer-events: auto; }
+#arcade .acard { position: relative; background: rgba(18,18,26,.98); border-radius: 20px; padding: 14px; display: flex; flex-direction: column; align-items: center; gap: 8px; border: 1px solid var(--line); }
+#arcade #acx { position: absolute; top: 8px; right: 10px; background: none; border: none; color: #fff; font-size: 18px; cursor: pointer; }
+#arcade #actitle { font-weight: 900; letter-spacing: 2px; color: var(--sun); }
+#arcadecanvas { width: min(300px, 82vw); height: auto; aspect-ratio: 3/4; border-radius: 12px; background: #0a0a12; touch-action: none; }
+#arcade #acinfo { font-size: 13px; color: var(--ink-dim); min-height: 18px; }
+#bubble { position: absolute; transform: translate(-50%, -100%); max-width: 220px; padding: 7px 11px; border-radius: 14px; background: rgba(255,255,255,.95); color: #16181c;
+  font-size: 13px; font-weight: 600; line-height: 1.3; display: none; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.35); z-index: 20; }
+#bubble.angry { background: rgba(255,214,214,.97); }

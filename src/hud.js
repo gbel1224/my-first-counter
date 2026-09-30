@@ -125,7 +125,7 @@ export function createHUD(plan) {
     objective(t, d) { obj.style.display = t ? "" : "none"; obj.querySelector(".t").textContent = t || ""; obj.querySelector(".d").textContent = d || ""; },
     prompt(html) { if (html) prompt.innerHTML = html; prompt.classList.toggle("on", !!html); },
     toast(msg, secs = 2.6) { toastEl.textContent = msg; toastEl.classList.add("on"); toastT = secs; },
-    speed(kmh, on) { speed.classList.toggle("on", on); if (on) speedV.textContent = Math.round(kmh); },
+    speed(kmh, on, fuel) { speed.classList.toggle("on", on); if (on) { speedV.textContent = Math.round(kmh); speed.querySelector(".u").textContent = "KM/H" + (fuel != null ? "  ·  ⛽ " + Math.round(fuel) + "%" : ""); } },
     buttons(driving, nearCar, actLabel, kind) {
       bA.textContent = driving ? (actLabel || "EXIT") : actLabel || (nearCar ? "DRIVE" : "GO");
       bA.classList.toggle("hide", !driving && !nearCar && !actLabel);
