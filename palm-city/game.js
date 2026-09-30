@@ -17,7 +17,7 @@ import { initHeists, updateHeists, heistObjective, heistActive, startHeist, abor
 import { updateFeed, feed, unread, markRead, ageLabel, clockLabel, pushHeist, pushRampage, pushLevel, _debug as phoneDebug,
   bankTick, deposit, withdraw, openTerm, breakTerm, TERM_RATE, TERM_SECS, SAVINGS_RATE,
   TICKERS, ensurePrices, stocksTick, shockByName, chaosShock, buyShares, sellShares, portfolioValue,
-  takeNotify, toggleLike, pushUserPost, ledgerAdd } from "./phone.js";
+  takeNotify, toggleLike, pushUserPost, ledgerAdd, priceHistory, costBasis } from "./phone.js";
 
 // ---------- renderer / scene ----------
 const dom = id => document.getElementById(id);
@@ -1440,6 +1440,11 @@ for (let t = 0; t < Math.round(340 * N / 32); t++) {   // a bigger crowd, scaled
 // dedicated PRNG for crowd wandering — deterministic (reproducible) but separate from the seeded
 // city/economy stream, so the crowd is purely cosmetic and never shifts gameplay outcomes
 const npcRng = mulberry32(0x51ED5EED);
+// per-pedestrian walking style (visual only, its own stream so the sim never sees it): without this
+// the whole crowd marched with one identical stride, arm swing and sway — a parade, not a street
+const gaitRng = mulberry32(0x6A17C0DE);
+const newGait = () => ({ stride: 0.3 + gaitRng() * 0.18, arm: 0.4 + gaitRng() * 0.6, cad: 2.3 + gaitRng() * 0.7,
+  sway: 0.015 + gaitRng() * 0.05, dip: 0.2 + gaitRng() * 0.2 });
 
 // ---------- pedestrian banter: walk up to anyone and talk — GTA-style moods & humour ----------
 const NPC_LINES = {
@@ -1608,9 +1613,20 @@ const HIP_Y = 0.88;   // hip pivot height — the lever a swinging leg lifts its
 // scratch for keeping a parented contact shadow world-flat under a body that pitches/rolls
 const _flatQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
 const _tmpQ = new THREE.Quaternion();
-function levelBlob(mesh) {   // cancel the parent's tilt so the shadow stays lying on the road
-  const b = mesh.userData && mesh.userData.blob;
-  if (b) b.quaternion.copy(_tmpQ.copy(mesh.quaternion).invert()).multiply(_flatQ);
+// Keep a car's contact shadow lying flat ON THE ROAD under it, whatever the body is doing: cancel the
+// parent's pitch/roll but keep its heading (the blob is a long oval — it has to turn with the car),
+// and when the car is airborne pin the blob to the ground and shrink it with height.
+const _yawQ = new THREE.Quaternion(), _yAxis = new THREE.Vector3(0, 1, 0), _blobV = new THREE.Vector3();
+function levelBlob(mesh, gy) {
+  const b = mesh.userData && mesh.userData.blob; if (!b) return;
+  _yawQ.setFromAxisAngle(_yAxis, mesh.rotation.y);
+  b.quaternion.copy(_tmpQ.copy(mesh.quaternion).invert()).multiply(_yawQ).multiply(_flatQ);
+  const lift = gy === undefined ? 0 : mesh.position.y - gy;
+  if (lift > 0.02) {
+    mesh.updateMatrixWorld();
+    b.position.copy(mesh.worldToLocal(_blobV.set(mesh.position.x, gy + 0.05, mesh.position.z)));
+    b.scale.setScalar(clamp(1 - lift * 0.07, 0.35, 1));
+  } else if (b.position.x || b.position.z || b.position.y !== 0.05 || b.scale.x !== 1) { b.position.set(0, 0.05, 0); b.scale.setScalar(1); }
 }
 
 // ---------- vehicle entry/exit animation: a door swings open + the player gets in / mounts ----------
@@ -2300,6 +2316,8 @@ const state = {
   term: null,            // active term deposit: { amt, left } (locked, pays interest at maturity)
   shares: {},            // ticker -> shares held
   sprice: {},            // ticker -> last price (persisted so the market doesn't reset each load)
+  sfair: {},             // ticker -> fair value prices mean-revert to (news moves it; it heals slowly)
+  scost: {},             // ticker -> total cost basis of the shares held (for P/L)
   ledger: [],            // bank statement: newest first, each line carrying the balance it left
   owned: {},
   cars: {},              // owned personal cars: pid -> chosen paint color (hex)
@@ -2353,7 +2371,7 @@ const SAVE_FIELDS = {
   xp: { save: v => Math.round(v || 0), load: v => v || 0 },
   bank: { save: v => Math.floor(v || 0), load: v => v || 0 },
   term: { save: v => v || null, load: v => (v && v.amt > 0) ? v : null },
-  shares: _sfObj, sprice: _sfObj,
+  shares: _sfObj, sprice: _sfObj, sfair: _sfObj, scost: _sfObj,
   ledger: { save: v => (v || []).slice(0, 24), load: v => v || [] },
   lvl: { save: v => v || 1, load: v => v || 1 },
 };
@@ -4915,14 +4933,27 @@ if (phoneBtn.style) phoneBtn.style.cssText = "position:absolute;right:16px;top:1
 if (phoneEl.style) phoneEl.style.cssText = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(10,6,14,.42),rgba(6,3,10,.62));backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:70;";
 // the card is the handset itself: dark titanium bezel, deep corner radius, a soft rim highlight
 if (phoneCard.style) phoneCard.style.cssText = "display:flex;flex-direction:column;width:302px;max-width:92vw;padding:7px;background:linear-gradient(160deg,#3a3a42,#121216 42%,#0a0a0e);border-radius:40px;box-shadow:0 24px 60px rgba(4,2,8,.7),inset 0 0 0 1.5px rgba(255,255,255,.16),inset 0 1px 2px rgba(255,255,255,.28);";
-let phoneApp = "home";   // home | jobs | gram | contacts | bank | stocks
+let phoneApp = "home";   // home | jobs | gram | contacts | marco | bank | stocks
 let stockSel = null;     // ticker being traded
 // A transient red alert inside the handset. A failed transaction used to do nothing at all (or at
 // best clamp itself silently), which reads as a broken button — the phone has to say why.
 let phoneErr = null, phoneErrT = 0;
 // The typed amount has to survive a re-render: every button calls openPhone(), which rebuilds the
 // whole screen, so an <input>'s own value would be wiped on each tap.
+// price chart as inline SVG: a line plus a soft fill under it, green if the window closed up, red if down
+function sparkSVG(h, w, ht, fill) {
+  if (!h || h.length < 2) return "<svg width='" + w + "' height='" + ht + "'></svg>";
+  let lo = Math.min(...h), hi = Math.max(...h);
+  const pad = (hi - lo) * 0.12 || hi * 0.01; lo -= pad; hi += pad;
+  const up = h[h.length - 1] >= h[0], col = up ? "#6ee08a" : "#ff7b7b";
+  const pts = h.map((v, i) => (i / (h.length - 1) * w).toFixed(1) + "," + ((1 - (v - lo) / (hi - lo)) * ht).toFixed(1)).join(" ");
+  return "<svg width='100%' viewBox='0 0 " + w + " " + ht + "' preserveAspectRatio='none' style='display:block;max-width:" + w + "px;height:" + ht + "px'>" +
+    (fill ? "<polygon points='0," + ht + " " + pts + " " + w + "," + ht + "' fill='" + col + "' fill-opacity='.14'/>" : "") +
+    "<polyline points='" + pts + "' fill='none' stroke='" + col + "' stroke-width='" + (fill ? 2 : 1.6) + "' stroke-linejoin='round' vector-effect='non-scaling-stroke'/></svg>";
+}
+const windowChange = h => (h && h.length > 1) ? (h[h.length - 1] - h[0]) / h[0] : 0;
 let phoneAmt = "", phoneAmtFocus = false;
+let termAmt = "", termAmtFocus = false;   // the term-deposit box keeps its own text so it can't fight the deposit box
 let phonePost = "", phonePostFocus = false;   // Palmgram composer, held outside the DOM for the same reason
 function amtRow(placeholder, onA, labelA, onB, labelB) {
   const wrap = el("div", "display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:stretch;");
@@ -4963,6 +4994,7 @@ const ROW_CSS = "padding:11px 12px;border-radius:14px;font-size:13px;line-height
 const PILL = "padding:9px 6px;border-radius:11px;font-size:12.5px;font-weight:600;color:#fff;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.14);";
 const money = n => "$" + Math.floor(n).toLocaleString();
 // phone contacts — people who actually do something when you call them
+const marcoThread = [];   // this session's texts with Marco, oldest first
 const CONTACTS = [
   { id: "marco", label: "📞 Marco", desc: "Ask what you should be doing" },
   { id: "muscle", label: "🤝 Hire Muscle", desc: "$1500 — an armed ally rides with you" },
@@ -4970,9 +5002,22 @@ const CONTACTS = [
 ];
 function callContact(id) {
   if (id === "marco") {
+    // a text thread instead of a toast that vanishes in three seconds: the ask, his answer, and where
     const o = currentObjective();
-    toast("📞 Marco: \"" + (o && o.text ? o.text : "Keep building, kid. City's yours.") + "\"");
-    AudioSys.play("blip", 0.6); closePhone(); return;
+    let where = "";
+    if (o && o.x !== undefined) {
+      const fx = driving ? driving.x : player.x, fz = driving ? driving.z : player.z;
+      const dx = o.x - fx, dz = o.z - fz, d = Math.hypot(dx, dz);
+      // world +z is south on the map (the sea sits at +z), +x is east
+      const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+      const dir = dirs[((Math.round(Math.atan2(dx, -dz) / (Math.PI / 4)) % 8) + 8) % 8];
+      where = d < 25 ? "You're right on top of it." : "About " + (Math.round(d / 10) * 10) + "m " + dir + " of you — follow the yellow marker.";
+    }
+    marcoThread.push({ me: true, t: "What should I be doing?" });
+    marcoThread.push({ me: false, t: (o && o.title ? "<b>" + o.title + "</b><br>" : "") + (o && o.text ? o.text : "Keep building, kid. City's yours.") });
+    if (where) marcoThread.push({ me: false, t: "📍 " + where });
+    if (marcoThread.length > 12) marcoThread.splice(0, marcoThread.length - 12);
+    phoneApp = "marco"; AudioSys.play("blip", 0.6); openPhone(); return;
   }
   if (id === "muscle") { hireAlly(); closePhone(); return; }
   if (id === "mech") {
@@ -5050,6 +5095,14 @@ function openPhone() {
     title = "Contacts";
     CONTACTS.forEach(C => body.appendChild(mkBtn("<b>" + C.label + "</b><br><small style='opacity:.7'>" + C.desc + "</small>", ROW_CSS, () => callContact(C.id))));
 
+  } else if (phoneApp === "marco") {
+    title = "Marco";
+    for (const m of marcoThread) body.appendChild(el("div",
+      "max-width:82%;padding:8px 12px;border-radius:18px;font-size:13px;line-height:1.4;color:#fff;" +
+      (m.me ? "align-self:flex-end;background:#0a84ff;border-bottom-right-radius:5px;" : "align-self:flex-start;background:rgba(255,255,255,.16);border-bottom-left-radius:5px;"), m.t));
+    body.appendChild(mkBtn("Ask again", PILL, () => callContact("marco")));
+    setTimeout(() => { body.scrollTop = body.scrollHeight; }, 0);
+
   } else if (phoneApp === "bank") {
     title = "Bank";
     const head = el("div", "padding:14px;border-radius:18px;background:linear-gradient(160deg,rgba(62,196,109,.24),rgba(28,138,70,.18));border:1px solid rgba(140,240,170,.28);color:#fff;");
@@ -5115,6 +5168,25 @@ function openPhone() {
         openPhone();
       })));
       body.appendChild(rowT);
+      const tw = el("div", "display:grid;grid-template-columns:1fr auto;gap:6px;");
+      const ti = document.createElement("input");
+      ti.className = "pe"; ti.type = "text"; ti.inputMode = "numeric"; ti.placeholder = "or type an amount to lock";
+      ti.value = termAmt;
+      ti.style.cssText = "min-width:0;padding:9px 11px;border-radius:11px;font-size:13px;font-weight:600;color:#fff;background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.22);outline:none;";
+      ti.addEventListener("input", () => { termAmt = ti.value.replace(/[^0-9.]/g, ""); if (ti.value !== termAmt) ti.value = termAmt; });
+      ti.addEventListener("focus", () => { termAmtFocus = true; });
+      ti.addEventListener("blur", () => { termAmtFocus = false; });
+      tw.appendChild(ti);
+      tw.appendChild(mkBtn("Lock", PILL + "padding-left:13px;padding-right:13px;", () => {
+        const n = Math.floor(parseFloat(termAmt));
+        if (!termAmt.trim()) phoneError("Type an amount to lock first.");
+        else if (!isFinite(n) || n <= 0) phoneError("\"" + termAmt + "\" isn't an amount you can lock.");
+        else if (state.bank < n) phoneError("Can't lock " + money(n) + " — your balance is " + money(state.bank) + ". Deposit more first.");
+        else { const d = openTerm(state, n); clearPhoneErr(); termAmt = ""; toast("🏦 Locked " + money(d) + " for " + TERM_SECS + "s"); AudioSys.play("blip", .5); save(); }
+        openPhone();
+      }));
+      if (termAmtFocus) setTimeout(() => { ti.focus(); ti.setSelectionRange(ti.value.length, ti.value.length); }, 0);
+      body.appendChild(tw);
     }
     // statement — newest first, with the balance each line left behind, so interest is visible
     body.appendChild(el("div", "font-size:11px;color:#dcd6e6;opacity:.8;margin-top:2px", "STATEMENT"));
@@ -5138,18 +5210,26 @@ function openPhone() {
         "<div style='font-size:11px;opacity:.7;margin-top:3px'>Cash " + money(state.money) + "</div>"));
       for (const t of TICKERS) {
         const p = state.sprice[t.id], held = state.shares[t.id] || 0;
-        const dev = (p - t.base) / t.base, up = dev >= 0;
+        const hs = priceHistory(t.id), dev = windowChange(hs), up = dev >= 0;
         body.appendChild(mkBtn(
-          "<div style='display:flex;justify-content:space-between;align-items:center'>" +
-          "<span><b>" + t.id + "</b> <small style='opacity:.6'>" + t.name + "</small>" + (held ? "<br><small style='color:#9ec7ff'>" + held + " shares</small>" : "") + "</span>" +
-          "<span style='text-align:right'><b>$" + p.toFixed(2) + "</b><br><small style='color:" + (up ? "#6ee08a" : "#ff7b7b") + "'>" + (up ? "▲" : "▼") + " " + Math.abs(dev * 100).toFixed(1) + "%</small></span></div>",
+          "<div style='display:grid;grid-template-columns:1fr 64px auto;gap:10px;align-items:center'>" +
+          "<span style='min-width:0'><b>" + t.id + "</b><br><small style='opacity:.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block'>" + (held ? "<span style='color:#9ec7ff;opacity:1'>" + held + " sh · </span>" : "") + t.name + "</small></span>" +
+          sparkSVG(hs, 64, 24, false) +
+          "<span style='text-align:right;min-width:62px'><b>$" + p.toFixed(2) + "</b><br><small style='color:" + (up ? "#6ee08a" : "#ff7b7b") + "'>" + (up ? "▲" : "▼") + " " + Math.abs(dev * 100).toFixed(1) + "%</small></span></div>",
           ROW_CSS, () => { stockSel = t.id; openPhone(); }));
       }
     } else {
       const t = TICKERS.find(x => x.id === stockSel), p = state.sprice[t.id], held = state.shares[t.id] || 0;
+      const hs = priceHistory(t.id), ch = windowChange(hs), up = ch >= 0;
+      const basis = costBasis(state, t.id), pl = held * p - basis;
       body.appendChild(el("div", "padding:14px;border-radius:18px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.14);color:#fff;",
-        "<div style='font-size:11px;opacity:.75'>" + t.name + "</div><div style='font-size:26px;font-weight:700'>" + t.id + " $" + p.toFixed(2) + "</div>" +
-        "<div style='font-size:12px;opacity:.85;margin-top:4px'>You hold <b>" + held + "</b> · worth " + money(held * p) + "</div>" +
+        "<div style='font-size:11px;opacity:.75'>" + t.name + "</div>" +
+        "<div style='display:flex;align-items:baseline;gap:8px'><span style='font-size:26px;font-weight:700'>" + t.id + " $" + p.toFixed(2) + "</span>" +
+        "<small style='font-weight:700;color:" + (up ? "#6ee08a" : "#ff7b7b") + "'>" + (up ? "▲" : "▼") + " " + Math.abs(ch * 100).toFixed(1) + "%</small></div>" +
+        "<div style='margin:8px 0 2px'>" + sparkSVG(hs, 260, 70, true) + "</div>" +
+        "<div style='font-size:10px;opacity:.55;margin-bottom:6px'>last " + Math.max(1, Math.round(hs.length * 3 / 60)) + " min</div>" +
+        "<div style='font-size:12px;opacity:.85'>You hold <b>" + held + "</b> · worth " + money(held * p) + "</div>" +
+        (held ? "<div style='font-size:12px'>P/L <b style='color:" + (Math.abs(pl) < 1 ? "#dcd6e6" : pl > 0 ? "#6ee08a" : "#ff7b7b") + "'>" + (Math.abs(pl) < 1 ? "" : pl > 0 ? "+" : "−") + money(Math.abs(pl)) + "</b> <small style='opacity:.6'>(paid " + money(basis) + ")</small></div>" : "") +
         "<div style='font-size:12px;opacity:.85'>Cash " + money(state.money) + "</div>"));
       const buy = el("div", "display:grid;grid-template-columns:repeat(4,1fr);gap:6px;");
       [1, 10, 50].forEach(n => buy.appendChild(mkBtn("Buy " + n, PILL, () => {
@@ -5687,7 +5767,7 @@ function update(dt) {
     c.pitch = (c.pitch || 0) + (pitchTgt - (c.pitch || 0)) * Math.min(1, 7 * dt);
     c.mesh.rotation.x = c.y > 0 ? clamp(-c.vy * 0.02, -0.4, 0.4) : c.pitch;
     c.mesh.rotation.z = c.bike ? clamp((c.lat || 0) * 0.05, -0.45, 0.45) : clamp((c.lat || 0) * 0.03, -0.22, 0.22);
-    levelBlob(c.mesh);   // the car you're driving pitches/rolls constantly — keep its shadow on the road
+    levelBlob(c.mesh, groundY(c.x, c.z));   // the car you're driving pitches/rolls constantly — keep its shadow on the road
     }
     camYaw = lerpAngle(camYaw, c.h, 1 - Math.exp(-3.2 * dt));
   } else if (para) {
@@ -5950,11 +6030,13 @@ function update(dt) {
     }
     // stride: advance the walk cycle with speed, swing legs & arms in opposition, bob with each step
     const stepping = moved > sp * dt * 0.3;
-    n.walkPhase += sp * dt * 2.6;
+    const G = n.gait || (n.gait = newGait()), run = n.flee > 0;
+    n.walkPhase += sp * dt * (run ? 2.2 : G.cad);
     const spd = Math.min(1, sp / 2.2);
-    const sw = stepping ? Math.sin(n.walkPhase) * spd * 0.4 : (n.legL.rotation.x * 0.85);
+    const sw = stepping ? Math.sin(n.walkPhase) * spd * (run ? 0.55 : G.stride) : (n.legL.rotation.x * 0.85);
     n.legL.rotation.x = sw; n.legR.rotation.x = -sw;
-    n.armL.rotation.x = -sw * 0.7; n.armR.rotation.x = sw * 0.7;
+    const arm = run ? 1.3 : G.arm;   // bolting bystanders pump their arms
+    n.armL.rotation.x = -sw * arm; n.armR.rotation.x = sw * arm;
     // knees only flex (never hyperextend): each shin tucks up as its leg swings through under the body
     const kAmp = stepping ? spd * 0.95 : 0;
     n.kneeL.rotation.x = kAmp * Math.max(0, -Math.cos(n.walkPhase));   // flexes mid-swing, straight at the extremes
@@ -5962,9 +6044,9 @@ function update(dt) {
     const gy = groundY(n.x, n.z);
     // dip as the legs split (a swung leg lifts its own foot, so the pelvis has to come down to plant
     // the step) and roll onto the foot carrying the weight — same physics as the hero's stride
-    n.mesh.position.set(n.x, gy - (stepping ? n.mesh.scale.y * HIP_Y * (1 - Math.cos(sw)) * 0.3 : 0), n.z);
+    n.mesh.position.set(n.x, gy - (stepping ? n.mesh.scale.y * HIP_Y * (1 - Math.cos(sw)) * G.dip : 0), n.z);
     n.mesh.rotation.y = n.h;
-    n.mesh.rotation.z = stepping ? Math.sin(n.walkPhase) * 0.04 * spd : 0;
+    n.mesh.rotation.z = stepping ? Math.sin(n.walkPhase) * G.sway * spd : 0;
   }
   for (let i = npcs.length - 1; i >= 0; i--) if (npcs[i]._dead) npcs.splice(i, 1);   // remove anyone killed this frame
   updateRagdolls(dt);
@@ -6146,6 +6228,7 @@ function update(dt) {
     c.mesh.rotation.y = c.h;
     c.mesh.rotation.x = (c.y > 0) ? clamp(-c.vy * 0.02, -0.5, 0.5) : 0;
     if (c.bike) c.mesh.rotation.z = clamp((c.lat || 0) * 0.05, -0.45, 0.45);   // lean into turns
+    if (c.y > 0 || c.mesh.rotation.x || c.mesh.rotation.z || c._blobDirty) { levelBlob(c.mesh, gy); c._blobDirty = c.y > 0 || !!c.mesh.rotation.x || !!c.mesh.rotation.z; }
   }
   // motorcycle rider: a bike isn't a car, so keep the real player visible and mount them on the saddle.
   // Jet skis reuse the same saddle pose — their seat height rides the bobbing hull instead of the ground.
