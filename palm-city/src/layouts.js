@@ -193,8 +193,11 @@ function kidsRoom(ctx, k) {
   // building blocks, a toy car and a ball on the rug
   const cols = [0xe83a3a, 0x3a8ae8, 0x3ae86a, 0xe8d03a];
   for (let i = 0; i < 7; i++) K.box("gloss", 0.09, 0.09, 0.09, 4.8 + (i % 3) * 0.1, 0.095 + Math.floor(i / 3) * 0.09, -8.4 + (i % 2) * 0.02, cols[i % 4], { ry: i * 0.3 });
-  K.box("gloss", 0.22, 0.07, 0.11, 5.9, 0.1, -9.0, 0xe83a3a, { r: 0.02, ry: 0.5 }); K.box("glass", 0.1, 0.05, 0.1, 5.9, 0.15, -9.0, 0x2a3a4a, { ry: 0.5 });
-  for (const [dx, dz] of [[0.07, 0.07], [-0.07, 0.07], [0.07, -0.07], [-0.07, -0.07]]) K.cyl("matte", 0.025, 0.025, 0.02, 5.9 + dx * Math.cos(0.5) + dz * Math.sin(0.5), 0.07, -9.0 - dx * Math.sin(0.5) + dz * Math.cos(0.5), 0x111111, { rz: HP, seg: 8 });
+  K.push(5.9, -9.0, 0.5, 0.04);
+  K.box("gloss", 0.26, 0.06, 0.13, 0, 0.075, 0, 0xe83a3a, { r: 0.02 }); K.box("gloss", 0.13, 0.05, 0.11, -0.02, 0.125, 0, 0xe83a3a, { r: 0.02 });
+  K.box("glass", 0.1, 0.035, 0.115, -0.02, 0.125, 0, 0x2a3a4a); K.box("glow", 0.005, 0.015, 0.03, 0.13, 0.08, 0.035, 0xfff4c0, { em: 1 }); K.box("glow", 0.005, 0.015, 0.03, 0.13, 0.08, -0.035, 0xfff4c0, { em: 1 });
+  for (const [x, z] of [[0.08, 0.07], [-0.08, 0.07], [0.08, -0.07], [-0.08, -0.07]]) { K.cyl("matte", 0.035, 0.035, 0.025, x, 0.035, z, 0x111111, { rx: HP, seg: 12 }); K.cyl("chrome", 0.018, 0.018, 0.027, x, 0.035, z, C.chrome, { rx: HP, seg: 8 }); }
+  K.pop();
   K.sph("gloss", 0.12, 6.4, 0.17, -8.1, 0xe83a3a, { seg: 14 }); K.torus("gloss", 0.12, 0.012, 6.4, 0.17, -8.1, 0xf4f4f0, { rx: 0, ts: 20 });
   P2.poster(K, k.x0 + 0.012, 1.75, -7.6, HP, 0.5, 0.7, 0x1a2a5a, 0xe8c040);
   P2.poster(K, 7.4, 1.75, k.z0 + 0.012, 0, 0.6, 0.8, 0x2a8a5a, 0xe83a3a);
