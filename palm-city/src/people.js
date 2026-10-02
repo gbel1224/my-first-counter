@@ -239,6 +239,7 @@ export function makeCharacter(look) {
   };
   const pose = (x, y, z, yaw, phase, amt, extra) => {
     gait(phase, amt, g, null);
+    g.gripL = g.gripR = g.indexL = g.indexR = undefined; g.gun = null;
     if (extra && extra.override) Object.assign(g, extra.override);
     if (useHuman()) {
       const now = performance.now() / 1000, dt = Math.min(0.1, now - lastT); lastT = now;
@@ -520,8 +521,19 @@ export class Crowd {
   // a person's joint angles this frame
   poseOf(p, g) {
     gait(p.phase, p.pause > 0 || p.knocked > 0 ? 0 : (p.amt || 1), g, p.style);
+    g.gripL = g.gripR = g.indexL = g.indexR = undefined; g.gun = null;
     const y = groundY(p.x, p.z) + (p.y || 0);
     let extra = null;
+    if (p.knocked <= 0) {
+      if (p.fightT > 0) {
+        // squared up: fists raised, a jab when they swing
+        const t = Math.max(0, p.punchT || 0) / 0.26, ext = Math.sin(t * Math.PI);
+        Object.assign(g, { armL: -0.9, elbowL: -1.9, armR: -0.85 - 0.7 * ext, elbowR: -2.0 + 1.8 * ext, twist: -0.25 * ext, gripL: 1, gripR: 1 });
+      } else if (p.aimT > 0) {
+        // shooting: gun arm out, the trigger finger pulls on each shot
+        Object.assign(g, { armR: -1.45, elbowR: -0.1, armL: -1.2, elbowL: -0.5, gun: p.weapon || "pistol", gripR: 0.95, indexR: p.shotT > 0 ? 1 : 0.3, gripL: 0.6 });
+      } else if (p.fear > 0 && p.amt > 1.5) { g.gripL = g.gripR = 0.6; }
+    }
     if (p.knocked > 0) {
       // tumbling in the air, then flat on the ground
       const lying = p.y <= 0.01;

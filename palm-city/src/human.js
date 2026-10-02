@@ -6,6 +6,7 @@
 import * as THREE from "../vendor/three.module.js";
 import { GLTFLoader } from "../vendor/GLTFLoader.js";
 import { clone as skClone } from "../vendor/SkeletonUtils.js";
+import { paint, place, merge } from "./geo.js";
 
 const HIP_Y = 0.97;
 const HEAD_OFF = 0.1;                     // the rig's head joint sits this far below the model's head bone                       // the rig's hip height (people.js RIG.hipY)
@@ -59,6 +60,26 @@ function prepare(kind, scene) {
     C[s + "Leg"] = new THREE.Quaternion().setFromUnitVectors(dir(s + "Leg", s + "Foot"), new THREE.Vector3(0, -1, 0));
     C["side" + s] = sx;
   }
+  // fingers: each one curls toward the palm. The palm's facing comes from the hand's own bones
+  // (wrist, index and pinky knuckles), so it works whatever pose the model was made in
+  const wp = n => bones[n] ? bones[n].getWorldPosition(new THREE.Vector3()) : null;
+  const F = {};
+  for (const sd of ["Left", "Right"]) {
+    const h = wp(sd + "Hand"), i1 = wp(sd + "HandIndex1"), p1 = wp(sd + "HandPinky1") || wp(sd + "HandRing1");
+    if (!h || !i1 || !p1) continue;
+    const sx = C["side" + sd];
+    const palm = new THREE.Vector3().crossVectors(i1.clone().sub(h), p1.clone().sub(h)).multiplyScalar(-sx).normalize();
+    const fingersDir = i1.clone().add(p1).multiplyScalar(0.5).sub(h).normalize();
+    F[sd] = { palm, across: i1.clone().sub(p1).normalize(), fingers: fingersDir };   // for holding things
+    for (const f of ["Index", "Middle", "Ring", "Pinky", "Thumb"]) {
+      const a = wp(sd + "Hand" + f + "1"), b = wp(sd + "Hand" + f + "2");
+      if (!a || !b) continue;
+      const d = b.clone().sub(a).normalize();
+      const curlAxis = new THREE.Vector3().crossVectors(d, palm).normalize();
+      F[sd + f] = f === "Thumb" ? { curl: curlAxis, swing: new THREE.Vector3().crossVectors(d, fingersDir).normalize() } : { curl: curlAxis };
+    }
+  }
+  C.F = F;
   const footY = bones.LeftFoot.getWorldPosition(new THREE.Vector3()).y - box.min.y;
   // shadows only from the big pieces (eyes, teeth, lashes and brows don't need a shadow pass), and a
   // generous bound so people off screen aren't drawn at all
@@ -79,6 +100,48 @@ function prepare(kind, scene) {
 // which rig side each model side is: the rig's "L" limbs sit on -x, the model's anatomical left on +x
 function sideMap(C) { return C.sideLeft < 0 ? { L: "Left", R: "Right" } : { L: "Right", R: "Left" }; }
 
+// guns, in the hand's frame: the grip at the origin, barrel forward along -y, sights up along +z
+const _gs = new THREE.Vector3(), _gm = new THREE.Matrix4(), _gv1 = new THREE.Vector3(), _gv2 = new THREE.Vector3(), _gv3 = new THREE.Vector3(), _gv4 = new THREE.Vector3();
+const GUNGEO = {};
+let GUNMAT = null;
+function gunMaterial() { return GUNMAT || (GUNMAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.55 })); }
+function gunGeometry(id) {
+  if (GUNGEO[id]) return GUNGEO[id];
+  const box = (w, l, h, x, y, z, col, rx = 0) => place(paint(new THREE.BoxGeometry(w, l, h), col), x, y, z, rx);
+  const cyl = (r, l, y, z, col) => place(paint(new THREE.CylinderGeometry(r, r, l, 10), col), 0, y, z);
+  const BLK = 0x1c1d20, MET = 0x3a3c40, WOOD = 0x5a3a22, OLIVE = 0x4a5236;
+  let p;
+  if (id === "pistol") p = [box(0.03, 0.19, 0.035, 0, -0.05, 0.045, MET), box(0.028, 0.045, 0.11, 0, 0.012, -0.01, BLK, 0.25), box(0.006, 0.04, 0.025, 0, -0.025, 0.012, BLK)];
+  else if (id === "smg") p = [box(0.04, 0.26, 0.06, 0, -0.06, 0.05, BLK), box(0.03, 0.04, 0.1, 0, 0.0, -0.01, BLK, 0.2), box(0.025, 0.035, 0.16, 0, -0.07, -0.04, MET), cyl(0.01, 0.08, -0.22, 0.06, MET)];
+  else if (id === "shotgun") p = [cyl(0.014, 0.62, -0.3, 0.05, MET), cyl(0.012, 0.5, -0.24, 0.025, MET), box(0.04, 0.12, 0.05, 0, -0.17, 0.02, WOOD), box(0.035, 0.36, 0.06, 0, 0.17, 0.01, WOOD, -0.12), box(0.03, 0.04, 0.08, 0, 0.0, -0.01, WOOD, 0.3)];
+  else if (id === "rifle" || id === "sniper") {
+    const L = id === "sniper" ? 0.62 : 0.42;
+    p = [box(0.045, 0.3, 0.07, 0, -0.08, 0.05, BLK), cyl(0.011, L, -0.23 - L / 2, 0.06, MET), box(0.03, 0.05, 0.1, 0, 0.0, -0.01, BLK, 0.25), box(0.04, 0.26, 0.07, 0, 0.2, 0.03, id === "sniper" ? OLIVE : BLK),
+      id === "sniper" ? cyl(0.018, 0.22, -0.08, 0.11, BLK) : box(0.025, 0.05, 0.13, 0, -0.14, -0.03, BLK, -0.1)];
+  } else if (id === "minigun") p = [...[0, 1, 2, 3, 4, 5].map(k => place(paint(new THREE.CylinderGeometry(0.012, 0.012, 0.62, 6), MET), Math.cos(k) * 0.03, -0.38, 0.05 + Math.sin(k) * 0.03)), box(0.12, 0.3, 0.13, 0, -0.02, 0.04, BLK), box(0.03, 0.05, 0.1, 0, 0.06, -0.04, BLK)];
+  else if (id === "rpg" || id === "gl") p = [cyl(id === "rpg" ? 0.045 : 0.035, id === "rpg" ? 0.95 : 0.5, -0.12, 0.1, OLIVE), box(0.03, 0.05, 0.1, 0, 0.0, 0.0, BLK, 0.2), box(0.03, 0.05, 0.1, 0, -0.25, 0.0, BLK, 0.2)];
+  else p = [box(0.03, 0.19, 0.035, 0, -0.05, 0.045, MET), box(0.028, 0.045, 0.11, 0, 0.012, -0.01, BLK, 0.25)];
+  return (GUNGEO[id] = merge(p));
+}
+
+// a finger joint's bend: curled about its own axis toward the palm (see prepare); the thumb also
+// swings in across the palm
+const FINGER = /^(Left|Right)Hand(Thumb|Index|Middle|Ring|Pinky)([123])$/;
+const CURL = [0, 1.3, 1.6, 1.0];                    // per joint, for a full fist
+const _fq = new THREE.Quaternion(), _fq2 = new THREE.Quaternion();
+function fingerBend(F, h, sd, finger, j) {
+  const ax = F[sd + finger];
+  if (!ax) return _fq.identity();
+  if (finger === "Thumb") {
+    const c = h.grip;
+    _fq.setFromAxisAngle(ax.curl, c * (j === 1 ? 0.35 : 0.55) + 0.05);
+    if (j === 1) _fq.premultiply(_fq2.setFromAxisAngle(ax.swing, c * 0.6));
+    return _fq;
+  }
+  let c = finger === "Index" ? h.index : h.grip;
+  if (finger === "Pinky") c = Math.min(1, c * 1.08 + 0.03);
+  return _fq.setFromAxisAngle(ax.curl, c * CURL[j]);
+}
 const rq = (x, y, z) => new THREE.Quaternion().setFromEuler(_e.set(x, y, z, "YXZ"));
 // each model's own skin tone in its texture, so a look's skin colour can be reached by multiplying
 const SKIN_REF = { man: new THREE.Color(0xd2a084), avatarsdk: new THREE.Color(0xc8946e), avaturn: new THREE.Color(0xf0c8b0), mpfb: new THREE.Color(0xf0c8b4) };
@@ -136,6 +199,14 @@ export function makeHuman(look, kind = modelFor(look)) {
       const fore = arm.multiply(rq(g["elbow" + side] || 0, 0, 0));
       A[m + "ForeArm"] = fore.clone().multiply(B.C[m + "ForeArm"]);
       A[m + "Hand"] = A[m + "ForeArm"];
+      // holding a gun: the wrist turns so the palm faces in, as it does around a pistol grip
+      if (side === "R" && g.gun && B.C.F[m]) {
+        const Fh = B.C.F[m], fw = _gv1.copy(Fh.fingers).applyQuaternion(A[m + "Hand"]), pa = _gv2.copy(Fh.palm).applyQuaternion(A[m + "Hand"]);
+        const want = _gv3.set(-B.C["side" + m], 0, 0); want.addScaledVector(fw, -want.dot(fw)).normalize();
+        pa.addScaledVector(fw, -pa.dot(fw)).normalize();
+        const ang = Math.atan2(_gv4.crossVectors(pa, want).dot(fw), pa.dot(want));
+        A[m + "Hand"] = _q2.setFromAxisAngle(fw, ang).multiply(A[m + "Hand"]).clone();
+      }
       const th = g["thigh" + side] || 0, kn = g["knee" + side] || 0;
       const thigh = H.clone().multiply(rq(th, 0, 0));
       A[m + "UpLeg"] = thigh.clone().multiply(B.C[m + "UpLeg"]);
@@ -147,12 +218,19 @@ export function makeHuman(look, kind = modelFor(look)) {
     // world (model-space) orientation of each bone = applied rotation * rest orientation; children
     // without their own rotation inherit the parent's; fingers curl a little, like a relaxed hand
     const W = human._W || (human._W = {}), AP = human._AP || (human._AP = {});
-    const curl = human._curl || (human._curl = { Left: rq(0, 0, -0.32 * B.C.sideLeft), Right: rq(0, 0, -0.32 * B.C.sideRight) });
+    // fingers: how closed each hand is (0 open, 1 a fist), the index finger on its own for a trigger
+    const rigOf = human._rigOf || (human._rigOf = { [S.L]: "L", [S.R]: "R" });
+    const hand = {};
+    for (const m of ["Left", "Right"]) {
+      const rs = rigOf[m], grip = g["grip" + rs] ?? 0.22;
+      hand[m] = { grip, index: g["index" + rs] ?? grip, sx: B.C["side" + m] };
+    }
     for (const r of order) {
       let a = A[r.n];
       if (!a) {
         a = r.pn ? AP[r.pn] : null;
-        if (a && /Hand(Index|Middle|Ring|Pinky)/.test(r.n)) { const sd = r.n.startsWith("Left") ? "Left" : "Right"; a = a.clone().multiply(curl[sd]); }
+        const fm = a && FINGER.exec(r.n);
+        if (fm) a = a.clone().multiply(fingerBend(B.C.F, hand[fm[1]], fm[1], fm[2], +fm[3]));
       }
       AP[r.n] = a || null;
       const w = W[r.n] || (W[r.n] = new THREE.Quaternion());
@@ -160,6 +238,31 @@ export function makeHuman(look, kind = modelFor(look)) {
       // local = parentWorld^-1 * world
       const pw = r.pn ? W[r.pn] : r.pq;
       r.b.quaternion.copy(_q.copy(pw).invert().multiply(w));
+    }
+    // a gun in the right hand
+    const gid = g.gun || null;
+    if (gid !== human._gunId) {
+      if (human._gun) { human._gun.parent.remove(human._gun); human._gun = null; }
+      human._gunId = gid;
+      if (gid && gid !== "fists") { human._gun = new THREE.Mesh(gunGeometry(gid), gunMaterial()); human._gun.matrixAutoUpdate = false; human._gun.castShadow = true; bones[S.R + "Hand"].add(human._gun); }
+    }
+    if (human._gun) {
+      // the gun lies along the forearm, its sights on the thumb side, its grip in the palm. The
+      // hand's real directions now = its bone's turn since rest applied to the rest directions
+      const hb = bones[S.R + "Hand"], Fh = B.C.F[S.R], rr = human._handRest || (human._handRest = order.find(r => r.n === S.R + "Hand"));
+      const turn = _q.copy(W[S.R + "Hand"]).multiply(_q2.copy(rr.wq).invert());
+      const fwd = _gv1.copy(Fh.fingers).applyQuaternion(turn), palm = _gv3.copy(Fh.palm).applyQuaternion(turn);
+      const up = _gv2.set(0, 1, 0).addScaledVector(fwd, -fwd.y);
+      if (up.lengthSq() < 1e-4) up.set(0, 0, 1); up.normalize();
+      const back = fwd.clone().negate(), side = _gv4.crossVectors(back, up);   // a right-handed frame: (side, -fwd, up) = (x, y, z)
+      _gm.makeBasis(side, back, up);
+      _q.setFromRotationMatrix(_gm).premultiply(_q2.setFromAxisAngle(_v2.set(0, 1, 0), yaw));
+      root.updateMatrixWorld(true);
+      const hp = hb.getWorldPosition(_v), hs = human.look.h || 1;
+      const off = _v2.copy(fwd).multiplyScalar(0.06).addScaledVector(palm, 0.03).addScaledVector(up, -0.02).multiplyScalar(hs).applyAxisAngle(_gv4.set(0, 1, 0), yaw);
+      // as a child of the hand bone: local = hand^-1 * where it should be
+      _gm.compose(hp.add(off), _q, _gs.set(hs, hs, hs));
+      human._gun.matrix.copy(hb.matrixWorld).invert().multiply(_gm);
     }
     // the eyes follow their gaze
     if (face && bones.LeftEye) {

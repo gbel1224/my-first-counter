@@ -125,8 +125,11 @@ export function makeGangs(g) {
       if (d > keep) { const sp = p.boss ? 2.6 : 3.6; p.x += dx / d * sp * dt; p.z += dz / d * sp * dt; p.amt = 1.4; const q = g.collider.resolve(p.x, p.z, 0.4); p.x = q.x; p.z = q.z; }
       else p.amt = 0;
       p.shootCD -= dt;
+      if (p.shotT > 0) p.shotT -= dt;
+      p.aimT = d < 45 ? 0.5 : Math.max(0, (p.aimT || 0) - dt);   // gun out when you're close
+      if (p.boss) p.weapon = "smg";
       if (p.shootCD <= 0 && d < 38 && g.crime.los(p.x, p.z, P.x, P.z)) {
-        p.shootCD = (p.boss ? 0.5 : 1.1) + r() * 0.8;
+        p.shootCD = (p.boss ? 0.5 : 1.1) + r() * 0.8; p.shotT = 0.12;
         g.fx.muzzle(p.x + dx / d * 0.6, 1.35, p.z + dz / d * 0.6, dx / d, dz / d);
         g.fx.tracer(p.x, 1.35, p.z, P.x + (r() - 0.5) * 2, 1.1, P.z + (r() - 0.5) * 2);
         g.sound("gun", 0.35);
@@ -135,7 +138,7 @@ export function makeGangs(g) {
       }
     } else {
       // loiter near home
-      p.amt = 0.6;
+      p.amt = 0.6; p.aimT = 0;
       const hx = p.home.x - p.x, hz = p.home.z - p.z;
       if (hx * hx + hz * hz > 400) p.yaw = Math.atan2(hx, hz);
       else if (r() < dt * 0.3) p.yaw += (r() - 0.5) * 2;

@@ -33,6 +33,9 @@ function frame(ts) {
     gait(ph, P.p === "walk" ? 1 : P.p === "run" ? 2 : 0.04, g);
     if (P.p === "sit") Object.assign(g, { thighL: -1.5, thighR: -1.5, kneeL: 1.5, kneeR: 1.5, armL: -0.35, armR: -0.3, elbowL: -1.05, elbowR: -1.1, lean: -0.05 });
     if (P.p === "punch") Object.assign(g, { armR: -1.55, elbowR: -0.1, armL: -0.9, elbowL: -1.8, lean: 0.15, twist: 0.3 });
+    if (P.p === "fist") Object.assign(g, { armL: -0.9, elbowL: -1.9, armR: -0.8, elbowR: -2.0, gripL: 1, gripR: 1 });
+    if (P.p === "open") Object.assign(g, { armL: -0.9, elbowL: -1.2, armR: -0.8, elbowR: -1.2, gripL: 0, gripR: 0 });
+    if (P.p.startsWith("aim")) Object.assign(g, { armR: -1.45, elbowR: -0.1, armL: -1.2, elbowL: -0.5, gripR: 0.95, indexR: P.p.endsWith("shoot") ? 1 : 0.3, gripL: 0.8, gun: q.get("gun") || "pistol" });
     if (P.p === "phone") Object.assign(g, { armR: -2.6, elbowR: -2.3, armL: -0.2 });
     if (P.p === "lie") { ex = { tilt: -1.45 }; Object.assign(g, { bob: -0.72, thighL: 0, thighR: 0, kneeL: 0.1, kneeR: 0.1, armL: 0, armR: 0, elbowL: -0.2, elbowR: -0.2, lean: 0 }); }
     P.face.base = (q.get("e") || "happy").split(",")[people.indexOf(P) % (q.get("e") || "happy").split(",").length]; if (q.get("talk")) P.face.talk = 1; tickFace(P.face, 0.016, t);
@@ -42,7 +45,7 @@ function frame(ts) {
     // a grid of face close-ups, one per person
     r.setScissorTest(true); const n = people.length, w = W / n;
     people.forEach((P, i) => {
-      const hb = P.h.bones.Head; const hp = hb.getWorldPosition(new THREE.Vector3());
+      const hb = q.get("hand") ? P.h.bones[q.get("hand")] : P.h.bones.Head; const hp = hb.getWorldPosition(new THREE.Vector3());
       const fc = new THREE.PerspectiveCamera(20, w / Hh, 0.02, 50); const yw = +(q.get("fyaw") || 0.35), d = +(q.get("fd") || 0.75);
       fc.position.set(hp.x + Math.sin(yw) * d, hp.y + 0.09, hp.z + Math.cos(yw) * d); fc.lookAt(hp.x, hp.y + 0.07, hp.z);
       r.setViewport(i * w, 0, w, Hh); r.setScissor(i * w, 0, w, Hh); r.render(scene, fc);
@@ -51,5 +54,6 @@ function frame(ts) {
   window.__frames = (window.__frames || 0) + 1;
   if (!(q.get("still") && window.__frames > 8)) requestAnimationFrame(frame);
 }
+window.__people = people; window.__THREE = THREE;
 requestAnimationFrame(frame);
 </script></body></html>

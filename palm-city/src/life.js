@@ -233,7 +233,8 @@ export function makeLife(scene, g) {
       const dx = g.P.x - q.x, dz = g.P.z - q.z, d = Math.hypot(dx, dz) || 1;
       q.yaw = Math.atan2(dx, dz);
       if (d > 1.1) { q.x += dx / d * 3.2 * dt; q.z += dz / d * 3.2 * dt; q.amt = 1.5; }
-      else { q.amt = 0; q.swing = (q.swing || 0) - dt; if (q.swing <= 0 && !g.P.car) { q.swing = 0.9 + r() * 0.5; g.crime.hurt(6); g.sound("door", 0.4, 1.6); } }
+      else { q.amt = 0; q.swing = (q.swing || 0) - dt; if (q.swing <= 0 && !g.P.car) { q.swing = 0.9 + r() * 0.5; q.punchT = 0.26; g.crime.hurt(6); g.sound("door", 0.4, 1.6); } }
+      if (q.punchT > 0) q.punchT -= dt;
       q.phase += dt * 3;
     };
   }
