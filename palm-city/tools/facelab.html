@@ -23,6 +23,9 @@ const beards = (q.get("b") || "full,,goatee,,stubble,mustache,,full,,goatee,,stu
 const chars = exprs.map((e, i) => {
   let s = 1234 + i * 977; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
   const look = randomLook(rnd); look.beard = beards[i % beards.length] || null; look.long = !look.beard && i % 2 === 1; look.bald = !look.beard && i % 5 === 4; look.mood = e; look.h = 1; look.bulk = 1;
+  const styles = (q.get("s") || "").split(","); if (styles[i]) { look.hairStyle = styles[i]; look.long = ["long", "bob", "bun", "pony"].includes(styles[i]); look.bald = false; }
+  const skins = (q.get("k") || "").split(","); if (skins[i]) { look.skin = parseInt(skins[i], 16); look.hs = undefined; }
+  look.fv = null;
   const ch = makeCharacter(look); scene.add(ch.group);
   return { ch, e, x: i * 2 };
 });
