@@ -286,6 +286,7 @@ function haptics(dt) {
 const interior = makeInterior(scene, {
   st, sky, get hud() { return hud; }, toast: (m, t) => hud.toast(m, t), sound: (k, v) => AudioSys.play(k, v), save: () => writeSave(),
   venueAction: (kind, site) => venueAction(kind, site), player: () => P,
+  renderer: R.renderer, fx, indoor: m => AudioSys.indoor(m), beat: () => AudioSys.beat(),
   sleep: () => { sky.set(0.3); settings.time = "0.3"; crime.S.health = 100; hud.banner("GOOD MORNING", "You slept like a baby · game saved", "", 2.4); AudioSys.play("jingle", 0.5); writeSave(); },
 });
 // what you can do inside a venue, at the counter
@@ -296,6 +297,7 @@ function venueAction(kind, site) {
   else if (kind === "drink") { if (pay(25)) { crime.S.health = Math.min(100, crime.S.health + 15); rig.shake = Math.max(rig.shake, 0.15); hud.toast(pick(["🍹 Cheers!", "🍸 On the house? Nope. $25.", "🥂 The night is young"])); } }
   else if (kind === "heal") { if (crime.S.health >= 100) hud.toast("🩺 \"You're in great shape. Next!\""); else if (pay(120)) { crime.S.health = 100; hud.toast("🩺 All patched up"); } }
   else if (kind === "browse") hud.toast(pick(["🖼 \"Sunset Over Nothing\" · $40,000. You keep walking.", "🖼 A single red square. The card says it's about loss.", "🖼 It's a palm tree. It's very good.", "🗿 The gold one is for sale. Everything's for sale."]), 3.2);
+  else if (kind === "pool") hud.toast(pick(["🎱 Clean break. Two stripes down.", "🎱 Eight ball, corner pocket. Called it.", "🎱 You scratch. Nobody saw that."]), 3);
   else if (kind === "snack") { crime.S.health = Math.min(100, crime.S.health + 25); hud.toast(pick(["🥪 A sandwich. Life is good.", "🍎 Healthy choice", "🧃 Juice box. No regrets."]) + " · +25 health"); AudioSys.play("blip", 0.4); }
   else if (kind === "wash") hud.toast(pick(["🧼 Squeaky clean", "🚿 You look like a new person", "🪞 Looking sharp"]));
   else if (kind === "dance") { P.danceT = 6; hud.toast(pick(["🕺 Nobody's watching. Everybody's watching.", "💃 The DJ nods at you", "🕺 Moves like that should be illegal"]), 3); }

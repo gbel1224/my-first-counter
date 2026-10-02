@@ -3,6 +3,7 @@
 // metres: x across, z from back (−) to the street (+), the front door on the street wall.
 // Links join two rooms: a hinged door, an open arch, a serving hatch, a glass window, or fully open.
 import * as F from "./furniture.js";
+import * as DC from "./decor.js";
 
 const { C } = F;
 const PI = Math.PI, HP = Math.PI / 2;
@@ -19,14 +20,29 @@ function livingSet(ctx, cx, cz, dir, d) {
 }
 function tvWall(ctx, x, z, ry, d) {
   if (!d.tv) return;
-  ctx.P(x, z, ry, () => { const s = F.tvUnit(ctx.K, 2.0, { wood: d.tv }); ctx.screen(x, s.y, z, ry, s.w - 0.06, s.h - 0.06, s.z + 0.03); });
+  ctx.P(x, z, ry, () => { const s = F.tvUnit(ctx.K, 2.0, { wood: d.tv }); ctx.tv(x + Math.sin(ry) * s.z, s.y, z + Math.cos(ry) * s.z, ry, s.w - 0.06, s.h - 0.06, "sport"); });
 }
 function lampAt(ctx, x, z, d) { if (d.lamp) ctx.P(x, z, 0, () => F.floorLamp(ctx.K, d.lamp)); }
 function plantAt(ctx, x, z, d, s = 1) { if (d.plant) ctx.P(x, z, 0, () => F.plant(ctx.K, d.plant, { s })); }
-function artAt(ctx, x, z, ry, d, w = 1.4, h = 0.95) { if (d.art !== null) ctx.painting(x, 1.65, z, ry, w, h, d.art); }
+function artAt(ctx, x, z, ry, d, w = 1.4, h = 0.95, y = 1.65) { if (d.art !== null) ctx.painting(x, y, z, ry, w, h, d.art); }
+// the kitchen details every home gets: subway-tile splashback, microwave, toaster, a pot on the hob, a clock
+function kitchenBits(ctx, x0, zRun, len, clockZ) {
+  const { K } = ctx;
+  ctx.paint("kitchen", 0xffffff, 0, "subway", { backsplash: true, side: "x0" });
+  K.push(x0 + 0.34, zRun - len / 2 + 1.35, Math.PI / 2, 0.92); DC.microwave(K); K.pop();
+  K.push(x0 + 0.3, zRun - len / 2 + 1.95, Math.PI / 2, 0.92); DC.toaster(K); K.pop();
+  DC.stockPot(K, x0 + 0.32, 0.93, zRun + len / 2 - 0.84);
+  ctx.steam(x0 + 0.32, 1.25, zRun + len / 2 - 0.84);
+  K.push(x0 + 0.02, clockZ, Math.PI / 2, 2.3); F.wallClock(K); K.pop();
+}
+function bedroomBits(ctx, bx, bz0, side) {
+  const { K } = ctx;
+  DC.photoFrame(K, bx - 1.05, 0.56, bz0 + 0.22, 0.3); DC.photoFrame(K, bx + 1.05, 0.56, bz0 + 0.22, -0.3);
+  ctx.fan(bx, bz0 + 2.3);
+}
 function bathroom(ctx, r, o) {
   const { K } = ctx;
-  ctx.paint(o.key, 0xe8eef0, 1.25, "gloss");
+  ctx.paint(o.key, 0xeef4f6, 1.35, "tile", { color2: 0x6a8aa8 });
   ctx.P(o.tub[0], o.tub[1], o.tub[2], () => F.bathtub(K, 1.7));
   ctx.P(o.wc[0], o.wc[1], o.wc[2], () => F.toilet(K));
   ctx.P(o.sink[0], o.sink[1], o.sink[2], () => F.vanity(K, 0.9));
@@ -53,8 +69,9 @@ export const PLANS = {
     furnish(ctx, d) {
       const { K, R } = ctx;
       const k = R.kitchen, l = R.living, b = R.bedroom;
-      ctx.paint("kitchen", 0xf2f0ea, 0, null, { backsplash: true });
+      kitchenBits(ctx, k.x0, 1.8, 3.0, 0.9);
       ctx.P(k.x0 + 0.32, 1.8, HP, () => F.kitchenRun(K, 3.0, { fronts: 0x3a4a5a }));
+      DC.fruitBowl(K, -3.0, 0.76, 2.3);
       ctx.P(k.x0 + 0.4, 3.85, HP, () => F.fridge(K));
       ctx.P(-3.0, 2.3, 0, () => F.roundTable(K, 0.45));
       ctx.P(-3.0, 1.55, 0, () => F.chair(K)); ctx.P(-3.0, 3.05, PI, () => F.chair(K));
@@ -63,6 +80,7 @@ export const PLANS = {
       tvWall(ctx, l.x1 - 0.22, 2.3, -HP, d);
       lampAt(ctx, 1.4, 0.55, d); plantAt(ctx, l.x1 - 0.35, 0.5, d); artAt(ctx, 4.6, l.z0, 0, d);
       ctx.P(-0.3, l.z1 - 0.17, PI, () => F.bookshelf(K, 0.9, 1.9));
+      ctx.fan(3.2, 2.3);
       ctx.spot(3.3, 3.2, 1.6, "DECORATE", "🎨 Decorate your home", "decorate");
       if (d.bed) ctx.P(-3.0, b.z0 + 1.05, 0, () => F.bed(K, 1.6, 2.05, d.bed));
       ctx.P(-4.15, b.z0 + 0.25, 0, () => F.nightstand(K)); ctx.P(-1.85, b.z0 + 0.25, 0, () => F.nightstand(K));
@@ -70,6 +88,8 @@ export const PLANS = {
       ctx.P(b.x1 - 0.24, -3.0, -HP, () => F.dresser(K, 1.2));
       if (d.rug) ctx.rug(-3.0, -1.2, 2.0, 1.2, d.rug, 0);
       plantAt(ctx, b.x1 - 0.3, b.z1 - 0.3, d, 0.8);
+      bedroomBits(ctx, -3.0, b.z0);
+      K.push(0, b.z0, 0, 0); DC.radiator(K, 1.2); K.pop();
       if (d.bed) ctx.spot(-3.0, -2.3, 1.7, "SLEEP", "🛏 Sleep till morning · heals you and saves", "sleep");
       bathroom(ctx, R.bath, { key: "bath", tub: [4.85, R.bath.z0 + 0.4, 0], wc: [R.bath.x1 - 0.36, -1.3, -HP], sink: [R.bath.x0 + 0.25, -2.9, HP], towel: [R.bath.x1 - 0.02, -2.6, -HP], mat: [3.6, -2.2] });
     },
@@ -93,18 +113,22 @@ export const PLANS = {
     furnish(ctx, d) {
       const { K, R } = ctx;
       const k = R.kitchen, l = R.living, b = R.bedroom, o = R.office;
-      ctx.paint("kitchen", 0xf2f0ea, 0, null, { backsplash: true });
+      kitchenBits(ctx, k.x0, 2.3, 3.4, 4.1);
       ctx.P(k.x0 + 0.32, 2.3, HP, () => F.kitchenRun(K, 3.4, { fronts: 0x2a3a4a, top: C.marble }));
       ctx.P(k.x0 + 0.4, 4.75, HP, () => F.fridge(K));
       ctx.P(-4.2, 2.4, -HP, () => F.kitchenIsland(K, 2.0));
       for (const z of [1.8, 2.4, 3.0]) ctx.P(-3.3, z, -HP, () => F.stool(K, { color: C.charcoal, h: 0.66 }));
       ctx.spot(k.x0 + 0.9, 4.75, 1.2, "SNACK", "🥪 Raid the fridge · heals a little", "snack");
       ctx.P(0.3, 4.3, 0, () => F.diningTable(K, 1.4, 0.8));
-      for (const x of [-0.1, 0.7]) { ctx.P(x, 3.6, 0, () => F.chair(K, { seat: 0x8a7a6a })); ctx.P(x, 5.0, PI, () => F.chair(K, { seat: 0x8a7a6a })); }
+      for (const x of [-0.1, 0.7]) { ctx.P(x, 3.6, 0, () => F.chair(K, { seat: 0x8a7a6a })); ctx.P(x, 5.0, PI, () => F.chair(K, { seat: 0x8a7a6a })); DC.placeSetting(K, x, 0.76, 4.02, 0); DC.placeSetting(K, x, 0.76, 4.58, PI); }
+      ctx.pendant(0.3, 4.3, 0.95, 0xc8a24a);
       livingSet(ctx, 4.2, 2.8, 1, d);
       tvWall(ctx, l.x1 - 0.22, 2.8, -HP, d);
-      ctx.P(5.5, 0.9, -0.6, () => F.armchair(K, d.sofa || 0x6a6e76));
-      lampAt(ctx, 2.4, 1.0, d); plantAt(ctx, l.x1 - 0.4, 5.0, d); artAt(ctx, 5.8, l.z0, 0, d, 1.6, 1.0);
+      ctx.P(3.0, 4.7, 2.3, () => F.armchair(K, d.sofa || 0x6a6e76));
+      ctx.P(5.7, l.z0 + 0.26, 0, () => DC.fireplace(K, 1.8));
+      ctx.fire(5.7, 0.22, l.z0 + 0.4);
+      lampAt(ctx, 2.4, 1.0, d); plantAt(ctx, l.x1 - 0.4, 5.0, d); artAt(ctx, 5.7, l.z0, 0, d, 1.4, 0.8, 2.12);
+      ctx.fan(4.6, 2.8);
       ctx.P(2.15, l.z0 + 0.17, 0, () => F.bookshelf(K, 1.2, 2.0));
       ctx.spot(5.0, 3.9, 1.6, "DECORATE", "🎨 Decorate your home", "decorate");
       if (d.bed) ctx.P(-4.2, b.z0 + 1.1, 0, () => F.bed(K, 1.8, 2.1, d.bed));
@@ -113,6 +137,8 @@ export const PLANS = {
       ctx.P(b.x1 - 0.24, -3.6, -HP, () => F.dresser(K, 1.2));
       if (d.rug) ctx.rug(-4.2, -1.9, 2.2, 1.3, d.rug, 0);
       plantAt(ctx, b.x0 + 0.35, b.z1 - 0.35, d, 0.8);
+      bedroomBits(ctx, -4.2, b.z0);
+      ctx.P(-2.1, -0.4, PI, () => DC.fullMirror(K));
       if (d.bed) ctx.spot(-4.2, -2.8, 1.7, "SLEEP", "🛏 Sleep till morning · heals you and saves", "sleep");
       bathroom(ctx, R.bath, { key: "bath", tub: [0.75, R.bath.z0 + 0.4, 0], wc: [R.bath.x0 + 0.36, -2.5, HP], sink: [R.bath.x1 - 0.25, -2.9, -HP], towel: [R.bath.x0 + 0.02, -4.0, HP], mat: [0.75, -3.9] });
       ctx.P(5.0, o.z0 + 0.38, 0, () => F.desk(K, 1.5));
@@ -121,6 +147,8 @@ export const PLANS = {
       ctx.P(o.x0 + 0.3, o.z0 + 0.32, 0, () => F.filingCabinet(K));
       plantAt(ctx, o.x1 - 0.35, o.z1 - 0.35, d, 0.9);
       ctx.rug(5.0, -2.7, 2.0, 1.4, 0x5a4a3a, 0);
+      K.push(4.4, o.z0 + 0.38, 0, 0.765); F.tableLamp(K, 0, 0, 0, 0x2a2a2e); K.pop();
+      ctx.P(o.x0 + 0.3, -1.0, HP, () => DC.coatRack(K));
     },
   },
   house: {
@@ -144,8 +172,9 @@ export const PLANS = {
     furnish(ctx, d) {
       const { K, R } = ctx;
       const k = R.kitchen, l = R.living, m = R.master, o = R.office, la = R.laundry;
-      ctx.paint("kitchen", 0xf2f0ea, 0, null, { backsplash: true });
+      kitchenBits(ctx, k.x0, 3.4, 4.0, 0.9);
       ctx.P(k.x0 + 0.32, 3.4, HP, () => F.kitchenRun(K, 4.0, { fronts: 0xe8e4dc, top: 0x2a2a2e }));
+      ctx.P(-2.4, k.z1 - 0.18, PI, () => DC.wineRack(K, 0.8));
       ctx.P(k.x0 + 0.4, 6.0, HP, () => F.fridge(K));
       ctx.P(-6.0, 2.6, -HP, () => F.kitchenIsland(K, 2.0));
       for (const z of [2.0, 2.6, 3.2]) ctx.P(-5.1, z, -HP, () => F.stool(K, { color: 0x8a5a3a, h: 0.66 }));
@@ -153,11 +182,16 @@ export const PLANS = {
       ctx.P(-3.2, 4.6, 0, () => F.diningTable(K, 1.8, 0.9, { wood: C.walnut }));
       for (const x of [-3.7, -2.7]) { ctx.P(x, 3.9, 0, () => F.chair(K, { wood: C.walnut, seat: 0xd8cfb8 })); ctx.P(x, 5.3, PI, () => F.chair(K, { wood: C.walnut, seat: 0xd8cfb8 })); }
       ctx.P(-4.45, 4.6, HP, () => F.chair(K, { wood: C.walnut, seat: 0xd8cfb8 })); ctx.P(-1.95, 4.6, -HP, () => F.chair(K, { wood: C.walnut, seat: 0xd8cfb8 }));
-      ctx.pendant(-3.2, 4.6, 0.9);
+      ctx.pendant(-3.7, 4.6, 0.9, 0x2a2a2e); ctx.pendant(-2.7, 4.6, 0.9, 0x2a2a2e);
+      for (const x of [-3.7, -2.7]) { DC.placeSetting(K, x, 0.76, 4.22, 0); DC.placeSetting(K, x, 0.76, 4.98, PI); }
+      DC.fruitBowl(K, -3.2, 0.76, 4.6);
       livingSet(ctx, 4.6, 4.2, 1, d);
       tvWall(ctx, l.x1 - 0.22, 4.2, -HP, d);
-      ctx.P(6.2, 1.9, -0.5, () => F.armchair(K, d.sofa || 0x6a6e76));
-      lampAt(ctx, 3.9, 5.9, d); plantAt(ctx, l.x1 - 0.45, 6.0, d, 1.2); plantAt(ctx, -0.5, 6.0, d, 0.9); artAt(ctx, 7.4, l.z0, 0, d, 1.6, 1.1);
+      ctx.P(4.0, 2.0, 0.8, () => F.armchair(K, d.sofa || 0x6a6e76));
+      ctx.P(7.2, l.z0 + 0.26, 0, () => DC.fireplace(K, 1.8)); ctx.fire(7.2, 0.22, l.z0 + 0.4);
+      ctx.aquarium(4.6, l.z1 - 0.27, PI, 1.4, 0.7, 0.5);
+      lampAt(ctx, 1.2, 5.95, d); plantAt(ctx, l.x1 - 0.45, 6.0, d, 1.2); plantAt(ctx, -0.5, 6.0, d, 0.9); artAt(ctx, 7.2, l.z0, 0, d, 1.4, 0.8, 2.15);
+      ctx.fan(5.5, 3.6);
       ctx.P(1.6, l.z0 + 0.17, 0, () => F.bookshelf(K, 1.2, 2.1)); ctx.P(5.0, l.z0 + 0.17, 0, () => F.bookshelf(K, 1.6, 2.1));
       ctx.spot(5.5, 3.0, 1.8, "DECORATE", "🎨 Decorate your home", "decorate");
       if (d.bed) ctx.P(-5.5, m.z0 + 1.1, 0, () => F.bed(K, 1.9, 2.1, d.bed));
@@ -167,6 +201,8 @@ export const PLANS = {
       ctx.P(-2.8, -1.5, -2.4, () => F.armchair(K, 0x8a6a5a));
       if (d.rug) ctx.rug(-5.5, -3.0, 2.4, 1.5, d.rug, 0);
       plantAt(ctx, m.x0 + 0.4, m.z1 - 0.4, d);
+      bedroomBits(ctx, -5.5, m.z0);
+      K.push(-5.5, m.z0, 0, 0); DC.radiator(K, 1.6); K.pop();
       if (d.bed) ctx.spot(-5.5, -3.0, 1.8, "SLEEP", "🛏 Sleep till morning · heals you and saves", "sleep");
       ctx.P(la.x0 + 0.32, -1.6, HP, () => F.washer(K)); ctx.P(la.x0 + 0.32, -0.9, HP, () => F.washer(K, { dryer: true }));
       ctx.P(la.x1 - 0.25, -1.3, -HP, () => F.shelfUnit(K, 1.2, { h: 1.8 }));
@@ -177,8 +213,12 @@ export const PLANS = {
       ctx.P(o.x1 - 0.45, -3.2, -HP, () => F.sofa(K, 2.0, 0x4a5a6a, { pillows: true, accent: 0xc8a24a }));
       ctx.P(o.x1 - 0.3, o.z0 + 0.32, 0, () => F.filingCabinet(K));
       ctx.P(7.3, -1.0, 0, () => F.safe(K));
-      ctx.rug(5.0, -3.2, 2.4, 1.6, 0x6a2a2a, 0);
+      ctx.rug(5.0, -2.9, 3.6, 2.4, 0x6a2a2a, 0);
+      ctx.P(5.0, -2.9, HP, () => DC.poolTable(K));
+      ctx.pendant(4.4, -2.9, 1.1, 0x1a4a2a); ctx.pendant(5.6, -2.9, 1.1, 0x1a4a2a);
       plantAt(ctx, o.x0 + 0.4, o.z1 - 0.4, d);
+      K.push(4.3, o.z0 + 0.38, 0, 0.765); F.tableLamp(K, 0, 0, 0, 0x1a4a2a); K.pop();
+      ctx.spot(5.0, -1.3, 1.3, "SHOOT POOL", "🎱 Rack 'em up", "pool");
     },
   },
 
@@ -188,7 +228,7 @@ export const PLANS = {
   food: {
     W: 16, D: 12, H: 3.2, door: 5.5, wall: 0xf0e6d4,
     rooms: {
-      dining: { r: [-8, -2, 8, 6], floor: "checker", light: [0xffe8c8, 30], ceil: "none", name: "Dining room" },
+      dining: { r: [-8, -2, 8, 6], floor: "checker", light: [0xffe8c8, 20], ceil: "none", name: "Dining room" },
       kitchen: { r: [-8, -6, 3, -2], floor: "quarry", light: [0xf4f8ff, 26], ceil: "fluoro", name: "Kitchen" },
       restroom: { r: [3, -6, 8, -2], floor: "tile", light: [0xf4f8ff, 14], ceil: "round", name: "Restrooms" },
     },
@@ -200,15 +240,16 @@ export const PLANS = {
     furnish(ctx) {
       const { K, R, brand, label } = ctx;
       const dn = R.dining, kt = R.kitchen, rr = R.restroom, pizza = label.includes("PIZZA");
-      ctx.paint("dining", 0xffffff, 1.1, "gloss", { color2: brand });
-      ctx.paint("kitchen", 0xf4f4f0, 1.6, "gloss");
-      ctx.paint("restroom", 0xdce6ea, 1.4, "gloss");
+      ctx.paint("dining", 0xffffff, 0, "brick", { accentWall: "back" });
+      ctx.paint("dining", 0xffffff, 1.1, "subway", { color2: brand, layer: 1 });
+      ctx.paint("kitchen", 0xffffff, 2.0, "tile");
+      ctx.paint("restroom", 0xdce6ea, 0, "tile");
       // counter with the staff lane behind it, soda machine and menus
       ctx.P(-2.0, -0.7, 0, () => F.serviceCounter(K, 5.0, brand));
       K.block(-4.5, dn.z0, 0.5, -1.0);
       ctx.P(0.55, dn.z0 + 0.35, 0, () => F.prepTable(K, 1.0));
       ctx.P(0.55, dn.z0 + 0.3, 0, () => F.sodaFountain(K));
-      ctx.npc(-3.0, -1.5, 0, "stand", { shirt: brand, pants: 0x2a2a2e });
+      ctx.npc(-3.0, -1.5, 0, "stand", { shirt: brand, pants: 0x2a2a2e }, [[-3.2, -1.5, 0], [-0.9, -1.45, 0.4], [-3.8, -1.5, 0]], "wipe");
       ctx.menu(-2.0, 2.62, dn.z0 + 0.01, 0, 3.0, 0.95);
       ctx.poster(-5.3, 1.9, dn.z0 + 0.01, 0, 1.3, 0.9, pizza ? "HOT & FRESH" : "SMASH BURGERS", brand);
       ctx.poster(2.2, 1.9, dn.z0 + 0.01, 0, 1.3, 0.9, pizza ? "SLICE $3" : "COMBO $12", brand);
@@ -223,7 +264,12 @@ export const PLANS = {
         ctx.K.cyl("gloss", 0.03, 0.03, 0.14, x + 0.4, 0.83, z - 0.1, 0xc82a2a, { seg: 8 });
         ctx.K.cyl("gloss", 0.03, 0.03, 0.14, x + 0.45, 0.83, z + 0.02, 0xe8c020, { seg: 8 });
       }
-      ctx.npc(-6.3, 0.52, 0, "sit"); ctx.npc(-3.3, 5.3, PI, "sit");
+      ctx.npc(-6.3, 0.52, 0, "sit"); ctx.npc(-3.3, 5.3, PI, "sit"); ctx.npc(-3.3, 3.5, 0, "sit");
+      for (const [x, z] of [[-6.3, 1.4], [-3.3, 1.4], [-6.3, 4.4], [-3.3, 4.4]]) { DC.placeSetting(K, x - 0.3, 0.76, z - 0.2, 0); DC.placeSetting(K, x + 0.3, 0.76, z + 0.2, PI); }
+      ctx.tv(dn.x1, 2.25, 0.6, -HP, 1.5, 0.84, "sport");
+      K.push(dn.x1 - 0.06, 0.6, -HP, 1.8); K.box("gloss", 1.6, 0.94, 0.06, 0, 0.45, 0, 0x111111, { r: 0.01 }); K.pop();
+      ctx.P(dn.x1 - 0.32, 2.3, -HP, () => DC.jukebox(K));
+      ctx.P(dn.x1 - 0.25, 4.3, -HP, () => DC.trashBin(K));
       for (const [x, z] of [[1.0, 2.2], [3.0, 2.2], [1.0, 4.4], [3.0, 4.4]]) {
         ctx.P(x, z, 0, () => F.roundTable(K, 0.36, { top: 0xe8e4dc }));
         ctx.P(x - 0.6, z, HP, () => F.chair(K, { wood: F.C.black, seat: brand })); ctx.P(x + 0.6, z, -HP, () => F.chair(K, { wood: F.C.black, seat: brand }));
@@ -233,13 +279,16 @@ export const PLANS = {
       ctx.P(dn.x1 - 0.05, 3.2, -HP, () => F.wallClock(K), 2.2);
       ctx.neon(dn.x0 + 0.01, 2.0, 3.0, HP, pizza ? "PIZZA" : "BURGERS", brand);
       // the kitchen: oven or griddle & fryers, prep table, sink run, walk-in fridge, dry store
-      if (pizza) ctx.P(-4.8, kt.z0 + 0.72, 0, () => F.pizzaOven(K));
-      else { ctx.P(-5.3, kt.z0 + 0.36, 0, () => F.griddle(K, 1.2)); ctx.P(-3.9, kt.z0 + 0.36, 0, () => F.fryer(K, 0.9)); }
+      if (pizza) { ctx.P(-4.8, kt.z0 + 0.72, 0, () => F.pizzaOven(K)); ctx.fire(-4.8, 0.98, kt.z0 + 1.35); }
+      else { ctx.P(-5.3, kt.z0 + 0.36, 0, () => F.griddle(K, 1.2)); ctx.P(-3.9, kt.z0 + 0.36, 0, () => F.fryer(K, 0.9)); ctx.steam(-5.3, 1.05, kt.z0 + 0.4); ctx.steam(-3.9, 1.1, kt.z0 + 0.4); }
+      DC.stockPot(K, 0.9, 0.93, kt.z0 + 0.36); ctx.steam(0.9, 1.25, kt.z0 + 0.36);
+      K.push(kt.x1 - 0.01, -3.0, -HP, 0); DC.extinguisher(K); K.pop();
+      K.push(-1.0, kt.z1 - 0.01, PI, 0); DC.noticeBoard(K, 1.0); K.pop();
       ctx.P(0.2, kt.z0 + 0.34, 0, () => F.kitchenRun(K, 3.0, { fronts: 0xb8bcc2, top: 0xc8ccd0 }));
       ctx.P(2.4, kt.z0 + 0.4, 0, () => F.fridge(K));
       ctx.P(-2.5, -3.9, 0, () => F.prepTable(K, 1.6));
       ctx.P(kt.x0 + 0.23, -3.9, HP, () => F.shelfUnit(K, 1.6));
-      ctx.npc(-4.6, -3.95, PI, "stand", { shirt: 0xf4f4f0, pants: 0x2a2a2e });
+      ctx.npc(-4.6, -3.95, PI, "stand", { shirt: 0xf4f4f0, pants: 0x2a2a2e }, [[-4.6, -3.95, PI], [-2.5, -3.2, PI], [0.2, -4.6, PI]], "cook");
       // restrooms: three stalls, a row of sinks
       const stall = 0xb8c4cc, sz = rr.z0 + 1.55;
       for (const x of [4.45, 5.95]) { K.box("gloss", 0.03, 1.7, 1.5, x, 1.0, rr.z0 + 0.75, stall, { r: 0.01 }); K.box("chrome", 0.04, 0.15, 0.04, x, 0.08, sz - 0.1, 0xd0d4d8); K.block(x - 0.03, rr.z0, x + 0.03, sz); }
@@ -275,7 +324,8 @@ export const PLANS = {
     furnish(ctx) {
       const { K, R } = ctx;
       const h = R.hall, f = R.foyer, b = R.bar, v = R.vip, bk = R.back;
-      ctx.paint("vip", 0x3a1020, 0); ctx.paint("foyer", 0x241a14, 0); ctx.paint("back", 0x6a6a70, 0);
+      ctx.paint("hall", 0x6a5656, 0, "brick"); ctx.paint("bar", 0x8a6a5a, 0, "brick");
+      ctx.paint("vip", 0x6a2438, 0, "damask"); ctx.paint("foyer", 0xffffff, 0, "panel"); ctx.paint("back", 0x9a9ea2, 0, "block");
       ctx.dance(-0.5, 0.5, 7, 0.95);
       ctx.P(-0.5, -5.3, 0, () => F.djBooth(K));
       K.block(-1.9, h.z0, 0.9, -5.75);
@@ -285,7 +335,12 @@ export const PLANS = {
       K.push(-0.5, -3.3, 0, 0); F.trussLights(K, 7, ctx.H - 0.1, [0xff3b8b, 0x3bd0ff, 0xb44bff, 0xffd23b, 0x3bd0ff]); K.pop();
       K.push(-0.5, 4.5, PI, 0); F.trussLights(K, 7, ctx.H - 0.1, [0xb44bff, 0xff3b8b, 0x3bd0ff, 0xff3b8b, 0xffd23b]); K.pop();
       F.mirrorBall(K, -0.5, ctx.H - 0.5, 0.5);
-      for (let i = 0; i < 6; i++) ctx.npc(-2.2 + (i % 3) * 1.7, -0.9 + Math.floor(i / 3) * 2.6, i * 1.3, "dance");
+      ctx.specks(-0.5, ctx.H - 0.6, 0.5, "hall");
+      const cans = [];
+      for (const [tz, flip, cols] of [[-3.3, 1, [0xff3b8b, 0x3bd0ff, 0xb44bff, 0xffd23b, 0x3bd0ff]], [4.5, -1, [0xb44bff, 0xff3b8b, 0x3bd0ff, 0xff3b8b, 0xffd23b]]])
+        cols.forEach((c, i) => cans.push([-0.5 + flip * (-3.5 + (i + 0.5) * 7 / 5), ctx.H - 0.6, tz + 0.1 * flip, c]));
+      ctx.beams(cans);
+      for (let i = 0; i < 9; i++) ctx.npc(-2.4 + (i % 3) * 1.6 + (Math.floor(i / 3) % 2) * 0.5, -1.4 + Math.floor(i / 3) * 1.9, i * 1.3, "dance");
       for (const [x, z] of [[-4.3, -1.6], [3.3, 0.6], [3.3, 5.6]]) { ctx.P(x, z, 0, () => F.roundTable(K, 0.32, { h: 1.05, top: 0x1a1a1c, leg: F.C.chrome })); ctx.K.lathe("glass", [[0.001, 0], [0.035, 0], [0.04, 0.12]], x + 0.1, 1.07, z, 0xff8ab0); }
       ctx.spot(-0.5, 0.5, 2.2, "DANCE", "🕺 Hit the dance floor", "dance");
       ctx.neon(h.x0 + 0.01, 2.6, -2.2, HP, "NEON PALMS", 0xff3b8b);
@@ -301,7 +356,7 @@ export const PLANS = {
       ctx.P(6.2, -2.4, -HP, () => F.barCounter(K, 5.0));
       ctx.P(b.x1 - 0.23, -2.4, -HP, () => F.backBar(K, 5.0));
       K.block(6.5, -4.95, b.x1, 0.15);
-      ctx.npc(7.6, -2.4, -HP, "stand", { shirt: 0x1a1a1a, pants: 0x1a1a1a });
+      ctx.npc(7.6, -2.4, -HP, "stand", { shirt: 0x1a1a1a, pants: 0x1a1a1a }, [[7.6, -3.8, -HP], [7.6, -2.4, -HP], [7.6, -0.6, -HP]], "wipe");
       for (const z of [-4.2, -3.2, -2.2, -1.2, -0.2]) ctx.P(5.35, z, HP, () => F.stool(K, { color: 0x6a1a3a }));
       ctx.npc(5.35, -3.2, HP, "perch"); ctx.npc(5.35, -1.2, HP, "perch");
       ctx.spot(5.1, -2.7, 1.4, "DRINK", "🍹 Order a drink · $25", "drink");
@@ -310,6 +365,7 @@ export const PLANS = {
       ctx.P(v.x0 + 0.46, 4.7, HP, () => F.sofa(K, 2.4, 0x5a1030, { legs: F.C.brass, accent: 0xc8a24a }));
       for (const z of [1.4, 4.7]) { ctx.P(v.x0 + 1.6, z, HP, () => F.coffeeTable(K, 1.0, 0.55, { glass: true })); K.cyl("chrome", 0.12, 0.1, 0.22, v.x0 + 1.6, 0.54, z + 0.2, F.C.chrome, { seg: 12 }); K.lathe("glass", [[0.001, 0], [0.04, 0], [0.04, 0.2], [0.012, 0.3]], v.x0 + 1.6, 0.5, z + 0.2, 0x2a5a2a); }
       ctx.npc(v.x0 + 0.5, 4.2, HP, "sit"); ctx.npc(v.x0 + 0.5, 1.9, HP, "sit");
+      ctx.P(-7.0, v.z0 + 0.26, 0, () => DC.fireplace(K, 1.6)); ctx.fire(-7.0, 0.22, v.z0 + 0.4);
       F.stanchion(K, -5.3, 1.45); F.stanchion(K, -5.3, 4.15); F.rope(K, -5.3, 4.15, -5.3, 5.5);
       ctx.P(v.x0 + 0.4, v.z1 - 0.4, 0, () => F.plant(K, "palm", { pot: F.C.brass }));
       ctx.spot(v.x0 + 2.2, 3.0, 1.4, "CHILL", "🥂 Kick back in the VIP lounge", "vip");
@@ -325,9 +381,9 @@ export const PLANS = {
   gallery: {
     W: 18, D: 12, H: 4.0, door: 5.5, wall: 0xf4f2ee,
     rooms: {
-      lobby: { r: [2, 0.5, 9, 6], floor: "marble", light: [0xfff4e4, 20], ceil: "spot", name: "Lobby" },
-      hallA: { r: [-9, 0.5, 2, 6], floor: "wood", light: [0xfff4e4, 22], ceil: "none", name: "East gallery" },
-      hallB: { r: [-9, -6, 2, 0.5], floor: "wood", light: [0xfff4e4, 24], ceil: "none", name: "West gallery" },
+      lobby: { r: [2, 0.5, 9, 6], floor: "marble", light: [0xfff4e4, 15], ceil: "spot", name: "Lobby" },
+      hallA: { r: [-9, 0.5, 2, 6], floor: "wood", light: [0xfff4e4, 17], ceil: "none", name: "East gallery" },
+      hallB: { r: [-9, -6, 2, 0.5], floor: "wood", light: [0xfff4e4, 18], ceil: "none", name: "West gallery" },
       office: { r: [2, -6, 9, 0.5], floor: "carpet", light: [0xfff0dc, 16], ceil: "fluoro", name: "Curator's office" },
     },
     links: [
@@ -356,7 +412,8 @@ export const PLANS = {
       for (const [x, k] of [[-5.5, 0], [-1.5, 2]]) { ctx.P(x, 3.2, 0, () => F.plinth(K, 1.0)); K.push(x, 3.2, 0, 0); F.sculpture(K, k, 1.0, k ? 0xe8e4dc : 0xc8a24a); K.pop(); }
       ctx.P(-3.5, 3.4, 0, () => F.bench(K, 1.6, { wood: 0x3a2e24 }));
       K.push(-3.5, 3.3, 0, 0); F.trackLights(K, 9.5, ctx.H - 0.05); K.pop();
-      ctx.npc(-6.9, 4.8, PI, "stand"); ctx.npc(-0.4, 4.9, PI + 0.3, "stand");
+      ctx.npc(-6.9, 4.8, PI, "stand", null, [[-7.0, 4.9, PI], [-3.5, 4.9, PI], [-0.1, 4.9, PI], [-7.2, 1.6, 0]], "look");
+      ctx.npc(-0.4, 4.9, PI + 0.3, "stand", { shirt: 0x6a2a3a }, [[0.0, 4.9, PI], [0.2, 1.6, 0], [-3.5, 4.8, PI]], "look");
       ctx.spot(-3.5, 4.3, 1.6, "ADMIRE", "🖼 Take in the art", "browse");
       // west gallery: big canvases, a roped-off centrepiece
       for (const x of [-7.0, -3.5, 0.0]) art(x, b.z0, 0, 2.0, 1.4);
@@ -368,7 +425,7 @@ export const PLANS = {
       K.block(-4.6, -4.1, -2.4, -1.9);
       ctx.P(-6.6, -3.0, HP, () => F.bench(K, 1.6, { wood: 0x3a2e24 })); ctx.P(-0.4, -3.0, HP, () => F.bench(K, 1.6, { wood: 0x3a2e24 }));
       K.push(-3.5, -1.2, 0, 0); F.trackLights(K, 9.5, ctx.H - 0.05); K.pop(); K.push(-3.5, -4.8, 0, 0); F.trackLights(K, 9.5, ctx.H - 0.05); K.pop();
-      ctx.npc(-6.6, -3.0, HP, "sit"); ctx.npc(0.4, -4.4, PI, "stand");
+      ctx.npc(-6.6, -3.0, HP, "sit"); ctx.npc(0.4, -4.4, PI, "stand", { shirt: 0xe8e0d0 }, [[0.0, -4.8, PI], [-3.5, -4.8, PI], [-7.0, -4.8, PI], [-8.2, -2.8, -HP], [0.9, -2.8, HP]], "look");
       // office: a desk, shipping crates, canvases leaning against the wall
       ctx.P(5.0, o.z0 + 0.38, 0, () => F.desk(K, 1.6));
       ctx.P(5.0, -4.9, PI, () => F.officeChair(K));
@@ -384,9 +441,9 @@ export const PLANS = {
   hospital: {
     W: 18, D: 13, H: 3.1, door: 6.0, wall: 0xe4eef0,
     rooms: {
-      lobby: { r: [0, 1, 9, 6.5], floor: "vinyl", light: [0xf4f8ff, 26], ceil: "panel", name: "Reception" },
-      ward: { r: [-9, -6.5, 0, 6.5], floor: "vinyl", light: [0xf0f6ff, 26], ceil: "panel", name: "Ward A" },
-      exam: { r: [0, -6.5, 4.5, 1], floor: "vinyl", light: [0xf4f8ff, 18], ceil: "panel", name: "Exam room" },
+      lobby: { r: [0, 1, 9, 6.5], floor: "vinyl", light: [0xf4f8ff, 15], ceil: "panel", name: "Reception" },
+      ward: { r: [-9, -6.5, 0, 6.5], floor: "vinyl", light: [0xf0f6ff, 15], ceil: "panel", name: "Ward A" },
+      exam: { r: [0, -6.5, 4.5, 1], floor: "vinyl", light: [0xf4f8ff, 12], ceil: "panel", name: "Exam room" },
       staff: { r: [4.5, -6.5, 9, 1], floor: "tile", light: [0xfff4e4, 16], ceil: "fluoro", name: "Staff room" },
     },
     links: [
@@ -397,7 +454,10 @@ export const PLANS = {
     furnish(ctx) {
       const { K, R } = ctx;
       const lb = R.lobby, w = R.ward, ex = R.exam, sf = R.staff;
-      ctx.paint("lobby", 0xc8dce4, 1.0, "gloss"); ctx.paint("ward", 0xc8dce4, 1.0, "gloss"); ctx.paint("exam", 0xc8dce4, 1.0, "gloss");
+      ctx.paint("lobby", 0xc8dce4, 1.0, "tile", { color2: 0x2e6a8a }); ctx.paint("ward", 0xc8dce4, 1.0, "tile", { color2: 0x2e6a8a }); ctx.paint("exam", 0xc8dce4, 1.0, "tile", { color2: 0x2e6a8a }); ctx.paint("staff", 0xffffff, 0, "subway", { backsplash: true, side: "z0" });
+      ctx.aquarium(0.34, 2.2, HP, 1.4, 0.7, 0.5);
+      ctx.tv(lb.x1, 2.2, 2.6, -HP, 1.2, 0.68, "news");
+      K.push(lb.x1 - 0.06, 2.6, -HP, 1.86); K.box("gloss", 1.3, 0.76, 0.06, 0, 0.34, 0, 0x111111, { r: 0.01 }); K.pop();
       ctx.P(5.5, 2.2, 0, () => F.receptionDesk(K, 2.8, { front: 0xe8eef2, top: 0x4a8aa8 }));
       K.block(4.1, lb.z0, 6.9, 1.8);
       ctx.npc(5.5, 1.5, 0, "stand", { shirt: 0x6ab0c8, pants: 0x6ab0c8 });
@@ -420,7 +480,7 @@ export const PLANS = {
       ctx.P(-3.0, w.z0 + 0.26, 0, () => F.medCabinet(K, 1.4));
       ctx.P(-1.3, -2.0, -HP, () => F.desk(K, 1.3, { wood: 0xe8eef2 }));
       ctx.P(-2.0, -2.0, HP, () => F.officeChair(K, { color: 0x2e6a8a }));
-      ctx.npc(-4.3, 1.6, -HP, "stand", { shirt: 0x6ab0c8, pants: 0x6ab0c8 });
+      ctx.npc(-4.3, 1.6, -HP, "stand", { shirt: 0x6ab0c8, pants: 0x6ab0c8 }, [[-6.2, 3.2, -HP], [-6.2, 0.0, -HP], [-6.2, -3.2, -HP], [-2.6, -2.0, HP], [-4.3, 1.6, -HP]], "stand");
       ctx.spot(-4.5, 0, 1.6, "VISIT", "💐 Check on the patients", "visit");
       // exam room
       ctx.P(1.1, -4.0, 0, () => F.examTable(K));
@@ -437,13 +497,15 @@ export const PLANS = {
       ctx.P(5.8, -1.3, 0, () => F.roundTable(K, 0.45)); ctx.P(5.1, -1.3, HP, () => F.chair(K)); ctx.P(6.5, -1.3, -HP, () => F.chair(K));
       K.push(5.3, sf.z0 + 0.34, 0, 0.93); F.coffeeMachine(K); K.pop();
       ctx.npc(5.1, -1.3, HP, "sit", { shirt: 0x6ab0c8, pants: 0x6ab0c8 });
+      K.push(sf.x0, -2.8, HP, 0); DC.noticeBoard(K, 1.2); K.pop();
+      K.push(lb.x0 + 0.01, 5.8, HP, 0); DC.extinguisher(K); K.pop();
     },
   },
 
   police: {
     W: 18, D: 13, H: 3.1, door: 6.0, wall: 0xd4d8dc,
     rooms: {
-      lobby: { r: [3, 1.5, 9, 6.5], floor: "tile", light: [0xf4f8ff, 22], ceil: "panel", name: "Front desk" },
+      lobby: { r: [3, 1.5, 9, 6.5], floor: "tile", light: [0xf4f8ff, 16], ceil: "panel", name: "Front desk" },
       bullpen: { r: [-9, 1.5, 3, 6.5], floor: "carpet", light: [0xf4f8ff, 26], ceil: "fluoro", name: "Squad room" },
       cells: { r: [-9, -6.5, -1, 1.5], floor: "concrete", light: [0xe8f0f4, 18], ceil: "fluoro", name: "Holding cells" },
       interview: { r: [-1, -6.5, 4, 1.5], floor: "concrete", light: [0xfff0d8, 10], ceil: "none", name: "Interview room" },
@@ -458,7 +520,9 @@ export const PLANS = {
     furnish(ctx) {
       const { K, R } = ctx;
       const lb = R.lobby, bp = R.bullpen, c = R.cells, iv = R.interview, lk = R.lockers;
-      ctx.paint("lobby", 0x2a3a5a, 1.0, "matte"); ctx.paint("cells", 0x9a9ea2, 0); ctx.paint("interview", 0x8a8e92, 0);
+      ctx.paint("lobby", 0xffffff, 1.1, "panel"); ctx.paint("cells", 0x9a9ea2, 0, "block"); ctx.paint("interview", 0x7a7e82, 0, "block"); ctx.paint("lockers", 0xffffff, 1.4, "tile");
+      ctx.tv(lb.x0 + 0.08, 2.3, 5.75, HP, 1.1, 0.62, "news");
+      K.push(lb.x0 + 0.13, 5.75, HP, 1.94); K.box("gloss", 1.2, 0.7, 0.06, 0, 0.36, 0, 0x111111, { r: 0.01 }); K.pop();
       ctx.P(5.3, 2.6, 0, () => F.receptionDesk(K, 2.6, { front: 0x2a3446, top: 0x8a8e94 }));
       K.block(4.0, lb.z0, 6.6, 2.2);
       ctx.npc(5.3, 1.95, 0, "stand", { shirt: 0x1e2a44, pants: 0x1e2a44 });
@@ -473,7 +537,10 @@ export const PLANS = {
         ctx.P(x, z, 0, () => F.desk(K, 1.4, { wood: 0x6a6e74 }));
         ctx.P(x, z + 0.7, PI, () => F.officeChair(K));
       }
-      ctx.npc(-3.8, 3.9, PI, "sit", { shirt: 0x1e2a44, pants: 0x1e2a44 }); ctx.npc(-7.2, 6.0, PI, "sit", { shirt: 0xe8e6e0, pants: 0x2a2a2e });
+      ctx.npc(-3.8, 3.9, PI, "type", { shirt: 0x1e2a44, pants: 0x1e2a44 }); ctx.npc(-7.2, 6.0, PI, "type", { shirt: 0xe8e6e0, pants: 0x2a2a2e }); ctx.npc(-1.2, 6.0, PI, "type", { shirt: 0x1e2a44, pants: 0x1e2a44 });
+      ctx.npc(0.5, 4.6, 0, "stand", { shirt: 0x1e2a44, pants: 0x1e2a44 }, [[0.2, 4.4, PI], [2.3, 5.6, 0], [-5.2, 4.4, -HP], [-7.6, 4.3, -HP]], "phone");
+      K.push(-4.0, bp.z0, 0, 0); DC.noticeBoard(K, 1.6); K.pop();
+      K.push(bp.x1 - 0.01, 2.4, -HP, 0); DC.extinguisher(K); K.pop();
       ctx.P(bp.x0 + 0.05, 4.2, HP, () => F.whiteboard(K, 2.0));
       for (const x of [-8.4, -7.9]) ctx.P(x, bp.z0 + 0.32, 0, () => F.filingCabinet(K));
       ctx.P(2.4, bp.z0 + 0.35, 0, () => F.waterCooler(K));
@@ -520,7 +587,7 @@ export const PLANS = {
     furnish(ctx) {
       const { K, R, brand, label } = ctx;
       const rc = R.reception, op = R.open, bs = R.boss, br = R.breakroom;
-      ctx.paint("reception", brand, 0, null, { accentWall: "back" });
+      ctx.paint("reception", brand, 0, null, { accentWall: "back" }); ctx.paint("boss", 0xffffff, 0, "panel"); ctx.paint("breakroom", 0xffffff, 0, "subway", { backsplash: true, side: "z0" });
       ctx.P(3.8, 1.5, 0, () => F.receptionDesk(K, 2.0));
       K.block(2.8, rc.z0, 4.8, 1.1);
       ctx.npc(3.8, 0.85, 0, "stand");
@@ -529,7 +596,8 @@ export const PLANS = {
       ctx.P(6.6, 1.9, 0, () => F.plant(K, "snake"));
       ctx.spot(3.8, 2.4, 1.4, "ASK", "💼 Talk to the front desk", "office");
       for (const [x, z] of [[-6.0, 1.5], [-1.6, 1.5], [-6.0, 3.8], [-1.6, 3.8]]) { ctx.P(x, z, 0, () => F.desk(K, 1.4)); ctx.P(x, z + 0.7, PI, () => F.officeChair(K)); }
-      ctx.npc(-1.6, 2.2, PI, "sit"); ctx.npc(-6.0, 4.5, PI, "sit");
+      ctx.npc(-1.6, 2.2, PI, "type"); ctx.npc(-6.0, 4.5, PI, "type");
+      ctx.npc(-3.8, 3.4, 0, "stand", { shirt: 0xe8e0d0 }, [[-3.8, 4.1, 0], [0.8, 4.2, 0], [0.5, 2.8, HP], [-3.8, 2.6, 0]], "phone");
       ctx.P(-3.8, op.z1 - 0.3, 0, () => F.waterCooler(K));
       ctx.P(-3.8, op.z1 - 0.01, PI, () => F.whiteboard(K, 1.8));
       ctx.P(1.4, op.z1 - 0.35, PI, () => F.printer(K));
@@ -544,7 +612,9 @@ export const PLANS = {
       ctx.P(-5.4, -1.3, HP, () => F.coffeeTable(K, 0.9, 0.5));
       ctx.P(-0.5, -4.4, 0, () => F.plant(K, "palm"));
       ctx.P(-0.5, -3.0, -HP, () => F.safe(K));
-      ctx.painting(bs.x1, 1.7, -1.4, -HP, 1.2, 0.8, 7);
+      ctx.painting(bs.x0, 1.85, -1.3, HP, 1.3, 0.75, 7);
+      ctx.aquarium(bs.x1 - 0.27, -1.5, -HP, 1.4, 0.7, 0.5);
+      K.push(-2.9, -3.4, 0, 0.765); F.tableLamp(K, 0, 0, 0, 0x1a4a2a); K.pop();
       ctx.rug(-3.5, -3.0, 3.0, 2.0, 0x6a2a2a, 0);
       // break room
       ctx.P(2.2, br.z0 + 0.34, 0, () => F.kitchenRun(K, 2.8, { fronts: 0xe8e4dc }));
@@ -572,14 +642,14 @@ export const PLANS = {
     furnish(ctx) {
       const { K, R } = ctx;
       const fl = R.floor, of = R.office, sf = R.staff;
-      ctx.paint("floor", 0x6a6e72, 1.2, "matte");
+      ctx.paint("floor", 0xb8b4ac, 0, "block"); ctx.paint("floor", 0x3a5a8a, 1.2, "matte", { layer: 1 }); ctx.paint("staff", 0xffffff, 1.3, "tile");
       ctx.P(-3.5, fl.z0 + 0.6, 0, () => F.palletRack(K, 10.8, 3));
       ctx.P(-3.5, -3.2, 0, () => F.palletRack(K, 10.8, 3));
       ctx.P(-3.5, 0.6, 0, () => F.palletRack(K, 10.8, 3));
       // painted aisle lines and a forklift lane
       for (const z of [-5.0, -1.3, 2.4]) K.box("matte", 12, 0.005, 0.1, -3.5, 0.045, z, 0xe8c020);
       K.box("matte", 0.1, 0.005, 14.5, 2.9, 0.045, 0, 0xe8c020);
-      ctx.P(0.2, 4.2, HP, () => F.forklift(K));
+      ctx.forklift(3.1, -5.8, 1.6);
       for (let i = 0; i < 4; i++) { const x = -9.4 + (i % 2) * 1.3, z = 4.0 + Math.floor(i / 2) * 1.4; ctx.P(x, z, 0, () => F.pallet(K)); F.cardboard(K, 0.5, 0.45, 0.55, x - 0.26, 0.15, z - 0.28); F.cardboard(K, 0.5, 0.45, 0.55, x + 0.26, 0.15, z + 0.2); F.cardboard(K, 0.5, 0.4, 0.55, x, 0.6, z, 0.3); K.block(x - 0.55, z - 0.62, x + 0.55, z + 0.62); }
       F.crate(K, 1.0, -5.0, 0, 5.8, 0.2); F.crate(K, 1.0, -3.8, 0, 5.8, -0.1); F.crate(K, 0.9, -4.4, 1.0, 5.8, 0.15); K.block(-5.6, 5.2, -3.2, 6.4);
       for (const [x, z, c] of [[4.6, -6.6, 0x2a5aa8], [5.3, -6.6, 0xc82a2a], [4.6, -5.9, 0x2a5aa8], [5.3, -5.9, 0x3a7a3a]]) F.barrel(K, x, z, c);
@@ -591,7 +661,10 @@ export const PLANS = {
         K.box("matte", 0.12, 0.3, 3.4, fl.x0 + 0.06, 3.55, z, 0x3a3a3e);
         for (const s of [-1, 1]) K.box("matte", 0.14, 3.6, 0.15, fl.x0 + 0.07, 1.8, z + s * 1.6, 0xe8c020);
       }
-      ctx.npc(1.2, 3.0, HP, "stand", { shirt: 0xe8e020, pants: 0x2a3a52 }); ctx.npc(-8.0, -1.3, 0.5, "stand", { shirt: 0xe87a20, pants: 0x2a3a52 });
+      ctx.npc(1.2, 5.0, HP, "stand", { shirt: 0xe8e020, pants: 0x2a3a52 }, [[1.2, 5.2, HP], [2.5, 2.2], [2.5, -1.3], [-6.0, -1.3, 0], [2.5, -1.3], [2.5, -5.0], [-6.0, -5.0, PI], [2.5, -5.0], [2.5, 2.2]], "look");
+      ctx.npc(-8.0, -1.3, 0.5, "stand", { shirt: 0xe87a20, pants: 0x2a3a52 }, [[-8.0, -1.3, 0], [-9.8, -1.3], [-9.8, 2.4, 0], [-9.8, -1.3]], "phone");
+      K.push(fl.x1 - 0.01, -1.0, -HP, 0); DC.extinguisher(K); K.pop();
+      K.push(of.x0 + 0.02, 6.0, HP, 0); DC.noticeBoard(K, 1.0); K.pop();
       // dispatch office behind glass
       ctx.P(8.5, of.z1 - 0.38, PI, () => F.desk(K, 1.6));
       ctx.P(8.5, of.z1 - 1.1, 0, () => F.officeChair(K));

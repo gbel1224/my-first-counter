@@ -5,22 +5,93 @@
 import * as THREE from "../vendor/three.module.js";
 import { paint, place, merge, vcMaterial, softBox } from "./geo.js";
 
-// surface types: one shared material each
+// surface types: one shared material each. Indoors the scene environment is a probe captured
+// inside the room itself, so reflections and bounce light are the room's own.
 const MATS = {};
+const rnd0 = Math.random;
+function canvas(w, h, draw) {
+  const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+// wall finishes: tiling textures mapped in world space (so every wall piece lines up), tinted by vertex colour
+const FINISH = {
+  plaster: [0.5, (x, w, h) => { x.fillStyle = "#f0f0f0"; x.fillRect(0, 0, w, h); for (let i = 0; i < 3500; i++) { const v = 200 + rnd0() * 55; x.fillStyle = `rgba(${v},${v},${v},.25)`; x.fillRect(rnd0() * w, rnd0() * h, 1 + rnd0() * 3, 1 + rnd0() * 3); } for (let i = 0; i < 40; i++) { x.strokeStyle = `rgba(255,255,255,${rnd0() * 0.15})`; x.lineWidth = 6 + rnd0() * 14; x.beginPath(); const px = rnd0() * w, py = rnd0() * h; x.arc(px, py, 20 + rnd0() * 40, rnd0() * 6, rnd0() * 6 + 1.2); x.stroke(); } }],
+  stripes: [1 / 0.6, (x, w, h) => { for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? "#e8e8e8" : "#ffffff"; x.fillRect(i * w / 8, 0, w / 8, h); } x.fillStyle = "rgba(160,140,100,.35)"; for (let i = 0; i < 8; i++) x.fillRect(i * w / 8 + w / 16 - 1, 0, 2, h); }],
+  damask: [1 / 0.55, (x, w, h) => { x.fillStyle = "#ffffff"; x.fillRect(0, 0, w, h); x.fillStyle = "rgba(90,90,90,.28)"; for (const [cx, cy] of [[w / 4, h / 4], [w * 3 / 4, h * 3 / 4]]) { x.beginPath(); x.moveTo(cx, cy - 50); x.bezierCurveTo(cx + 40, cy - 30, cx + 30, cy + 10, cx, cy + 50); x.bezierCurveTo(cx - 30, cy + 10, cx - 40, cy - 30, cx, cy - 50); x.fill(); x.beginPath(); x.arc(cx, cy - 58, 8, 0, 7); x.fill(); x.beginPath(); x.arc(cx, cy + 58, 8, 0, 7); x.fill(); for (const sd of [-1, 1]) { x.beginPath(); x.ellipse(cx + sd * 34, cy, 10, 22, sd * 0.4, 0, 7); x.fill(); } } }],
+  tile: [1 / 0.6, (x, w, h) => { const n = 4, g = w / n; x.fillStyle = "#b8b8b8"; x.fillRect(0, 0, w, h); for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const v = 238 + rnd0() * 17; x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(i * g + 2, j * g + 2, g - 4, g - 4); x.fillStyle = "rgba(255,255,255,.5)"; x.fillRect(i * g + 4, j * g + 4, g - 12, 3); } }],
+  subway: [1 / 0.6, (x, w, h) => { x.fillStyle = "#a8a8a8"; x.fillRect(0, 0, w, h); const rows = 8, rh = h / rows, bw = w / 2; for (let r = 0; r < rows; r++) for (let c = -1; c < 3; c++) { const px = c * bw + (r % 2) * bw / 2, v = 240 + rnd0() * 15; x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(px + 2, r * rh + 2, bw - 4, rh - 4); x.fillStyle = "rgba(255,255,255,.55)"; x.fillRect(px + 5, r * rh + 4, bw - 14, 3); } }],
+  brick: [1 / 1.3, (x, w, h) => { x.fillStyle = "#b8b0a4"; x.fillRect(0, 0, w, h); const rows = 16, rh = h / rows, bw = w / 4; for (let r = 0; r < rows; r++) for (let c = -1; c < 5; c++) { const px = c * bw + (r % 2) * bw / 2, t = rnd0(); x.fillStyle = `rgb(${150 + t * 50 | 0},${70 + t * 30 | 0},${50 + t * 20 | 0})`; x.fillRect(px + 3, r * rh + 3, bw - 6, rh - 6); for (let k = 0; k < 20; k++) { x.fillStyle = `rgba(0,0,0,${rnd0() * 0.15})`; x.fillRect(px + 3 + rnd0() * (bw - 8), r * rh + 3 + rnd0() * (rh - 8), 3, 2); } x.fillStyle = "rgba(255,255,255,.08)"; x.fillRect(px + 3, r * rh + 3, bw - 6, 3); } }],
+  panel: [1 / 1.2, (x, w, h) => { const n = 6, bw = w / n; for (let i = 0; i < n; i++) { const t = rnd0(); x.fillStyle = `rgb(${150 + t * 30 | 0},${104 + t * 22 | 0},${66 + t * 14 | 0})`; x.fillRect(i * bw, 0, bw, h); for (let k = 0; k < 18; k++) { x.strokeStyle = `rgba(70,40,20,${0.08 + rnd0() * 0.12})`; x.lineWidth = 1 + rnd0() * 1.5; const px = i * bw + rnd0() * bw; x.beginPath(); x.moveTo(px, 0); x.bezierCurveTo(px + (rnd0() - 0.5) * 8, h / 3, px + (rnd0() - 0.5) * 8, h * 2 / 3, px, h); x.stroke(); } x.fillStyle = "rgba(40,20,10,.55)"; x.fillRect(i * bw, 0, 3, h); } }],
+  block: [1 / 1.6, (x, w, h) => { x.fillStyle = "#8a8a8a"; x.fillRect(0, 0, w, h); const rows = 4, rh = h / rows, bw = w / 2; for (let r = 0; r < rows; r++) for (let c = -1; c < 3; c++) { const px = c * bw + (r % 2) * bw / 2, v = 190 + rnd0() * 30; x.fillStyle = `rgb(${v},${v},${v - 4})`; x.fillRect(px + 3, r * rh + 3, bw - 6, rh - 6); for (let k = 0; k < 120; k++) { x.fillStyle = `rgba(0,0,0,${rnd0() * 0.12})`; x.fillRect(px + rnd0() * bw, r * rh + rnd0() * rh, 2, 2); } } }],
+};
+function finishMat(key) {
+  const [scale, draw] = FINISH[key];
+  const tex = canvas(512, 512, draw);
+  const shiny = key === "tile" || key === "subway";
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: shiny ? 0.18 : key === "panel" ? 0.5 : 0.9, metalness: 0 });
+  m.envMapIntensity = shiny ? 1.0 : 0.55;
+  m.onBeforeCompile = sh => {
+    sh.uniforms.tFin = { value: tex }; sh.uniforms.uFinScale = { value: scale };
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vFinP; varying vec3 vFinN;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFinP = (modelMatrix * vec4(transformed, 1.0)).xyz; vFinN = normalize(mat3(modelMatrix) * objectNormal);");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D tFin; uniform float uFinScale; varying vec3 vFinP; varying vec3 vFinN;")
+      .replace("#include <color_fragment>", `#include <color_fragment>
+        vec2 fuv = abs(vFinN.y) > 0.6 ? vFinP.xz : (abs(vFinN.x) > abs(vFinN.z) ? vec2(vFinP.z, vFinP.y) : vec2(vFinP.x, vFinP.y));
+        vec3 ft = texture2D(tFin, fuv * uFinScale).rgb;
+        diffuseColor.rgb *= pow(ft, vec3(2.2));`);
+  };
+  return m;
+}
+// screens: a computer desktop, and a live ECG trace for the hospital monitors
+export const SCREENS = {};
+function desktopTex() {
+  return canvas(256, 160, (x, w, h) => {
+    const g = x.createLinearGradient(0, 0, w, h); g.addColorStop(0, "#1a4a8a"); g.addColorStop(1, "#6a2a7a"); x.fillStyle = g; x.fillRect(0, 0, w, h);
+    x.fillStyle = "rgba(0,0,0,.5)"; x.fillRect(0, h - 14, w, 14);
+    for (let i = 0; i < 6; i++) { x.fillStyle = ["#e8e8e8", "#40a0ff", "#ffd040", "#60e060", "#ff6040", "#c080ff"][i]; x.fillRect(8 + i * 16, h - 11, 10, 8); }
+    x.fillStyle = "#f4f4f4"; x.fillRect(30, 18, 150, 100); x.fillStyle = "#3a6ab8"; x.fillRect(30, 18, 150, 12);
+    for (let r = 0; r < 8; r++) { x.fillStyle = r % 3 ? "#9aa0a8" : "#3a3a3a"; x.fillRect(38, 38 + r * 9, 40 + rnd0() * 90, 4); }
+    x.fillStyle = "#f4f4f4"; x.fillRect(150, 60, 90, 70); x.fillStyle = "#2a8a4a"; x.fillRect(150, 60, 90, 10);
+    for (let i = 0; i < 6; i++) { x.fillStyle = "#3a9ae8"; const bh = 10 + rnd0() * 40; x.fillRect(158 + i * 13, 125 - bh, 9, bh); }
+  });
+}
 function mats() {
   if (MATS.matte) return MATS;
-  const v = ({ env, ...o }) => { const m = vcMaterial(o); m.envMapIntensity = env ?? 0.12; return m; };
-  MATS.matte = v({ roughness: 0.82 });
-  MATS.wood = v({ roughness: 0.5 });
-  MATS.fabric = v({ roughness: 0.96 });
-  MATS.leather = v({ roughness: 0.42, env: 0.2 });
-  MATS.gloss = v({ roughness: 0.16, env: 0.25 });                     // ceramic, lacquer, plastic
-  MATS.metal = v({ roughness: 0.34, metalness: 0.75, env: 0.45 });
-  MATS.chrome = v({ roughness: 0.12, metalness: 0.95, env: 0.7 });
-  MATS.glow = v({ roughness: 0.6, emitMul: 1.0 });
-  MATS.glass = v({ roughness: 0.04, metalness: 0.1, transparent: true, opacity: 0.32, depthWrite: false, env: 0.6 });
+  const v = ({ env, ...o }) => { const m = vcMaterial(o); m.envMapIntensity = env ?? 0.5; return m; };
+  MATS.matte = v({ roughness: 0.82, env: 0.55 });
+  MATS.wood = v({ roughness: 0.42, env: 0.8 });
+  MATS.fabric = v({ roughness: 0.96, env: 0.35 });
+  MATS.leather = v({ roughness: 0.38, env: 0.85 });
+  MATS.gloss = v({ roughness: 0.12, env: 1.0 });                      // ceramic, lacquer, plastic
+  MATS.metal = v({ roughness: 0.3, metalness: 0.8, env: 1.0 });
+  MATS.chrome = v({ roughness: 0.06, metalness: 1.0, env: 1.2 });
+  MATS.glow = v({ roughness: 0.6, emitMul: 1.0, env: 0.2 });
+  MATS.mirror = v({ roughness: 0.03, metalness: 1.0, env: 1.25 });
+  MATS.glass = v({ roughness: 0.02, metalness: 0.1, transparent: true, opacity: 0.28, depthWrite: false, env: 1.4 });
+  for (const k of Object.keys(FINISH)) MATS[k] = finishMat(k);
+  SCREENS.desktop = desktopTex();
+  MATS.screen = new THREE.MeshBasicMaterial({ map: SCREENS.desktop, vertexColors: true, color: new THREE.Color(1.3, 1.3, 1.3) });
+  const ecg = document.createElement("canvas"); ecg.width = 128; ecg.height = 64;
+  SCREENS.ecg = new THREE.CanvasTexture(ecg); SCREENS.ecgCtx = ecg.getContext("2d");
+  MATS.vitals = new THREE.MeshBasicMaterial({ map: SCREENS.ecg, color: new THREE.Color(1.4, 1.4, 1.4) });
   return MATS;
 }
+// the heart monitors: a green trace sweeping across, with a blip every beat
+let ecgX = 0;
+export function tickScreens(t) {
+  if (!SCREENS.ecgCtx) return;
+  const x = SCREENS.ecgCtx, w = 128, h = 64;
+  if (ecgX === 0) { x.fillStyle = "#04120a"; x.fillRect(0, 0, w, h); }
+  for (let k = 0; k < 2; k++) {
+    const ph = (t * 1.2 + ecgX / w) % 1, y = ph > 0.2 && ph < 0.24 ? 14 : ph > 0.24 && ph < 0.28 ? 54 : ph > 0.28 && ph < 0.31 ? 26 : 38;
+    x.fillStyle = "#04120a"; x.fillRect(ecgX, 0, 6, h);
+    x.fillStyle = "#40ff80"; x.fillRect(ecgX, Math.min(y, 38), 2, Math.abs(y - 38) + 2);
+    ecgX = (ecgX + 2) % w;
+  }
+  x.fillStyle = "#40ff80"; x.font = "bold 12px monospace"; x.fillText("72", 104, 12);
+  SCREENS.ecg.needsUpdate = true;
+}
+export const matFor = k => mats()[k];
 
 const TAU = Math.PI * 2;
 export function makeKit() {
@@ -65,7 +136,8 @@ export function makeKit() {
       const grp = new THREE.Group(), MT = mats();
       for (const k in buckets) {
         const mesh = new THREE.Mesh(merge(buckets[k]), MT[k]);
-        mesh.castShadow = k !== "glass" && k !== "glow"; mesh.receiveShadow = k !== "glass";
+        const lit = !["glass", "glow", "screen", "vitals"].includes(k);
+        mesh.castShadow = lit; mesh.receiveShadow = lit;
         grp.add(mesh);
         for (const g of buckets[k]) g.dispose();
       }
@@ -208,7 +280,7 @@ function monitor(K, x, y, z, ry = 0) {
   K.box("gloss", 0.2, 0.012, 0.14, 0, 0.006, 0, C.black);
   K.box("metal", 0.04, 0.2, 0.025, 0, 0.11, -0.03, C.charcoal);
   K.box("gloss", 0.56, 0.34, 0.03, 0, 0.36, -0.01, C.black, { r: 0.008 });
-  K.box("glow", 0.53, 0.31, 0.005, 0, 0.36, 0.007, 0x5a8ad0, { em: 0.9 });
+  K.box("screen", 0.53, 0.31, 0.005, 0, 0.36, 0.007, 0xffffff);
   K.pop();
 }
 export function desk(K, w, o = {}) {
@@ -336,7 +408,7 @@ export function dresser(K, w) {
   for (const x of [-1, 1]) for (let i = 0; i < 3; i++) { K.box("wood", w / 2 - 0.03, 0.22, 0.012, x * w / 4, 0.22 + i * 0.25, 0.232, 0x6a4a30, { r: 0.004 }); K.box("chrome", 0.1, 0.015, 0.02, x * w / 4, 0.26 + i * 0.25, 0.245, C.brass); }
   for (const [x, z] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) K.box("wood", 0.035, 0.08, 0.035, x * (w / 2 - 0.03), 0.04, z * 0.2, C.walnut);
   K.box("wood", 0.8, 1.0, 0.03, 0, 1.48, -0.21, C.walnut);
-  K.box("glass", 0.72, 0.92, 0.006, 0, 1.48, -0.19, 0xdde6ee);
+  K.box("mirror", 0.72, 0.92, 0.006, 0, 1.48, -0.19, 0xe8eef2);
   K.block(-w / 2, -0.24, w / 2, 0.26);
 }
 
@@ -486,7 +558,7 @@ export function vanity(K, w = 0.9, o = {}) {
   K.lathe("gloss", [[0.001, 0.02], [0.16, 0.02], [0.2, 0.12], [0.205, 0.14]], 0, 0.86, 0.02, C.white, { sz: 0.8 });
   K.cyl("chrome", 0.015, 0.018, 0.22, 0, 1.0, -0.18, C.chrome, { seg: 8 });
   K.box("chrome", 0.025, 0.025, 0.14, 0, 1.1, -0.12, C.chrome);
-  K.box("glass", w - 0.1, 0.8, 0.01, 0, 1.55, -0.23, 0xdde8f0);
+  K.box("mirror", w - 0.1, 0.8, 0.01, 0, 1.55, -0.23, 0xe8eef2);
   K.box("metal", w - 0.04, 0.84, 0.015, 0, 1.55, -0.245, C.steel);
   K.box("glow", w - 0.2, 0.05, 0.05, 0, 2.02, -0.2, 0xfff4e0, { em: 1.6 });
   K.block(-w / 2, -0.25, w / 2, 0.26);
@@ -590,7 +662,7 @@ export function barCounter(K, len, o = {}) {
 }
 export function backBar(K, len, o = {}) {
   K.box("wood", len, 0.9, 0.45, 0, 0.45, 0, o.wood ?? 0x1e1820);
-  K.box("glass", len - 0.1, 1.2, 0.01, 0, 1.6, -0.21, 0x2a2430);                           // mirror
+  K.box("mirror", len - 0.1, 1.2, 0.01, 0, 1.6, -0.21, 0x6a6070);                           // mirror
   for (let r = 0; r < 3; r++) {
     const y = 1.05 + r * 0.42;
     K.box("glass", len, 0.02, 0.26, 0, y, -0.08, 0xdde8ee);
@@ -661,8 +733,7 @@ export function vitalsMonitor(K) {
   K.cyl("chrome", 0.015, 0.015, 1.3, 0, 0.65, 0, C.chrome, { seg: 6 });
   K.cyl("metal", 0.2, 0.22, 0.03, 0, 0.015, 0, C.steel, { seg: 12 });
   K.box("gloss", 0.34, 0.26, 0.1, 0, 1.4, 0, 0xdfe6ea, { r: 0.015 });
-  K.box("glow", 0.28, 0.18, 0.005, 0, 1.41, 0.052, 0x0a1a10, { em: 0.4 });
-  for (let i = 0; i < 6; i++) K.box("glow", 0.045, 0.006, 0.002, -0.11 + i * 0.045, 1.43 + (i === 2 ? 0.04 : i === 3 ? -0.03 : 0), 0.056, 0x40ff80, { em: 2.5, rz: i === 2 ? 1.1 : i === 3 ? -1.1 : 0 });
+  K.box("vitals", 0.28, 0.18, 0.005, 0, 1.41, 0.052, 0xffffff);
 }
 export function curtain(K, len, col = 0xa8d8d4) {
   K.box("metal", len, 0.03, 0.04, 0, 2.5, 0, C.steel);
