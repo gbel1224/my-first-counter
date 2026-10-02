@@ -3,6 +3,7 @@
 <body><div id="l"></div><script type="module">
 import * as THREE from "../vendor/three.module.js";
 import { makeCharacter, randomLook } from "../src/people.js";
+import { HAIR_U } from "../src/face.js";
 const q = new URLSearchParams(location.search);
 const exprs = (q.get("e") || "neutral,happy,laugh,sad,mad,annoyed,surprised,shocked,scared,flirty,smug,disgusted").split(",");
 const cols = +(q.get("c") || 4), rows = Math.ceil(exprs.length / cols), W = +(q.get("w") || 1200), Hh = Math.round(W / cols * 1.05) * rows;
@@ -33,6 +34,7 @@ const cam = new THREE.PerspectiveCamera(22, 1, 0.05, 50);
 const yaw = +(q.get("yaw") || 0.35), t0 = performance.now();
 function frame(ts) {
   const t = (ts - t0) / 1000;
+  HAIR_U.uTime.value = t; const ws = +(q.get("wind") || 0.6); HAIR_U.uWind.value.set(ws, 0, ws * 0.4);
   const lab = document.getElementById("l"); lab.innerHTML = "";
   chars.forEach((c, i) => {
     c.ch.face.base = c.e; if (q.get("talk")) c.ch.face.talk = 1;

@@ -151,77 +151,205 @@ function build() {
     const ck = side => { const g = new THREE.SphereGeometry(0.019, 18, 14); g.scale(1.15, 0.8, 0.62); g.translate(side * 0.045, 0.171, 0.0865); g.computeVertexNormals(); return paintFn(g, (x, y, z, c) => { c[0] = 1; c[1] = 0.955; c[2] = 0.95; }); };
     F.cheeks = merge([ck(-1), ck(1)]);
   }
-  // ---- hair: shells over the scalp with a soft hairline, in seven styles ----
+  // ---- hair: an under-layer shell over the scalp, then hundreds of strand cards combed over it ----
   const noise3 = (x, y, z) => Math.sin(x * 1.7 + Math.sin(y * 2.3)) * Math.sin(y * 1.9 + Math.sin(z * 2.9)) * Math.sin(z * 2.1 + Math.sin(x * 3.1));
+  // where the hair sits over a point of the scalp (direction d), and how much hair is there (m)
+  const shellAt = (d, style, out = new THREE.Vector3()) => {
+    skin(d, true, out);
+    const ph = Math.atan2(d.x, d.z), a = Math.abs(ph) / Math.PI;
+    let H = 0.263 - 0.07 * sst(0.1, 0.48, a) - 0.08 * sst(0.55, 1.0, a) + 0.003 * Math.sin(ph * 9);
+    let full = 0.0045 + 0.006 * sst(0.235, 0.315, out.y) + 0.003 * sst(0.6, 1, a);
+    if (style === "side") { H += 0.006 * Math.sin(ph) * sst(0.4, 0, a); full += 0.004 * sst(0.2, 0.32, out.y) * (0.6 + 0.4 * Math.sin(ph + 0.6)); }
+    if (style === "buzz") { H += 0.004; full = 0.0016; }
+    if (style === "afro") { H -= 0.004; full = (0.016 + 0.013 * sst(0.2, 0.31, out.y)) * (1 + 0.12 * noise3(d.x * 30, d.y * 30, d.z * 30)); }
+    if (style === "long" || style === "bob") H -= 0.05 * sst(0.45, 0.9, a);
+    if (style === "bob") full += 0.003 * sst(0.3, 0.6, a);
+    if (style === "bun" || style === "pony") { H += 0.004; full = 0.0028 + 0.002 * sst(0.25, 0.31, out.y); }
+    const m = sst(H - 0.02, H + 0.012, out.y);
+    const th = -0.0045 + (0.0045 + full) * sst(0, 1, m);
+    out.x += d.x * th; out.y += d.y * th * 0.9; out.z += d.z * th;
+    return { q: out, m, a, ph, H };
+  };
+  const dirOf = (p, out = new THREE.Vector3()) => out.set(p.x / HR.x, (p.y - HC.y) / HR.y, (p.z - HC.z) / HR.z).normalize();
+  const normOf = (d, out = new THREE.Vector3()) => out.set(d.x / HR.x, d.y / HR.y, d.z / HR.z).normalize();
   const hairShell = style => {
     const s = new THREE.SphereGeometry(1, 72, 54), p = s.attributes.position, d = new THREE.Vector3();
-    for (let i = 0; i < p.count; i++) {
-      d.fromBufferAttribute(p, i); skin(d, true, q);
-      const ph = Math.atan2(d.x, d.z), a = Math.abs(ph) / Math.PI;
-      // where the hair starts: the hairline across the brow, above the ears, down to the nape
-      let H = 0.263 - 0.07 * sst(0.1, 0.48, a) - 0.08 * sst(0.55, 1.0, a) + 0.003 * Math.sin(ph * 9);
-      let full = 0.0055 + 0.0075 * sst(0.235, 0.315, q.y) + 0.003 * sst(0.6, 1, a);
-      if (style === "side") { H += 0.006 * Math.sin(ph) * sst(0.4, 0, a); full += 0.005 * sst(0.2, 0.32, q.y) * (0.6 + 0.4 * Math.sin(ph + 0.6)); full -= 0.003 * G2(ph, 0, -0.45, 0, 0.06, 1) * sst(0.25, 0.31, q.y); }
-      if (style === "buzz") { H += 0.004; full = 0.0016; }
-      if (style === "afro") { H -= 0.004; full = (0.018 + 0.014 * sst(0.2, 0.31, q.y)) * (1 + 0.12 * noise3(d.x * 30, d.y * 30, d.z * 30)); }
-      if (style === "long" || style === "bob") H -= 0.05 * sst(0.45, 0.9, a);
-      if (style === "bob") full += 0.004 * sst(0.3, 0.6, a);
-      if (style === "bun" || style === "pony") { H += 0.004; full = 0.0034 + 0.0025 * sst(0.25, 0.31, q.y); }
-      // a fringe of tufts along the front edge for the cropped cuts
-      if (style === "crop" || style === "side") full += 0.0035 * sst(H + 0.03, H + 0.004, q.y) * (0.5 + 0.5 * Math.sin(ph * 15 + 1)) * sst(0.45, 0.1, a);
-      const m = sst(H - 0.02, H + 0.012, q.y);
-      const th = -0.0045 + (0.0045 + full) * sst(0, 1, m);
-      q.x += d.x * th; q.y += d.y * th * 0.9; q.z += d.z * th;
-      p.setXYZ(i, q.x, q.y, q.z);
-    }
+    for (let i = 0; i < p.count; i++) { d.fromBufferAttribute(p, i); const r = shellAt(d, style, q); p.setXYZ(i, r.q.x, r.q.y, r.q.z); }
     s.computeVertexNormals();
-    const out = [paintFn(s, (x, y, z, c) => { const ph = Math.atan2(x, z); const k = 0.86 + 0.08 * sst(0.2, 0.3, y) + (style === "buzz" ? -0.12 : 0); c[0] = c[1] = c[2] = k; })];
-    const curtain = (bottom, flare, len) => {
-      const f = new THREE.CylinderGeometry(1, 1, 1, 56, 18, true, 1.05, Math.PI * 2 - 2.1), fp = f.attributes.position;
-      for (let i = 0; i < fp.count; i++) {
-        v.fromBufferAttribute(fp, i); const t = v.y + 0.5, th = Math.atan2(v.x, v.z);
-        const wave = 0.004 * Math.sin(th * 11 + t * 6) * (1 - t);
-        const rx = lerp(0.112 + flare, 0.105, t) + wave, rz = lerp(0.09 + flare * 0.6, 0.118, t) + wave;
-        fp.setXYZ(i, v.x * rx, lerp(bottom, 0.215, t), v.z * rz - 0.004 - (1 - t) * len);
-      }
-      f.computeVertexNormals();
-      out.push(paintFn(f, (x, y, z, c) => { const k = 0.8 + 0.06 * sst(0.05, 0.2, y); c[0] = c[1] = c[2] = k; }));
-      const fi = f.clone(); fi.scale(0.965, 1, 0.965);
-      const ix = fi.index.array; for (let t = 0; t < ix.length; t += 3) { const tmp = ix[t + 1]; ix[t + 1] = ix[t + 2]; ix[t + 2] = tmp; }
-      fi.computeVertexNormals(); out.push(paintFn(fi, flat(0x5a5a5a)));
-    };
-    if (style === "long") curtain(0.0, 0.006, 0.03);
-    if (style === "bob") curtain(0.105, 0.012, 0.004);
-    if (style === "bun") { const b = new THREE.SphereGeometry(0.036, 20, 16), bp = b.attributes.position; for (let i = 0; i < bp.count; i++) { v.fromBufferAttribute(bp, i); const k = 1 + 0.08 * Math.sin(Math.atan2(v.x, v.z) * 7 + v.y * 90); bp.setXYZ(i, v.x * k, v.y * 0.85, v.z * k); } b.translate(0, 0.292, -0.078); b.computeVertexNormals(); out.push(paintFn(b, (x, y, z, c) => { c[0] = c[1] = c[2] = 0.84 + 0.1 * Math.sin(Math.atan2(x, z - -0.078) * 7); })); }
-    if (style === "pony") { for (const g of tube([[0, 0.262, -0.098], [0, 0.235, -0.13], [0, 0.175, -0.142], [0.006, 0.11, -0.13]], u => lerp(0.017, 0.006, u) * (u < 0.1 ? 0.8 : 1), 0.8, 24, 12)) out.push(paintFn(g, flat(0xd8d8d8))); const tie = new THREE.TorusGeometry(0.015, 0.0035, 8, 18); tie.rotateX(0.9); tie.translate(0, 0.258, -0.104); out.push(paintFn(tie, flat(0x303030))); }
+    // the under-layer is darker: it's the dense hair the strands lie on top of
+    const out = [paintFn(s, (x, y, z, c) => { const k = style === "buzz" ? 0.72 : style === "afro" ? 0.8 : 0.58; c[0] = c[1] = c[2] = k; })];
+    // long styles: a darker under-curtain behind the falling strands, so the hair reads full
+    if (style === "long" || style === "bob") {
+      const bottom = style === "long" ? 0.02 : 0.112, flare = style === "long" ? 0.004 : 0.01, drop = style === "long" ? 0.03 : 0.004;
+      const f = new THREE.CylinderGeometry(1, 1, 1, 48, 14, true, 2.1, Math.PI * 2 - 4.2), fp = f.attributes.position;
+      for (let i = 0; i < fp.count; i++) { v.fromBufferAttribute(fp, i); const t = v.y + 0.5; fp.setXYZ(i, v.x * (lerp(0.11 + flare, 0.104, t)), lerp(bottom, 0.215, t), v.z * lerp(0.088 + flare * 0.6, 0.116, t) - 0.004 - (1 - t) * drop); }
+      f.computeVertexNormals(); out.push(paintFn(f, flat(0x6a6a6a)));
+    }
+    if (style === "bun") { const b = new THREE.SphereGeometry(0.034, 20, 16), bp = b.attributes.position; for (let i = 0; i < bp.count; i++) { v.fromBufferAttribute(bp, i); const k = 1 + 0.08 * Math.sin(Math.atan2(v.x, v.z) * 7 + v.y * 90); bp.setXYZ(i, v.x * k, v.y * 0.85, v.z * k); } b.translate(0, 0.292, -0.078); b.computeVertexNormals(); out.push(paintFn(b, flat(0x8a8a8a))); }
+    if (style === "pony") { const tie = new THREE.TorusGeometry(0.013, 0.0035, 8, 18); tie.rotateX(0.9); tie.translate(0, 0.258, -0.104); out.push(paintFn(tie, flat(0x303030))); }
     return merge(out);
   };
   for (const st of HAIRSTYLES) F["hair_" + st] = hairShell(st);
-  // ---- beards: shells on the sculpted jaw, each style its own mask ----
+
+  // strand cards: thin strips with a strand texture (see-through between the hairs), laid along the
+  // way the hair is combed; each vertex knows how far it is from the root, so the tips can blow in the wind
+  const cardSet = () => ({ pos: [], nrm: [], uv: [], col: [], dir: [] });
+  const strip = (S, pts, nrms, dirs, width, u0, shade) => {
+    const n = pts.length, side = new THREE.Vector3(), P = [], Q = [];
+    for (let k = 0; k < n; k++) {
+      const t = k / (n - 1), w = width * (1 - 0.45 * t);
+      side.crossVectors(dirs[k], nrms[k]).normalize().multiplyScalar(w / 2);
+      P.push(pts[k].clone().sub(side)); Q.push(pts[k].clone().add(side));
+    }
+    for (let k = 0; k < n - 1; k++) {
+      const t0 = k / (n - 1), t1 = (k + 1) / (n - 1);
+      const quad = [[P[k], 0, t0, k], [Q[k], 1, t0, k], [Q[k + 1], 1, t1, k + 1], [P[k], 0, t0, k], [Q[k + 1], 1, t1, k + 1], [P[k + 1], 0, t1, k + 1]];
+      for (const [pt, uu, vv, kk] of quad) {
+        S.pos.push(pt.x, pt.y, pt.z); S.nrm.push(nrms[kk].x, nrms[kk].y, nrms[kk].z); S.uv.push(u0 + uu * 0.24, vv);
+        S.col.push(shade, shade, shade); S.dir.push(dirs[kk].x, dirs[kk].y, dirs[kk].z);
+      }
+    }
+  };
+  const cardGeo = S => {
+    const g = new THREE.BufferGeometry(), n = S.pos.length / 3;
+    g.setAttribute("position", new THREE.Float32BufferAttribute(S.pos, 3)); g.setAttribute("normal", new THREE.Float32BufferAttribute(S.nrm, 3));
+    g.setAttribute("uv", new THREE.Float32BufferAttribute(S.uv, 2)); g.setAttribute("color", new THREE.Float32BufferAttribute(S.col, 3));
+    g.setAttribute("aEmit", new THREE.Float32BufferAttribute(new Float32Array(n), 1)); g.setAttribute("aDir", new THREE.Float32BufferAttribute(S.dir, 3));
+    g.computeBoundingSphere(); g.computeBoundingBox();
+    return g;
+  };
+  let seed = 9871; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const fib = (n, k) => { const y = 1 - (k + 0.5) / n * 2, r = Math.sqrt(1 - y * y), th = k * 2.399963; return new THREE.Vector3(Math.cos(th) * r, y, Math.sin(th) * r); };
+  const crown = new THREE.Vector3(0, 0.31, -0.03), DOWN = new THREE.Vector3(0, -1, 0);
+  // which way the hair is combed at a point, for each style
+  const flow = (style, q, n, a, ph, out) => {
+    const v = out;
+    if (style === "crop" || style === "afro" || style === "buzz") { v.copy(q).sub(crown).normalize(); v.lerp(DOWN, sst(0.3, 0.75, a) * 0.6); }
+    else if (style === "side") { const sg = ph > -0.45 ? 1 : -1; v.set(sg, -0.15, -0.3).normalize().lerp(DOWN, sst(0.3, 0.7, a) * 0.7); }
+    else if (style === "long" || style === "bob") { v.set(Math.sign(q.x || 1) * 0.55, -1, -0.12).normalize(); }
+    else { const B = style === "bun" ? [0, 0.285, -0.085] : [0, 0.262, -0.1]; v.set(B[0] - q.x, B[1] - q.y, B[2] - q.z).normalize(); }
+    return v.sub(n.clone().multiplyScalar(v.dot(n))).normalize();
+  };
+  const STYLE_CARDS = {
+    crop: { n: 460, len: [0.026, 0.044], seg: 5, w: [0.008, 0.012], lift: 0.0022 }, side: { n: 460, len: [0.036, 0.062], seg: 6, w: [0.009, 0.013], lift: 0.0026 },
+    afro: { n: 520, len: [0.009, 0.015], seg: 3, w: [0.008, 0.012], lift: 0.0025, curly: true }, long: { n: 300, len: [0.07, 0.11], seg: 7, w: [0.012, 0.018], lift: 0.0026 },
+    bob: { n: 300, len: [0.07, 0.1], seg: 7, w: [0.012, 0.018], lift: 0.0026 }, bun: { n: 320, len: [0.06, 0.1], seg: 6, w: [0.008, 0.012], lift: 0.0015 },
+    pony: { n: 320, len: [0.06, 0.1], seg: 6, w: [0.008, 0.012], lift: 0.0015 },
+  };
+  const hairCards = style => {
+    const cfg = STYLE_CARDS[style]; if (!cfg) return null;
+    const S = cardSet(), d = new THREE.Vector3(), nn = new THREE.Vector3(), T = new THREE.Vector3(), tmp = new THREE.Vector3();
+    const total = 2400; let made = 0;
+    for (let k = 0; k < total && made < cfg.n; k++) {
+      d.copy(fib(total, (k * 7 + 3) % total));
+      const r0 = shellAt(d, style); if (r0.m < 0.75 || rnd() < 0.15) continue;
+      const len = cfg.len[0] + rnd() * (cfg.len[1] - cfg.len[0]) * (style === "crop" && r0.q.y > 0.27 ? 1.2 : 1), seg = cfg.seg;
+      const pts = [], nrms = [], dirs = [];
+      let p = r0.q.clone(), dd = d.clone();
+      for (let s = 0; s <= seg; s++) {
+        const t = s / seg, r = shellAt(dd, style);
+        normOf(dd, nn);
+        if (cfg.curly) { T.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5); T.sub(nn.clone().multiplyScalar(T.dot(nn))).normalize(); }
+        else flow(style, r.q, nn, r.a, r.ph, T);
+        const lift = 0.0012 + cfg.lift * t;
+        pts.push(r.q.clone().addScaledVector(nn, lift)); nrms.push(nn.clone()); dirs.push(T.clone());
+        // step along the comb direction, then drop back onto the scalp
+        tmp.copy(r.q).addScaledVector(T, len / seg); dirOf(tmp, dd);
+        if (r.a < 0.3 && r.q.y < r.H - 0.012 && style !== "long" && style !== "bob") break;      // fringes stop at the brow
+      }
+      if (pts.length < 3) continue;
+      strip(S, pts, nrms, dirs, cfg.w[0] + rnd() * (cfg.w[1] - cfg.w[0]), Math.floor(rnd() * 4) * 0.25, 0.9 + rnd() * 0.18);
+      made++;
+    }
+    // long hair and bobs: layers of strands falling from the crown down past the shoulders
+    if (style === "long" || style === "bob") {
+      const bottom = style === "long" ? 0.0 : 0.105, flare = style === "long" ? 0.006 : 0.012, drop = style === "long" ? 0.03 : 0.004;
+      for (let layer = 0; layer < 3; layer++) for (let i = 0; i < 46; i++) {
+        const th = 1.45 + (i + rnd() * 0.8) / 46 * (Math.PI * 2 - 2.9), pts = [], nrms = [], dirs = [];
+        const seg = 9, out = 0.004 + layer * 0.004;
+        for (let s = 0; s <= seg; s++) {
+          const t = 1 - s / seg, wave = 0.004 * Math.sin(th * 11 + t * 6 + layer) * (1 - t);
+          // the strands come out from under the hair on the crown, curve over the head and fall
+          const top = sst(0.75, 1, t), rx = lerp(0.112 + flare, 0.105, t) * (1 - top * 0.12) + wave + out, rz = lerp(0.09 + flare * 0.6, 0.118, t) * (1 - top * 0.12) + wave + out;
+          pts.push(new THREE.Vector3(Math.sin(th) * rx, lerp(bottom - rnd() * 0.012, 0.262, t), Math.cos(th) * rz - 0.004 - (1 - t) * drop));
+          nrms.push(new THREE.Vector3(Math.sin(th), 0, Math.cos(th))); dirs.push(new THREE.Vector3(0, -1, 0));
+        }
+        strip(S, pts, nrms, dirs, 0.02 + rnd() * 0.012, Math.floor(rnd() * 4) * 0.25, 0.86 + rnd() * 0.18);
+      }
+    }
+    // the ponytail: a sheaf of strands from the tie, swinging down the back
+    if (style === "pony") for (let i = 0; i < 26; i++) {
+      const a0 = rnd() * Math.PI * 2, r0 = 0.004 + rnd() * 0.008, pts = [], nrms = [], dirs = [];
+      for (let s = 0; s <= 8; s++) {
+        const t = s / 8, x = Math.cos(a0) * r0 * (1 + t) + 0.004 * t, y = lerp(0.258, 0.12, t), z = lerp(-0.105, -0.14, Math.sin(t * Math.PI / 2)) + Math.sin(a0) * r0 * (1 + t);
+        pts.push(new THREE.Vector3(x, y, z)); nrms.push(new THREE.Vector3(Math.cos(a0), 0, Math.sin(a0) - 0.6).normalize()); dirs.push(new THREE.Vector3(0, -1, -0.3 * (1 - t)).normalize());
+      }
+      strip(S, pts, nrms, dirs, 0.012 + rnd() * 0.006, Math.floor(rnd() * 4) * 0.25, 0.8 + rnd() * 0.3);
+    }
+    if (style === "bun") for (let i = 0; i < 40; i++) {
+      const a0 = rnd() * Math.PI * 2, pts = [], nrms = [], dirs = [];
+      for (let s = 0; s <= 5; s++) { const t = s / 5, ang = a0 + t * 2.4, y = 0.292 + (rnd() - 0.5) * 0.01; const r = 0.036; pts.push(new THREE.Vector3(Math.cos(ang) * r, y + Math.sin(t * 3) * 0.01, -0.078 + Math.sin(ang) * r)); nrms.push(new THREE.Vector3(Math.cos(ang), 0.2, Math.sin(ang)).normalize()); dirs.push(new THREE.Vector3(-Math.sin(ang), 0, Math.cos(ang))); }
+      strip(S, pts, nrms, dirs, 0.012, Math.floor(rnd() * 4) * 0.25, 0.85 + rnd() * 0.25);
+    }
+    return cardGeo(S);
+  };
+  for (const st of HAIRSTYLES) { const g = hairCards(st); if (g) F["hairc_" + st] = g; }
+
+  // ---- beards: a shell on the sculpted jaw, then short strand cards growing down over it ----
+  const beardAt = (d, mask, thick, out = new THREE.Vector3()) => {
+    skin(d, true, out);
+    const m = mask(out.x, out.y, out.z, d);
+    const clump = 1 + (thick > 0.003 ? 0.22 * Math.sin(d.x * 61 + Math.sin(d.y * 47)) * Math.sin(d.y * 53 + Math.sin(d.z * 37)) : 0);
+    const th = -0.003 + (0.003 + thick * clump) * sst(0, 1, m);
+    out.x += d.x * th; out.y += d.y * th * 0.6; out.z += d.z * th;
+    return { q: out, m };
+  };
   const beard = (mask, thick) => {
     const s = new THREE.SphereGeometry(1, 96, 76), p = s.attributes.position, d = new THREE.Vector3();
-    for (let i = 0; i < p.count; i++) {
-      d.fromBufferAttribute(p, i); skin(d, true, q);
-      const m = mask(q.x, q.y, q.z, d);
-      const clump = 1 + (thick > 0.003 ? 0.22 * Math.sin(d.x * 61 + Math.sin(d.y * 47)) * Math.sin(d.y * 53 + Math.sin(d.z * 37)) : 0);
-      const th = -0.003 + (0.003 + thick * clump) * sst(0, 1, m);
-      q.x += d.x * th; q.y += d.y * th * 0.6; q.z += d.z * th;
-      p.setXYZ(i, q.x, q.y, q.z);
-    }
+    for (let i = 0; i < p.count; i++) { d.fromBufferAttribute(p, i); const r = beardAt(d, mask, thick, q); p.setXYZ(i, r.q.x, r.q.y, r.q.z); }
     s.computeVertexNormals();
-    return merge([paintFn(s, (x, y, z, c) => { const k = 0.85 + 0.12 * Math.sin(x * 900 + y * 300) * Math.sin(y * 700); c[0] = c[1] = c[2] = k; })]);
+    return merge([paintFn(s, (x, y, z, c) => { const k = thick > 0.003 ? 0.62 : 0.85 + 0.12 * Math.sin(x * 900 + y * 300) * Math.sin(y * 700); c[0] = c[1] = c[2] = k; })]);
   };
-  const mouthHole = (x, y) => sst(1.0, 1.35, (x / 0.0275) ** 2 + ((y - MOUTH.y + 0.001) / 0.0105) ** 2);
-  const stache = (x, y) => sst(0.03, 0.024, Math.abs(x)) * sst(MOUTH.y + 0.003, MOUTH.y + 0.007, y) * sst(MOUTH.y + 0.0175, MOUTH.y + 0.0135, y);
+  const beardCards = (mask, thick, count, len, mus) => {
+    const S = cardSet(), d = new THREE.Vector3(), nn = new THREE.Vector3(), T = new THREE.Vector3(), tmp = new THREE.Vector3();
+    const total = 9000; let made = 0;
+    for (let k = 0; k < total && made < count; k++) {
+      d.copy(fib(total, (k * 13 + 5) % total)); if (d.z < -0.2) continue;
+      const r0 = beardAt(d, mask, thick); if (r0.m < 0.6) continue;
+      const pts = [], nrms = [], dirs = []; let dd = d.clone(); const L = len * (0.7 + rnd() * 0.6);
+      for (let s = 0; s <= 3; s++) {
+        const t = s / 3, r = beardAt(dd, mask, thick); normOf(dd, nn);
+        const inStache = mus(r.q.x, r.q.y) > 0.5;
+        T.set(inStache ? Math.sign(r.q.x || 1) * 0.55 : -Math.sign(r.q.x) * 0.18, -1, inStache ? 0.25 : 0.12);
+        T.sub(nn.clone().multiplyScalar(T.dot(nn))).normalize();
+        pts.push(r.q.clone().addScaledVector(nn, 0.0008 + 0.0025 * t)); nrms.push(nn.clone()); dirs.push(T.clone());
+        tmp.copy(r.q).addScaledVector(T, L / 3); dirOf(tmp, dd);
+      }
+      strip(S, pts, nrms, dirs, 0.006 + rnd() * 0.004, Math.floor(rnd() * 4) * 0.25, 0.8 + rnd() * 0.35);
+      made++;
+    }
+    return cardGeo(S);
+  };
+  // the mouth stays clear, but a full beard runs unbroken: sideburns to jaw to chin, round the corners of
+  // the mouth into the mustache, and under the lower lip
+  const mouthHole = (x, y) => sst(1.0, 1.3, (x / 0.0262) ** 2 + ((y - MOUTH.y + 0.0005) / 0.0082) ** 2);
+  const stache = (x, y) => sst(0.033, 0.026, Math.abs(x)) * sst(MOUTH.y + 0.0025, MOUTH.y + 0.0065, y) * sst(MOUTH.y + 0.0175, MOUTH.y + 0.0135, y);
+  const corners = (x, y) => sst(0.022, 0.027, Math.abs(x)) * sst(0.042, 0.034, Math.abs(x)) * sst(MOUTH.y + 0.016, MOUTH.y + 0.011, y);
   const jawMask = (x, y, z, d) => {
     const a = Math.abs(Math.atan2(d.x, d.z)) / Math.PI;
-    const top = lerp(0.151, 0.19, sst(0.22, 0.42, a));
-    return sst(top + 0.01, top - 0.02, y) * sst(0.72, 0.52, a) * sst(0.04, 0.075, y);
+    const top = lerp(0.152, 0.205, sst(0.22, 0.44, a));
+    return sst(top + 0.01, top - 0.018, y) * sst(0.74, 0.54, a) * sst(0.04, 0.075, y);
   };
-  F.beardFull = beard((x, y, z, d) => Math.max(jawMask(x, y, z, d) * mouthHole(x, y), stache(x, y)), 0.0085);
-  F.beardStubble = beard((x, y, z, d) => Math.max(jawMask(x, y, z, d) * mouthHole(x, y), stache(x, y)), 0.0011);
-  F.beardGoatee = beard((x, y, z, d) => { const g = G2(x, y, 0, 0.117, 0.015, 0.016); return Math.max(sst(0.35, 0.65, g) * mouthHole(x, y) * sst(0.2, 0.5, d.z), stache(x, y)); }, 0.0045);
-  F.beardMus = beard((x, y, z, d) => stache(x, y) * sst(0.3, 0.5, d.z), 0.0062);
+  const fullMask = (x, y, z, d) => Math.max(jawMask(x, y, z, d) * mouthHole(x, y), stache(x, y), corners(x, y) * mouthHole(x, y) * sst(0.2, 0.5, d.z));
+  const goateeMask = (x, y, z, d) => { const g = G2(x, y, 0, 0.12, 0.016, 0.018); return Math.max(sst(0.35, 0.65, g) * mouthHole(x, y) * sst(0.2, 0.5, d.z), stache(x, y), corners(x, y) * mouthHole(x, y) * sst(0.115, 0.13, y) * sst(0.2, 0.5, d.z)); };
+  const musMask = (x, y, z, d) => stache(x, y) * sst(0.3, 0.5, d.z);
+  F.beardFull = beard(fullMask, 0.0075);
+  F.beardStubble = beard(fullMask, 0.0011);
+  F.beardGoatee = beard(goateeMask, 0.0042);
+  F.beardMus = beard(musMask, 0.0048);
+  F.beardcFull = beardCards(fullMask, 0.0075, 520, 0.016, stache);
+  F.beardcGoatee = beardCards(goateeMask, 0.0042, 170, 0.012, stache);
+  F.beardcMus = beardCards(musMask, 0.0048, 90, 0.01, stache);
   // ---- eyes: eyeball, a ringed iris with its pupil, a catchlight, an upper lid with lashes, a lower lid ----
   F.eyeW = merge([paintFn(new THREE.SphereGeometry(EYE.r, 28, 20), (x, y, z, c) => { const e = sst(0.2, 0.9, z / EYE.r); c[0] = lerp(0.82, 1, e); c[1] = lerp(0.72, 0.98, e); c[2] = lerp(0.72, 0.96, e); })]);
   {
@@ -302,7 +430,88 @@ export const FACE_COLOR = { headHi: "skin", nose: "skin", cheeks: "skin", eyeW: 
 // how each part is shaded
 export const FACE_MAT = { headHi: "skin", nose: "skin", cheeks: "skin", lid: "skin", lidLow: "skin", browR: "hair", browL: "hair", beardFull: "hair", beardGoatee: "hair", beardMus: "hair", beardStubble: "hair",
   eyeW: "eye", iris: "eye", glint: "glint", lipUR: "lip", lipUL: "lip", lipLR: "lip", lipLL: "lip", mouth: "wet", teethU: "wet", teethL: "wet" };
-for (const st of HAIRSTYLES) { FACE_COLOR["hair_" + st] = "hair"; FACE_MAT["hair_" + st] = "hair"; }
+for (const st of HAIRSTYLES) { FACE_COLOR["hair_" + st] = "hair"; FACE_MAT["hair_" + st] = "hair"; FACE_COLOR["hairc_" + st] = "hair"; FACE_MAT["hairc_" + st] = st === "afro" ? "curl" : "card"; }
+for (const k of ["beardcFull", "beardcGoatee", "beardcMus"]) { FACE_COLOR[k] = "beardTint"; FACE_MAT[k] = "card"; }
+export const BEARD_CARDS = { full: "beardcFull", goatee: "beardcGoatee", mustache: "beardcMus" };
+
+// the wind the hair moves in (world-space, metres per second-ish) and the clock it sways to
+export const HAIR_U = { uTime: { value: 0 }, uWind: { value: new THREE.Vector3(0.5, 0, 0.25) } };
+// a strand texture, built pixel by pixel: dozens of fine hairs, tapering to wispy tips, gaps between them
+function strandTexture(curly) {
+  const W = 128, H = 256, A = new Float32Array(W * H), B = new Float32Array(W * H);
+  let sd = curly ? 77 : 33; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  const N = curly ? 40 : 46;
+  for (let s = 0; s < N; s++) {
+    const x0 = rnd() * W, amp = curly ? 2.5 + rnd() * 4 : 0.5 + rnd() * 1.4, fr = curly ? 0.1 + rnd() * 0.08 : 0.012 + rnd() * 0.02, ph = rnd() * 6.28;
+    const drift = (rnd() - 0.5) * (curly ? 6 : 12), reach = 0.55 + rnd() * 0.45, wid = 0.45 + rnd() * 0.7, br = 0.62 + rnd() * 0.38;
+    for (let y = 0; y < H * reach; y++) {
+      const t = y / H, taper = 1 - sst(reach * 0.6, reach, t), xc = x0 + Math.sin(y * fr + ph) * amp + drift * t * t, w = wid * taper + 0.35;
+      for (let px = Math.floor(xc - 2.5); px <= Math.ceil(xc + 2.5); px++) {
+        const a = Math.max(0, 1 - Math.abs(px - xc) / w) * (0.35 + 0.65 * taper), i = y * W + ((px % W) + W) % W;
+        if (a > A[i]) { A[i] = a; B[i] = br * (0.9 + 0.1 * Math.sin(y * 0.3 + s)); }
+      }
+    }
+  }
+  const data = new Uint8Array(W * H * 4);
+  for (let i = 0; i < W * H; i++) { const y = Math.floor(i / W), root = y < H * 0.03 ? 0.5 : 0; const a = Math.min(1, Math.max(A[i], root)); const b = A[i] > 0.05 ? B[i] : 0.55; data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = Math.round(b * 255); data[i * 4 + 3] = Math.round(a * 255); }
+  const t = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
+  t.wrapS = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true;
+  return t;
+}
+let STRAND = null, CURL = null;
+// the strand-card shading: lit along the hair (two-tone sheen), roots darker, see-through between strands, blowing in the wind
+function cardMaterial(curly) {
+  if (!STRAND) { STRAND = strandTexture(false); CURL = strandTexture(true); }
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, map: curly ? CURL : STRAND, alphaTest: 0.32, side: THREE.DoubleSide, roughness: 0.75 });
+  m.alphaToCoverage = true;
+  m.userData.uMove = { value: new THREE.Vector3() };
+  const key = "|Fcard" + (curly ? "c" : "");
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uTime = HAIR_U.uTime; sh.uniforms.uWind = HAIR_U.uWind; sh.uniforms.uMove = m.userData.uMove;
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute vec3 aDir; varying vec3 vDirV; varying float vTip; uniform float uTime; uniform vec3 uWind; uniform vec3 uMove;")
+      .replace("#include <begin_vertex>", `#include <begin_vertex>
+        vTip = uv.y;
+        vec3 dd = aDir;
+        #ifdef USE_INSTANCING
+          dd = mat3(instanceMatrix) * dd;
+        #endif
+        vDirV = normalize((modelViewMatrix * vec4(dd, 0.0)).xyz);`)
+      .replace("#include <project_vertex>", `
+        vec4 mvPosition = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          mvPosition = instanceMatrix * mvPosition;
+        #endif
+        vec4 wp = modelMatrix * mvPosition;
+        float tip = pow(uv.y, 1.5);
+        float ph = uTime * 2.4 + wp.x * 3.1 + wp.z * 2.7 + wp.y * 6.0;
+        float gust = 0.55 + 0.45 * sin(uTime * 0.7 + wp.x * 0.05) * sin(uTime * 1.3 + wp.z * 0.04);
+        vec3 wind = uWind * gust * (0.6 + 0.4 * sin(ph)) + vec3(sin(ph * 1.7), 0.35 * sin(ph * 2.3), cos(ph * 1.3)) * 0.22 * length(uWind);
+        wp.xyz += (wind + uMove) * tip * 0.028;
+        mvPosition = viewMatrix * wp;
+        gl_Position = projectionMatrix * mvPosition;`);
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vDirV; varying float vTip;")
+      .replace("#include <color_fragment>", `#include <color_fragment>
+        diffuseColor.rgb *= mix(0.55, 1.08, smoothstep(0.0, 0.45, vTip));
+        float lu = fract(vMapUv.x * 4.0 + 0.001) / 0.96;
+        diffuseColor.a *= smoothstep(0.0, 0.28, lu) * smoothstep(1.0, 0.72, lu);`)
+      .replace("#include <lights_physical_pars_fragment>", `#include <lights_physical_pars_fragment>
+        void RE_Direct_Card(const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight) {
+          float ndl = dot(geometryNormal, directLight.direction);
+          float wrap = max(0.0, (ndl + 0.5) / 1.5);
+          reflectedLight.directDiffuse += directLight.color * wrap * BRDF_Lambert(material.diffuseColor);
+          vec3 T = normalize(vDirV), H = normalize(directLight.direction + geometryViewDir);
+          vec3 T2 = normalize(T + geometryNormal * 0.35);
+          float a = dot(T, H), b = dot(T2, H);
+          float s1 = pow(sqrt(max(0.0, 1.0 - a * a)), 140.0), s2 = pow(sqrt(max(0.0, 1.0 - b * b)), 36.0);
+          reflectedLight.directSpecular += directLight.color * wrap * (s1 * 0.09 + s2 * 0.14 * min(vec3(1.0), material.diffuseColor * 2.5));
+        }
+        #undef RE_Direct
+        #define RE_Direct RE_Direct_Card`);
+  };
+  m.customProgramCacheKey = () => key;
+  return m;
+}
+export { cardMaterial };
 // a hairstyle for someone who doesn't have one yet: longer styles for long-haired looks
 export const LONG_STYLES = ["long", "bob", "bun", "pony"];
 export function pickStyle(look, hs) {
@@ -382,6 +591,7 @@ export function faceMaterials() {
     eye: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.06, envMapIntensity: 1.4 }),
     glint: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
     lip: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32 }),
+    card: cardMaterial(false), curl: cardMaterial(true),
     wet: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.24 }),
   };
 }
@@ -464,7 +674,7 @@ export function faceMatrices(head0, f, opts, emit) {
   // their own proportions: a wider or narrower face, a longer or shorter head
   const head = _h.copy(head0).multiply(local(0, 0, 0, 0, 0, 0, v.jaw, v.len, 1));
   if (opts.head) emit("headHi", head, 0);
-  if (opts.hair) emit(opts.hair, head, 0);
+  if (opts.hair) { emit(opts.hair, head, 0); const c2 = "hairc_" + opts.hair.slice(5); if (FACE[c2]) emit(c2, head, 0); }
   emit("nose", _n.copy(head).multiply(local(0, NOSE_ROOT.y, NOSE_ROOT.z, 0, 0, 0, v.noseW, v.nose, v.nose)).multiply(local(0, -NOSE_ROOT.y, -NOSE_ROOT.z, 0, 0, 0)), 0);
   // cheeks lift and fill out with a smile, and with a squint
 
@@ -497,4 +707,5 @@ export function faceMatrices(head0, f, opts, emit) {
     emit(L ? "lipLL" : "lipLR", _a.copy(head).multiply(local(0, MOUTH.y - drop - Math.max(0, cv) * 0.0006, MOUTH.z - drop * 0.4, open * 0.25, 0, a * 0.85, wide * v.mouthW, (1 - open * 0.1) * v.lips * 1.04, v.lips)), 0);
   }
   if (opts.beard) emit(opts.beard, head, 0);
+  if (opts.beardCards) emit(opts.beardCards, head, 0);
 }

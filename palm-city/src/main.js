@@ -16,7 +16,7 @@ import { makeSkids } from "./skid.js";
 import { makeDoors } from "./doors.js";
 import { createPlayer, updatePlayerOnFoot, poseOnFoot, spawnCar, syncCar, driveStep, createCamRig, updateCam } from "./play.js";
 import { makeCharacter } from "./people.js";
-import { setExpr } from "./face.js";
+import { setExpr, HAIR_U } from "./face.js";
 import { PLACES, buildSigns, setSignNight, makeBeacon } from "./places.js";
 import { BIZ, PROPS, newState, makeEconomy, xpNeed } from "./economy.js";
 import { makeStory } from "./story.js";
@@ -631,6 +631,11 @@ function update(dt) {
     updateCam(rig, dt, P.car ? { x: P.car.x, z: P.car.z, y: P.car.y, h: P.car.h, speed: P.car.speed } : { x: P.x, z: P.z, y: P.y, h: P.yaw, speed: 0 }, inp, collider, !!P.car, time);
   }
   weather.update(dt, camera, interior.inside);
+  // the breeze the hair blows in: a sea wind off the bay, swinging round slowly, stronger in a storm (none indoors)
+  {
+    const storm = (weather.W && (weather.W.rain || weather.W.amt || weather.W.k)) || 0, ang = time * 0.03 + 0.6, str = interior.inside ? 0.12 : 0.55 + storm * 1.4;
+    HAIR_U.uTime.value = time; HAIR_U.uWind.value.set(Math.cos(ang) * str, 0, Math.sin(ang) * str);
+  }
   sky.update(dt, time, P.car || P, camera);
 }
 
