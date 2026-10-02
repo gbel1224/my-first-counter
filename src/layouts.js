@@ -22,7 +22,7 @@ function tvWall(ctx, x, z, ry, d) {
   if (!d.tv) return;
   ctx.P(x, z, ry, () => { const s = F.tvUnit(ctx.K, 2.0, { wood: d.tv }); ctx.tv(x + Math.sin(ry) * s.z, s.y, z + Math.cos(ry) * s.z, ry, s.w - 0.06, s.h - 0.06, "sport"); });
 }
-function lampAt(ctx, x, z, d) { if (d.lamp) ctx.P(x, z, 0, () => F.floorLamp(ctx.K, d.lamp)); }
+function lampAt(ctx, x, z, d) { if (d.lamp) { ctx.P(x, z, 0, () => F.floorLamp(ctx.K, d.lamp)); ctx.light(x, 1.5, z, d.lamp, 4.5, 4.5); } }
 function plantAt(ctx, x, z, d, s = 1) { if (d.plant) ctx.P(x, z, 0, () => F.plant(ctx.K, d.plant, { s })); }
 function artAt(ctx, x, z, ry, d, w = 1.4, h = 0.95, y = 1.65) { if (d.art !== null) ctx.painting(x, y, z, ry, w, h, d.art); }
 // the kitchen details every home gets: subway-tile splashback, microwave, toaster, a pot on the hob, a clock
@@ -38,6 +38,7 @@ function kitchenBits(ctx, x0, zRun, len, clockZ) {
 function bedroomBits(ctx, bx, bz0, side) {
   const { K } = ctx;
   DC.photoFrame(K, bx - 1.05, 0.56, bz0 + 0.22, 0.3); DC.photoFrame(K, bx + 1.05, 0.56, bz0 + 0.22, -0.3);
+  for (const sd of [-1, 1]) ctx.light(bx + sd * 1.2, 0.95, bz0 + 0.35, 0xffd49a, 1.6, 3);
   ctx.fan(bx, bz0 + 2.3);
 }
 function bathroom(ctx, r, o) {
@@ -312,7 +313,7 @@ export const PLANS = {
       foyer: { r: [4, 2, 9, 6.5], floor: "marble", light: [0xffd0a0, 14], ceil: "spot", name: "Foyer" },
       hall: { r: [-5, -6.5, 4, 6.5], floor: "concreteDark", light: [0xc050ff, 12], ceil: "none", name: "Dance floor" },
       bar: { r: [4, -6.5, 9, 2], floor: "darkwood", light: [0xffa060, 12], ceil: "spot", name: "Bar" },
-      vip: { r: [-9, -1, -5, 6.5], floor: "carpetRed", light: [0xff6080, 10], ceil: "spot", name: "VIP lounge" },
+      vip: { r: [-9, -1, -5, 6.5], floor: "carpetRed", light: [0xffa0a0, 18], ceil: "spot", name: "VIP lounge" },
       back: { r: [-9, -6.5, -5, -1], floor: "concrete", light: [0xf4f0e8, 14], ceil: "fluoro", name: "Backstage" },
     },
     links: [
@@ -340,6 +341,10 @@ export const PLANS = {
       for (const [tz, flip, cols] of [[-3.3, 1, [0xff3b8b, 0x3bd0ff, 0xb44bff, 0xffd23b, 0x3bd0ff]], [4.5, -1, [0xb44bff, 0xff3b8b, 0x3bd0ff, 0xff3b8b, 0xffd23b]]])
         cols.forEach((c, i) => cans.push([-0.5 + flip * (-3.5 + (i + 0.5) * 7 / 5), ctx.H - 0.6, tz + 0.1 * flip, c]));
       ctx.beams(cans);
+      // roving coloured washes and a floor uplight that changes with the beat
+      for (let i = 0; i < 3; i++) ctx.light(-0.5, 3.4, 0.5, 0xff3b8b, 9, 9, (t, L) => { L.x = -0.5 + Math.sin(t * 0.6 + i * 2.1) * 3.2; L.z = 0.5 + Math.cos(t * 0.8 + i * 2.1) * 3.6; L.col.setHSL((t * 0.04 + i / 3) % 1, 1, 0.55); });
+      ctx.light(-0.5, 0.5, 0.5, 0xffffff, 5, 6, (t, L) => { L.col.setHex([0xff3b8b, 0x3bd0ff, 0xb44bff, 0xffd23b][Math.floor(t * 2.2) % 4]); });
+      ctx.light(-0.5, 1.4, -4.6, 0x3bd0ff, 3, 4);
       for (let i = 0; i < 9; i++) ctx.npc(-2.4 + (i % 3) * 1.6 + (Math.floor(i / 3) % 2) * 0.5, -1.4 + Math.floor(i / 3) * 1.9, i * 1.3, "dance");
       for (const [x, z] of [[-4.3, -1.6], [3.3, 0.6], [3.3, 5.6]]) { ctx.P(x, z, 0, () => F.roundTable(K, 0.32, { h: 1.05, top: 0x1a1a1c, leg: F.C.chrome })); ctx.K.lathe("glass", [[0.001, 0], [0.035, 0], [0.04, 0.12]], x + 0.1, 1.07, z, 0xff8ab0); }
       ctx.spot(-0.5, 0.5, 2.2, "DANCE", "🕺 Hit the dance floor", "dance");
