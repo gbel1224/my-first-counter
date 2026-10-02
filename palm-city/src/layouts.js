@@ -864,7 +864,7 @@ export const PLANS = {
       hallB: { r: [-9, -6, 2, 0.5], floor: "wood", light: [0xfff4e4, 18], ceil: "none", name: "West gallery" },
       office: { r: [2, -6, 9, 0.5], floor: "carpet", light: [0xfff0dc, 16], ceil: "fluoro", name: "Curator's office" },
       studio: { r: [-9, -10, 2, -6], floor: "concrete", light: [0xf4f8ff, 20], ceil: "panel", name: "Restoration studio" },
-      vault: { r: [2, -10, 9, -6], floor: "concreteDark", light: [0xe8f0ff, 10], ceil: "spot", name: "Vault" },
+      vault: { r: [2, -10, 9, -6], floor: "concreteDark", light: [0xe8f0ff, 18], ceil: "spot", name: "Vault" },
     },
     links: [
       { a: "lobby", b: "hallA", kind: "arch", at: 3.2, w: 2.2, sign: ["EXHIBITION", null] },

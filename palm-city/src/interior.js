@@ -381,7 +381,13 @@ export function makeInterior(scene, g) {
         const [nx, nz] = facing(ry), tilt = o.lean || 0;
         K.push(x + nx * 0.025, z + nz * 0.025, ry, y); K.box("wood", w + 0.08, h + 0.08, 0.04, 0, 0, 0, 0x1e1a14, { rx: -tilt }); K.pop();
         const m = plane(x + nx * 0.025, y, z + nz * 0.025, ry, w, h, new THREE.MeshStandardMaterial({ map: paintingTex(v), roughness: 0.85, envMapIntensity: 0.1 }), 0.022);
-        m.rotation.x = 0; if (tilt) { m.rotation.order = "YXZ"; m.rotation.x = -tilt; }
+        m.rotation.x = 0;
+        if (tilt) {
+          // tilted back: sit the canvas on the frame's face, along the tilted normal
+          m.rotation.order = "YXZ"; m.rotation.x = -tilt;
+          const c = Math.cos(tilt), sn = Math.sin(tilt);
+          m.position.set(x + nx * 0.025 + nx * c * 0.024, y + sn * 0.024, z + nz * 0.025 + nz * c * 0.024);
+        }
       },
       rug(x, z, w, d, col, ry = 0) {
         const c = new THREE.Color(col), tex = textTex(256, 256, (cx, s) => { cx.fillStyle = hex(c); cx.fillRect(0, 0, s, s); cx.strokeStyle = "rgba(240,230,210,.55)"; cx.lineWidth = 8; cx.strokeRect(18, 18, s - 36, s - 36); cx.lineWidth = 3; cx.strokeRect(34, 34, s - 68, s - 68); cx.strokeStyle = "rgba(240,230,210,.3)"; cx.beginPath(); cx.moveTo(s / 2, 50); cx.lineTo(s - 50, s / 2); cx.lineTo(s / 2, s - 50); cx.lineTo(50, s / 2); cx.closePath(); cx.stroke(); for (let i = 0; i < 4000; i++) { cx.fillStyle = `rgba(0,0,0,${rnd() * 0.08})`; cx.fillRect(rnd() * s, rnd() * s, 2, 2); } });
