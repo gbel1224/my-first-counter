@@ -26,7 +26,7 @@ const chars = exprs.map((e, i) => {
   const look = randomLook(rnd); look.beard = beards[i % beards.length] || null; look.long = !look.beard && i % 2 === 1; look.bald = !look.beard && i % 5 === 4; look.mood = e; look.h = 1; look.bulk = 1;
   const styles = (q.get("s") || "").split(","); if (styles[i]) { look.hairStyle = styles[i]; look.long = ["long", "bob", "bun", "pony"].includes(styles[i]); look.bald = false; }
   const skins = (q.get("k") || "").split(","); if (skins[i]) { look.skin = parseInt(skins[i], 16); look.hs = undefined; }
-  look.fv = null;
+  look.fv = null; const ages = (q.get("age") || "").split(","); if (ages[i]) look.age = +ages[i]; const fr = (q.get("fr") || "").split(","); if (fr[i]) look.freckles = +fr[i];
   const ch = makeCharacter(look); scene.add(ch.group);
   return { ch, e, x: i * 2 };
 });
@@ -42,7 +42,7 @@ function frame(ts) {
     const hm = c.ch.group.children[2].matrix.elements, hy = hm[13] + 0.18;
     const cx = i % cols, cy = Math.floor(i / cols), w = W / cols, h = Hh / rows;
     cam.aspect = w / h; cam.updateProjectionMatrix();
-    cam.position.set(c.x + Math.sin(yaw) * 0.85, hy + 0.04, Math.cos(yaw) * 0.85); cam.lookAt(c.x, hy - 0.005, 0.02);
+    const dd = +(q.get("d") || 0.85); cam.position.set(c.x + Math.sin(yaw) * dd, hy + 0.04 * dd / 0.85, Math.cos(yaw) * dd); cam.lookAt(c.x, hy - 0.005, 0.02);
     r.setViewport(cx * w, Hh - (cy + 1) * h, w, h); r.setScissor(cx * w, Hh - (cy + 1) * h, w, h);
     r.render(scene, cam);
     const d = document.createElement("div"); d.textContent = c.e; d.style.left = (cx * w + 8) + "px"; d.style.top = (cy * h + 6) + "px"; lab.appendChild(d);

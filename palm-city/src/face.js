@@ -81,7 +81,7 @@ function mirrorX(src) {
   return g;
 }
 // a tube along points, its radius following rad(u), flattened front-to-back by fz, with rounded ends
-function tube(pts, rad, fz = 1, seg = 24, rs = 10) {
+function tube(pts, rad, fz = 1, seg = 24, rs = 10, capStart = true) {
   const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(...p)));
   const g = new THREE.TubeGeometry(curve, seg, 1, rs, false);
   const p = g.attributes.position, c = new THREE.Vector3(), v = new THREE.Vector3();
@@ -90,7 +90,7 @@ function tube(pts, rad, fz = 1, seg = 24, rs = 10) {
     for (let j = 0; j <= rs; j++) { const k = i * (rs + 1) + j; v.fromBufferAttribute(p, k).sub(c).multiplyScalar(r); v.z *= fz; p.setXYZ(k, c.x + v.x, c.y + v.y, c.z + v.z); }
   }
   g.computeVertexNormals();
-  const caps = [0, 1].map(u => { const q = curve.getPointAt(u); const s = new THREE.SphereGeometry(rad(u), 10, 8); s.scale(1, 1, fz); s.translate(q.x, q.y, q.z); return s; });
+  const caps = (capStart ? [0, 1] : [1]).map(u => { const q = curve.getPointAt(u); const s = new THREE.SphereGeometry(rad(u), 10, 8); s.scale(1, 1, fz); s.translate(q.x, q.y, q.z); return s; });
   return [g, ...caps];
 }
 
@@ -123,7 +123,8 @@ function build() {
     const nose = paintFn(n, (x, y, z, c) => {
       const nx = x / 0.0138, ny = (y - 0.181) / 0.03;
       const nost = Math.exp(-(((Math.abs(nx) - 0.55) / 0.3) ** 2) - (((ny + 0.86) / 0.1) ** 2)) * sst(0.1, 0.122, z);
-      const k = 1 - 0.62 * Math.min(1, nost * 1.4);
+      const wingCrease = Math.exp(-(((Math.hypot(Math.abs(nx) - 0.62, (ny + 0.62) * 1.3) - 0.38) / 0.07) ** 2)) * sst(0.0, 0.25, Math.abs(nx) - 0.2);
+      const k = (1 - 0.62 * Math.min(1, nost * 1.4)) * (1 - 0.22 * wingCrease);
       const tip = 0.5 * Math.exp(-(((ny + 0.55) / 0.3) ** 2));
       c[0] = k; c[1] = k * (1 - tip * 0.06); c[2] = k * (1 - tip * 0.07);
     });
@@ -387,9 +388,10 @@ function build() {
   }
   // ---- lips: upper with a cupid's bow, fuller lower, each half from the middle out to the corner ----
   {
-    const up = tube([[-0.0012, 0.0034, 0.0016], [0.0035, 0.0047, 0.0014], [0.0065, 0.0043, 0.0006], [0.012, 0.0031, -0.0008], [0.0185, 0.0013, -0.0026], [0.0236, -0.0002, -0.0044]], u => lerp(0.0029, 0.001, sst(0.05, 1, u)) * (u < 0.12 ? 0.9 : 1), 0.7, 26, 12);
-    const lo = tube([[-0.0012, -0.0039, 0.0021], [0.006, -0.0042, 0.0015], [0.0125, -0.0035, 0.0], [0.0185, -0.0019, -0.0022], [0.0236, -0.0003, -0.0044]], u => lerp(0.0039, 0.001, sst(0.05, 1, u)), 0.72, 26, 12);
-    const lipCol = (x, y, z, c) => { const k = (0.92 + sst(0.0, 0.0035, z) * 0.12) * lerp(1, 0.62, sst(0.014, 0.024, Math.abs(x))); c[0] = k; c[1] = k * 0.97; c[2] = k * 0.97; };
+    const up = tube([[-0.0012, 0.0034, 0.0016], [0.0035, 0.0047, 0.0014], [0.0065, 0.0043, 0.0006], [0.012, 0.0031, -0.0008], [0.0185, 0.0013, -0.0026], [0.0236, -0.0002, -0.0044]], u => lerp(0.0034, 0.0011, sst(0.05, 1, u)) * (u < 0.12 ? 0.9 : 1), 0.85, 26, 14, false);
+    const lo = tube([[-0.0012, -0.0039, 0.0021], [0.006, -0.0042, 0.0015], [0.0125, -0.0035, 0.0], [0.0185, -0.0019, -0.0022], [0.0236, -0.0003, -0.0044]], u => lerp(0.0046, 0.0011, sst(0.05, 1, u)), 0.88, 26, 14, false);
+    // lips: moist highlight along the middle, darker where they meet, fading toward the skin at the outer border and the corners
+    const lipCol = (x, y, z, c) => { const k = (0.9 + sst(0.0, 0.003, z) * 0.14) * lerp(1, 0.66, sst(0.015, 0.024, Math.abs(x))) * (1 - 0.22 * sst(0.0012, 0.0, Math.abs(y))); const toSkin = sst(0.0028, 0.0042, Math.abs(y)) * 0.5; c[0] = lerp(k, 1.05, toSkin); c[1] = lerp(k * 0.96, 1.08, toSkin); c[2] = lerp(k * 0.96, 1.08, toSkin); };
     F.lipUR = merge(up.map(g => paintFn(g, lipCol))); F.lipUL = mirrorX(F.lipUR);
     F.lipLR = merge(lo.map(g => paintFn(g, lipCol))); F.lipLL = mirrorX(F.lipLR);
   }
@@ -427,7 +429,7 @@ export const FACE_COLOR = { headHi: "skin", nose: "skin", cheeks: "skin", eyeW: 
   lipUR: "lipCol", lipUL: "lipCol", lipLR: "lipCol", lipLL: "lipCol", mouth: 0xffffff, teethU: 0xffffff, teethL: 0xffffff,
   beardFull: "beardTint", beardGoatee: "beardTint", beardMus: "beardTint", beardStubble: "beardTint" };
 // how each part is shaded
-export const FACE_MAT = { headHi: "skin", nose: "skin", cheeks: "skin", lid: "skin", lidLow: "skin", browR: "hair", browL: "hair", beardFull: "hair", beardGoatee: "hair", beardMus: "hair", beardStubble: "hair",
+export const FACE_MAT = { headHi: "skinD", nose: "skin", cheeks: "skin", lid: "skin", lidLow: "skin", browR: "hair", browL: "hair", beardFull: "hair", beardGoatee: "hair", beardMus: "hair", beardStubble: "hair",
   eyeW: "eye", iris: "eye", glint: "glint", lipUR: "lip", lipUL: "lip", lipLR: "lip", lipLL: "lip", mouth: "wet", teethU: "wet", teethL: "wet" };
 for (const st of HAIRSTYLES) { FACE_COLOR["hair_" + st] = "hair"; FACE_MAT["hair_" + st] = "shell"; FACE_COLOR["hairc_" + st] = "hair"; FACE_MAT["hairc_" + st] = st === "afro" ? "curl" : "card"; }
 for (const k of ["beardcFull", "beardcGoatee", "beardcMus"]) { FACE_COLOR[k] = "beardTint"; FACE_MAT[k] = "card"; }
@@ -548,6 +550,75 @@ export function pickStyle(look, hs) {
   return list[Math.floor(hs * 4567) % list.length];
 }
 
+// the detailed skin: everything here works in head-local metres (vFLocal), so features land in the right place
+const SKIN_DETAIL = `
+varying vec4 vSkin;     // x age 0..1, y freckles 0..1, z stubble 0..1, w a per-person seed
+float sst(float a, float b, float x) { return smoothstep(a, b, x); }
+float g2(vec2 p, vec2 c, vec2 s) { vec2 d = (p - c) / s; return exp(-dot(d, d)); }
+float frontW() { return sst(0.04, 0.085, vFLocal.z); }
+// the height of the skin surface: pores, fine texture, and age lines in the places faces crease
+float skinHeight(vec3 p) {
+  vec2 q = vec2(abs(p.x), p.y);
+  float age = vSkin.x, fw = frontW();
+  float poreSize = 0.6 + 0.8 * g2(q, vec2(0.0, 0.17), vec2(0.03, 0.03)) + 0.5 * g2(q, vec2(0.045, 0.165), vec2(0.02, 0.02));
+  float pores = -smoothstep(0.62, 0.95, fnoise(p * 1500.0 + vSkin.w * 31.0)) * poreSize;
+  float fine = (fnoise(p * 520.0) - 0.5) * 0.6 + (fnoise(p * 2600.0) - 0.5) * 0.35;
+  float h = (pores + fine) * 0.35;
+  // forehead lines
+  float fore = sst(0.232, 0.245, p.y) * sst(0.275, 0.258, p.y) * sst(0.055, 0.03, q.x) * fw;
+  h -= fore * (0.25 + age) * 2.2 * pow(abs(sin(p.y * 620.0 + sin(p.x * 60.0) * 1.2)), 4.0);
+  // crow's feet fanning out from the outer corners of the eyes
+  vec2 ec = vec2(0.054, 0.205), de = q - ec; float ang = atan(de.y, de.x), rr = length(de);
+  h -= age * 2.2 * sst(0.018, 0.004, rr) * sst(0.0, 0.004, rr) * sst(0.7, 0.2, abs(ang)) * pow(abs(sin(ang * 9.0)), 4.0);
+  // the fold from the side of the nose down past the corners of the mouth
+  vec2 a = vec2(0.016, 0.168), b = vec2(0.03, 0.128); vec2 ab = b - a; float t = clamp(dot(q - a, ab) / dot(ab, ab), 0.0, 1.0);
+  float dl = length(q - a - ab * t);
+  h -= (0.35 + age * 1.2) * sst(0.004, 0.0, dl) * fw;
+  // under-eye creases
+  h -= age * 0.8 * sst(0.003, 0.0, abs(length((q - vec2(0.036, 0.2)) * vec2(1.0, 1.6)) - 0.017)) * sst(0.205, 0.19, p.y) * fw;
+  return h;
+}
+vec3 skinBump(vec3 surf, vec3 n, float fd) {
+  float h = skinHeight(vFLocal) * 0.0013;
+  vec2 dh = vec2(dFdx(h), dFdy(h));
+  vec3 sx = normalize(dFdx(surf)), sy = normalize(dFdy(surf));
+  vec3 r1 = cross(sy, n), r2 = cross(n, sx);
+  float det = dot(sx, r1) * fd;
+  vec3 grad = sign(det) * (dh.x * r1 + dh.y * r2);
+  return normalize(abs(det) * n - grad * 1.0);
+}
+void skinAlbedo(inout vec3 c) {
+  vec3 p = vFLocal; vec2 q = vec2(abs(p.x), p.y); float fw = frontW();
+  float lum = dot(c, vec3(0.3, 0.59, 0.11)), light = smoothstep(0.08, 0.5, lum);
+  // a flush on the nose, cheeks, ears; blood near the surface
+  float flush = 0.6 * g2(q, vec2(0.0, 0.168), vec2(0.012, 0.014)) + 0.45 * g2(q, vec2(0.048, 0.168), vec2(0.018, 0.016)) + 0.5 * sst(0.086, 0.096, q.x) * sst(0.0, 0.02, 0.21 - abs(p.y - 0.19));
+  c *= mix(vec3(1.0), vec3(1.04, 0.9, 0.88), flush * (0.4 + 0.6 * light));
+  // darker under the eyes
+  c *= mix(vec3(1.0), vec3(0.86, 0.82, 0.88), g2(q, vec2(0.036, 0.195), vec2(0.016, 0.006)) * fw * (0.6 + vSkin.x * 0.6));
+  // freckles across the nose and cheeks
+  vec3 fp = p * 620.0 + vSkin.w * 17.0, fcell = floor(fp); vec3 fo = vec3(fhash(fcell), fhash(fcell + 3.1), fhash(fcell + 7.7)) * 0.6 + 0.2;
+  float fdist = length(fp - fcell - fo), fsz = 0.18 + 0.2 * fhash(fcell + 1.3);
+  float fr = step(0.55, fhash(fcell + 9.1)) * sst(fsz, fsz * 0.4, fdist) * (0.5 + 0.5 * fhash(fcell + 4.4)) * vSkin.y * (g2(q, vec2(0.025, 0.175), vec2(0.045, 0.026)) * fw);
+  c *= mix(vec3(1.0), vec3(0.72, 0.58, 0.48), fr);
+  // a mole or two
+  vec3 cell = floor(p * 70.0 + vSkin.w * 7.0); float mh = fhash(cell + vSkin.w * 13.0);
+  vec3 cc = (cell + 0.5) / 70.0 - vSkin.w * 0.1; float md = length(p * 70.0 + vSkin.w * 7.0 - (cell + 0.5));
+  c *= mix(1.0, 0.45, step(0.993, mh) * sst(0.32, 0.18, md) * fw);
+  // five o'clock shadow over the jaw and upper lip on clean-shaven men: a bluish-grey cast with follicles
+  float jaw = sst(0.162, 0.148, p.y) * sst(0.06, 0.085, p.y) * fw * (1.0 - g2(q, vec2(0.0, 0.1405), vec2(0.026, 0.007)));
+  jaw = max(jaw, g2(q, vec2(0.0, 0.153), vec2(0.024, 0.005)) * fw);
+  float fol = 0.7 + 0.3 * smoothstep(0.4, 0.8, fnoise(p * 2200.0));
+  c *= mix(vec3(1.0), vec3(0.74, 0.74, 0.8), jaw * vSkin.z * fol * (0.5 + 0.5 * light));
+  // mottling: skin is never one flat colour
+  c *= 0.95 + 0.08 * fnoise(p * 140.0) + 0.04 * (fnoise(p * 420.0) - 0.5);
+}
+float skinRough(float r) {
+  vec2 q = vec2(abs(vFLocal.x), vFLocal.y);
+  float tz = max(g2(q, vec2(0.0, 0.245), vec2(0.03, 0.02)), g2(q, vec2(0.0, 0.18), vec2(0.012, 0.04)));
+  float pore = smoothstep(0.62, 0.95, fnoise(vFLocal * 1500.0 + vSkin.w * 31.0));
+  return clamp(r - tz * 0.16 + pore * 0.12 + (fnoise(vFLocal * 300.0) - 0.5) * 0.08, 0.3, 1.0);
+}
+`;
 // ---- shading: skin that light soaks into, hair with strands and a two-tone sheen ----
 const NOISE = `
 varying vec3 vFLocal;
@@ -563,9 +634,21 @@ export function patch(m, kind) {
   const prev = m.onBeforeCompile, key = (m.customProgramCacheKey ? m.customProgramCacheKey.call(m) : "") + "|F" + kind;
   m.onBeforeCompile = (sh, r) => {
     if (prev) prev.call(m, sh, r);
-    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vFLocal;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvFLocal = position;");
-    let f = sh.fragmentShader.replace("#include <common>", "#include <common>\n" + NOISE);
-    if (kind === "skin") {
+    const detail = kind === "skinD";
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vFLocal;" + (detail ? "\nattribute vec4 aSkin; varying vec4 vSkin;" : ""))
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFLocal = position;" + (detail ? "\nvSkin = aSkin;" : ""));
+    let f = sh.fragmentShader.replace("#include <common>", "#include <common>\n" + NOISE + (detail ? SKIN_DETAIL : ""));
+    if (detail) {
+      // the face up close: pores, lines that deepen with age, freckles and moles, a flush on the nose and
+      // cheeks, shadows under the eyes, a five o'clock shadow, an oily shine down the T-zone
+      f = f.replace("#include <color_fragment>", `#include <color_fragment>
+        skinAlbedo(diffuseColor.rgb);`)
+       .replace("#include <roughnessmap_fragment>", `#include <roughnessmap_fragment>
+        roughnessFactor = skinRough(roughnessFactor);`)
+       .replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
+        normal = skinBump(-vViewPosition, normal, faceDirection);`);
+    }
+    if (kind === "skin" || detail) {
       // mottling and pores in the colour and the shine; light that wraps round and glows warm at the edges
       f = f.replace("#include <color_fragment>", `#include <color_fragment>
         float pn = fnoise(vFLocal * 420.0) * 0.55 + fnoise(vFLocal * 170.0) * 0.45;
@@ -615,6 +698,7 @@ export function patch(m, kind) {
 export function faceMaterials() {
   return {
     skin: patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5 }), "skin"),
+    skinD: patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5 }), "skinD"),
     hair: patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82 }), "hair"),
     eye: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.06, envMapIntensity: 1.4 }),
     glint: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
@@ -710,14 +794,14 @@ export function faceMatrices(head0, f, opts, emit) {
     const L = side < 0, open = L ? f.eyeL : f.eyeR, slot = L ? 0 : 1;
     const ex = side * EYE.x, yaw = side * 0.06;
     const es = v.eye;
-    emit("eyeW", _a.copy(head).multiply(local(ex, EYE.y, EYE.z, 0, yaw, 0, 1.2 * es, es, es)), slot);
+    emit("eyeW", _a.copy(head).multiply(local(ex, EYE.y, EYE.z, 0, yaw, 0, 1.12 * es, 0.97 * es, es)), slot);
     emit("iris", _a.copy(head).multiply(local(ex, EYE.y, EYE.z, -f.gy, yaw + f.gx, 0, es, es, es)), slot);
     emit("glint", _a.copy(head).multiply(local(ex, EYE.y, EYE.z, 0, yaw, 0, es, es, es)), slot);
     // upper lid: tucked back when wide, over the top of the iris when relaxed, right down for a blink
-    const lidA = open >= 1 ? lerp(-0.42, -0.85, Math.min(1, (open - 1) / 0.4)) : lerp(1.58, -0.42, open);
-    emit("lid", _a.copy(head).multiply(local(ex, EYE.y + 0.0004, EYE.z - 0.0004, lidA, yaw + f.gx * 0.25, side * -0.04, 1.2 * es, es, es)), slot);
+    const lidA = open >= 1 ? lerp(-0.3, -0.82, Math.min(1, (open - 1) / 0.4)) : lerp(1.58, -0.3, open);
+    emit("lid", _a.copy(head).multiply(local(ex, EYE.y + 0.0004, EYE.z - 0.0004, lidA, yaw + f.gx * 0.25, side * -0.06, 1.12 * es, 0.97 * es, es)), slot);
     const low = c.lower + (f.blink > 0 ? 0.3 : 0);
-    emit("lidLow", _a.copy(head).multiply(local(ex, EYE.y - 0.0003, EYE.z - 0.0003, -(0.08 + low * 0.55), yaw, 0, 1.2 * es, es, es)), slot);
+    emit("lidLow", _a.copy(head).multiply(local(ex, EYE.y - 0.0003, EYE.z - 0.0003, -(0.16 + low * 0.55), yaw, side * 0.05, 1.12 * es, 0.97 * es, es)), slot);
     // brows: inner ends knit down for anger, lift for worry; a smirk or a wink cocks one
     const br = f.raise + (L ? 0 : c.smirk * 0.0035) - (L ? c.wink * 0.0015 : 0) + Math.max(0, open - 1) * 0.004;
     emit(L ? "browL" : "browR", _a.copy(head).multiply(local(side * BROW.x, BROW.y + br, BROW.z + Math.max(0, c.tilt) * 0.0012, 0, side * 0.12, (L ? -1 : 1) * (c.tilt * 0.7) + (L ? 0.03 : -0.03), 1, v.brow, v.brow)), 0);

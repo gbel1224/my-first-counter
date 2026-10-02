@@ -97,6 +97,11 @@ export function finishLook(look) {
   if (look.hairStyle === undefined || (look.hairStyle && !look.bald && (look.long ? !["long", "bob", "bun", "pony", "afro"].includes(look.hairStyle) : ["long", "bob", "bun", "pony"].includes(look.hairStyle)))) look.hairStyle = pickStyle(look, hs);
   if (look.bald) look.hairStyle = null; else if (!look.hairStyle) look.hairStyle = look.long ? "long" : "crop";
   if (!look.fv) look.fv = faceVariation(hs, !!look.long);
+  // skin: how weathered, freckled, and (for clean-shaven men) shadowed with stubble
+  if (look.age === undefined) look.age = ((hs * 3571) % 1) * 0.9 + 0.05;
+  const lightSkin = new THREE.Color(look.skin).getHSL({}).l > 0.6;
+  if (look.freckles === undefined) look.freckles = lightSkin && ((hs * 6971) % 1) < 0.35 ? 0.5 + ((hs * 911) % 1) * 0.5 : 0;
+  look.stubble = !look.long && !look.beard ? 0.25 + ((hs * 2153) % 1) * 0.75 : 0;
   if (look.mood === undefined) look.mood = ["neutral", "neutral", "happy", "annoyed", "neutral", "sad", "happy", "neutral", "smug"][Math.floor(hs * 7919) % 9];
   _fc.set(look.skin); _fc2.setRGB(_fc.r * 0.86, _fc.g * 0.64, _fc.b * 0.63); look.lipCol = _fc2.getHex();
   _fc2.set(look.hair).multiplyScalar(0.8); look.browCol = _fc2.getHex();
@@ -176,17 +181,23 @@ export function makeCharacter(look) {
   }
   // the face: the sculpted head, hair, eyes, lids, brows, lips, teeth — each its own mesh, placed every frame
   const FMAT = faceMaterials(), fm = {}, fmats = {}, cardMove = { value: new THREE.Vector3() };
+  let skinAttr = null;
+  const setSkin = () => { if (skinAttr) { skinAttr.setXYZW(0, look.age || 0.3, look.freckles || 0, look.stubble || 0, (look.hs || 0.5) * 10); skinAttr.needsUpdate = true; } };
   let lastPos = null;
   for (const [k, n] of Object.entries(FACE_SLOTS)) {
     const cat = FACE_MAT[k];
     let mat;
     if (cat === "card" || cat === "curl") { mat = fmats[k] = cardMaterial(cat === "curl"); mat.userData.uMove = cardMove; }
-    else { mat = fmats[k] = FMAT[cat].clone(); mat.userData = {}; if (cat === "skin" || cat === "hair" || cat === "shell") patchFace(mat, cat === "shell" ? "hair" : cat); }
+    else { mat = fmats[k] = FMAT[cat].clone(); mat.userData = {}; if (cat === "skin" || cat === "skinD" || cat === "hair" || cat === "shell") patchFace(mat, cat === "shell" ? "hair" : cat); }
     mat.color.set(faceCol(k, look));
     fm[k] = [];
-    for (let i = 0; i < n; i++) { const m = new THREE.Mesh(FACE[k], mat); m.matrixAutoUpdate = false; m.castShadow = k === "headHi" || k.startsWith("hair_") || (k.startsWith("beard") && !k.startsWith("beardc")); m.receiveShadow = cat === "skin"; group.add(m); fm[k].push(m); }
+    for (let i = 0; i < n; i++) {
+      let m;
+      if (k === "headHi") { const g = FACE.headHi.clone(); g.setAttribute("aSkin", new THREE.InstancedBufferAttribute(new Float32Array(4), 4)); m = new THREE.InstancedMesh(g, mat, 1); m.setMatrixAt(0, new THREE.Matrix4()); m.frustumCulled = false; skinAttr = g.attributes.aSkin; }
+      else m = new THREE.Mesh(FACE[k], mat); m.matrixAutoUpdate = false; m.castShadow = k === "headHi" || k.startsWith("hair_") || (k.startsWith("beard") && !k.startsWith("beardc")); m.receiveShadow = cat === "skin"; group.add(m); fm[k].push(m); }
   }
   meshes.head.visible = false;
+  setSkin();
   const face = newFace(look.hs || Math.random());
   face.base = face.expr = look.mood || "neutral";
   let lastT = performance.now() / 1000;
@@ -232,6 +243,7 @@ export function makeCharacter(look) {
     finishLook(look);
     for (const k of Object.keys(PART_OF)) meshes[k].material.color.set(look[COLOR_OF[k]]);
     for (const k in fmats) fmats[k].color.set(faceCol(k, look));
+    setSkin();
   }
   return { group, pose, look, mats, setAcc, recolor, face };
 }
@@ -279,7 +291,9 @@ export class Crowd {
     const FMAT = faceMaterials();
     this.fm = {};
     for (const [k, n] of Object.entries(FACE_SLOTS)) {
-      const m = new THREE.InstancedMesh(FACE[k], FMAT[FACE_MAT[k]], FMAX * n);
+      let geo = FACE[k];
+      if (k === "headHi") { geo = FACE.headHi.clone(); geo.setAttribute("aSkin", new THREE.InstancedBufferAttribute(new Float32Array(FMAX * 4), 4)); }
+      const m = new THREE.InstancedMesh(geo, FMAT[FACE_MAT[k]], FMAX * n);
       m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(FMAX * n * 3), 3);
       m.frustumCulled = false; m.count = 0; m.castShadow = k === "headHi" || k.startsWith("hair_") || (k.startsWith("beard") && !k.startsWith("beardc")); m.receiveShadow = FACE_MAT[k] === "skin"; scene.add(m); this.fm[k] = m;
     }
@@ -501,8 +515,10 @@ export class Crowd {
         mesh.setMatrixAt(at, m);
         c.set(faceCol(k, L));
         mesh.setColorAt(at, c);
+        if (k === "headHi") { const sa = mesh.geometry.attributes.aSkin; sa.setXYZW(at, L.age || 0.3, L.freckles || 0, L.stubble || 0, (L.hs || 0.5) * 10); }
       });
     }
     for (const k in FM) { FM[k].count = cnt[k]; FM[k].instanceMatrix.needsUpdate = true; FM[k].instanceColor.needsUpdate = true; }
+    FM.headHi.geometry.attributes.aSkin.needsUpdate = true;
   }
 }
