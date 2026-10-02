@@ -41,6 +41,7 @@ import { SEA_Y } from "./ocean.js";
 import { AudioSys } from "./audio.js";
 import { makeInterior } from "./interior.js";
 import { loadHumans, humansReady } from "./human.js";
+import { setView } from "./cull.js";
 
 const bootBar = document.getElementById("bootbar");
 const step = async (pct) => { bootBar.style.width = pct + "%"; await new Promise(r => setTimeout(r, 0)); };
@@ -668,6 +669,7 @@ function render() {
     if (P.danceT > 0 && P.speed < 0.3) over = { armL: -2.3 + Math.sin(time * 5) * 0.6, armR: -2.1 - Math.sin(time * 5) * 0.6, elbowL: -0.7, elbowR: -0.7, thighL: Math.max(0, Math.sin(time * 5)) * -0.5, thighR: Math.max(0, -Math.sin(time * 5)) * -0.5, kneeL: Math.max(0, Math.sin(time * 5)) * 0.8, kneeR: Math.max(0, -Math.sin(time * 5)) * 0.8 };
     poseOnFoot(P, time, over);
   }
+  camera.updateMatrixWorld(); setView(camera);
   crowd.render(camera.position.x * 0.5 + focus.x * 0.5, camera.position.z * 0.5 + focus.z * 0.5, camera);
   traffic.render(focus.x, focus.z, sky.state.night);
   parked.render(focus.x, focus.z);

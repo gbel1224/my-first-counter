@@ -2,6 +2,7 @@
 // intersections along smooth curves, stop for red lights, queue behind whoever is in front, and
 // brake for you. All of it is instanced: four draw calls per car type for the whole city.
 import * as THREE from "../vendor/three.module.js";
+import { inView } from "./cull.js";
 import { N, ROAD, CELL, HALF, roadC, clamp, lerp, mulberry32 } from "./world.js";
 import { CAR_TYPES, carGeometries, MAT, PAINTS, REAL_PAINTS } from "./cars.js";
 
@@ -200,7 +201,7 @@ export class Traffic {
     for (const c of this.cars) {
       if (!c.alive) continue;
       const dx = c.x - fx, dz = c.z - fz;
-      if (dx * dx + dz * dz > 330 * 330) continue;
+      if (dx * dx + dz * dz > 280 * 280 || !inView(c.x, c.z)) continue;
       const M = this.mesh[c.type], i = counts[c.type];
       if (i >= MAXI) continue;
       counts[c.type] = i + 1;
@@ -303,7 +304,7 @@ export class Parked {
   }
   render(fx, fz) {
     const near = this.near; near.length = 0;
-    for (const c of this.cars) { if (!c.alive) continue; const d = (c.x - fx) ** 2 + (c.z - fz) ** 2; if (d < 230 * 230) { c._d = d; near.push(c); } }
+    for (const c of this.cars) { if (!c.alive) continue; const d = (c.x - fx) ** 2 + (c.z - fz) ** 2; if (d < 200 * 200 && inView(c.x, c.z)) { c._d = d; near.push(c); } }
     if (near.length > PMAX) { near.sort((a, b) => a._d - b._d); near.length = PMAX; }
     const counts = {}; for (const t of CAR_TYPES) counts[t] = 0;
     for (const c of near) {

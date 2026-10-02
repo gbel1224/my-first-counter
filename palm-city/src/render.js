@@ -11,7 +11,8 @@ const FS_VERT = "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(pos
 
 export function createRenderer(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance", stencil: false });
-  const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 2 : 2);
+  // phones render at 1.5x (still crisp on a small screen, a third of the pixels of 3x); desktops up to 1.75x
+  const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 1.75);
   renderer.setPixelRatio(dpr);
   renderer.setSize(innerWidth, innerHeight, false);
   renderer.outputColorSpace = THREE.LinearSRGBColorSpace;   // the composite pass does the sRGB encode
@@ -22,7 +23,7 @@ export function createRenderer(canvas) {
   const gl = renderer.getContext();
   const canHalf = renderer.capabilities.isWebGL2 && (gl.getExtension("EXT_color_buffer_float") || gl.getExtension("EXT_color_buffer_half_float"));
   const type = canHalf ? THREE.HalfFloatType : THREE.UnsignedByteType;
-  const samples = renderer.capabilities.isWebGL2 ? 4 : 0;
+  const samples = renderer.capabilities.isWebGL2 ? (isMobile ? 2 : 4) : 0;
 
   let W = 1, H = 1;
   const mk = (w, h, s) => new THREE.WebGLRenderTarget(w, h, { type, samples: s || 0, depthBuffer: !!s, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });

@@ -1,6 +1,7 @@
 // Palm City — geometry helpers: paint a geometry with a vertex colour, transform it, and merge
 // many pieces into one buffer (one draw call per model, however many parts it's built from).
 import * as THREE from "../vendor/three.module.js";
+import { addTile } from "./cull.js";
 
 const _c = new THREE.Color();
 export function paint(geo, hex, emissive = 0) {
@@ -77,4 +78,44 @@ export function limb(r0, r1, len, seg = 10) {
   for (let i = 0; i <= N; i++) { const a = -Math.PI / 2 + i / N * Math.PI / 2; pts.push(new THREE.Vector2(Math.max(1e-4, Math.cos(a) * r1), -len + Math.sin(a) * r1)); }
   for (let i = 0; i <= N; i++) { const a = i / N * Math.PI / 2; pts.push(new THREE.Vector2(Math.max(1e-4, Math.cos(a) * r0), Math.sin(a) * r0)); }
   return new THREE.LatheGeometry(pts, seg);
+}
+
+// Split a static InstancedMesh into city tiles, each its own InstancedMesh with a real bounding
+// sphere, so the renderer skips tiles that are off screen (and out of the shadow map). The tiles
+// share the original's vertex buffers and material; per-instance attributes are sliced per tile.
+export function tileInstances(scene, mesh, size = 200, maxDist = Infinity) {
+  const n = mesh.count, groups = new Map(), m = new THREE.Matrix4(), p = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    mesh.getMatrixAt(i, m); p.setFromMatrixPosition(m);
+    const k = Math.floor(p.x / size) + "," + Math.floor(p.z / size);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(i);
+  }
+  const src = mesh.geometry, tiles = [];
+  for (const ids of groups.values()) {
+    const g = new THREE.BufferGeometry();
+    if (src.index) g.setIndex(src.index);
+    for (const [name, a] of Object.entries(src.attributes)) {
+      if (!a.isInstancedBufferAttribute) { g.setAttribute(name, a); continue; }
+      const s = a.itemSize, arr = new a.array.constructor(ids.length * s);
+      ids.forEach((id, j) => { for (let c = 0; c < s; c++) arr[j * s + c] = a.array[id * s + c]; });
+      g.setAttribute(name, new THREE.InstancedBufferAttribute(arr, s, a.normalized));
+    }
+    g.groups = src.groups;
+    if (!src.boundingSphere) src.computeBoundingSphere();
+    g.boundingSphere = src.boundingSphere.clone(); g.boundingBox = src.boundingBox;
+    const t = new THREE.InstancedMesh(g, mesh.material, ids.length);
+    ids.forEach((id, j) => { mesh.getMatrixAt(id, m); t.setMatrixAt(j, m); });
+    if (mesh.instanceColor) {
+      const c = new THREE.Color();
+      ids.forEach((id, j) => { mesh.getColorAt(id, c); t.setColorAt(j, c); });
+    }
+    t.castShadow = mesh.castShadow; t.receiveShadow = mesh.receiveShadow;
+    t.renderOrder = mesh.renderOrder; t.name = mesh.name;
+    t.computeBoundingSphere(); t.frustumCulled = true;
+    scene.add(t); tiles.push(t);
+    if (maxDist < Infinity) addTile(t, maxDist);
+  }
+  scene.remove(mesh);
+  return tiles;
 }
