@@ -20,3 +20,7 @@ Play: https://gbel1224.github.io/my-first-counter/
 - `src/people.js` rig, gait, instanced crowd · `src/cars.js` car models · `src/traffic.js` lanes/signals/traffic
 - `src/play.js` player, driving physics, camera · `src/input.js` · `src/hud.js` · `src/main.js` loop
 - `tools/check.mjs` headless browser check (`node tools/check.mjs`)
+
+## Credits
+
+The people (player and nearby pedestrians) are rigged human models from Avaturn, Avatar SDK, MakeHuman/MPFB and Ready Player Me. See `assets/humans/CREDITS.md` for sources and licenses (non-commercial).

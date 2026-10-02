@@ -1,0 +1,55 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Human lab</title>
+<style>html,body{margin:0;background:#1a1c20}canvas{display:block}</style></head>
+<body><script type="module">
+import * as THREE from "../vendor/three.module.js";
+import { randomLook, gait } from "../src/people.js";
+import { loadHumans, makeHuman } from "../src/human.js";
+import { newFace, tickFace } from "../src/face.js";
+const q = new URLSearchParams(location.search);
+const W = +(q.get("w") || 1400), Hh = +(q.get("h") || 700);
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(W, Hh); r.setPixelRatio(1); document.body.appendChild(r.domElement);
+r.toneMapping = THREE.ACESFilmicToneMapping; r.outputColorSpace = THREE.SRGBColorSpace; r.shadowMap.enabled = true;
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x8a96a6);
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x5a4a40, 1.2));
+const key = new THREE.DirectionalLight(0xfff0e0, 2.6); key.position.set(-3, 6, 5); key.castShadow = true; key.shadow.camera.left = -8; key.shadow.camera.right = 8; key.shadow.camera.top = 4; key.shadow.camera.bottom = -2; key.shadow.mapSize.set(2048, 1024); key.shadow.normalBias = 0.03; key.shadow.bias = -0.0005; scene.add(key);
+const gnd = new THREE.Mesh(new THREE.PlaneGeometry(60, 20), new THREE.MeshStandardMaterial({ color: 0x6a6e76, roughness: 0.9 })); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; scene.add(gnd);
+const models = q.get("m") ? q.get("m").split(",") : null; await loadHumans("../");
+const poses = (q.get("p") || "stand,walk,run,sit,punch,phone,lie,stand").split(",");
+const SKINS = [0xe8bf9c, 0x8a5a3a, 0xb57a52, 0x5e3a24, 0xf0d0b4, 0xc88e64, 0x9c6a48, 0xd4a07a];
+const people = poses.map((p, i) => {
+  let s = 99 + i * 977; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const look = randomLook(rnd); look.long = q.get("woman") ? true : q.get("man") ? false : i % 2 === 1; look.skin = SKINS[i % 8]; look.beard = i % 4 === 0 ? "full" : i % 4 === 2 ? "goatee" : null; look.h = 1; look.bulk = 1;
+  if (!models) { look.long = rnd() < 0.5; look.hs = rnd(); look.beard = rnd() < 0.4 ? "full" : null; look.bald = rnd() < 0.15; } const h = makeHuman(look, models ? models[i % models.length] : undefined); scene.add(h.root);
+  return { h, p, x: (i - (poses.length - 1) / 2) * 1.1, face: newFace(i * 0.1) };
+});
+const cam = new THREE.PerspectiveCamera(+(q.get("fov") || 34), W / Hh, 0.05, 80);
+const cx = +(q.get("cx") || 0), cy = +(q.get("cy") || 1.0), cz = +(q.get("cz") || 6.5);
+cam.position.set(cx, cy + 0.3, cz); cam.lookAt(cx, cy, 0);
+const t0 = performance.now(); const g = {};
+function frame(ts) {
+  const t = (ts - t0) / 1000;
+  for (const P of people) {
+    const ph = 1.3 + t * 6; let amt = 0.04, ex = null;
+    gait(ph, P.p === "walk" ? 1 : P.p === "run" ? 2 : 0.04, g);
+    if (P.p === "sit") Object.assign(g, { thighL: -1.5, thighR: -1.5, kneeL: 1.5, kneeR: 1.5, armL: -0.35, armR: -0.3, elbowL: -1.05, elbowR: -1.1, lean: -0.05 });
+    if (P.p === "punch") Object.assign(g, { armR: -1.55, elbowR: -0.1, armL: -0.9, elbowL: -1.8, lean: 0.15, twist: 0.3 });
+    if (P.p === "phone") Object.assign(g, { armR: -2.6, elbowR: -2.3, armL: -0.2 });
+    if (P.p === "lie") { ex = { tilt: -1.45 }; Object.assign(g, { bob: -0.72, thighL: 0, thighR: 0, kneeL: 0.1, kneeR: 0.1, armL: 0, armR: 0, elbowL: -0.2, elbowR: -0.2, lean: 0 }); }
+    P.face.base = (q.get("e") || "happy").split(",")[people.indexOf(P) % (q.get("e") || "happy").split(",").length]; if (q.get("talk")) P.face.talk = 1; tickFace(P.face, 0.016, t);
+    P.h.drive(P.x, P.p === "sit" ? -0.42 + 0.47 : P.p === "lie" ? 0.58 - 0.4 : 0, 0, +(q.get("yaw") || 0.3), g, ex, P.face);
+  }
+  if (q.get("faces")) {
+    // a grid of face close-ups, one per person
+    r.setScissorTest(true); const n = people.length, w = W / n;
+    people.forEach((P, i) => {
+      const hb = P.h.bones.Head; const hp = hb.getWorldPosition(new THREE.Vector3());
+      const fc = new THREE.PerspectiveCamera(20, w / Hh, 0.02, 50); const yw = +(q.get("fyaw") || 0.35), d = +(q.get("fd") || 0.75);
+      fc.position.set(hp.x + Math.sin(yw) * d, hp.y + 0.09, hp.z + Math.cos(yw) * d); fc.lookAt(hp.x, hp.y + 0.07, hp.z);
+      r.setViewport(i * w, 0, w, Hh); r.setScissor(i * w, 0, w, Hh); r.render(scene, fc);
+    });
+  } else r.render(scene, cam);
+  window.__frames = (window.__frames || 0) + 1;
+  if (!(q.get("still") && window.__frames > 8)) requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script></body></html>

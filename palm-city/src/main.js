@@ -40,6 +40,7 @@ import { inWater, waterStep, heliStep, planeStep } from "./craft.js";
 import { SEA_Y } from "./ocean.js";
 import { AudioSys } from "./audio.js";
 import { makeInterior } from "./interior.js";
+import { loadHumans, humansReady } from "./human.js";
 
 const bootBar = document.getElementById("bootbar");
 const step = async (pct) => { bootBar.style.width = pct + "%"; await new Promise(r => setTimeout(r, 0)); };
@@ -49,6 +50,8 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.3, 1400);
 addEventListener("resize", () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); R.resize(); });
 
+// the real people (rigged, textured models) load alongside the city; the built-up figures stand in until they arrive
+const humansLoad = loadHumans();
 await step(8);
 const plan = buildCity();
 const collider = new Collider(plan.buildings);
@@ -732,13 +735,15 @@ function render() {
 }
 
 const bizNames = Object.fromEntries(Object.entries(STORY.biz).map(([k, v]) => [k, v.name]));
+// give the people a few seconds to arrive before the curtain goes up; a slow connection plays on and they swap in
+await Promise.race([humansLoad, new Promise(r => setTimeout(r, 9000))]);
 await step(100);
 document.getElementById("boot").classList.add("gone");
 requestAnimationFrame(frame);
 
 // debug / test hooks
 globalThis.__pc2 = {
-  THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, P, cars, state, rig, I,
+  THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, P, cars, state, rig, I,
   interior, props, skids, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },
