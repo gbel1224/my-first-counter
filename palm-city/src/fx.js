@@ -70,6 +70,11 @@ export function createFX(scene) {
       emit(glow, { x: x + rnd(-0.5, 0.5), y, z: z + rnd(-0.5, 0.5), vx: rnd(-0.2, 0.2), vy: rnd(1.5, 3), vz: rnd(-0.2, 0.2), life: rnd(0.35, 0.6), size: rnd(0.7, 1.2),
         r: 3.5, g: 1.4, b: 0.3, a: 1, grav: -1, grow: -0.8 });
     },
+    // a small hearth flame: tight, tall-ish, quick
+    flame(x, y, z, s = 1) {
+      emit(glow, { x: x + rnd(-0.12, 0.12) * s, y, z: z + rnd(-0.05, 0.05), vx: rnd(-0.05, 0.05), vy: rnd(0.5, 0.9) * s, vz: 0, life: rnd(0.3, 0.5), size: rnd(0.16, 0.26) * s,
+        r: 3.2, g: 1.3, b: 0.3, a: 1, grav: -0.6, grow: -0.9 });
+    },
     explosion(x, y, z, s = 1) {
       burst(glow, x, y, z, 26 * s, 9 * s, 3, 0.45, 2.2 * s, 5, 2.6, 0.8, 1, 0, 3);
       burst(glow, x, y, z, 30, 16, 6, 0.8, 0.15, 5, 3, 1.2, 1, 20);

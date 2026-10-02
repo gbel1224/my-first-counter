@@ -124,8 +124,8 @@ export const AudioSys = (() => {
     if (!ready) return;
     intensityCur += ((x || 0) - intensityCur) * 0.04;
     const i = intensityCur;
-    if (musicGain && !muted) musicGain.gain.value = MUSIC_VOL * (1 + i * 0.55);
-    if (musicFilter) musicFilter.frequency.value = 9000 + i * 9000;
+    if (musicGain && !muted) musicGain.gain.value = MUSIC_VOL * (1 + i * 0.55) * indoorMul;
+    if (musicFilter) musicFilter.frequency.value = indoorFreq || 9000 + i * 9000;
     if (musicSrc) musicSrc.playbackRate.value = 1 + i * 0.06;
   }
   function skid(a) {
@@ -139,5 +139,43 @@ export const AudioSys = (() => {
     if (engineGain && m) engineGain.gain.value = 0;
     if (skidGain && m) skidGain.gain.value = 0;
   }
-  return { init, play, gun, boom, horn, engine, intensity, skid, setMuted, get muted() { return muted; } };
+  // ---- indoors: the street music comes through the walls muffled; the club has its own beat ----
+  let indoorMode = null, indoorMul = 1, indoorFreq = 0, nextStep = 0, step = 0, beatGain = null;
+  function indoor(mode) {
+    indoorMode = mode;
+    indoorMul = mode === "club" ? 0.25 : mode ? 0.55 : 1; indoorFreq = mode === "club" ? 260 : mode ? 900 : 0;
+    if (musicGain && !muted) musicGain.gain.value = MUSIC_VOL * indoorMul;
+    if (musicFilter) musicFilter.frequency.value = indoorFreq || 11000;
+    if (ctx && !beatGain) { beatGain = ctx.createGain(); beatGain.gain.value = 0; beatGain.connect(comp); }
+    if (beatGain) beatGain.gain.setTargetAtTime(mode === "club" && !muted ? 0.55 : 0, ctx.currentTime, 0.3);
+    if (mode === "club" && ctx) nextStep = ctx.currentTime + 0.1;
+  }
+  const RIFF = [55, 0, 0, 65.4, 0, 0, 73.4, 0, 55, 0, 0, 82.4, 0, 0, 73.4, 65.4];   // A minor, a bar of 16ths
+  function voice(type, f0, f1, t, len, vol, filt) {
+    const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0, t); if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + len * 0.6);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0008, t + len);
+    let n = o; if (filt) { const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = filt; o.connect(f); n = f; }
+    n.connect(g); g.connect(beatGain); o.start(t); o.stop(t + len + 0.02);
+  }
+  function hiss(t, len, vol, freq, type = "highpass") {
+    const s = ctx.createBufferSource(); s.buffer = noiseBuf;
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq;
+    const g = ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0008, t + len);
+    s.connect(f); f.connect(g); g.connect(beatGain); s.start(t, Math.random() * 0.5); s.stop(t + len + 0.02);
+  }
+  function beat() {
+    if (indoorMode !== "club" || !ctx || !beatGain || muted || !noiseBuf) return;
+    const spb = 60 / 124 / 4;
+    if (nextStep < ctx.currentTime) nextStep = ctx.currentTime + 0.05;
+    while (nextStep < ctx.currentTime + 0.25) {
+      const t = nextStep, s16 = step % 16;
+      if (s16 % 4 === 0) voice("sine", 150, 42, t, 0.32, 0.95);                     // four on the floor
+      if (s16 % 2 === 1) hiss(t, s16 % 4 === 2 ? 0.12 : 0.04, 0.12, 7500);          // hats
+      if (s16 === 4 || s16 === 12) hiss(t, 0.16, 0.32, 1400, "bandpass");            // clap
+      if (RIFF[s16]) voice("sawtooth", RIFF[s16], 0, t, 0.2, 0.22, 420);              // bassline
+      if (step % 64 === 0 || step % 64 === 40) for (const f of [220, 261.6, 329.6]) voice("sawtooth", f, 0, t, 1.2, 0.035, 1600);   // stabs
+      nextStep += spb; step++;
+    }
+  }
+  return { init, play, gun, boom, horn, engine, intensity, skid, setMuted, indoor, beat, get muted() { return muted; } };
 })();
