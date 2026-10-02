@@ -313,7 +313,7 @@ export const PLANS = {
       foyer: { r: [4, 2, 9, 6.5], floor: "marble", light: [0xffd0a0, 14], ceil: "spot", name: "Foyer" },
       hall: { r: [-5, -6.5, 4, 6.5], floor: "concreteDark", light: [0xc050ff, 12], ceil: "none", name: "Dance floor" },
       bar: { r: [4, -6.5, 9, 2], floor: "darkwood", light: [0xffa060, 12], ceil: "spot", name: "Bar" },
-      vip: { r: [-9, -1, -5, 6.5], floor: "carpetRed", light: [0xff6080, 10], ceil: "spot", name: "VIP lounge" },
+      vip: { r: [-9, -1, -5, 6.5], floor: "carpetRed", light: [0xffa0a0, 18], ceil: "spot", name: "VIP lounge" },
       back: { r: [-9, -6.5, -5, -1], floor: "concrete", light: [0xf4f0e8, 14], ceil: "fluoro", name: "Backstage" },
     },
     links: [
