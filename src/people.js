@@ -181,7 +181,7 @@ export function makeCharacter(look) {
     const cat = FACE_MAT[k];
     let mat;
     if (cat === "card" || cat === "curl") { mat = fmats[k] = cardMaterial(cat === "curl"); mat.userData.uMove = cardMove; }
-    else { mat = fmats[k] = FMAT[cat].clone(); mat.userData = {}; if (cat === "skin" || cat === "hair") patchFace(mat, cat); }
+    else { mat = fmats[k] = FMAT[cat].clone(); mat.userData = {}; if (cat === "skin" || cat === "hair" || cat === "shell") patchFace(mat, cat === "shell" ? "hair" : cat); }
     mat.color.set(faceCol(k, look));
     fm[k] = [];
     for (let i = 0; i < n; i++) { const m = new THREE.Mesh(FACE[k], mat); m.matrixAutoUpdate = false; m.castShadow = k === "headHi" || k.startsWith("hair_") || (k.startsWith("beard") && !k.startsWith("beardc")); m.receiveShadow = cat === "skin"; group.add(m); fm[k].push(m); }

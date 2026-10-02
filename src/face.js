@@ -225,14 +225,14 @@ function build() {
   };
   const STYLE_CARDS = {
     crop: { n: 460, len: [0.026, 0.044], seg: 5, w: [0.008, 0.012], lift: 0.0022 }, side: { n: 460, len: [0.036, 0.062], seg: 6, w: [0.009, 0.013], lift: 0.0026 },
-    afro: { n: 520, len: [0.009, 0.015], seg: 3, w: [0.008, 0.012], lift: 0.0025, curly: true }, long: { n: 300, len: [0.07, 0.11], seg: 7, w: [0.012, 0.018], lift: 0.0026 },
+    afro: { n: 1400, len: [0.007, 0.012], seg: 3, w: [0.005, 0.008], lift: 0.0004, curly: true }, long: { n: 300, len: [0.07, 0.11], seg: 7, w: [0.012, 0.018], lift: 0.0026 },
     bob: { n: 300, len: [0.07, 0.1], seg: 7, w: [0.012, 0.018], lift: 0.0026 }, bun: { n: 320, len: [0.06, 0.1], seg: 6, w: [0.008, 0.012], lift: 0.0015 },
     pony: { n: 320, len: [0.06, 0.1], seg: 6, w: [0.008, 0.012], lift: 0.0015 },
   };
   const hairCards = style => {
     const cfg = STYLE_CARDS[style]; if (!cfg) return null;
     const S = cardSet(), d = new THREE.Vector3(), nn = new THREE.Vector3(), T = new THREE.Vector3(), tmp = new THREE.Vector3();
-    const total = 2400; let made = 0;
+    const total = 4800; let made = 0;
     for (let k = 0; k < total && made < cfg.n; k++) {
       d.copy(fib(total, (k * 7 + 3) % total));
       const r0 = shellAt(d, style); if (r0.m < 0.75 || rnd() < 0.15) continue;
@@ -242,8 +242,14 @@ function build() {
       for (let s = 0; s <= seg; s++) {
         const t = s / seg, r = shellAt(dd, style);
         normOf(dd, nn);
-        if (cfg.curly) { T.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5); T.sub(nn.clone().multiplyScalar(T.dot(nn))).normalize(); }
-        else flow(style, r.q, nn, r.a, r.ph, T);
+        if (cfg.curly) {
+          // afro: a tuft standing out of the head, leaning a little, built straight out rather than lying flat
+          if (s === 0) { T.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5); T.sub(nn.clone().multiplyScalar(T.dot(nn))).normalize().multiplyScalar(0.55).addScaledVector(nn, 0.85).normalize(); }
+          const pp = s === 0 ? r.q.clone() : pts[pts.length - 1].clone().addScaledVector(T, len / seg);
+          pts.push(pp); nrms.push(T.clone().cross(nn).cross(T).normalize()); dirs.push(T.clone());
+          continue;
+        }
+        flow(style, r.q, nn, r.a, r.ph, T);
         const lift = 0.0012 + cfg.lift * t;
         pts.push(r.q.clone().addScaledVector(nn, lift)); nrms.push(nn.clone()); dirs.push(T.clone());
         // step along the comb direction, then drop back onto the scalp
@@ -251,7 +257,7 @@ function build() {
         if (r.a < 0.3 && r.q.y < r.H - 0.012 && style !== "long" && style !== "bob") break;      // fringes stop at the brow
       }
       if (pts.length < 3) continue;
-      strip(S, pts, nrms, dirs, cfg.w[0] + rnd() * (cfg.w[1] - cfg.w[0]), Math.floor(rnd() * 4) * 0.25, 0.9 + rnd() * 0.18);
+      strip(S, pts, nrms, dirs, cfg.w[0] + rnd() * (cfg.w[1] - cfg.w[0]), Math.floor(rnd() * 4) * 0.25, cfg.curly ? 0.7 + rnd() * 0.2 : 0.9 + rnd() * 0.18);
       made++;
     }
     // long hair and bobs: layers of strands falling from the crown down past the shoulders
@@ -423,38 +429,53 @@ export const FACE_COLOR = { headHi: "skin", nose: "skin", cheeks: "skin", eyeW: 
 // how each part is shaded
 export const FACE_MAT = { headHi: "skin", nose: "skin", cheeks: "skin", lid: "skin", lidLow: "skin", browR: "hair", browL: "hair", beardFull: "hair", beardGoatee: "hair", beardMus: "hair", beardStubble: "hair",
   eyeW: "eye", iris: "eye", glint: "glint", lipUR: "lip", lipUL: "lip", lipLR: "lip", lipLL: "lip", mouth: "wet", teethU: "wet", teethL: "wet" };
-for (const st of HAIRSTYLES) { FACE_COLOR["hair_" + st] = "hair"; FACE_MAT["hair_" + st] = "hair"; FACE_COLOR["hairc_" + st] = "hair"; FACE_MAT["hairc_" + st] = st === "afro" ? "curl" : "card"; }
+for (const st of HAIRSTYLES) { FACE_COLOR["hair_" + st] = "hair"; FACE_MAT["hair_" + st] = "shell"; FACE_COLOR["hairc_" + st] = "hair"; FACE_MAT["hairc_" + st] = st === "afro" ? "curl" : "card"; }
 for (const k of ["beardcFull", "beardcGoatee", "beardcMus"]) { FACE_COLOR[k] = "beardTint"; FACE_MAT[k] = "card"; }
 export const BEARD_CARDS = { full: "beardcFull", goatee: "beardcGoatee", mustache: "beardcMus" };
 
 // the wind the hair moves in (world-space, metres per second-ish) and the clock it sways to
 export const HAIR_U = { uTime: { value: 0 }, uWind: { value: new THREE.Vector3(0.5, 0, 0.25) } };
-// a strand texture, built pixel by pixel: dozens of fine hairs, tapering to wispy tips, gaps between them
-function strandTexture(curly) {
-  const W = 128, H = 256, A = new Float32Array(W * H), B = new Float32Array(W * H);
-  let sd = curly ? 77 : 33; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
-  const N = curly ? 40 : 46;
+// a strand texture, built pixel by pixel: strands grow in clumps, each its own thickness and shade,
+// tapering to fine tips, with the odd flyaway crossing over. "cards" leaves gaps between the strands
+// (see-through), "dense" is the packed under-hair (opaque), "curl" is tight coils.
+function strandTexture(kind) {
+  const curly = kind === "curl", dense = kind === "dense";
+  const W = 256, H = 512, A = new Float32Array(W * H), B = new Float32Array(W * H);
+  let sd = curly ? 77 : dense ? 51 : 33; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  const clumps = Array.from({ length: curly ? 18 : 16 }, () => ({ x: rnd() * W, tint: 0.8 + rnd() * 0.25, sway: (rnd() - 0.5) * 14, ph: rnd() * 6.28 }));
+  const N = curly ? 110 : dense ? 420 : 74;
   for (let s = 0; s < N; s++) {
-    const x0 = rnd() * W, amp = curly ? 2.5 + rnd() * 4 : 0.5 + rnd() * 1.4, fr = curly ? 0.1 + rnd() * 0.08 : 0.012 + rnd() * 0.02, ph = rnd() * 6.28;
-    const drift = (rnd() - 0.5) * (curly ? 6 : 12), reach = 0.55 + rnd() * 0.45, wid = 0.45 + rnd() * 0.7, br = 0.62 + rnd() * 0.38;
+    const c = clumps[Math.floor(rnd() * clumps.length)], fly = !dense && rnd() < 0.05;
+    const x0 = c.x + (rnd() - 0.5) * (curly ? 26 : dense ? 40 : 12);
+    const amp = curly ? 3 + rnd() * 5 : 0.6 + rnd() * 1.6, fr = curly ? 0.07 + rnd() * 0.06 : 0.006 + rnd() * 0.012, ph = c.ph + rnd() * 0.8;
+    const reach = dense ? 1 : fly ? 0.9 : 0.5 + rnd() * 0.5, wid = (dense ? 0.9 : 0.45) + rnd() * 0.7;
+    const br = c.tint * (0.55 + rnd() * 0.45), drift = fly ? (rnd() - 0.5) * 26 : c.sway * (0.7 + rnd() * 0.6);
     for (let y = 0; y < H * reach; y++) {
-      const t = y / H, taper = 1 - sst(reach * 0.6, reach, t), xc = x0 + Math.sin(y * fr + ph) * amp + drift * t * t, w = wid * taper + 0.35;
-      for (let px = Math.floor(xc - 2.5); px <= Math.ceil(xc + 2.5); px++) {
-        const a = Math.max(0, 1 - Math.abs(px - xc) / w) * (0.35 + 0.65 * taper), i = y * W + ((px % W) + W) % W;
-        if (a > A[i]) { A[i] = a; B[i] = br * (0.9 + 0.1 * Math.sin(y * 0.3 + s)); }
+      const t = y / H, taper = dense ? 1 : 1 - sst(reach * 0.55, reach, t);
+      const xc = x0 + Math.sin(y * fr + ph) * amp + drift * t * t, w = wid * taper + 0.3;
+      for (let px = Math.floor(xc - 3); px <= Math.ceil(xc + 3); px++) {
+        const a = Math.max(0, 1 - Math.abs(px - xc) / w) * (0.3 + 0.7 * taper), i = y * W + ((px % W) + W) % W;
+        if (a > A[i]) { A[i] = a; B[i] = br * (0.88 + 0.12 * Math.sin(y * 0.21 + s * 1.7)); }
       }
     }
   }
   const data = new Uint8Array(W * H * 4);
-  for (let i = 0; i < W * H; i++) { const y = Math.floor(i / W), root = 0; const a = Math.min(1, Math.max(A[i], root)); const b = A[i] > 0.05 ? B[i] : 0.55; data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = Math.round(b * 255); data[i * 4 + 3] = Math.round(a * 255); }
+  for (let i = 0; i < W * H; i++) {
+    const y = Math.floor(i / W) / H, cov = Math.min(1, A[i]);
+    const root = 0.8 + 0.2 * sst(0.0, 0.2, y);                                     // a touch darker at the roots
+    const b = dense ? lerp(0.32, B[i] || 0.5, cov) : (cov > 0.04 ? B[i] : 0.5);
+    data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = Math.round(Math.min(1, b * root) * 255);
+    data[i * 4 + 3] = dense ? 255 : Math.round(cov * 255);
+  }
   const t = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
-  t.wrapS = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.anisotropy = 4;
+  t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true;
   return t;
 }
-let STRAND = null, CURL = null;
+let STRAND = null, CURL = null, DENSE = null;
 // the strand-card shading: lit along the hair (two-tone sheen), roots darker, see-through between strands, blowing in the wind
 function cardMaterial(curly) {
-  if (!STRAND) { STRAND = strandTexture(false); CURL = strandTexture(true); }
+  if (!STRAND) { STRAND = strandTexture("cards"); CURL = strandTexture("curl"); }
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, map: curly ? CURL : STRAND, alphaTest: 0.32, side: THREE.DoubleSide, roughness: 0.75 });
   m.alphaToCoverage = true;
   m.userData.uMove = { value: new THREE.Vector3() };
@@ -482,9 +503,17 @@ function cardMaterial(curly) {
         wp.xyz += (wind + uMove) * tip * 0.028;
         mvPosition = viewMatrix * wp;
         gl_Position = projectionMatrix * mvPosition;`);
-    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vDirV; varying float vTip;")
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vDirV; varying float vTip; float strandB = 0.5;")
+      .replace("#include <map_fragment>", `#include <map_fragment>
+        strandB = sampledDiffuseColor.r;
+        vec2 tx = vMapUv * vec2(256.0, 512.0);
+        float lod = max(0.0, 0.5 * log2(max(dot(dFdx(tx), dFdx(tx)), dot(dFdy(tx), dFdy(tx)))));
+        diffuseColor.a *= 1.0 + lod * 0.22;`)
+      .replace("#include <alphatest_fragment>", `
+        diffuseColor.a = clamp((diffuseColor.a - alphaTest) / max(fwidth(diffuseColor.a), 1e-4) + 0.5, 0.0, 1.0);
+        if (diffuseColor.a < 0.02) discard;`)
       .replace("#include <color_fragment>", `#include <color_fragment>
-        diffuseColor.rgb *= mix(0.55, 1.08, smoothstep(0.0, 0.45, vTip));
+        diffuseColor.rgb *= mix(0.68, 1.08, smoothstep(0.0, 0.5, vTip));
         float lu = fract(vMapUv.x * 4.0 + 0.001) / 0.96;
         diffuseColor.a *= smoothstep(0.0, 0.28, lu) * smoothstep(1.0, 0.72, lu) * smoothstep(0.0, 0.12, vTip);`)
       .replace("#include <lights_physical_pars_fragment>", `#include <lights_physical_pars_fragment>
@@ -493,10 +522,12 @@ function cardMaterial(curly) {
           float wrap = max(0.0, (ndl + 0.5) / 1.5);
           reflectedLight.directDiffuse += directLight.color * wrap * BRDF_Lambert(material.diffuseColor);
           vec3 T = normalize(vDirV), H = normalize(directLight.direction + geometryViewDir);
-          vec3 T2 = normalize(T + geometryNormal * 0.35);
+          float shift = (strandB - 0.5) * 0.5;
+          T = normalize(T + geometryNormal * shift * 0.4);
+          vec3 T2 = normalize(T + geometryNormal * (0.35 + shift));
           float a = dot(T, H), b = dot(T2, H);
           float s1 = pow(sqrt(max(0.0, 1.0 - a * a)), 140.0), s2 = pow(sqrt(max(0.0, 1.0 - b * b)), 36.0);
-          reflectedLight.directSpecular += directLight.color * wrap * (s1 * 0.09 + s2 * 0.14 * min(vec3(1.0), material.diffuseColor * 2.5));
+          reflectedLight.directSpecular += directLight.color * wrap * (s1 * 0.1 + s2 * 0.16 * min(vec3(1.0), material.diffuseColor * 2.5)) * (0.5 + strandB);
         }
         #undef RE_Direct
         #define RE_Direct RE_Direct_Card`);
@@ -505,6 +536,10 @@ function cardMaterial(curly) {
   return m;
 }
 export { cardMaterial };
+export function shellMaterial() {
+  if (!DENSE) { DENSE = strandTexture("dense"); DENSE.repeat.set(14, 2.2); }
+  return patch(new THREE.MeshStandardMaterial({ vertexColors: true, map: DENSE, roughness: 0.8 }), "hair");
+}
 // a hairstyle for someone who doesn't have one yet: longer styles for long-haired looks
 export const LONG_STYLES = ["long", "bob", "bun", "pony"];
 export function pickStyle(look, hs) {
@@ -554,7 +589,7 @@ export function patch(m, kind) {
       f = f.replace("#include <color_fragment>", `#include <color_fragment>
         float ang = atan(vFLocal.x, vFLocal.z);
         strand = fnoise(vec3(ang * 70.0, vFLocal.y * 9.0, vFLocal.x * 3.0)) * 0.6 + fnoise(vec3(ang * 190.0, vFLocal.y * 22.0, 1.0)) * 0.4;
-        diffuseColor.rgb *= 0.74 + 0.4 * strand;`)
+        diffuseColor.rgb *= 0.88 + 0.2 * strand;`)
        .replace("#include <lights_physical_pars_fragment>", `#include <lights_physical_pars_fragment>
         void RE_Direct_Hair(const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight) {
           RE_Direct_Physical(directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight);
@@ -584,7 +619,7 @@ export function faceMaterials() {
     eye: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.06, envMapIntensity: 1.4 }),
     glint: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
     lip: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32 }),
-    card: cardMaterial(false), curl: cardMaterial(true),
+    card: cardMaterial(false), curl: cardMaterial(true), shell: shellMaterial(),
     wet: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.24 }),
   };
 }
