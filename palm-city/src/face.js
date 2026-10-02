@@ -51,7 +51,7 @@ function buildFaceParts() {
     const sides = new THREE.SphereGeometry(0.083, 16, 4, Math.PI / 2 + 0.75, Math.PI * 2 - 1.5, Math.PI * 0.42, Math.PI * 0.2);
     sides.scale(1.27, 1.12, 1.3); sides.translate(0, 0.158, 0.018);
     F.beardFull = merge([paint(jaw, 0xffffff), paint(sides, 0xffffff), mus()]);
-    const g = new THREE.SphereGeometry(0.02, 12, 8); g.scale(0.85, 1.05, 0.55); g.translate(0, 0.116, 0.104);
+    const g = new THREE.SphereGeometry(0.016, 12, 8); g.scale(0.85, 1.1, 0.5); g.translate(0, 0.114, 0.104);
     F.beardGoatee = merge([paint(g, 0xffffff), mus()]);
     F.beardMus = merge([mus()]);
     const s = new THREE.SphereGeometry(0.0835, 18, 9, 0, Math.PI * 2, Math.PI * 0.58, Math.PI * 0.42);
@@ -90,7 +90,8 @@ export function newFace(seed = Math.random()) {
 }
 export function setExpr(f, name, secs = 3) { if (!EXPR[name]) return; f.expr = name; f.hold = secs; }
 export function tickFace(f, dt, t) {
-  if (f.hold > 0) { f.hold -= dt; if (f.hold <= 0) f.expr = f.base; }
+  if (f.hold > 0) f.hold -= dt;
+  else f.expr = f.base;
   if (f.talk > 0) f.talk = Math.max(0, f.talk - dt);
   const tg = EXPR[f.expr] || EXPR.neutral, c = f.cur, k = Math.min(1, dt * 9);
   for (const key of ["tilt", "raise", "eye", "curve", "open"]) c[key] += (tg[key] - c[key]) * k;

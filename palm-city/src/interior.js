@@ -753,6 +753,13 @@ export function makeInterior(scene, g) {
         if (n.walking) { n.ch.pose(ROOM.x + n.x, 0.04, ROOM.z + n.z, n.yaw, n.wp, 0.45); continue; }
       }
       const x = ROOM.x + n.x, z = ROOM.z + n.z, t = time + n.phase, pose = n.path ? n.stop : n.pose;
+      // faces: people on the phone are talking, dancers are grinning, patients look rough
+      const fc = n.ch.face;
+      if (fc) {
+        if (pose === "phone") fc.talk = Math.max(fc.talk, Math.sin(t * 0.7) > -0.3 ? 0.3 : 0);
+        if (pose === "dance" || pose === "dj") { fc.base = (n.phase * 10 | 0) % 3 ? "happy" : "laugh"; }
+        else if (pose === "lie") fc.base = "sad";
+      }
       if (pose === "type") n.ch.pose(x, -0.42, z, n.yaw, 0, 0.04, { override: { ...SIT, armL: -1.15, armR: -1.15, elbowL: -0.45 + Math.sin(t * 17) * 0.06, elbowR: -0.45 + Math.sin(t * 15 + 1) * 0.06, lean: 0.12 }, headPitch: 0.1 });
       else if (pose === "cook") n.ch.pose(x, 0.04, z, n.yaw, t * 0.9, 0.04, { override: { armL: -1.0, elbowL: -0.9, armR: -1.1 + Math.sin(t * 5) * 0.2, elbowR: -0.8 + Math.cos(t * 5) * 0.25, lean: 0.12 } });
       else if (pose === "wipe") n.ch.pose(x, 0.04, z, n.yaw, t * 0.9, 0.04, { override: { armR: -1.25 + Math.sin(t * 3) * 0.15, elbowR: -0.4 + Math.cos(t * 3) * 0.3, armL: -0.3, lean: 0.2 } });

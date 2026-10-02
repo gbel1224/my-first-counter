@@ -29,8 +29,8 @@ function buildParts() {
   P.hips = merge([place(paint(new THREE.SphereGeometry(0.17, 12, 8), 0xffffff), 0, 0, 0, 0, 0, 0, 1.1, 0.62, 0.7)]);
   {
     // head: egg-shaped and life-sized; the eyes, brows and mouth are separate parts (face.js) so they can move
-    const head = paint(new THREE.SphereGeometry(0.112, 22, 16), 0xffffff); head.scale(0.88, 1.14, 1.0); head.translate(0, 0.19, 0.005);
-    const jaw = place(paint(new THREE.SphereGeometry(0.075, 16, 12), 0xffffff), 0, 0.122, 0.03, 0, 0, 0, 1.0, 0.8, 1.0);
+    const head = paint(new THREE.SphereGeometry(0.112, 24, 18), 0xffffff); head.scale(0.88, 1.14, 1.0); head.translate(0, 0.19, 0.005);
+    const jaw = place(paint(new THREE.SphereGeometry(0.072, 20, 14), 0xffffff), 0, 0.124, 0.028, 0, 0, 0, 0.98, 0.82, 1.0);
     const neck = paint(new THREE.CylinderGeometry(0.048, 0.056, 0.13, 10), 0xe8e8e8); neck.translate(0, 0.05, 0);
     // the nose: a bridge, a rounded tip, the wings either side and two nostrils
     const bridge = place(paint(new THREE.CylinderGeometry(0.0075, 0.012, 0.04, 8), 0xf4f0f0), 0, 0.186, 0.109, -0.38, 0, 0, 1, 1, 0.8);
@@ -194,7 +194,7 @@ export function makeCharacter(look) {
     meshes.hair.visible = !look.bald && !look.long;
     meshes.hairL.visible = !look.bald && !!look.long;
     const now = performance.now() / 1000, dt = Math.min(0.1, now - lastT); lastT = now;
-    if (extra && extra.expr) face.expr = extra.expr;
+    if (extra && extra.expr) { face.expr = extra.expr; face.hold = Math.max(face.hold, 0.1); }
     tickFace(face, dt, now);
     const bk = look.beard ? BEARD_KIND[look.beard] : null;
     for (const k of Object.values(BEARD_KIND)) fm[k][0].visible = k === bk;
