@@ -151,6 +151,7 @@ export function createSky(scene, renderer) {
     // weather: a shower dims the sun, flattens the light, thickens and greys the haze
     const w = out.weatherDim || 0;
     sun.intensity = base.si * (1 - 0.78 * w); hemi.intensity = base.hemi * (1 + 0.15 * w);
+    if (out.indoor) { sun.intensity = 0; hemi.intensity = 0; }        // indoors the rooms light themselves
     scene.fog.density = 0.0021 * (1 + w * 1.4); scene.fog.color.copy(base.fog).lerp(grey, w * 0.7);
     dome.position.copy(camera.position);
     // shadow frustum follows the action, snapped to whole texels so edges don't crawl
