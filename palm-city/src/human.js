@@ -80,6 +80,10 @@ function prepare(kind, scene) {
     }
   }
   C.F = F;
+  // the arms at rest, for reaching (two-bone IK): upper arm and forearm directions, and the elbow's
+  // hinge axis (the rig bends elbows about x in the hanging frame, so it's C^-1 applied to x)
+  C.arm = {};
+  for (const sd of ["Left", "Right"]) C.arm[sd] = { upper: dir(sd + "Arm", sd + "ForeArm"), fore: dir(sd + "ForeArm", sd + "Hand"), hinge: new THREE.Vector3(1, 0, 0).applyQuaternion(C[sd + "Arm"].clone().invert()) };
   const footY = bones.LeftFoot.getWorldPosition(new THREE.Vector3()).y - box.min.y;
   // shadows only from the big pieces (eyes, teeth, lashes and brows don't need a shadow pass), and a
   // generous bound so people off screen aren't drawn at all
@@ -104,24 +108,120 @@ function sideMap(C) { return C.sideLeft < 0 ? { L: "Left", R: "Right" } : { L: "
 const _gs = new THREE.Vector3(), _gm = new THREE.Matrix4(), _gv1 = new THREE.Vector3(), _gv2 = new THREE.Vector3(), _gv3 = new THREE.Vector3(), _gv4 = new THREE.Vector3();
 const GUNGEO = {};
 let GUNMAT = null;
-function gunMaterial() { return GUNMAT || (GUNMAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.55 })); }
+function gunMaterial() { return GUNMAT || (GUNMAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.35 })); }
+// guns built from parts: grip at the origin, barrel forward along -y, top along +z
 function gunGeometry(id) {
   if (GUNGEO[id]) return GUNGEO[id];
-  const box = (w, l, h, x, y, z, col, rx = 0) => place(paint(new THREE.BoxGeometry(w, l, h), col), x, y, z, rx);
-  const cyl = (r, l, y, z, col) => place(paint(new THREE.CylinderGeometry(r, r, l, 10), col), 0, y, z);
-  const BLK = 0x1c1d20, MET = 0x3a3c40, WOOD = 0x5a3a22, OLIVE = 0x4a5236;
-  let p;
-  if (id === "pistol") p = [box(0.03, 0.19, 0.035, 0, -0.05, 0.045, MET), box(0.028, 0.045, 0.11, 0, 0.012, -0.01, BLK, 0.25), box(0.006, 0.04, 0.025, 0, -0.025, 0.012, BLK)];
-  else if (id === "smg") p = [box(0.04, 0.26, 0.06, 0, -0.06, 0.05, BLK), box(0.03, 0.04, 0.1, 0, 0.0, -0.01, BLK, 0.2), box(0.025, 0.035, 0.16, 0, -0.07, -0.04, MET), cyl(0.01, 0.08, -0.22, 0.06, MET)];
-  else if (id === "shotgun") p = [cyl(0.014, 0.62, -0.3, 0.05, MET), cyl(0.012, 0.5, -0.24, 0.025, MET), box(0.04, 0.12, 0.05, 0, -0.17, 0.02, WOOD), box(0.035, 0.36, 0.06, 0, 0.17, 0.01, WOOD, -0.12), box(0.03, 0.04, 0.08, 0, 0.0, -0.01, WOOD, 0.3)];
-  else if (id === "rifle" || id === "sniper") {
-    const L = id === "sniper" ? 0.62 : 0.42;
-    p = [box(0.045, 0.3, 0.07, 0, -0.08, 0.05, BLK), cyl(0.011, L, -0.23 - L / 2, 0.06, MET), box(0.03, 0.05, 0.1, 0, 0.0, -0.01, BLK, 0.25), box(0.04, 0.26, 0.07, 0, 0.2, 0.03, id === "sniper" ? OLIVE : BLK),
-      id === "sniper" ? cyl(0.018, 0.22, -0.08, 0.11, BLK) : box(0.025, 0.05, 0.13, 0, -0.14, -0.03, BLK, -0.1)];
-  } else if (id === "minigun") p = [...[0, 1, 2, 3, 4, 5].map(k => place(paint(new THREE.CylinderGeometry(0.012, 0.012, 0.62, 6), MET), Math.cos(k) * 0.03, -0.38, 0.05 + Math.sin(k) * 0.03)), box(0.12, 0.3, 0.13, 0, -0.02, 0.04, BLK), box(0.03, 0.05, 0.1, 0, 0.06, -0.04, BLK)];
-  else if (id === "rpg" || id === "gl") p = [cyl(id === "rpg" ? 0.045 : 0.035, id === "rpg" ? 0.95 : 0.5, -0.12, 0.1, OLIVE), box(0.03, 0.05, 0.1, 0, 0.0, 0.0, BLK, 0.2), box(0.03, 0.05, 0.1, 0, -0.25, 0.0, BLK, 0.2)];
-  else p = [box(0.03, 0.19, 0.035, 0, -0.05, 0.045, MET), box(0.028, 0.045, 0.11, 0, 0.012, -0.01, BLK, 0.25)];
+  const p = [];
+  const box = (w, l, hgt, y, z, col, rx = 0, x = 0) => p.push(place(paint(new THREE.BoxGeometry(w, l, hgt), col), x, y, z, rx));
+  const cyl = (r, l, y, z, col, seg = 12, x = 0) => p.push(place(paint(new THREE.CylinderGeometry(r, r, l, seg), col), x, y, z));
+  const cone = (r0, r1, l, y, z, col) => p.push(place(paint(new THREE.CylinderGeometry(r0, r1, l, 12), col), 0, y, z));
+  const guard = (y, z, r = 0.017) => p.push(place(paint(new THREE.TorusGeometry(r, 0.0035, 4, 12, Math.PI), 0x18191b), 0, y, z, 0, Math.PI / 2, Math.PI / 2));
+  const POLY = 0x26282b, STEEL = 0x45484d, DARK = 0x0c0c0d, WOOD = 0x6a3f22, WOOD2 = 0x55321b, OLIVE = 0x4c5638, TAN = 0x8a7a58, GLASS = 0x2a4a6a;
+  if (id === "pistol") {
+    box(0.03, 0.19, 0.032, -0.06, 0.052, STEEL);                   // slide
+    for (let k = 0; k < 5; k++) box(0.031, 0.003, 0.024, 0.02 - k * 0.007, 0.054, DARK);   // rear serrations
+    box(0.008, 0.035, 0.014, -0.075, 0.069, DARK, 0, 0.0155);      // ejection port
+    box(0.028, 0.17, 0.02, -0.05, 0.027, POLY);                    // frame + dust cover
+    box(0.029, 0.05, 0.115, 0.014, -0.026, POLY, 0.32);            // grip, raked back
+    box(0.03, 0.045, 0.006, 0.028, -0.085, DARK, 0.32);            // magazine base
+    guard(-0.03, 0.012); box(0.005, 0.006, 0.02, -0.028, 0.006, DARK);   // trigger guard + trigger
+    box(0.012, 0.006, 0.008, -0.145, 0.072, DARK); box(0.02, 0.006, 0.008, 0.025, 0.072, DARK);   // sights
+    cyl(0.006, 0.01, -0.156, 0.052, DARK, 8);                      // muzzle
+  } else if (id === "smg") {
+    box(0.042, 0.24, 0.058, -0.06, 0.05, POLY); box(0.044, 0.06, 0.02, -0.12, 0.085, STEEL);
+    box(0.03, 0.05, 0.1, 0.0, -0.015, POLY, 0.2); box(0.026, 0.035, 0.16, -0.075, -0.05, STEEL, 0.08);   // grip, magazine
+    guard(-0.035, 0.014); cyl(0.011, 0.07, -0.215, 0.05, DARK, 10); cyl(0.016, 0.03, -0.25, 0.05, STEEL, 10);
+    box(0.012, 0.012, 0.016, -0.17, 0.09, DARK); box(0.03, 0.012, 0.016, 0.03, 0.09, DARK);
+    box(0.012, 0.16, 0.012, 0.13, 0.03, STEEL, 0, 0.018); box(0.012, 0.16, 0.012, 0.13, 0.03, STEEL, 0, -0.018); box(0.04, 0.012, 0.05, 0.21, 0.03, POLY);   // folding stock
+  } else if (id === "shotgun") {
+    cyl(0.013, 0.58, -0.36, 0.055, STEEL); cyl(0.011, 0.48, -0.31, 0.03, STEEL);                  // barrel + tube magazine
+    box(0.042, 0.16, 0.05, -0.04, 0.045, STEEL);                                                 // receiver
+    for (let k = 0; k < 6; k++) cyl(0.021, 0.012, -0.22 - k * 0.018, 0.03, WOOD2);               // ribbed pump
+    cyl(0.019, 0.1, -0.265, 0.03, WOOD);
+    guard(0.0, 0.016); box(0.034, 0.05, 0.075, 0.035, 0.0, WOOD, 0.45);                           // trigger guard, wrist
+    box(0.036, 0.26, 0.055, 0.19, 0.015, WOOD, -0.1); box(0.04, 0.02, 0.085, 0.325, 0.0, DARK, -0.1);   // stock + recoil pad
+    cyl(0.003, 0.006, -0.645, 0.072, 0xd8c070, 6);                                             // bead sight
+  } else if (id === "rifle" || id === "gl") {
+    box(0.04, 0.2, 0.055, -0.04, 0.05, POLY);                                                    // receiver
+    box(0.022, 0.2, 0.008, -0.05, 0.083, DARK);                                                  // top rail
+    cyl(0.022, 0.2, -0.24, 0.05, POLY, 8);                                                       // handguard
+    for (let k = 0; k < 5; k++) box(0.046, 0.012, 0.012, -0.17 - k * 0.032, 0.05, DARK);        // vents
+    cyl(0.008, 0.2, -0.43, 0.05, STEEL, 10); cyl(0.012, 0.035, -0.54, 0.05, DARK, 8);           // barrel, muzzle brake
+    box(0.008, 0.02, 0.04, -0.33, 0.085, DARK);                                                  // front sight post
+    box(0.024, 0.04, 0.03, 0.02, 0.1, DARK);                                                     // rear sight
+    box(0.03, 0.045, 0.1, 0.012, -0.015, POLY, 0.28);                                            // pistol grip
+    guard(-0.03, 0.018); box(0.026, 0.045, 0.085, -0.09, -0.01, STEEL, -0.18); box(0.026, 0.04, 0.07, -0.105, -0.075, STEEL, -0.38);   // curved magazine
+    box(0.012, 0.13, 0.018, 0.12, 0.05, STEEL);                                                  // buffer tube
+    box(0.036, 0.13, 0.055, 0.22, 0.04, POLY); box(0.038, 0.012, 0.075, 0.285, 0.03, DARK);      // stock + butt pad
+    if (id === "gl") cyl(0.025, 0.16, -0.26, 0.0, OLIVE, 12);                                    // underslung launcher
+  } else if (id === "sniper") {
+    box(0.04, 0.24, 0.05, -0.03, 0.045, OLIVE); cyl(0.011, 0.6, -0.45, 0.05, STEEL, 10); cyl(0.016, 0.05, -0.76, 0.05, DARK, 8);
+    cyl(0.021, 0.2, -0.04, 0.115, DARK, 14); cyl(0.027, 0.045, -0.15, 0.115, DARK, 14); cyl(0.024, 0.035, 0.07, 0.115, DARK, 14);   // scope body + bells
+    cyl(0.022, 0.002, -0.173, 0.115, GLASS, 14); box(0.012, 0.02, 0.03, -0.04, 0.09, DARK); box(0.012, 0.02, 0.03, 0.04, 0.09, DARK);   // lens, rings
+    p.push(place(paint(new THREE.CylinderGeometry(0.005, 0.005, 0.05, 6), STEEL), -0.03, 0.04, 0.06, 0, 0, Math.PI / 2)); cyl(0.009, 0.012, 0.04, 0.075, STEEL, 8);   // bolt
+    box(0.03, 0.045, 0.1, 0.012, -0.015, OLIVE, 0.28); guard(-0.03, 0.018); box(0.026, 0.06, 0.05, -0.08, 0.0, DARK);
+    box(0.04, 0.27, 0.06, 0.2, 0.025, OLIVE, -0.06); box(0.03, 0.12, 0.025, 0.17, 0.075, OLIVE);   // stock + cheek rest
+    box(0.006, 0.18, 0.006, -0.3, 0.015, DARK, 0, 0.015); box(0.006, 0.18, 0.006, -0.3, 0.015, DARK, 0, -0.015);   // folded bipod
+  } else if (id === "minigun") {
+    for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; cyl(0.01, 0.62, -0.42, 0.05 + Math.sin(a) * 0.032, STEEL, 6, Math.cos(a) * 0.032); }
+    cyl(0.05, 0.03, -0.2, 0.05, DARK, 14); cyl(0.05, 0.03, -0.6, 0.05, DARK, 14);                  // barrel clamps
+    box(0.12, 0.24, 0.13, 0.0, 0.05, POLY); box(0.08, 0.1, 0.1, 0.0, -0.06, OLIVE);                // housing, ammo box
+    box(0.02, 0.02, 0.1, -0.05, 0.16, DARK); box(0.11, 0.02, 0.02, -0.05, 0.21, DARK);           // carry handle
+    box(0.03, 0.045, 0.09, 0.08, -0.01, POLY, 0.25);
+  } else if (id === "rpg") {
+    cyl(0.04, 0.95, -0.12, 0.1, OLIVE, 14); cyl(0.046, 0.06, 0.32, 0.1, DARK, 14);               // tube, rear flare
+    cone(0.02, 0.06, 0.16, -0.68, 0.1, OLIVE); cone(0.0, 0.02, 0.1, -0.81, 0.1, DARK);            // warhead
+    box(0.03, 0.045, 0.1, 0.0, 0.02, DARK, 0.2); box(0.03, 0.045, 0.1, -0.24, 0.02, DARK, 0.2);   // grips
+    box(0.02, 0.07, 0.05, -0.1, 0.155, DARK);                                                     // optic
+    for (let k = 0; k < 3; k++) cyl(0.042, 0.012, -0.3 + k * 0.25, 0.1, TAN, 14);                 // bands
+  } else return gunGeometry("pistol");
   return (GUNGEO[id] = merge(p));
+}
+
+// how each gun is held. at: "shoulder" (stock in the shoulder; butt = metres from grip to butt),
+// "front" (out in both hands, the left cupping the right), "hip", "tube" (on the shoulder).
+// fore: [forward, up] from the grip to where the left hand holds. twist: blade the body.
+const HOLD = {
+  pistol: { at: "front", reach: 0.46, lift: -0.02, fore: [0, 0], support: 0.85, twist: 0.05 },
+  smg: { at: "front", reach: 0.4, lift: -0.06, fore: [0.14, -0.01], support: 0.8, twist: 0.12 },
+  shotgun: { at: "shoulder", butt: 0.33, fore: [0.22, 0.0], support: 0.8, twist: 0.42 },
+  rifle: { at: "shoulder", butt: 0.3, fore: [0.17, 0.0], support: 0.8, twist: 0.42 },
+  sniper: { at: "shoulder", butt: 0.3, fore: [0.2, 0.0], support: 0.75, twist: 0.42 },
+  gl: { at: "shoulder", butt: 0.3, fore: [0.2, 0.0], support: 0.8, twist: 0.4 },
+  minigun: { at: "hip", fore: [0.05, 0.12], support: 0.9, twist: 0.25 },
+  rpg: { at: "tube", fore: [0.25, 0.0], support: 0.8, twist: 0.3 },
+};
+const _k = {}; for (const n of ["f", "u", "r", "sR", "sL", "G", "b", "x", "fp", "rf", "rp", "lf", "lp", "la", "pr", "pl"]) _k[n] = new THREE.Vector3();
+// two-bone IK: put the wrist at `wrist` (world), the elbow toward `pole`, the hand turned to the
+// given knuckle direction and palm facing. Writes the applied rotations (model space) into A.
+const _ik = { m1: new THREE.Matrix4(), m2: new THREE.Matrix4(), q: new THREE.Quaternion(), y: new THREE.Quaternion(), a: new THREE.Vector3(), b: new THREE.Vector3(), c: new THREE.Vector3(), d: new THREE.Vector3(), e: new THREE.Vector3() };
+function frameQ(dir, ax, out) {   // a rotation whose x = dir, y = ax (made perpendicular), z = x × y
+  const x = _ik.a.copy(dir).normalize(), y = _ik.b.copy(ax).addScaledVector(x, -ax.dot(x)).normalize(), z = _ik.c.crossVectors(x, y);
+  return out.setFromRotationMatrix(_ik.m1.makeBasis(x, y, z));
+}
+const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion();
+function mapQ(fromDir, fromAx, toDir, toAx) {   // the rotation taking (fromDir, fromAx) onto (toDir, toAx)
+  frameQ(fromDir, fromAx, _qa); frameQ(toDir, toAx, _qb);
+  return _qb.clone().multiply(_qa.invert());
+}
+function reach(human, A, sd, wrist, pole, fing, palm, yaw) {
+  const B = BASE[human.kind], R = B.C.arm[sd], F = B.C.F[sd], bn = human.bones;
+  const S = bn[sd + "Arm"].getWorldPosition(new THREE.Vector3()), E0 = bn[sd + "ForeArm"].getWorldPosition(new THREE.Vector3()), W0 = bn[sd + "Hand"].getWorldPosition(new THREE.Vector3());
+  const L1 = S.distanceTo(E0), L2 = E0.distanceTo(W0);
+  const to = wrist.clone().sub(S); let d = to.length();
+  d = Math.min(Math.max(d, Math.abs(L1 - L2) + 1e-3), (L1 + L2) * 0.995); to.setLength(d);
+  const n = to.clone().normalize(), a = (L1 * L1 - L2 * L2 + d * d) / (2 * d), hh = Math.sqrt(Math.max(0, L1 * L1 - a * a));
+  const perp = pole.clone().addScaledVector(n, -pole.dot(n)).normalize();
+  const E = S.clone().addScaledVector(n, a).addScaledVector(perp, hh), Wt = S.clone().add(to);
+  // into model space (undo the body's turn)
+  const yq = _ik.y.setFromAxisAngle(_ik.e.set(0, 1, 0), -yaw);
+  const up = E.clone().sub(S).applyQuaternion(yq).normalize(), lo = Wt.clone().sub(E).applyQuaternion(yq).normalize();
+  let hinge = new THREE.Vector3().crossVectors(up, lo).negate();
+  if (hinge.lengthSq() < 1e-6) hinge = perp.clone().applyQuaternion(yq).cross(up).normalize(); else hinge.normalize();
+  A[sd + "Arm"] = mapQ(R.upper, R.hinge, up, hinge);
+  A[sd + "ForeArm"] = mapQ(R.fore, R.hinge, lo, hinge);
+  A[sd + "Hand"] = mapQ(F.fingers, F.palm, fing.clone().applyQuaternion(yq), palm.clone().applyQuaternion(yq));
 }
 
 // a finger joint's bend: curled about its own axis toward the palm (see prepare); the thumb also
@@ -180,7 +280,8 @@ export function makeHuman(look, kind = modelFor(look)) {
     root.scale.set(s * bulk, s, s * bulk);
     const H = rq(0, 0, g.roll || 0);
     if (extra && extra.tilt) H.multiply(rq(extra.tilt, 0, 0));
-    const lean = g.lean || 0, tw = g.twist || 0;
+    const gun = g.gun && g.gun !== "fists" ? g.gun : null, kindG = gun ? HOLD[gun] || HOLD.pistol : null;
+    const lean = g.lean || 0, tw = (g.twist || 0) + (kindG ? kindG.twist * -B.C.sideLeft : 0);   // long guns: blade the body, left shoulder forward
     const T = H.clone().multiply(rq(lean, tw, 0));
     const hp = -lean * 0.6 + (extra && extra.headPitch || 0);
     A.Hips = H;
@@ -189,7 +290,9 @@ export function makeHuman(look, kind = modelFor(look)) {
     A.Spine2 = T;
     // the head: the rig's tilt plus where they're looking
     const look2 = face && face.look ? face.look : null;
-    const hy = -tw + (look2 ? look2.x * 0.9 : 0), hx = hp - (look2 ? look2.y * 0.6 : 0);
+    let hy = -tw + (look2 ? look2.x * 0.9 : 0), hx = hp - (look2 ? look2.y * 0.6 : 0);
+    // shouldering a long gun: the cheek drops onto the stock, eye down the sights
+    if (kindG && (kindG.at === "shoulder" || kindG.at === "tube")) { hx += 0.16; hy += 0.12 * B.C.sideRight; }
     A.Neck = T.clone().multiply(rq(hx * 0.4, hy * 0.4, 0));
     A.Head = T.clone().multiply(rq(hx, hy, 0));
     for (const side of ["L", "R"]) {
@@ -199,14 +302,6 @@ export function makeHuman(look, kind = modelFor(look)) {
       const fore = arm.multiply(rq(g["elbow" + side] || 0, 0, 0));
       A[m + "ForeArm"] = fore.clone().multiply(B.C[m + "ForeArm"]);
       A[m + "Hand"] = A[m + "ForeArm"];
-      // holding a gun: the wrist turns so the palm faces in, as it does around a pistol grip
-      if (side === "R" && g.gun && B.C.F[m]) {
-        const Fh = B.C.F[m], fw = _gv1.copy(Fh.fingers).applyQuaternion(A[m + "Hand"]), pa = _gv2.copy(Fh.palm).applyQuaternion(A[m + "Hand"]);
-        const want = _gv3.set(-B.C["side" + m], 0, 0); want.addScaledVector(fw, -want.dot(fw)).normalize();
-        pa.addScaledVector(fw, -pa.dot(fw)).normalize();
-        const ang = Math.atan2(_gv4.crossVectors(pa, want).dot(fw), pa.dot(want));
-        A[m + "Hand"] = _q2.setFromAxisAngle(fw, ang).multiply(A[m + "Hand"]).clone();
-      }
       const th = g["thigh" + side] || 0, kn = g["knee" + side] || 0;
       const thigh = H.clone().multiply(rq(th, 0, 0));
       A[m + "UpLeg"] = thigh.clone().multiply(B.C[m + "UpLeg"]);
@@ -225,7 +320,11 @@ export function makeHuman(look, kind = modelFor(look)) {
       const rs = rigOf[m], grip = g["grip" + rs] ?? 0.22;
       hand[m] = { grip, index: g["index" + rs] ?? grip, sx: B.C["side" + m] };
     }
-    for (const r of order) {
+    if (kindG) {   // shooting hand (right) round the grip with a finger on the trigger; the other hand supports
+      hand.Right = { grip: 0.95, index: g.indexR ?? 0.3, sx: B.C.sideRight };
+      hand.Left = { grip: kindG.support, index: kindG.support, sx: B.C.sideLeft };
+    }
+    const fk = () => { for (const r of order) {
       let a = A[r.n];
       if (!a) {
         a = r.pn ? AP[r.pn] : null;
@@ -238,31 +337,42 @@ export function makeHuman(look, kind = modelFor(look)) {
       // local = parentWorld^-1 * world
       const pw = r.pn ? W[r.pn] : r.pq;
       r.b.quaternion.copy(_q.copy(pw).invert().multiply(w));
-    }
-    // a gun in the right hand
-    const gid = g.gun || null;
+    } };
+    fk();
+    // a gun: placed against the body (stock in the shoulder, or out in front in both hands), then
+    // both arms reach for it — the right hand round the grip, the left under the barrel or cupping
+    // the right — by two-bone IK, and the skeleton is posed again
+    const gid = gun;
     if (gid !== human._gunId) {
-      if (human._gun) { human._gun.parent.remove(human._gun); human._gun = null; }
+      if (human._gun) { root.remove(human._gun); human._gun = null; }
       human._gunId = gid;
-      if (gid && gid !== "fists") { human._gun = new THREE.Mesh(gunGeometry(gid), gunMaterial()); human._gun.matrixAutoUpdate = false; human._gun.castShadow = true; bones[S.R + "Hand"].add(human._gun); }
+      if (gid) { human._gun = new THREE.Mesh(gunGeometry(gid), gunMaterial()); human._gun.matrixAutoUpdate = false; human._gun.castShadow = true; root.add(human._gun); }
     }
-    if (human._gun) {
-      // the gun lies along the forearm, its sights on the thumb side, its grip in the palm. The
-      // hand's real directions now = its bone's turn since rest applied to the rest directions
-      const hb = bones[S.R + "Hand"], Fh = B.C.F[S.R], rr = human._handRest || (human._handRest = order.find(r => r.n === S.R + "Hand"));
-      const turn = _q.copy(W[S.R + "Hand"]).multiply(_q2.copy(rr.wq).invert());
-      const fwd = _gv1.copy(Fh.fingers).applyQuaternion(turn), palm = _gv3.copy(Fh.palm).applyQuaternion(turn);
-      const up = _gv2.set(0, 1, 0).addScaledVector(fwd, -fwd.y);
-      if (up.lengthSq() < 1e-4) up.set(0, 0, 1); up.normalize();
-      const back = fwd.clone().negate(), side = _gv4.crossVectors(back, up);   // a right-handed frame: (side, -fwd, up) = (x, y, z)
-      _gm.makeBasis(side, back, up);
-      _q.setFromRotationMatrix(_gm).premultiply(_q2.setFromAxisAngle(_v2.set(0, 1, 0), yaw));
+    if (kindG && bones.RightArm && bones.LeftArm && B.C.F.Right && B.C.F.Left) {
       root.updateMatrixWorld(true);
-      const hp = hb.getWorldPosition(_v), hs = human.look.h || 1;
-      const off = _v2.copy(fwd).multiplyScalar(0.06).addScaledVector(palm, 0.03).addScaledVector(up, -0.02).multiplyScalar(hs).applyAxisAngle(_gv4.set(0, 1, 0), yaw);
-      // as a child of the hand bone: local = hand^-1 * where it should be
-      _gm.compose(hp.add(off), _q, _gs.set(hs, hs, hs));
-      human._gun.matrix.copy(hb.matrixWorld).invert().multiply(_gm);
+      const hs = h, fwd = _k.f.set(Math.sin(yaw), 0, Math.cos(yaw)), up = _k.u.set(0, 1, 0);
+      const right = _k.r.set(-Math.cos(yaw), 0, Math.sin(yaw));                     // the body's right
+      const sR = bones.RightArm.getWorldPosition(_k.sR), sL = bones.LeftArm.getWorldPosition(_k.sL);
+      const G = _k.G;
+      if (kindG.at === "shoulder") G.copy(sR).addScaledVector(right, -0.075 * hs).addScaledVector(fwd, (kindG.butt + 0.03) * hs).addScaledVector(up, -0.035 * hs);
+      else if (kindG.at === "hip") G.copy(sR).addScaledVector(fwd, 0.28 * hs).addScaledVector(up, -0.42 * hs).addScaledVector(right, -0.02 * hs);
+      else if (kindG.at === "tube") G.copy(sR).addScaledVector(fwd, 0.16 * hs).addScaledVector(up, -0.06 * hs).addScaledVector(right, -0.05 * hs);
+      else G.copy(sR).add(sL).multiplyScalar(0.5).addScaledVector(fwd, kindG.reach * hs).addScaledVector(up, kindG.lift * hs).addScaledVector(right, 0.02 * hs);
+      // the gun's frame: barrel along fwd, sights up
+      const back = _k.b.copy(fwd).negate(), gx = _k.x.crossVectors(back, up);
+      _gm.makeBasis(gx, back, up).setPosition(G);
+      _gm.scale(_gs.set(hs, hs, hs));
+      human._gun.matrix.copy(root.matrixWorld).invert().multiply(_gm);
+      // where each hand goes, and how it's turned (knuckles' direction, palm's facing)
+      const fore = _k.fp.copy(G).addScaledVector(fwd, kindG.fore[0] * hs).addScaledVector(up, kindG.fore[1] * hs);
+      const rFing = _k.rf.copy(fwd).addScaledVector(up, -0.45).normalize(), rPalm = _k.rp.copy(right).negate();
+      let lFing, lPalm, lAt;
+      if (kindG.at === "front") { lFing = _k.lf.copy(fwd).addScaledVector(up, -0.6).normalize(); lPalm = _k.lp.copy(right); lAt = _k.la.copy(G).addScaledVector(right, -0.035 * hs).addScaledVector(up, -0.02 * hs); }
+      else { lFing = _k.lf.copy(right).multiplyScalar(0.75).addScaledVector(fwd, 0.65).normalize(); lPalm = _k.lp.copy(up); lAt = _k.la.copy(fore).addScaledVector(up, -0.02 * hs); }
+      const wristFor = (at, f, pa) => at.clone().addScaledVector(f, -0.075 * hs).addScaledVector(pa, -0.035 * hs);
+      reach(human, A, "Right", wristFor(G, rFing, rPalm), _k.pr.copy(right).multiplyScalar(0.6).addScaledVector(up, -1), rFing, rPalm, yaw);
+      reach(human, A, "Left", wristFor(lAt, lFing, lPalm), _k.pl.copy(right).multiplyScalar(-0.6).addScaledVector(up, -1), lFing, lPalm, yaw);
+      fk();
     }
     // the eyes follow their gaze
     if (face && bones.LeftEye) {

@@ -35,7 +35,7 @@ function frame(ts) {
     if (P.p === "punch") Object.assign(g, { armR: -1.55, elbowR: -0.1, armL: -0.9, elbowL: -1.8, lean: 0.15, twist: 0.3 });
     if (P.p === "fist") Object.assign(g, { armL: -0.9, elbowL: -1.9, armR: -0.8, elbowR: -2.0, gripL: 1, gripR: 1 });
     if (P.p === "open") Object.assign(g, { armL: -0.9, elbowL: -1.2, armR: -0.8, elbowR: -1.2, gripL: 0, gripR: 0 });
-    if (P.p.startsWith("aim")) Object.assign(g, { armR: -1.45, elbowR: -0.1, armL: -1.2, elbowL: -0.5, gripR: 0.95, indexR: P.p.endsWith("shoot") ? 1 : 0.3, gripL: 0.8, gun: q.get("gun") || "pistol" });
+    if (P.p.startsWith("aim")) Object.assign(g, { armR: -1.45, elbowR: -0.1, armL: -1.2, elbowL: -0.5, gripR: 0.95, indexR: P.p.endsWith("shoot") ? 1 : 0.3, gripL: 0.8, gun: (q.get("gun") || "pistol").split(",")[people.indexOf(P) % (q.get("gun") || "pistol").split(",").length] });
     if (P.p === "phone") Object.assign(g, { armR: -2.6, elbowR: -2.3, armL: -0.2 });
     if (P.p === "lie") { ex = { tilt: -1.45 }; Object.assign(g, { bob: -0.72, thighL: 0, thighR: 0, kneeL: 0.1, kneeR: 0.1, armL: 0, armR: 0, elbowL: -0.2, elbowR: -0.2, lean: 0 }); }
     P.face.base = (q.get("e") || "happy").split(",")[people.indexOf(P) % (q.get("e") || "happy").split(",").length]; if (q.get("talk")) P.face.talk = 1; tickFace(P.face, 0.016, t);
