@@ -130,7 +130,9 @@ function homeGym(ctx, g) {
   for (const [i, z] of [-8.4, -8.9].entries()) { K.sph("metal", 0.1 + i * 0.02, g.x0 + 0.3, 0.12 + i * 0.02, z, 0x1a1a1e, { seg: 12 }); K.torus("metal", 0.06, 0.016, g.x0 + 0.3, 0.26 + i * 0.03, z, 0x1a1a1e, { rx: 0, ry: HP, arc: PI, ts: 10 }); }
   ctx.P(-0.65, -8.8, PI, () => P2.punchingBag(K));
   ctx.P(-0.8, -6.75, 0, () => P2.yogaMat(K, 0x3a8a8a));
-  ctx.mirror(-3.6, 1.35, g.z1 - 0.01, PI, 3.2, 1.5);
+  K.box("mirror", 3.2, 1.6, 0.02, -3.6, 1.3, g.z1 - 0.02, 0xe8eef2);
+  for (const y of [0.48, 2.12]) K.box("metal", 3.28, 0.04, 0.04, -3.6, y, g.z1 - 0.03, 0x1a1a1e);
+  for (const x of [-5.22, -1.98]) K.box("metal", 0.04, 1.68, 0.04, x, 1.3, g.z1 - 0.03, 0x1a1a1e);
   wallTV(ctx, g.x1, 1.95, -7.0, -HP, 1.0, 0.56, "sport");
   ctx.poster(g.x0 + 0.01, 1.75, -8.7, HP, 0.6, 0.8, "NO DAYS OFF", 0x1a1a1e, 0xe8c020);
   K.cyl("gloss", 0.035, 0.035, 0.2, -5.0, 0.15, -6.7, 0x2a8ad8, { seg: 10 });                // water bottle
@@ -151,7 +153,7 @@ function homeCinema(ctx, c) {
   for (const x of [4.85, 5.85, 6.85]) ctx.P(x, -6.35, PI, () => P2.recliner(K, 0x3a1a1a), 0.2);
   ctx.P(0.5, -6.1, HP, () => P2.popcornMachine(K)); ctx.light(0.6, 1.0, -6.1, 0xffd080, 1.2, 2.2);
   for (const [x, a] of [[0.6, 0.3], [6.9, -0.3]]) ctx.P(x, -9.0, a, () => F.speaker(K, 1.4));
-  for (const z of [-8.4, -6.6]) for (const [x, n] of [[c.x0, 1], [c.x1, -1]]) { K.box("glow", 0.03, 0.18, 0.12, x + n * 0.02, 1.9, z, 0xffb070, { em: 2 }); K.box("gloss", 0.05, 0.05, 0.16, x + n * 0.03, 1.79, z, C.brass); ctx.light(x + n * 0.2, 1.9, z, 0xffa060, 1.0, 2.2); }
+  for (const z of [-8.4, -6.6]) for (const [x, n] of [[c.x0, 1], [c.x1, -1]]) { K.box("glow", 0.03, 0.18, 0.12, x + n * 0.02, 1.9, z, 0xffb070, { em: 2 }); K.box("gloss", 0.05, 0.05, 0.16, x + n * 0.03, 1.79, z, C.brass); ctx.light(x + n * 0.2, 1.9, z, 0xffa060, 2.2, 3); }
   ctx.poster(c.x0 + 0.01, 1.6, -7.5, HP, 0.6, 0.9, "NIGHT DRIVE", 0x1a1a3a, 0xff8a3a);
   ctx.poster(c.x1 - 0.01, 1.6, -7.8, -HP, 0.6, 0.9, "PALM WARS", 0x0a1a2a, 0xe8c020);
   // popcorn tubs and drinks in the cup holders
@@ -547,8 +549,8 @@ export const PLANS = {
       bedroom: { r: [-7.5, -5.5, -1, 0], floor: "@decor", light: [0xffd8a8, 20], ceil: "round", name: "Bedroom" },
       bath: { r: [-1, -5.5, 2.5, 0], floor: "tile", light: [0xf4f8ff, 16], ceil: "round", name: "Bathroom" },
       office: { r: [2.5, -5.5, 7.5, 0], floor: "wood", light: [0xfff0dc, 18], ceil: "round", name: "Study" },
-      gym: { r: [-7.5, -9.5, 0, -5.5], floor: "concreteDark", light: [0xf4f8ff, 18], ceil: "panel", name: "Home gym" },
-      cinema: { r: [0, -9.5, 7.5, -5.5], floor: "carpetRed", light: [0xffc890, 4], ceil: "spot", name: "Home cinema" },
+      gym: { r: [-7.5, -9.5, 0, -5.5], floor: "vinyl", light: [0xf4f8ff, 22], ceil: "panel", name: "Home gym" },
+      cinema: { r: [0, -9.5, 7.5, -5.5], floor: "carpetRed", light: [0xffc890, 9], ceil: "spot", name: "Home cinema" },
     },
     links: [
       { a: "kitchen", b: "living", kind: "open" },
