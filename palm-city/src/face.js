@@ -145,7 +145,7 @@ function build() {
       e.scale(0.75, 0.86, 0.86); e.rotateY(side * 0.1); e.rotateZ(side * -0.06); e.translate(side * 0.0935, 0.188, -0.008);
       return paintFn(e, (x, y, z, c) => { const k = 0.93 + 0.05 * sst(0.0, 0.004, Math.abs(Math.abs(x) - 0.0935)); c[0] = k; c[1] = k * 0.9; c[2] = k * 0.9; });
     };
-    const neck = new THREE.CylinderGeometry(0.046, 0.055, 0.15, 24, 1, true); neck.translate(0, 0.048, -0.004);
+    const neck = new THREE.CylinderGeometry(0.052, 0.062, 0.13, 24, 1, true); neck.translate(0, 0.045, -0.006);
     F.headHi = merge([head, ear(-1), ear(1), paintFn(neck, flat(0xf2f2f2))]);
     F.nose = merge([nose]);
     // the apples of the cheeks: soft pads that ride up and out when someone smiles

@@ -30,7 +30,8 @@ const chars = exprs.map((e, i) => {
   const ch = makeCharacter(look); scene.add(ch.group);
   return { ch, e, x: i * 2 };
 });
-const cam = new THREE.PerspectiveCamera(22, 1, 0.05, 50);
+const cam = new THREE.PerspectiveCamera(q.get("full") ? 30 : 22, 1, 0.05, 50);
+if (q.get("full")) { const gnd = new THREE.Mesh(new THREE.PlaneGeometry(60, 20), new THREE.MeshStandardMaterial({ color: 0x5a5e66, roughness: 0.9 })); gnd.rotation.x = -Math.PI / 2; scene.add(gnd); }
 const yaw = +(q.get("yaw") || 0.35), t0 = performance.now();
 function frame(ts) {
   const t = (ts - t0) / 1000;
@@ -38,11 +39,12 @@ function frame(ts) {
   const lab = document.getElementById("l"); lab.innerHTML = "";
   chars.forEach((c, i) => {
     c.ch.face.base = c.e; if (q.get("talk")) c.ch.face.talk = 1;
-    c.ch.pose(c.x, 0, 0, 0, 0, 0);
+    c.ch.pose(c.x, 0, 0, 0, q.get("walk") ? t * 6 : 0, q.get("walk") ? 1 : 0);
     const hm = c.ch.group.children[2].matrix.elements, hy = hm[13] + 0.18;
     const cx = i % cols, cy = Math.floor(i / cols), w = W / cols, h = Hh / rows;
     cam.aspect = w / h; cam.updateProjectionMatrix();
-    const dd = +(q.get("d") || 0.85); cam.position.set(c.x + Math.sin(yaw) * dd, hy + 0.04 * dd / 0.85, Math.cos(yaw) * dd); cam.lookAt(c.x, hy - 0.005, 0.02);
+    const dd = +(q.get("d") || 0.85); cam.position.set(c.x + Math.sin(yaw) * dd, hy + 0.04 * dd / 0.85, Math.cos(yaw) * dd);
+    if (q.get("full")) { const fd = +(q.get("full")); cam.position.set(c.x + Math.sin(yaw) * fd, 1.05, Math.cos(yaw) * fd); cam.lookAt(c.x, 0.92, 0); } if (!q.get("full")) cam.lookAt(c.x, hy - 0.005, 0.02);
     r.setViewport(cx * w, Hh - (cy + 1) * h, w, h); r.setScissor(cx * w, Hh - (cy + 1) * h, w, h);
     r.render(scene, cam);
     const d = document.createElement("div"); d.textContent = c.e; d.style.left = (cx * w + 8) + "px"; d.style.top = (cy * h + 6) + "px"; lab.appendChild(d);
