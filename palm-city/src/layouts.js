@@ -408,7 +408,7 @@ function policeBackRooms(ctx) {
   const { K, R } = ctx;
   const ar = R.armory, ev = R.evidence, cop = { shirt: 0x1e2a44, pants: 0x1e2a44 };
   // armory: rifles racked on two walls, vests, riot shields, ammo cans, a pistol stripped on the bench
-  ctx.paint("armory", 0x7a7e72, 0, "block");
+  ctx.paint("armory", 0xb8bcae, 0, "block");
   ctx.P(5.7, ar.z0 + 0.06, 0, () => P2.gunRack(K, 2.6));
   ctx.P(ar.x0 + 0.06, -8.0, HP, () => P2.gunRack(K, 1.8));
   ctx.P(7.9, -9.55, 0, () => P2.vestRack(K));
@@ -1003,8 +1003,8 @@ export const PLANS = {
       cells: { r: [-9, -6.5, -1, 1.5], floor: "concrete", light: [0xe8f0f4, 18], ceil: "fluoro", name: "Holding cells" },
       interview: { r: [-1, -6.5, 4, 1.5], floor: "concrete", light: [0xfff0d8, 10], ceil: "none", name: "Interview room" },
       lockers: { r: [4, -6.5, 9, 1.5], floor: "tile", light: [0xf4f8ff, 18], ceil: "fluoro", name: "Locker room" },
-      armory: { r: [4, -10, 9, -6.5], floor: "concrete", light: [0xf4f8ff, 14], ceil: "fluoro", name: "Armory" },
-      evidence: { r: [-1, -10, 4, -6.5], floor: "concrete", light: [0xf4f8ff, 12], ceil: "fluoro", name: "Evidence room" },
+      armory: { r: [4, -10, 9, -6.5], floor: "concrete", light: [0xf4f8ff, 26], ceil: "fluoro", name: "Armory" },
+      evidence: { r: [-1, -10, 4, -6.5], floor: "concrete", light: [0xf4f8ff, 18], ceil: "fluoro", name: "Evidence room" },
     },
     links: [
       { a: "lobby", b: "bullpen", kind: "arch", at: 4.0, w: 1.8 },

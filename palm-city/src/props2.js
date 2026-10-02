@@ -469,7 +469,8 @@ export function leadAprons(K) {
 
 // ============================== police armory / evidence ==============================
 export function gunRack(K, w = 2.0) {
-  K.box("wood", w, 1.8, 0.1, 0, 1.1, 0, 0x2a2e32);
+  K.box("wood", w, 1.8, 0.1, 0, 1.1, 0, 0x6a7064);
+  for (let i = 0; i < 40; i++) K.cyl("matte", 0.008, 0.008, 0.005, -w / 2 + 0.05 + (i % 20) * (w - 0.1) / 19, 1.75 + Math.floor(i / 20) * 0.1 - 1.7, 0.052, 0x3a3e36, { rx: Math.PI / 2, seg: 4 });
   K.box("metal", w, 0.08, 0.2, 0, 0.35, 0.08, 0x3a3e42);
   const n = Math.floor(w / 0.22);
   for (let i = 0; i < n; i++) {
