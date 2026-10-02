@@ -336,7 +336,7 @@ function galleryBackRooms(ctx) {
   ctx.npc(-0.1, -8.2, PI + 0.3, "stand", { shirt: 0x6a2a3a, pants: 0x2a2a2e }, [[-0.1, -8.2, PI + 0.3], [0.6, -6.7, -2.4], [-2.2, -8.75, PI]], "look");
   ctx.spot(-4.6, -7.3, 1.5, "WATCH", "🎨 Watch the restorers work", "restore");
   // vault: the round door swung open, art racks, a gold piece under glass, deposit boxes, lasers
-  ctx.paint("vault", 0x8a8e92, 0, "block");
+  ctx.paint("vault", 0xb0b4b8, 0, "block");
   K.push(2.45, -7.3, HP, 0); P2.vaultDoor(K); K.pop(); K.block(vt.x0, -8.5, 2.85, vt.z1);
   for (const x of [2.54, 3.86]) K.box("metal", 0.12, 2.7, 0.1, x, 1.35, -5.88, 0x5a5e62);
   K.box("metal", 1.44, 0.14, 0.1, 3.2, 2.67, -5.88, 0x5a5e62);
@@ -864,7 +864,7 @@ export const PLANS = {
       hallB: { r: [-9, -6, 2, 0.5], floor: "wood", light: [0xfff4e4, 18], ceil: "none", name: "West gallery" },
       office: { r: [2, -6, 9, 0.5], floor: "carpet", light: [0xfff0dc, 16], ceil: "fluoro", name: "Curator's office" },
       studio: { r: [-9, -10, 2, -6], floor: "concrete", light: [0xf4f8ff, 20], ceil: "panel", name: "Restoration studio" },
-      vault: { r: [2, -10, 9, -6], floor: "concreteDark", light: [0xe8f0ff, 18], ceil: "spot", name: "Vault" },
+      vault: { r: [2, -10, 9, -6], floor: "concrete", light: [0xe8f0ff, 28], ceil: "spot", name: "Vault" },
     },
     links: [
       { a: "lobby", b: "hallA", kind: "arch", at: 3.2, w: 2.2, sign: ["EXHIBITION", null] },
