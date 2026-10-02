@@ -2,6 +2,7 @@
 // real knees and elbows) shared by the player and the whole crowd. The crowd is drawn with ONE instanced mesh
 // per body part, so hundreds of animated pedestrians cost about a dozen draw calls.
 import * as THREE from "../vendor/three.module.js";
+import { inView } from "./cull.js";
 import { limb, paint, merge, place } from "./geo.js";
 import { FACE, BEARD_KIND, IRIS, FACE_COLOR, FACE_MAT, HAIRSTYLES, faceMaterials, newFace, tickFace, faceMatrices, pickStyle, faceVariation, patch as patchFace, cardMaterial, BEARD_CARDS } from "./face.js";
 import { humansReady, makeHuman, modelFor, tint as tintHuman, HumanPool } from "./human.js";
@@ -31,47 +32,47 @@ function buildParts() {
   const P = {};
   // torso: a tapered capsule, broader through the chest, flattened front-to-back; belt at the waist
   {
-    const t = new THREE.CapsuleGeometry(0.165, 0.32, 4, 12);
+    const t = new THREE.CapsuleGeometry(0.165, 0.32, 3, 9);
     const tp = t.attributes.position;
     for (let i = 0; i < tp.count; i++) { const y = tp.getY(i); tp.setX(i, tp.getX(i) * (1.12 + Math.max(0, y) * 0.35)); tp.setZ(i, tp.getZ(i) * (0.66 + Math.max(0, y) * 0.12)); }
     t.computeVertexNormals(); t.translate(0, 0.29, 0);
     const g = paint(t, 0xffffff);
-    const belt = paint(new THREE.CylinderGeometry(0.19, 0.19, 0.05, 14), 0x3a3a3a); belt.scale(1.1, 1, 0.68);
+    const belt = paint(new THREE.CylinderGeometry(0.19, 0.19, 0.05, 9), 0x3a3a3a); belt.scale(1.1, 1, 0.68);
     P.torso = merge([g, belt]);
   }
-  P.hips = merge([place(paint(new THREE.SphereGeometry(0.17, 12, 8), 0xffffff), 0, 0, 0, 0, 0, 0, 1.1, 0.62, 0.7)]);
+  P.hips = merge([place(paint(new THREE.SphereGeometry(0.17, 9, 6), 0xffffff), 0, 0, 0, 0, 0, 0, 1.1, 0.62, 0.7)]);
   {
     // head: egg-shaped and life-sized; the eyes, brows and mouth are separate parts (face.js) so they can move
-    const head = paint(new THREE.SphereGeometry(0.112, 24, 18), 0xffffff); head.scale(0.88, 1.14, 1.0); head.translate(0, 0.19, 0.005);
-    const jaw = place(paint(new THREE.SphereGeometry(0.072, 20, 14), 0xffffff), 0, 0.124, 0.028, 0, 0, 0, 0.98, 0.82, 1.0);
-    const neck = paint(new THREE.CylinderGeometry(0.048, 0.056, 0.13, 10), 0xe8e8e8); neck.translate(0, 0.05, 0);
+    const head = paint(new THREE.SphereGeometry(0.112, 12, 9), 0xffffff); head.scale(0.88, 1.14, 1.0); head.translate(0, 0.19, 0.005);
+    const jaw = place(paint(new THREE.SphereGeometry(0.072, 8, 6), 0xffffff), 0, 0.124, 0.028, 0, 0, 0, 0.98, 0.82, 1.0);
+    const neck = paint(new THREE.CylinderGeometry(0.048, 0.056, 0.13, 7), 0xe8e8e8); neck.translate(0, 0.05, 0);
     // the nose: a bridge, a rounded tip, the wings either side and two nostrils
-    const bridge = place(paint(new THREE.CylinderGeometry(0.0075, 0.012, 0.04, 8), 0xf4f0f0), 0, 0.186, 0.109, -0.38, 0, 0, 1, 1, 0.8);
-    const tip = place(paint(new THREE.SphereGeometry(0.0125, 10, 8), 0xf6f2f2), 0, 0.168, 0.12, 0, 0, 0, 1.05, 0.9, 0.95);
-    const wings = [-1, 1].map(s => place(paint(new THREE.SphereGeometry(0.0085, 8, 6), 0xf0eaea), s * 0.0115, 0.165, 0.112, 0, 0, 0, 1, 0.85, 1));
-    const nostrils = [-1, 1].map(s => place(paint(new THREE.SphereGeometry(0.0038, 6, 4), 0x4a3030), s * 0.0062, 0.1605, 0.1175, 0, 0, 0, 1.2, 0.6, 1));
-    const ears = [-0.1, 0.1].map(x => place(paint(new THREE.SphereGeometry(0.025, 8, 6), 0xf0f0f0), x, 0.19, 0.0, 0, 0, 0, 0.55, 1, 1));
+    const bridge = place(paint(new THREE.CylinderGeometry(0.0075, 0.012, 0.04, 4), 0xf4f0f0), 0, 0.186, 0.109, -0.38, 0, 0, 1, 1, 0.8);
+    const tip = place(paint(new THREE.SphereGeometry(0.0125, 5, 4), 0xf6f2f2), 0, 0.168, 0.12, 0, 0, 0, 1.05, 0.9, 0.95);
+    const wings = [-1, 1].map(s => place(paint(new THREE.SphereGeometry(0.0085, 4, 3), 0xf0eaea), s * 0.0115, 0.165, 0.112, 0, 0, 0, 1, 0.85, 1));
+    const nostrils = [-1, 1].map(s => place(paint(new THREE.SphereGeometry(0.0038, 3, 2), 0x4a3030), s * 0.0062, 0.1605, 0.1175, 0, 0, 0, 1.2, 0.6, 1));
+    const ears = [-0.1, 0.1].map(x => place(paint(new THREE.SphereGeometry(0.025, 5, 4), 0xf0f0f0), x, 0.19, 0.0, 0, 0, 0, 0.55, 1, 1));
     P.head = merge([head, jaw, neck, bridge, tip, ...wings, ...nostrils, ...ears]);
   }
   {
     // short hair: a close cap over the top and back
-    const h = new THREE.SphereGeometry(0.118, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.52);
+    const h = new THREE.SphereGeometry(0.118, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.52);
     h.scale(0.92, 1.1, 1.06); h.rotateX(-0.36); h.translate(0, 0.205, -0.012);   // tipped back: the hairline sits above the brows
     P.hair = merge([paint(h, 0xffffff)]);
     // long hair: the cap plus a fall down the back to the shoulders
-    const back = new THREE.CapsuleGeometry(0.1, 0.2, 3, 10); back.scale(1.05, 1, 0.55); back.translate(0, 0.1, -0.07);
+    const back = new THREE.CapsuleGeometry(0.1, 0.2, 2, 7); back.scale(1.05, 1, 0.55); back.translate(0, 0.1, -0.07);
     P.hairL = merge([paint(h.clone(), 0xffffff), paint(back, 0xffffff)]);
   }
-  P.upper = merge([paint(limb(0.06, 0.05, RIG.upper, 10), 0xffffff)]);
+  P.upper = merge([paint(limb(0.06, 0.05, RIG.upper, 7), 0xffffff)]);
   {
-    const f = paint(limb(0.048, 0.038, RIG.fore, 10), 0xffffff);
-    const hand = place(paint(new THREE.SphereGeometry(0.045, 10, 8), 0xf2f2f2), 0, -RIG.fore - 0.045, 0.0, 0, 0, 0, 0.7, 1.35, 0.95);
+    const f = paint(limb(0.048, 0.038, RIG.fore, 7), 0xffffff);
+    const hand = place(paint(new THREE.SphereGeometry(0.045, 6, 5), 0xf2f2f2), 0, -RIG.fore - 0.045, 0.0, 0, 0, 0, 0.7, 1.35, 0.95);
     P.fore = merge([f, hand]);
   }
-  P.thigh = merge([paint(limb(0.085, 0.062, RIG.thigh, 10), 0xffffff)]);
+  P.thigh = merge([paint(limb(0.085, 0.062, RIG.thigh, 7), 0xffffff)]);
   {
-    const s = paint(limb(0.058, 0.042, RIG.shin, 10), 0xffffff);
-    const shoe = new THREE.CapsuleGeometry(0.048, 0.16, 3, 8); shoe.rotateX(Math.PI / 2); shoe.scale(1.05, 0.72, 1);
+    const s = paint(limb(0.058, 0.042, RIG.shin, 7), 0xffffff);
+    const shoe = new THREE.CapsuleGeometry(0.048, 0.16, 2, 6); shoe.rotateX(Math.PI / 2); shoe.scale(1.05, 0.72, 1);
     P.shin = merge([s, place(paint(shoe, 0x26262a), 0, -RIG.shin - 0.035, 0.05)]);
   }
   return P;
@@ -334,7 +335,7 @@ export class Crowd {
     for (const k of Object.keys(PART_OF)) {
       const m = new THREE.InstancedMesh(PARTS[PART_OF[k]], mat, MAX);
       m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3);
-      m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; m.count = 0;
+      m.name = "low_" + k; m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; m.count = 0;
       scene.add(m); this.meshes[k] = m;
     }
     this._g = {}; this._c = new THREE.Color(); this.near = [];
@@ -346,7 +347,7 @@ export class Crowd {
       if (k === "headHi") { geo = FACE.headHi.clone(); geo.setAttribute("aSkin", new THREE.InstancedBufferAttribute(new Float32Array(FMAX * 4), 4)); }
       const m = new THREE.InstancedMesh(geo, FMAT[FACE_MAT[k]], FMAX * n);
       m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(FMAX * n * 3), 3);
-      m.frustumCulled = false; m.count = 0; m.castShadow = k === "headHi" || k.startsWith("hair_") || (k.startsWith("beard") && !k.startsWith("beardc")); m.receiveShadow = FACE_MAT[k] === "skin"; scene.add(m); this.fm[k] = m;
+      m.name = "face_" + k; m.frustumCulled = false; m.count = 0; m.castShadow = k === "headHi" || k.startsWith("hair_") || (k.startsWith("beard") && !k.startsWith("beardc")); m.receiveShadow = FACE_MAT[k] === "skin"; scene.add(m); this.fm[k] = m;
     }
     this._zero = new THREE.Matrix4().makeScale(0, 0, 0);
     // detailed bodies for the same people
@@ -355,14 +356,14 @@ export class Crowd {
     for (const [k, n] of Object.entries(BODY_SLOTS)) {
       const m = new THREE.InstancedMesh(BODY[k], BM[BODY_MAT[k]], FMAX * n);
       m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(FMAX * n * 3), 3);
-      m.frustumCulled = false; m.count = 0; m.castShadow = true; m.receiveShadow = true; scene.add(m); this.bm[k] = m;
+      m.name = "body_" + k; m.frustumCulled = false; m.count = 0; m.castShadow = true; m.receiveShadow = true; scene.add(m); this.bm[k] = m;
     }
     this._pm = {}; for (const k of BODY_PARTS) this._pm[k] = Array.from({ length: MAX }, () => new THREE.Matrix4());
     this._heads = Array.from({ length: MAX }, () => new THREE.Matrix4());
     this._ft = performance.now() / 1000;
     // the nearest people are real models (human.js); fewer on phones
     const mobile = typeof navigator !== "undefined" && /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
-    this.pool = new HumanPool(scene, mobile ? 6 : 12);
+    this.pool = new HumanPool(scene, mobile ? 4 : 8);
     this._hg = {};
   }
   // a person's face state (made on first use)
@@ -535,7 +536,7 @@ export class Crowd {
     for (const p of this.people) {
       if (p.hidden) continue;
       const dx = p.x - fx, dz = p.z - fz, d2 = dx * dx + dz * dz;
-      if (d2 < 150 * 150) { p._d2 = d2; near.push(p); }
+      if (d2 < 120 * 120 && (d2 < 100 || inView(p.x, p.z, 8))) { p._d2 = d2; near.push(p); }
     }
     if (near.length > MAX) { near.sort((a, b) => a._d2 - b._d2); near.length = MAX; }
     let i = 0;

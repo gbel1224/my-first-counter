@@ -5,7 +5,7 @@
 // texture memory, and the whole skyline is a handful of draw calls.
 import * as THREE from "../vendor/three.module.js";
 import { N, ROAD, BLOCK, WALK, CURB, CELL, HALF, STYLE, blockC, mulberry32, PLAZA } from "./world.js";
-import { paint, place, merge, vcMaterial } from "./geo.js";
+import { paint, place, merge, vcMaterial, tileInstances } from "./geo.js";
 
 // shared GLSL: hashing, value noise, and an anti-aliased "is this pixel inside a repeating cell
 // rectangle" test that fades to its average coverage when the cells shrink below a few pixels
@@ -212,6 +212,7 @@ function buildBuildings(scene, city, U) {
   mesh.castShadow = true; mesh.receiveShadow = true;
   mesh.frustumCulled = false;
   scene.add(mesh);
+  tileInstances(scene, mesh, 240);
 
   // ---- roof clutter: AC units, water tanks, antenna masts, pitched roofs on houses ----
   const r = mulberry32(0xC0FFEE);
@@ -512,11 +513,11 @@ function palmGeometry(kind) {
     // royal palms swell near the base and again just under the crown; sabals are rough and even
     const rad = t => royal ? 0.26 - t * 0.07 + Math.exp(-t * 9) * 0.1 : 0.22 - t * 0.02;
     const nx = Math.sin(t1 * 1.2) * lean;
-    const g = new THREE.CylinderGeometry(rad(t1), rad(t0), H / segs + 0.02, 10, 1);
+    const g = new THREE.CylinderGeometry(rad(t1), rad(t0), H / segs + 0.02, 7, 1);
     const shade = (s % 2 ? 0x8d8577 : 0x7f776a);
     parts.push(place(paint(g, royal ? shade : (s % 2 ? 0x6e5a44 : 0x5e4c3a)), (px + nx) / 2, (t0 + t1) / 2 * H, 0, 0, 0, -(nx - px) / (H / segs)));
     // leaf-scar rings
-    parts.push(place(paint(new THREE.TorusGeometry(rad(t1) + 0.005, 0.018, 3, 10), royal ? 0x5d574d : 0x4a3a2c), nx, t1 * H, 0, Math.PI / 2, 0, 0));
+    parts.push(place(paint(new THREE.TorusGeometry(rad(t1) + 0.005, 0.018, 3, 7), royal ? 0x5d574d : 0x4a3a2c), nx, t1 * H, 0, Math.PI / 2, 0, 0));
     px = nx;
   }
   const topX = px, topY = H;
@@ -593,6 +594,7 @@ function instanced(scene, geo, mat, list, yOf, cast = true) {
   mesh.castShadow = cast; mesh.receiveShadow = true;
   mesh.frustumCulled = false;
   scene.add(mesh);
+  tileInstances(scene, mesh, 140, 400);   // static: split into tiles the renderer can skip, drawn out to ~500 m
   return mesh;
 }
 

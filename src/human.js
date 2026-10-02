@@ -60,7 +60,19 @@ function prepare(kind, scene) {
     C["side" + s] = sx;
   }
   const footY = bones.LeftFoot.getWorldPosition(new THREE.Vector3()).y - box.min.y;
-  scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+  // shadows only from the big pieces (eyes, teeth, lashes and brows don't need a shadow pass), and a
+  // generous bound so people off screen aren't drawn at all
+  scene.traverse(o => {
+    if (!o.isMesh) return;
+    const n = (o.name + " " + (o.material.name || "")).toLowerCase();
+    o.castShadow = !/eye|teeth|tongue|lash|brow|ao/.test(n); o.receiveShadow = true;
+    if (o.isSkinnedMesh) {
+      o.geometry.computeBoundingSphere();
+      const bs = o.geometry.boundingSphere.clone(); bs.radius = Math.max(bs.radius * 1.6, 1.4 / (o.matrixWorld.getMaxScaleOnAxis() || 1));
+      o.boundingSphere = bs;
+    }
+    o.frustumCulled = true;
+  });
   return { kind, scene, C, scale, height: (box.max.y - box.min.y) * scale, footY };
 }
 
