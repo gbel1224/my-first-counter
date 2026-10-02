@@ -20,7 +20,7 @@ export function makeCombat(scene, g) {
   // g: { crowd, traffic, parked, crime, fx, sound, shake, st, player(), camYaw(), earnCombo }
   const wrecks = [];
   const charMat = new THREE.MeshStandardMaterial({ color: 0x1a1816, roughness: 1, metalness: 0.1 });
-  const S = { punchT: 0, combo: 0, comboT: 0, cd: 0, weapon: 0 };
+  const S = { punchT: 0, combo: 0, comboT: 0, cd: 0, weapon: 0, shotT: 0, fistT: 0 };
   if (!g.st.weapons) g.st.weapons = { fists: true };
   if (!g.st.ammo) g.st.ammo = {};
 
@@ -176,7 +176,7 @@ export function makeCombat(scene, g) {
     const P = g.player();
     S.combo = S.comboT > 0 ? (S.combo + 1) % 3 : 0; S.comboT = 0.7;
     const kick = S.combo === 2;
-    S.punchT = kick ? 0.38 : 0.26; S.cd = kick ? 0.5 : 0.28;
+    S.punchT = kick ? 0.38 : 0.26; S.cd = kick ? 0.5 : 0.28; S.fistT = 2.5;   // fists stay balled a while after a swing
     const fx = Math.sin(P.yaw), fz = Math.cos(P.yaw);
     const reach = kick ? 1.9 : 1.5;
     const t = g.crowd.nearest(P.x + fx * 0.9, P.z + fz * 0.9, reach, null);
@@ -202,7 +202,7 @@ export function makeCombat(scene, g) {
     if (w.id === "fists") return punch();
     if (S.cd > 0) return false;
     if ((g.st.ammo[w.id] || 0) <= 0) { S.cd = 0.4; g.sound("blip", 0.3, 0.5); g.toast && g.toast("Out of ammo — buy more at the gun shop"); return false; }
-    S.cd = w.rate; g.st.ammo[w.id]--;
+    S.cd = w.rate; g.st.ammo[w.id]--; S.shotT = Math.min(0.12, w.rate * 0.7);   // the trigger finger pulls
     const P = g.player();
     if (w.proj) {
       let dx = Math.sin(aimYaw), dz = Math.cos(aimYaw);
@@ -253,6 +253,8 @@ export function makeCombat(scene, g) {
     if (S.cd > 0) S.cd -= dt;
     if (S.comboT > 0) S.comboT -= dt;
     if (S.punchT > 0) S.punchT -= dt;
+    if (S.shotT > 0) S.shotT -= dt;
+    if (S.fistT > 0) S.fistT -= dt;
     const P = g.player();
     // damaged cars smoke, then burn, then go up
     const burn = c => {
@@ -265,6 +267,13 @@ export function makeCombat(scene, g) {
     for (const c of g.traffic.cars) if (c.alive) burn(c);
     for (const w of wrecks) { w.t += dt; if (w.t < 10 && Math.random() < dt * 10) g.fx.fire(w.x, 0.8, w.z); if (w.t < 25 && Math.random() < dt * 5) g.fx.smoke(w.x, 1.4, w.z, 0.12); }
   }
+  // the hands: fists when fighting, a grip and a trigger finger with a gun out
+  function hands() {
+    const w = current();
+    if (w.id === "fists") return S.fistT > 0 ? { gripL: 1, gripR: 1 } : null;
+    const two = w.id !== "pistol";
+    return { gun: w.id, gripR: 0.95, indexR: S.shotT > 0 ? 1 : 0.3, gripL: two ? 0.75 : 0.5 };
+  }
   // pose override for the attack animation
   function pose() {
     if (S.punchT <= 0) return null;
@@ -276,5 +285,5 @@ export function makeCombat(scene, g) {
     return right ? { armR: -1.55 * ext, elbowR: -0.2 - (1 - ext) * 1.2, armL: -0.5, elbowL: -1.8, twist: -0.25 * ext }
                  : { armL: -1.55 * ext, elbowL: -0.2 - (1 - ext) * 1.2, armR: -0.5, elbowR: -1.8, twist: 0.25 * ext };
   }
-  return { S, WEAPONS, current, cycle, buy, own, fire, punch, update, pose, damageCar, explodeCar, blast, wrecks, launch, asCops, projs };
+  return { S, WEAPONS, current, cycle, buy, own, fire, punch, update, pose, hands, damageCar, explodeCar, blast, wrecks, launch, asCops, projs };
 }
