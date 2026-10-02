@@ -4,6 +4,7 @@
 import * as THREE from "../vendor/three.module.js";
 import { limb, paint, merge, place } from "./geo.js";
 import { FACE, BEARD_KIND, IRIS, FACE_COLOR, FACE_MAT, HAIRSTYLES, faceMaterials, newFace, tickFace, faceMatrices, pickStyle, faceVariation, patch as patchFace, cardMaterial, BEARD_CARDS } from "./face.js";
+import { humansReady, makeHuman, modelFor, tint as tintHuman, HumanPool } from "./human.js";
 import { BODY, BODY_SLOTS, BODY_COLOR, BODY_MAT, bodyPieces, clothMaterial, SHOES } from "./body.js";
 const BODY_PARTS = ["torso", "hips", "upperL", "upperR", "foreL", "foreR", "thighL", "thighR", "shinL", "shinR"];
 // every detailed piece a rig part might wear, whatever the look
@@ -227,9 +228,26 @@ export function makeCharacter(look) {
   const g = {};
   // accessories ride on the head / torso: hats, glasses, beards, jackets (see setAcc)
   const acc = {}, accOff = new THREE.Matrix4(), headM = new THREE.Matrix4(), tmpM = new THREE.Matrix4();
+  // the real person (human.js): once the models have loaded, it takes over from the built-up figure
+  let human = null;
+  const useHuman = () => {
+    if (human || !humansReady()) return human;
+    human = makeHuman(look); group.add(human.root);
+    const accs = Object.values(acc); for (const ch of group.children) if (ch !== human.root && !accs.includes(ch)) ch.visible = false;
+    return human;
+  };
   const pose = (x, y, z, yaw, phase, amt, extra) => {
     gait(phase, amt, g, null);
     if (extra && extra.override) Object.assign(g, extra.override);
+    if (useHuman()) {
+      const now = performance.now() / 1000, dt = Math.min(0.1, now - lastT); lastT = now;
+      if (extra && extra.expr) { face.expr = extra.expr; face.hold = Math.max(face.hold, 0.1); }
+      tickFace(face, dt, now);
+      human.drive(x, y, z, yaw, g, extra, face);
+      const ks = Object.keys(acc);
+      if (ks.length) { human.headMatrix(headM); for (const k of ks) acc[k].matrix.copy(headM); }
+      return;
+    }
     poseMatrices(x, y, z, yaw, look, g, (k, m) => {
       meshes[k].matrix.copy(m); if (k === "head") headM.copy(m);
       const pieces = bm[k];
@@ -268,12 +286,17 @@ export function makeCharacter(look) {
   }
   function recolor() {
     finishLook(look);
+    if (human) {
+      // a new look may need a different person (long hair, a beard): swap the model
+      if (modelFor(look) !== human.kind) { group.remove(human.root); human = null; useHuman(); }
+      else tintHuman(human);
+    }
     for (const k in bmats) bmats[k].color.set(bodyCol(k, look));
     for (const k of Object.keys(PART_OF)) meshes[k].material.color.set(look[COLOR_OF[k]]);
     for (const k in fmats) fmats[k].color.set(faceCol(k, look));
     setSkin();
   }
-  return { group, pose, look, mats, setAcc, recolor, face };
+  return { group, pose, look, mats, setAcc, recolor, face, get human() { return human; } };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -337,6 +360,10 @@ export class Crowd {
     this._pm = {}; for (const k of BODY_PARTS) this._pm[k] = Array.from({ length: MAX }, () => new THREE.Matrix4());
     this._heads = Array.from({ length: MAX }, () => new THREE.Matrix4());
     this._ft = performance.now() / 1000;
+    // the nearest people are real models (human.js); fewer on phones
+    const mobile = typeof navigator !== "undefined" && /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
+    this.pool = new HumanPool(scene, mobile ? 6 : 12);
+    this._hg = {};
   }
   // a person's face state (made on first use)
   faceOf(p) {
@@ -489,6 +516,19 @@ export class Crowd {
     const nc = ew ? [1, 0, 3, 2][corner] : [3, 2, 1, 0][corner];
     p.cross = { x0, z0, x1, z1, len: Math.hypot(x1 - x0, z1 - z0), t: 0, bi: ni, bj: nj, tt: nc + 0.001 };
   }
+  // a person's joint angles this frame
+  poseOf(p, g) {
+    gait(p.phase, p.pause > 0 || p.knocked > 0 ? 0 : (p.amt || 1), g, p.style);
+    const y = groundY(p.x, p.z) + (p.y || 0);
+    let extra = null;
+    if (p.knocked > 0) {
+      // tumbling in the air, then flat on the ground
+      const lying = p.y <= 0.01;
+      extra = { tilt: lying ? -1.45 : p.spin };
+      Object.assign(g, { thighL: 0.3, thighR: -0.2, kneeL: 0.4, kneeR: 0.2, armL: -2.4, armR: 2.2, elbowL: -0.3, elbowR: -0.3, lean: 0, bob: lying ? -0.72 : 0 });
+    } else g.bob = g.bob || 0;
+    return { g, extra, y };
+  }
   // fill the instance buffers with the nearest people
   render(fx, fz, camera) {
     const near = this.near; near.length = 0;
@@ -504,15 +544,7 @@ export class Crowd {
     const PM = this._pm;
     const put = (k, m) => { M[k].setMatrixAt(i, m); if (k === "head") heads[i].copy(m); else if (PM[k]) PM[k][i].copy(m); };
     for (const p of near) {
-      gait(p.phase, p.pause > 0 || p.knocked > 0 ? 0 : (p.amt || 1), g, p.style);
-      const y = groundY(p.x, p.z) + (p.y || 0);
-      let extra = null;
-      if (p.knocked > 0) {
-        // tumbling in the air, then flat on the ground
-        const lying = p.y <= 0.01;
-        extra = { tilt: lying ? -1.45 : p.spin };
-        Object.assign(g, { thighL: 0.3, thighR: -0.2, kneeL: 0.4, kneeR: 0.2, armL: -2.4, armR: 2.2, elbowL: -0.3, elbowR: -0.3, lean: 0, bob: lying ? -0.72 : 0 });
-      }
+      const { extra, y } = this.poseOf(p, g);
       poseMatrices(p.x, y, p.z, p.yaw, p.look, g, put, extra);
       for (const k in M) {
         const col = p.look[COLOR_OF[k]];
@@ -536,8 +568,28 @@ export class Crowd {
     const idx = [];
     for (let j = 0; j < n; j++) if (near[j]._d2 < 26 * 26) idx.push(j);
     if (idx.length > FMAX) { idx.sort((a, b) => near[a]._d2 - near[b]._d2); idx.length = FMAX; }
+    // the very nearest are real people: their stand-in parts step aside entirely
+    let real = null;
+    if (humansReady()) {
+      const order = idx.slice().sort((a, b) => near[a]._d2 - near[b]._d2).map(j => near[j]);
+      real = this.pool.assign(order);
+    }
     for (const j of idx) {
       const p = near[j], L = p.look, f = this.faceOf(p);
+      const hu = real && real.get(p);
+      if (hu) {
+        f.base = L.mood || "neutral";
+        const auto = this.exprFor(p);
+        if (auto) { f.expr = auto; f.hold = 0.35; }
+        tickFace(f, dt, now);
+        const cam = this._cam;
+        if (cam && p._d2 < 64) { let a = Math.atan2(cam.x - p.x, cam.z - p.z) - p.yaw; a = Math.atan2(Math.sin(a), Math.cos(a)); f.look = Math.abs(a) < 1.2 ? (f._lk || (f._lk = { x: 0, y: 0 }), f._lk.x = Math.max(-0.4, Math.min(0.4, a * 0.7)), f._lk.y = Math.max(-0.2, Math.min(0.2, (cam.y - 1.6) * 0.08)), f._lk) : null; }
+        else f.look = null;
+        for (const k in this.meshes) this.meshes[k].setMatrixAt(j, this._zero);
+        const { g, extra, y } = this.poseOf(p, this._hg);
+        hu.drive(p.x, y, p.z, p.yaw, g, extra, f);
+        continue;
+      }
       f.base = L.mood || "neutral";
       const auto = this.exprFor(p);
       if (auto) { f.expr = auto; f.hold = 0.35; }
