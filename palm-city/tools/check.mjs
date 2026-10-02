@@ -167,6 +167,16 @@ try {
       const car = G.cars.find(c => !c.kind && !c.locked && !c.boom); G.P.x = car.x - 1.6; G.P.z = car.z; run(1); G.enterNearest();
       if (G.P.car) { const c = G.P.car; c.h = 0; c.x = hyd.x0; c.z = hyd.z0 - 6; c.vx = 0; c.vz = 14; c.speed = 14; run(30); G.exitCar(); }
       o.prop = hyd.loose;
+      // talk to a stranger: they answer, their mouth moves, and an insult to a tough guy starts a fight
+      G.crime.S.wanted = 0;
+      const ped = G.crowd.nearest(G.P.x, G.P.z, 300, q => !q.gang && !q.goon && !q.crew && !q.hidden && !(q.knocked > 0));
+      if (ped) {
+        ped.persona = "tough"; ped.fear = 0; G.P.x = ped.x + 1.2; G.P.z = ped.z; run(2);
+        const ta = G.life.action(); if (ta && ta[0] === "TALK") ta[2]();
+        o.talkOpen = !!G.life.talkingTo() && ped.face && ped.face.talk > 0;
+        G.life.choose("insult"); run(150);
+        o.talkFight = ped.fightT > 0 && ped.face.expr === "mad";
+      }
       return o;
     });
     ok("RPG rocket wrecks a car", r2.rpgWreck, r2);
@@ -175,6 +185,8 @@ try {
     ok("walk into a venue, eat at the counter, walk out", r2.ate && r2.venueOut, r2);
     ok("Wake Breaker water race pays a medal", r2.wake, r2);
     ok("cars knock street props flying", r2.prop, r2);
+    ok("strangers talk back with moving mouths", r2.talkOpen, r2);
+    ok("insulting a tough guy starts a fight (and he looks mad)", r2.talkFight, r2);
     ok("no page errors", errs.length === 0, errs.slice(0, 3));
     await pg.close();
   }
