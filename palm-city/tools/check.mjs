@@ -175,7 +175,7 @@ try {
         const ta = G.life.action(); o.talkAct = ta && ta[0]; if (ta && ta[0] === "TALK") ta[2]();
         const who = G.life.talkingTo();
         o.talkOpen = !!who && !!who.face && who.face.talk > 0;
-        if (who) { who.persona = "tough"; G.life.choose("insult"); run(150); o.talkFight = who.fightT > 0 && who.face.expr === "mad"; }
+        if (who) { who.persona = "tough"; who.fear = 0; G.life.choose("insult"); for (let k = 0; k < 6 && !(who.fightT > 0); k++) run(60); o.talkFight = who.fightT > 0 && who.face.expr === "mad"; }
       }
       return o;
     });
