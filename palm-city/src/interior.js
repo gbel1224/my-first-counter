@@ -180,7 +180,11 @@ export function makeInterior(scene, g) {
   // building
   // ------------------------------------------------------------------------------------------
   function build(plan, opts) {
-    const K = makeKit(), W = plan.W, D = plan.D, H = plan.H, lights = [];
+    const K = makeKit(), H = plan.H, lights = [];
+    // the footprint comes from the rooms (buildings can be L-shaped and grow in any direction)
+    const RR = Object.values(plan.rooms).map(r => r.r);
+    const bx0 = Math.min(...RR.map(r => r[0])), bz0 = Math.min(...RR.map(r => r[1])), bx1 = Math.max(...RR.map(r => r[2])), bz1 = Math.max(...RR.map(r => r[3]));
+    const W = bx1 - bx0, D = bz1 - bz0, bcx = (bx0 + bx1) / 2, bcz = (bz0 + bz1) / 2;
     const group = new THREE.Group(), extras = [];
     const own = [];                                        // textures/materials to dispose on exit
     const keys = Object.keys(plan.rooms);
@@ -204,10 +208,14 @@ export function makeInterior(scene, g) {
     // outer walls: every room side on the perimeter
     for (const k of keys) {
       const r = raw[k];
-      if (Math.abs(r.x0 + W / 2) < 1e-6) walls.push({ axis: "z", at: r.x0, from: r.z0, to: r.z1, rooms: { [k]: 1 }, outer: "left", openings: [] });
-      if (Math.abs(r.x1 - W / 2) < 1e-6) walls.push({ axis: "z", at: r.x1, from: r.z0, to: r.z1, rooms: { [k]: -1 }, outer: "right", openings: [] });
-      if (Math.abs(r.z0 + D / 2) < 1e-6) walls.push({ axis: "x", at: r.z0, from: r.x0, to: r.x1, rooms: { [k]: 1 }, outer: "back", openings: [] });
-      if (Math.abs(r.z1 - D / 2) < 1e-6) walls.push({ axis: "x", at: r.z1, from: r.x0, to: r.x1, rooms: { [k]: -1 }, outer: "front", openings: [] });
+      // every stretch of a room's side that no neighbouring room covers is an outside wall
+      const sides = [["z", r.x0, r.z0, r.z1, 1, "left", (o) => Math.abs(o.x1 - r.x0) < 1e-6, o => [o.z0, o.z1]], ["z", r.x1, r.z0, r.z1, -1, "right", (o) => Math.abs(o.x0 - r.x1) < 1e-6, o => [o.z0, o.z1]],
+        ["x", r.z0, r.x0, r.x1, 1, "back", (o) => Math.abs(o.z1 - r.z0) < 1e-6, o => [o.x0, o.x1]], ["x", r.z1, r.x0, r.x1, -1, "front", (o) => Math.abs(o.z0 - r.z1) < 1e-6, o => [o.x0, o.x1]]];
+      for (const [axis, at, from, to, sg, name, touches, span] of sides) {
+        let free = [[from, to]];
+        for (const k2 of keys) { if (k2 === k) continue; const o = raw[k2]; if (!touches(o)) continue; const [a, b] = span(o); free = free.flatMap(([u, v]) => (b <= u || a >= v) ? [[u, v]] : [[u, Math.max(u, a)], [Math.min(v, b), v]].filter(([p, q]) => q - p > 0.01)); }
+        for (const [u, v] of free) walls.push({ axis, at, from: u, to: v, rooms: { [k]: sg }, outer: name, openings: [] });
+      }
     }
     // which room sides carry a wall (for the usable inner rectangles)
     for (const k of keys) {
@@ -225,7 +233,7 @@ export function makeInterior(scene, g) {
       const [y0, y1] = OPEN[l.kind];
       w.openings.push({ c: l.at, w: l.w || (l.kind === "door" ? 0.95 : 1.6), y0, y1, kind: l.kind, link: l });
     }
-    const front = walls.find(w => w.outer === "front" && plan.door > w.from && plan.door < w.to);
+    const front = walls.find(w => w.outer === "front" && Math.abs(w.at - bz1) < 1e-6 && plan.door > w.from && plan.door < w.to);
     front.openings.push({ c: plan.door, w: 1.3, y0: 0, y1: 2.3, kind: "front" });
     for (const win of plan.windows || []) {
       const w = walls.find(w => w.outer === win.side && w.rooms[win.room] !== undefined);
@@ -348,7 +356,7 @@ export function makeInterior(scene, g) {
       }
     }
     const cm = ceilMat.clone(); cm.color.setHex(plan.ceiling ?? 0xf0ece4); cm.envMapIntensity = 0.5; own.push(cm);
-    const ceil = new THREE.Mesh(new THREE.BoxGeometry(W + 0.4, 0.2, D + 0.4), cm); ceil.position.y = H + 0.1; ceil.castShadow = true; ceil.receiveShadow = true;
+    const ceil = new THREE.Mesh(new THREE.BoxGeometry(W + 0.4, 0.2, D + 0.4), cm); ceil.position.set(bcx, H + 0.1, bcz); ceil.castShadow = true; ceil.receiveShadow = true;
     own.push(ceil.geometry); extras.push(ceil);
     // smoke detectors, vents, light switches by the doors
     for (const k of keys) { const r = raw[k]; DC.smokeDetector(K, (r.x0 + r.x1) / 2 + 0.8, (r.z0 + r.z1) / 2 - 0.6, H); if (!plan.home) DC.vent(K, (r.x0 + r.x1) / 2 - 1.2, (r.z0 + r.z1) / 2 + 0.9, H); }
@@ -470,7 +478,7 @@ export function makeInterior(scene, g) {
     plan.furnish(ctx, d || {});
     if (!plan.home) {                                       // a lit EXIT sign over the front door
       const ex = textTex(128, 48, (c, w2, h2) => { c.fillStyle = "#0a5a2a"; c.fillRect(0, 0, w2, h2); c.fillStyle = "#e8fff0"; c.font = "bold 34px sans-serif"; c.textAlign = "center"; c.fillText("EXIT", w2 / 2, 36); });
-      plane(plan.door, 2.55, D / 2 - T / 2, Math.PI, 0.4, 0.15, new THREE.MeshBasicMaterial({ map: ex, color: new THREE.Color(1.8, 1.8, 1.8) }), 0.02);
+      plane(plan.door, 2.55, bz1 - T / 2, Math.PI, 0.4, 0.15, new THREE.MeshBasicMaterial({ map: ex, color: new THREE.Color(1.8, 1.8, 1.8) }), 0.02);
     }
     // soft contact shadows under everything that stands on the floor, and darker corners along the walls
     extras.push(...contactShadows(K.blocks.slice(nWallBlocks), pieces, H, own));
@@ -478,7 +486,7 @@ export function makeInterior(scene, g) {
     kitGroup.traverse(o => { if (o.geometry) own.push(o.geometry); });
     const blocks = K.blocks;
     // the exit mat, just inside the front door
-    const exit = { x: plan.door, z: D / 2 - 0.75 };
+    const exit = { x: plan.door, z: bz1 - 0.75 };
     // which openings connect which rooms (for the second light)
     const doors = [];
     for (const w of walls) for (const o of w.openings) if (o.link) doors.push({ x: w.axis === "x" ? o.c : w.at, z: w.axis === "x" ? w.at : o.c, a: o.link.a, b: o.link.b });
@@ -492,7 +500,7 @@ export function makeInterior(scene, g) {
       lights.push({ x, y: 1.7, z, col: new THREE.Color(0xfff0dc), I: 0, range: 7, day: true });
     }
     for (const L of lights) { L.room = keys.find(k => L.x >= raw[k].x0 - 0.01 && L.x <= raw[k].x1 + 0.01 && L.z >= raw[k].z0 - 0.01 && L.z <= raw[k].z1 + 0.01) || keys[0]; L.group = grp[L.room]; L.I0 = L.I; }
-    return { group, plan, R, raw, keys, blocks, dyn, spots, npcs, updates, anims, exit, doors, own, walls, lights, grp, W, D, H };
+    return { group, plan, R, raw, keys, blocks, dyn, spots, npcs, updates, anims, exit, doors, own, walls, lights, grp, W, D, H, bx0, bx1, bz0, bz1 };
   }
   function dispose(b) {
     root.remove(b.group);
@@ -749,7 +757,7 @@ export function makeInterior(scene, g) {
     if (!B) return;
     let lx = P.x - ROOM.x, lz = P.z - ROOM.z;
     const r = 0.3;
-    lx = clamp(lx, -B.W / 2 + T / 2 + r, B.W / 2 - T / 2 - r); lz = clamp(lz, -B.D / 2 + T / 2 + r, B.D / 2 - T / 2 - r);
+    lx = clamp(lx, B.bx0 + T / 2 + r, B.bx1 - T / 2 - r); lz = clamp(lz, B.bz0 + T / 2 + r, B.bz1 - T / 2 - r);
     for (let pass = 0; pass < 2; pass++) for (const [x0, x1, z0, z1] of pass ? B.dyn : B.blocks.concat(B.dyn)) {
       if (lx > x0 - r && lx < x1 + r && lz > z0 - r && lz < z1 + r) {
         const pl = lx - (x0 - r), pr = (x1 + r) - lx, pb = lz - (z0 - r), pf = (z1 + r) - lz, m = Math.min(pl, pr, pb, pf);
