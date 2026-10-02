@@ -16,6 +16,7 @@ import { makeSkids } from "./skid.js";
 import { makeDoors } from "./doors.js";
 import { createPlayer, updatePlayerOnFoot, poseOnFoot, spawnCar, syncCar, driveStep, createCamRig, updateCam } from "./play.js";
 import { makeCharacter } from "./people.js";
+import { setExpr } from "./face.js";
 import { PLACES, buildSigns, setSignNight, makeBeacon } from "./places.js";
 import { BIZ, PROPS, newState, makeEconomy, xpNeed } from "./economy.js";
 import { makeStory } from "./story.js";
@@ -268,6 +269,7 @@ const life = makeLife(scene, {
   st, P, crowd, crime, combat, cars, camera, focus: focusInfo, isMobile, time: () => time,
   get hud() { return hud; }, earn: n => eco.earn(n), toast: (m, t) => hud.toast(m, t), banner: (a, b, k, t) => hud.banner(a, b, k, t),
   sound: (k, v, r) => AudioSys.play(k, v, r), save: () => writeSave(), shake: a => { rig.shake = Math.max(rig.shake, a); },
+  indoors: () => typeof interior !== "undefined" && interior.inside,
 });
 const props = makeProps(street, {
   fx, sound: (k, v, r) => AudioSys.play(k, v, r), shake: a => { rig.shake = Math.max(rig.shake, a); },
@@ -315,6 +317,7 @@ const FLAVOR = {
 function venueAction(kind, site) {
   const pay = n => { if (st.money < n) { hud.toast("You need $" + Math.ceil(n - st.money) + " more"); return false; } st.money -= n; AudioSys.play("cash", 0.5); return true; };
   const pick = a => a[Math.floor(Math.random() * a.length)];
+  if (kind === "eat" || kind === "snack" || kind === "drink") { if (P.ch.face) { P.ch.face.talk = 2.5; setExpr(P.ch.face, "happy", 3); } }       // chewing, sipping
   if (kind === "eat") { if (pay(15)) { crime.S.health = 100; hud.toast(pick(["🍕 That hit the spot", "🍔 Best in Palm City", "🍟 Greasy. Perfect."]) + " · fully healed"); } }
   else if (kind === "drink") { if (pay(25)) { crime.S.health = Math.min(100, crime.S.health + 15); rig.shake = Math.max(rig.shake, 0.15); hud.toast(pick(["🍹 Cheers!", "🍸 On the house? Nope. $25.", "🥂 The night is young"])); } }
   else if (kind === "heal") { if (crime.S.health >= 100) hud.toast("🩺 \"You're in great shape. Next!\""); else if (pay(120)) { crime.S.health = 100; hud.toast("🩺 All patched up"); } }
@@ -595,6 +598,14 @@ function update(dt) {
   const hz = P.car ? [{ x: P.car.x, z: P.car.z, speed: P.car.speed, vx: P.car.vx, vz: P.car.vz, onHit: (p, sp) => { rig.shake = 0.35; AudioSys.play("door", 0.5, 0.8); if (sp > 9) { crime.addCrime(1); if (sp > 16) p.dead = true, p.knocked = 22; } } }] : [];
   for (const u of crime.units) if (u.active && u.speed > 5) hz.push({ x: u.x, z: u.z, speed: u.speed, vx: u.vx, vz: u.vz });
   interior.update(dt, time);
+  if (interior.inside || hud.talking()) life.quiet();
+  // your own face: wince when you're hurt, grit your teeth when you swing, sweat it with the cops on you
+  if (P.ch.face) {
+    const f = P.ch.face;
+    if (crime.S.flash > 0.25) setExpr(f, "pain", 0.5);
+    else if (combat.S.punchT > 0) setExpr(f, "mad", 0.6);
+    else if (crime.S.wanted >= 3 && f.hold <= 0) setExpr(f, P.speed > 5 ? "scared" : "annoyed", 1);
+  }
   if (state.phase === "play" && !hud.talking() && !interior.inside) {             // the world holds its breath during dialogue
     crime.update(dt, time); combat.update(dt, time); gangs.update(dt);
     updateHeists(dt, time); events.update(dt); jobs.update(dt); extras.update(dt); life.update(dt);

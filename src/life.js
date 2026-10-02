@@ -5,6 +5,8 @@ import * as THREE from "../vendor/three.module.js";
 import { HALF, blockC, blockMin, BLOCK, CURB, groundY, clamp, mulberry32 } from "./world.js";
 import { PLACES } from "./places.js";
 import { openArcade, closeArcade, updateArcade, arcadeOpen, initArcade } from "./arcade.js";
+import { PERSONAS, CHOICES, YOU, OPEN, REPLY, GOSSIP, AMBIENT, SHOUT, WANTED, TOO_LONG } from "./talk.js";
+import { setExpr } from "./face.js";
 
 export const OUTFITS = [
   ["White Tee", 0xe8e6e0, 0x2a3a52], ["Street Black", 0x23262b, 0x3a3f47], ["Navy Polo", 0x1f2d4a, 0xa89a7a], ["Olive Field", 0x4a5236, 0x2a2a2c],
@@ -20,13 +22,6 @@ export const GLASSES = [["No glasses"], ["Sunglasses", "dark", 0x111114], ["Avia
 export const BEARDS = [["Clean shaven"], ["Full black", "full", 0x1f1812], ["Full brown", "full", 0x4a3220], ["Goatee", "goatee", 0x241c14], ["Mustache", "mustache", 0x2a2018], ["Grey beard", "full", 0x8a847a]]
   .map(([name, type, color]) => ({ name, type, color, none: !type, cost: 60 }));
 
-const LINES = {
-  friendly: ["Hey, how's it goin'?", "Lovely day, ain't it?", "Stay outta trouble!", "Nice threads!", "Have a good one!", "Lookin' sharp today!", "Take care out there."],
-  neutral: ["…do I know you?", "Busy day, huh.", "Yeah yeah, keep movin'.", "Traffic's brutal today.", "You seen my bus?", "Could go for a coffee right about now."],
-  rude: ["Outta my way.", "What are you lookin' at?", "Beat it, weirdo.", "Nobody asked, pal.", "Ugh, it's YOU again.", "Take a hike, clown."],
-  angry: ["Touch me again and we got PROBLEMS!", "Back OFF before I lose it!", "You got a death wish?!", "Keep talkin', see what happens!"],
-  random: ["I once fought a pigeon. I lost.", "Do birds even have knees?", "I named my car. Her name's Brenda.", "Never trust a man with two phones.", "Pineapple belongs on pizza. Fight me."],
-};
 const pick = a => a[(Math.random() * a.length) | 0];
 
 export function makeLife(scene, g) {
@@ -113,19 +108,120 @@ export function makeLife(scene, g) {
   let shot = null; const hoops = { made: 0, tried: 0 };
 
   // ---- talking ----
-  const bubble = document.createElement("div"); bubble.id = "bubble"; document.getElementById("ui").appendChild(bubble);
-  let talk = null;
+  // speech bubbles: the person you're talking to, you, and whoever's muttering or yelling nearby
+  const mkBubble = id => { const b = document.createElement("div"); b.id = id; b.className = "sbub"; document.getElementById("ui").appendChild(b); return { el: b, who: null, line: "", t: 0 }; };
+  const bubNpc = mkBubble("bubble"), bubYou = mkBubble("bubbleYou"), bubAmb = mkBubble("bubbleA");
+  const bar = document.createElement("div"); bar.id = "talkbar"; document.getElementById("ui").appendChild(bar);
+  bar.innerHTML = '<div class="who"></div>' + CHOICES.map((c, i) => `<button data-c="${c.id}"><span>${c.icon}</span>${c.label}<i>${i + 1}</i></button>`).join("");
+  bar.addEventListener("pointerdown", e => { const b = e.target.closest("button"); if (!b) return; e.preventDefault(); e.stopPropagation(); choose(b.dataset.c); });
+  addEventListener("keydown", e => { if (!conv) return; const n = +e.key; if (n >= 1 && n <= CHOICES.length) { e.preventDefault(); choose(CHOICES[n - 1].id); } });
+  let conv = null, ambT = 4, shoutT = 0;
   const _v = new THREE.Vector3();
-  function nearestPed(maxD) { return g.crowd.nearest(g.P.x, g.P.z, maxD, p => !p.gang && !p.ally); }
+  const faceOf = p => g.crowd.faceOf(p);
+  const personaOf = p => p.persona || (p.persona = PERSONAS[Math.floor(((p.look.hs ?? r()) * 7919) % PERSONAS.length)]);
+  function say(b, who, line, secs) { b.who = who; b.line = line; b.t = secs || Math.max(2.4, 1 + line.length * 0.055); b.el.textContent = line; }
+  // someone on the street says a line: their mouth moves for as long as the words take, the face follows
+  function npcSays(p, line, expr, bubble = bubNpc) {
+    const f = faceOf(p), dur = Math.max(1.2, line.length * 0.05);
+    f.talk = dur; if (expr) setExpr(f, expr, dur + 2);
+    say(bubble, p, line);
+  }
+  function youSay(line, expr) {
+    const f = g.P.ch.face; if (f) { f.talk = Math.max(1, line.length * 0.05); if (expr) setExpr(f, expr, f.talk + 1.5); }
+    say(bubYou, "you", line);
+  }
+  function nearestPed(maxD) { return g.crowd.nearest(g.P.x, g.P.z, maxD, p => !p.gang && !p.ally && !p.goon && !p.crew); }
   function speak(p) {
-    if (p.mood === undefined) p.mood = r() < 0.5 ? 0 : r() < 0.6 ? 1 : 2;
+    if (conv && conv.p === p) return;
+    endConv();
+    const per = personaOf(p);
     p.anger = p.anger || 0;
-    if (p.mood === 2) p.anger++;
-    const line = p.anger >= 2 ? pick(LINES.angry) : p.mood === 0 ? pick([...LINES.friendly, ...LINES.random]) : p.mood === 2 ? pick(LINES.rude) : pick([...LINES.neutral, ...LINES.random]);
-    talk = { p, line, t: 3.2 };
+    conv = { p, turns: 0, busy: 0 };
     p.pause = 3; p.yaw = Math.atan2(g.P.x - p.x, g.P.z - p.z);
     g.sound("blip", 0.35);
-    if (p.anger >= 2 && r() < 0.6) fightBack(p);
+    if (g.crime.S.wanted > 0 && per !== "tough") { const [l, e, fx] = pick(WANTED); npcSays(p, l, e); effect(p, fx); return; }
+    const [line, expr] = pick(OPEN[per]);
+    npcSays(p, line, expr);
+    bar.querySelector(".who").textContent = p.liked ? "Talking to someone who likes you 💕" : "Talking to a stranger";
+    bar.classList.add("on"); document.body.classList.add("convo");
+  }
+  function choose(id) {
+    if (!conv || conv.busy > 0) return;
+    const p = conv.p, per = personaOf(p);
+    youSay(pick(YOU[id]), { insult: "smug", flirt: "flirty", joke: "laugh", compliment: "happy", greet: "happy" }[id] || "neutral");
+    conv.busy = 1.1 + Math.min(1.6, bubYou.line.length * 0.02);
+    conv.next = () => {
+      conv.turns++;
+      let [line, expr, fx] = conv.turns > 4 && id !== "bye" ? pick(TOO_LONG) : pick(REPLY[per][id]);
+      if (fx === "tip") line = line + " " + pick(GOSSIP);
+      npcSays(p, line, expr);
+      if (id === "insult") p.anger = (p.anger || 0) + 1;
+      effect(p, fx);
+      if (id === "bye" && conv) { conv.ending = 2.2; }
+    };
+  }
+  function effect(p, fx) {
+    if (!fx || fx === "tip") return;
+    if (fx === "number") { if (!p.liked) { p.liked = true; g.toast("💕 They put their number in your phone", 2.6); g.sound("jingle", 0.4); } return; }
+    endConv(true);
+    if (fx === "fight") { p.anger = 2; fightBack(p); }
+    else if (fx === "flee") { p.pause = 0; p.fear = 7; p.fearMax = 7; }
+    else if (fx === "leave") { p.pause = 0; p.dir = r() < 0.5 ? 1 : -1; }
+  }
+  function endConv(keepBubbles) {
+    if (!conv) return;
+    conv = null; bar.classList.remove("on"); document.body.classList.remove("convo");
+    if (!keepBubbles) bubYou.t = Math.min(bubYou.t, 0.6);
+  }
+  function convTick(dt) {
+    if (!conv) return;
+    const p = conv.p, d2 = (g.P.x - p.x) ** 2 + (g.P.z - p.z) ** 2;
+    if (g.P.car || d2 > 25 || p.knocked > 0 || p.fear > 0 || p.hidden) { endConv(); return; }
+    p.pause = Math.max(p.pause, 1.5); p.amt = 0;
+    p.yaw = Math.atan2(g.P.x - p.x, g.P.z - p.z);
+    if (conv.busy > 0) { conv.busy -= dt; if (conv.busy <= 0 && conv.next) { const n = conv.next; conv.next = null; n(); } }
+    if (conv && conv.ending !== undefined && (conv.ending -= dt) <= 0) { p.pause = 0.5; endConv(true); }
+  }
+  // the street talks: people mutter, take calls, and yell when something kicks off
+  function streetTick(dt) {
+    const near = g.crowd.near, fists = g.combat.current().id === "fists";
+    shoutT -= dt;
+    for (const p of near) {
+      if (p._d2 > 22 * 22 || p.gang || p.goon || p.crew) continue;
+      if (p.fear > 0 && p._shout !== p.fearMax && shoutT <= 0 && p !== (conv && conv.p)) {
+        p._shout = p.fearMax; shoutT = 1.1 + r() * 0.8;
+        npcSays(p, pick(fists ? SHOUT.fight : SHOUT.gun), null, bubAmb); bubAmb.t = 2; break;
+      }
+      if (p.knocked > 0 && !p.dead && !p._hitShout && p.y <= 0.01 && shoutT <= 0) { p._hitShout = true; shoutT = 1.5; npcSays(p, pick(SHOUT.hit), null, bubAmb); bubAmb.t = 2; break; }
+      if (p.knocked <= 0) p._hitShout = false;
+    }
+    ambT -= dt;
+    if (ambT <= 0 && bubAmb.t <= 0) {
+      ambT = 5 + r() * 6;
+      const cands = near.filter(p => p._d2 > 9 && p._d2 < 15 * 15 && !(p.fear > 0) && !(p.knocked > 0) && !p.gang && !p.goon && !p.crew && p !== (conv && conv.p));
+      if (cands.length) { const p = cands[(r() * cands.length) | 0]; npcSays(p, pick(AMBIENT), r() < 0.3 ? pick(["laugh", "annoyed", "surprised", "happy"]) : null, bubAmb); bubAmb.t = 3; }
+    }
+  }
+  function bubbleTick(b, dt, angry) {
+    b.sx = null;
+    if (b.t <= 0) { b.el.style.display = "none"; return; }
+    b.t -= dt;
+    const w = b.who === "you" ? g.P : b.who;
+    if (!w || w.hidden) { b.t = 0; return; }
+    _v.set(w.x, (w.y || 0) + (b.who === "you" ? 2.25 : 2.2), w.z).project(g.camera);
+    const on = _v.z < 1 && Math.abs(_v.x) < 1.1 && Math.abs(_v.y) < 1.1;
+    b.el.style.display = on ? "block" : "none";
+    if (on) { b.sx = (_v.x * 0.5 + 0.5) * innerWidth; b.sy = (-_v.y * 0.5 + 0.5) * innerHeight; b.el.classList.toggle("angry", !!angry); b.el.style.opacity = Math.min(1, b.t * 3); }
+  }
+  // place the bubbles, nudging apart any that would sit on top of each other
+  function layoutBubbles() {
+    const list = [bubNpc, bubYou, bubAmb].filter(b => b.sx !== null);
+    for (const b of list) { b.ox = 0; b.w = b.el.offsetWidth || 160; }
+    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+      const a = list[i], c = list[j], need = (a.w + c.w) / 2 + 8, dx = (c.sx + c.ox) - (a.sx + a.ox);
+      if (Math.abs(dx) < need && Math.abs(c.sy - a.sy) < 70) { const push = (need - Math.abs(dx)) / 2, sgn = dx >= 0 ? 1 : -1; a.ox -= push * sgn; c.ox += push * sgn; }
+    }
+    for (const b of list) { b.el.style.left = (b.sx + b.ox) + "px"; b.el.style.top = b.sy + "px"; }
   }
   // an angry pedestrian squares up and swings at you until one of you goes down
   function fightBack(p) {
@@ -183,7 +279,7 @@ export function makeLife(scene, g) {
     }];
     if (Math.abs(g.P.x - court.x) < 14 && Math.abs(g.P.z - court.z) < 8 && !shot) return ["SHOOT", "🏀 Beach court · " + hoops.made + "/" + hoops.tried, () => shoot()];
     const ped = nearestPed(2.2);
-    if (ped) return ["TALK", "", () => speak(ped)];
+    if (ped && !(conv && conv.p === ped)) return ["TALK", "", () => speak(ped)];
     return null;
   }
   function shoot() {
@@ -208,15 +304,13 @@ export function makeLife(scene, g) {
         shot = null; ball.visible = false;
       }
     }
-    // speech bubble follows the speaker's head on screen
-    if (talk) {
-      talk.t -= dt;
-      _v.set(talk.p.x, (talk.p.y || 0) + 2.2, talk.p.z).project(g.camera);
-      const on = talk.t > 0 && _v.z < 1;
-      bubble.style.display = on ? "block" : "none";
-      if (on) { bubble.textContent = talk.line; bubble.style.left = ((_v.x * 0.5 + 0.5) * innerWidth) + "px"; bubble.style.top = ((-_v.y * 0.5 + 0.5) * innerHeight) + "px"; bubble.className = talk.p.anger >= 2 ? "angry" : ""; }
-      if (talk.t <= 0) talk = null;
-    }
+    convTick(dt);
+    if (!(g.indoors && g.indoors())) streetTick(dt); else { bubAmb.t = 0; }
+    bubbleTick(bubNpc, dt, bubNpc.who && bubNpc.who.anger >= 2);
+    bubbleTick(bubYou, dt);
+    bubbleTick(bubAmb, dt, bubAmb.who && bubAmb.who.fear > 0);
+    layoutBubbles();
   }
-  return { update, action, applyLook, tutorial, arcadeOpen: () => arcadeOpen, closeArcade, court, ATMS, fuelOf: v => v && v.fuel };
+  function quiet() { endConv(); for (const b of [bubNpc, bubYou, bubAmb]) { b.t = 0; b.el.style.display = "none"; } }
+  return { update, quiet, action, applyLook, tutorial, arcadeOpen: () => arcadeOpen, closeArcade, court, ATMS, fuelOf: v => v && v.fuel, talkingTo: () => conv && conv.p, choose };
 }
