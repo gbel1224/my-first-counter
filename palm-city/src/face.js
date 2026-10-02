@@ -178,13 +178,6 @@ function build() {
     s.computeVertexNormals();
     // the under-layer is darker: it's the dense hair the strands lie on top of
     const out = [paintFn(s, (x, y, z, c) => { const k = style === "buzz" ? 0.72 : style === "afro" ? 0.8 : 0.58; c[0] = c[1] = c[2] = k; })];
-    // long styles: a darker under-curtain behind the falling strands, so the hair reads full
-    if (style === "long" || style === "bob") {
-      const bottom = style === "long" ? 0.02 : 0.112, flare = style === "long" ? 0.004 : 0.01, drop = style === "long" ? 0.03 : 0.004;
-      const f = new THREE.CylinderGeometry(1, 1, 1, 48, 14, true, 2.1, Math.PI * 2 - 4.2), fp = f.attributes.position;
-      for (let i = 0; i < fp.count; i++) { v.fromBufferAttribute(fp, i); const t = v.y + 0.5; fp.setXYZ(i, v.x * (lerp(0.11 + flare, 0.104, t)), lerp(bottom, 0.215, t), v.z * lerp(0.088 + flare * 0.6, 0.116, t) - 0.004 - (1 - t) * drop); }
-      f.computeVertexNormals(); out.push(paintFn(f, flat(0x6a6a6a)));
-    }
     if (style === "bun") { const b = new THREE.SphereGeometry(0.034, 20, 16), bp = b.attributes.position; for (let i = 0; i < bp.count; i++) { v.fromBufferAttribute(bp, i); const k = 1 + 0.08 * Math.sin(Math.atan2(v.x, v.z) * 7 + v.y * 90); bp.setXYZ(i, v.x * k, v.y * 0.85, v.z * k); } b.translate(0, 0.292, -0.078); b.computeVertexNormals(); out.push(paintFn(b, flat(0x8a8a8a))); }
     if (style === "pony") { const tie = new THREE.TorusGeometry(0.013, 0.0035, 8, 18); tie.rotateX(0.9); tie.translate(0, 0.258, -0.104); out.push(paintFn(tie, flat(0x303030))); }
     return merge(out);
@@ -453,7 +446,7 @@ function strandTexture(curly) {
     }
   }
   const data = new Uint8Array(W * H * 4);
-  for (let i = 0; i < W * H; i++) { const y = Math.floor(i / W), root = y < H * 0.03 ? 0.5 : 0; const a = Math.min(1, Math.max(A[i], root)); const b = A[i] > 0.05 ? B[i] : 0.55; data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = Math.round(b * 255); data[i * 4 + 3] = Math.round(a * 255); }
+  for (let i = 0; i < W * H; i++) { const y = Math.floor(i / W), root = 0; const a = Math.min(1, Math.max(A[i], root)); const b = A[i] > 0.05 ? B[i] : 0.55; data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = Math.round(b * 255); data[i * 4 + 3] = Math.round(a * 255); }
   const t = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
   t.wrapS = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true;
   return t;
@@ -493,7 +486,7 @@ function cardMaterial(curly) {
       .replace("#include <color_fragment>", `#include <color_fragment>
         diffuseColor.rgb *= mix(0.55, 1.08, smoothstep(0.0, 0.45, vTip));
         float lu = fract(vMapUv.x * 4.0 + 0.001) / 0.96;
-        diffuseColor.a *= smoothstep(0.0, 0.28, lu) * smoothstep(1.0, 0.72, lu);`)
+        diffuseColor.a *= smoothstep(0.0, 0.28, lu) * smoothstep(1.0, 0.72, lu) * smoothstep(0.0, 0.12, vTip);`)
       .replace("#include <lights_physical_pars_fragment>", `#include <lights_physical_pars_fragment>
         void RE_Direct_Card(const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight) {
           float ndl = dot(geometryNormal, directLight.direction);
