@@ -34,7 +34,7 @@ export function makeLife(scene, g) {
   function applyLook() {
     const L = g.P.ch.look;
     const o = OUTFITS[st.look.outfit ?? -1]; if (o) { L.shirt = o.shirt; L.pants = o.pants; }
-    const h = HAIR[st.look.hair ?? -1]; if (h) { L.hair = h.color; L.bald = h.style === "bald"; L.long = h.style === "long"; }
+    const h = HAIR[st.look.hair ?? -1]; if (h) { L.hair = h.color; L.bald = h.style === "bald"; L.long = h.style === "long"; L.hairStyle = L.bald ? null : L.long ? "long" : h.style || "side"; L.fv = null; }
     L.armCol = L.sleeveless ? L.skin : L.shirt; L.shinCol = L.shorts ? L.skin : L.pants;
     g.P.ch.recolor();
     g.P.ch.setAcc("hat", HATS[st.look.hat || 0]); g.P.ch.setAcc("glasses", GLASSES[st.look.glasses || 0]); g.P.ch.setAcc("beard", BEARDS[st.look.beard || 0]);

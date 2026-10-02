@@ -3,8 +3,10 @@
 // per body part, so hundreds of animated pedestrians cost about a dozen draw calls.
 import * as THREE from "../vendor/three.module.js";
 import { limb, paint, merge, place } from "./geo.js";
-import { FACE, BEARD_KIND, IRIS, FACE_COLOR, FACE_MAT, faceMaterials, newFace, tickFace, faceMatrices } from "./face.js";
-const FACE_SLOTS = { headHi: 1, hairHi: 1, hairLHi: 1, eyeW: 2, iris: 2, glint: 2, lid: 2, lidLow: 2, browR: 1, browL: 1, mouth: 1, teethU: 1, teethL: 1, lipUR: 1, lipUL: 1, lipLR: 1, lipLL: 1, beardFull: 1, beardGoatee: 1, beardMus: 1, beardStubble: 1 };
+import { FACE, BEARD_KIND, IRIS, FACE_COLOR, FACE_MAT, HAIRSTYLES, faceMaterials, newFace, tickFace, faceMatrices, pickStyle, faceVariation, patch as patchFace } from "./face.js";
+const FACE_SLOTS = { headHi: 1, nose: 1, eyeW: 2, iris: 2, glint: 2, lid: 2, lidLow: 2, browR: 1, browL: 1, mouth: 1, teethU: 1, teethL: 1, lipUR: 1, lipUL: 1, lipLR: 1, lipLL: 1, beardFull: 1, beardGoatee: 1, beardMus: 1, beardStubble: 1 };
+for (const st of HAIRSTYLES) FACE_SLOTS["hair_" + st] = 1;
+const hairPart = look => look.bald || !look.hairStyle ? null : "hair_" + look.hairStyle;
 const faceCol = (k, look) => { const c = FACE_COLOR[k]; return typeof c === "string" ? look[c] : c; };
 import { mulberry32, clamp, lerp, lerpAngle, N, ROAD, BLOCK, WALK, CELL, CURB, HALF, blockMin, roadC, groundY, district } from "./world.js";
 
@@ -89,6 +91,10 @@ export function finishLook(look) {
   const hs = look.hs ?? (look.hs = Math.abs(Math.sin((look.h || 1) * 127.1 + (look.bulk || 1) * 311.7 + ((look.skin || 0) & 1023) * 0.731 + ((look.shirt || 0) & 511) * 0.193) * 43758.5453) % 1);
   if (look.iris === undefined) look.iris = IRIS[Math.floor(hs * 97) % IRIS.length];
   if (look.beard === undefined) look.beard = !look.long && hs < 0.42 ? ["full", "goatee", "mustache", "stubble", "full", "stubble"][Math.floor(hs * 1000) % 6] : null;
+  // the hairstyle has to suit the look (a long-haired look keeps long styles, short keeps short)
+  if (look.hairStyle === undefined || (look.hairStyle && !look.bald && (look.long ? !["long", "bob", "bun", "pony", "afro"].includes(look.hairStyle) : ["long", "bob", "bun", "pony"].includes(look.hairStyle)))) look.hairStyle = pickStyle(look, hs);
+  if (look.bald) look.hairStyle = null; else if (!look.hairStyle) look.hairStyle = look.long ? "long" : "crop";
+  if (!look.fv) look.fv = faceVariation(hs, !!look.long);
   if (look.mood === undefined) look.mood = ["neutral", "neutral", "happy", "annoyed", "neutral", "sad", "happy", "neutral", "smug"][Math.floor(hs * 7919) % 9];
   _fc.set(look.skin); _fc2.setRGB(_fc.r * 0.86, _fc.g * 0.64, _fc.b * 0.63); look.lipCol = _fc2.getHex();
   _fc2.set(look.hair).multiplyScalar(0.8); look.browCol = _fc2.getHex();
@@ -169,9 +175,9 @@ export function makeCharacter(look) {
   // the face: the sculpted head, hair, eyes, lids, brows, lips, teeth — each its own mesh, placed every frame
   const FMAT = faceMaterials(), fm = {}, fmats = {};
   for (const [k, n] of Object.entries(FACE_SLOTS)) {
-    const cat = FACE_MAT[k], mat = fmats[k] = FMAT[cat].clone(); mat.color.set(faceCol(k, look));
+    const cat = FACE_MAT[k], mat = fmats[k] = FMAT[cat].clone(); mat.userData = {}; if (cat === "skin" || cat === "hair") patchFace(mat, cat); mat.color.set(faceCol(k, look));
     fm[k] = [];
-    for (let i = 0; i < n; i++) { const m = new THREE.Mesh(FACE[k], mat); m.matrixAutoUpdate = false; m.castShadow = k === "headHi" || k.startsWith("hair") || k.startsWith("beard"); m.receiveShadow = cat === "skin"; group.add(m); fm[k].push(m); }
+    for (let i = 0; i < n; i++) { const m = new THREE.Mesh(FACE[k], mat); m.matrixAutoUpdate = false; m.castShadow = k === "headHi" || k.startsWith("hair_") || k.startsWith("beard"); m.receiveShadow = cat === "skin"; group.add(m); fm[k].push(m); }
   }
   meshes.head.visible = false;
   const face = newFace(look.hs || Math.random());
@@ -191,8 +197,8 @@ export function makeCharacter(look) {
     if (extra && extra.expr) { face.expr = extra.expr; face.hold = Math.max(face.hold, 0.1); }
     tickFace(face, dt, now);
     const bk = look.beard ? BEARD_KIND[look.beard] : null;
-    for (const k of ["hairHi", "hairLHi", ...Object.values(BEARD_KIND)]) fm[k][0].visible = false;
-    faceMatrices(headM, face, { head: true, hair: look.bald ? null : look.long ? "hairLHi" : "hairHi", beard: bk }, putFace);
+    for (const k of [...HAIRSTYLES.map(h => "hair_" + h), ...Object.values(BEARD_KIND)]) fm[k][0].visible = false;
+    faceMatrices(headM, face, { head: true, hair: hairPart(look), beard: bk, fv: look.fv }, putFace);
   };
   function setAcc(kind, spec) {
     if (kind === "beard") { look.beard = !spec || spec.none ? null : spec.type; look.beardCol = spec && spec.color; recolor(); return; }
@@ -265,7 +271,7 @@ export class Crowd {
     for (const [k, n] of Object.entries(FACE_SLOTS)) {
       const m = new THREE.InstancedMesh(FACE[k], FMAT[FACE_MAT[k]], FMAX * n);
       m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(FMAX * n * 3), 3);
-      m.frustumCulled = false; m.count = 0; m.castShadow = k === "headHi" || k.startsWith("hair") || k.startsWith("beard"); m.receiveShadow = FACE_MAT[k] === "skin"; scene.add(m); this.fm[k] = m;
+      m.frustumCulled = false; m.count = 0; m.castShadow = k === "headHi" || k.startsWith("hair_") || k.startsWith("beard"); m.receiveShadow = FACE_MAT[k] === "skin"; scene.add(m); this.fm[k] = m;
     }
     this._zero = new THREE.Matrix4().makeScale(0, 0, 0);
     this._heads = Array.from({ length: MAX }, () => new THREE.Matrix4());
@@ -480,7 +486,7 @@ export class Crowd {
       const cam = this._cam;
       if (cam && near[j]._d2 < 64) { let a = Math.atan2(cam.x - p.x, cam.z - p.z) - p.yaw; a = Math.atan2(Math.sin(a), Math.cos(a)); f.look = Math.abs(a) < 1.2 ? (f._lk || (f._lk = { x: 0, y: 0 }), f._lk.x = Math.max(-0.4, Math.min(0.4, a * 0.7)), f._lk.y = Math.max(-0.2, Math.min(0.2, (cam.y - 1.6) * 0.08)), f._lk) : null; }
       else f.look = null;
-      faceMatrices(this._heads[j], f, { head: true, hair: L.bald ? null : L.long ? "hairLHi" : "hairHi", beard: bk }, (k, m) => {
+      faceMatrices(this._heads[j], f, { head: true, hair: hairPart(L), beard: bk, fv: L.fv }, (k, m) => {
         const mesh = FM[k], at = cnt[k]++;
         mesh.setMatrixAt(at, m);
         c.set(faceCol(k, L));
