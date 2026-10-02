@@ -290,6 +290,28 @@ const interior = makeInterior(scene, {
   sleep: () => { sky.set(0.3); settings.time = "0.3"; crime.S.health = 100; hud.banner("GOOD MORNING", "You slept like a baby · game saved", "", 2.4); AudioSys.play("jingle", 0.5); writeSave(); },
 });
 // what you can do inside a venue, at the counter
+// the back rooms: a line of flavour, sometimes a little health or cash
+const FLAVOR = {
+  game: { lines: ["🎮 Three rounds, three wins. Untouchable.", "🎮 Rage-quit. The controller survived. Barely.", "🎮 'One more game' — an hour ago"] },
+  outfit: { lines: ["👔 Fresh fit. Palm City isn't ready.", "👟 New kicks, new you", "🕶 Drip check: passed"] },
+  workout: { hp: 15, lines: ["🏋 New personal best", "🥊 The heavy bag never stood a chance", "🏃 Five miles on the treadmill. Legs: gone."] },
+  movie: { hp: 5, lines: ["🍿 Car chases and explosions. Five stars.", "🍿 You fell asleep in the second act", "🎬 The popcorn's stale. The movie slaps."] },
+  tinker: { lines: ["🔧 You tighten something. It was already tight.", "🔧 New spark plugs. She purrs.", "🛠 Oil change done. Your hands are filthy."] },
+  toys: { lines: ["🧸 The teddy approves", "🚀 You build a rocket out of blocks. It's beautiful.", "🧩 Puzzle finished. One piece missing. Always."] },
+  stock: { lines: ["🥫 You count the tomatoes. Twice.", "📦 \"Hey — you can't be back here!\"", "🧊 The walk-in is cold. Very cold."] },
+  green: { lines: ["🎤 \"Who let you back here?\" — the headliner", "🎸 You strum the guitar. The band winces.", "🍇 You help yourself to the rider"] },
+  clubboss: { lines: ["💰 \"You didn't see any of this.\"", "💰 \"Business is good. Real good.\"", "💰 He counts the cash twice and stares at you."] },
+  keg: { hp: 5, lines: ["🍺 'Quality control.' Tastes like profit.", "🍺 Fresh keg, fresh pour"] },
+  restore: { lines: ["🎨 \"Don't touch that. It's worth more than your car.\"", "🖌 A 300-year-old smile, one brushstroke at a time", "🔍 Under the magnifier: a forger's signature"] },
+  vault: { lines: ["🔒 Time lock's on till morning. Shame.", "🔒 The guard watches you very, very closely", "💎 You count the cameras. Eight. Nine."] },
+  surgery: { lines: ["🩺 \"Scalpel.\" You look away.", "🩺 The monitor beeps steady. Good sign.", "🩺 \"Who's that in the doorway? Out!\""] },
+  scan: { lines: ["🧲 \"Empty your pockets. All of them.\"", "🧲 The magnet hums. Your keys fly across the room.", "🩻 Nice skeleton. Very symmetrical."] },
+  armory: { lines: ["🔫 \"Badge first, hotshot.\"", "🔫 \"Nice try. Civilians wait outside.\"", "🛡 The riot shields have seen things"] },
+  evidence: { lines: ["🗃 Case #4471: one stolen sedan. Not yours. Probably.", "🗃 Exhibit B is a very large bag of cash", "🗃 \"Sign the log or get out.\""] },
+  meeting: { lines: ["💼 \"Let's circle back on that.\" You nod wisely.", "📈 Up eighteen percent. Everyone claps.", "💼 This meeting could have been an email"] },
+  servers: { lines: ["🖥 Blinking lights. Somebody's mining crypto in here.", "🖥 \"Did you try turning it off and on again?\"", "❄ It's freezing. The servers like it that way."] },
+  load: { pay: 20, lines: ["📦 You haul a few boxes onto the truck", "📦 Pallet loaded. The driver tips you.", "📦 Your back will remember this"] },
+};
 function venueAction(kind, site) {
   const pay = n => { if (st.money < n) { hud.toast("You need $" + Math.ceil(n - st.money) + " more"); return false; } st.money -= n; AudioSys.play("cash", 0.5); return true; };
   const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -304,6 +326,12 @@ function venueAction(kind, site) {
   else if (kind === "vip") hud.toast(st.money >= 50000 ? "🥂 \"Right this way, you're on the list.\"" : "🥂 \"Nice try. VIP starts at $50,000 in the bank.\"", 3);
   else if (kind === "visit") { crime.S.health = Math.min(100, crime.S.health + 10); hud.toast(pick(["💐 The patients appreciate the company", "💐 \"You're the best visitor we've had all week\""])); }
   else if (kind === "cop") hud.toast(pick(["👮 \"Keep your nose clean, pal.\"", "👮 \"Lost property's round the back.\"", "👮 \"We've got our eye on you.\""]), 3);
+  else if (FLAVOR[kind]) {
+    const f = FLAVOR[kind];
+    if (f.hp) crime.S.health = Math.min(100, crime.S.health + f.hp);
+    if (f.pay) { eco.earn(f.pay); AudioSys.play("cash", 0.4); }
+    hud.toast(pick(f.lines) + (f.hp ? " · +" + f.hp + " health" : "") + (f.pay ? " · +$" + f.pay : ""), 3);
+  }
   else if (kind === "office") {
     const b = BIZ.find(b => b.p === site.p || b.id === site.id), lvl = b && st.owned[b.id];
     hud.toast(lvl ? "💼 \"Books look great, boss\" · level " + lvl + " · +$" + (b.rate * lvl) + "/min" : pick(["💼 \"We're not hiring right now.\"", "💼 \"Take a number.\"", "💼 \"Leave your card, we'll call you.\""]), 3);

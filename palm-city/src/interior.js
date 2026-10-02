@@ -12,6 +12,7 @@ import { makeKit } from "./furniture.js";
 import * as F from "./furniture.js";
 import { PLANS } from "./layouts.js";
 import * as DC from "./decor.js";
+import { makeCar } from "./cars.js";
 import { RL, roomLit, MAX_LIGHTS, MAX_ROOMS } from "./roomlight.js";
 
 const ROOM = { x: HALF + 360, z: -HALF - 220 };
@@ -455,11 +456,20 @@ export function makeInterior(scene, g) {
     const anims = [], dyn = [];
     Object.assign(ctx, {
       anim(a, x = 0, z = 0, ry = 0, y = 0) { a.group.position.set(x, y, z); a.group.rotation.y = ry; extras.push(a.group); anims.push(a); a.group.traverse(o => { if (o.geometry) own.push(o.geometry); if (o.material && o.material.dispose) own.push(o.material); }); return a; },
+      // a real car parked inside (the garage): its own copies of the materials so the room light can touch them
+      car(x, z, ry, type, color) {
+        const c = makeCar(type, color);
+        c.group.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); own.push(o.material); } });
+        c.group.position.set(x, 0.04, z); c.group.rotation.y = ry; extras.push(c.group);
+        const hl = c.spec.len / 2 + 0.1, hw = c.spec.wid / 2 + 0.1, ca = Math.abs(Math.cos(ry)), sa = Math.abs(Math.sin(ry));
+        const ex = hw * ca + hl * sa, ez = hl * ca + hw * sa; K.block(x - ex, z - ez, x + ex, z + ez);
+        return c;
+      },
       fan(x, z) { ctx.anim(DC.ceilingFan(0, 0, 0), x, z, 0, H); },
       aquarium(x, z, ry, w, h, dd) { K.push(x, z, ry, 0); const a = DC.aquarium(K, w, h, dd); K.pop(); ctx.anim(a, x, z, ry); ctx.light(x + Math.sin(ry) * 0.5, 1.4, z + Math.cos(ry) * 0.5, 0x7ad8ff, 2.2, 3.5); },
       fire(x, y, z, s = 1) { ctx.light(x, y + 0.35, z + 0.25, 0xff7a2a, 7 * s, 5, (t, L) => { L.I = 7 * s * (0.8 + 0.12 * Math.sin(t * 13) + 0.1 * Math.sin(t * 29 + 1)); }); updates.push((t, dt) => { if (!g.fx) return; for (let i = 0; i < 2; i++) if (Math.random() < dt * 40) g.fx.flame(ROOM.x + x + (Math.random() - 0.5) * 0.45 * s, y, ROOM.z + z, s); }); },
       steam(x, y, z) { updates.push((t, dt) => { if (Math.random() < dt * 4 && g.fx) g.fx.smoke(ROOM.x + x + (Math.random() - 0.5) * 0.2, y, ROOM.z + z, 0.85); }); },
-      tv(x, y, z, ry, w, h, kind = "sport") { ctx.light(x + Math.sin(ry) * 0.6, y, z + Math.cos(ry) * 0.6, kind === "news" ? 0x6a90ff : 0x60c070, 1.6, 3.5, (t, L) => { L.I = 1.6 * (0.75 + 0.25 * Math.sin(t * 5.3) * Math.sin(t * 1.7)); }); const tex = tvTex(kind); own.push(tex); const m = plane(x, y, z, ry, w, h, new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(1.25, 1.25, 1.25) }), 0.035); updates.push(t => tex.userData.draw(t)); return m; },
+      tv(x, y, z, ry, w, h, kind = "sport") { ctx.light(x + Math.sin(ry) * 0.6, y, z + Math.cos(ry) * 0.6, ({ news: 0x6a90ff, movie: 0xff9a60, game: 0x6ab0ff, cctv: 0x9ab0b8, chart: 0xe8f0ff })[kind] || 0x60c070, 1.6, 3.5, (t, L) => { L.I = 1.6 * (0.75 + 0.25 * Math.sin(t * 5.3) * Math.sin(t * 1.7)); }); const tex = tvTex(kind); own.push(tex); const m = plane(x, y, z, ry, w, h, new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(1.25, 1.25, 1.25) }), 0.035); updates.push(t => tex.userData.draw(t)); return m; },
       beams(list) { clubBeams(list, extras, own, updates); },
       specks(bx, by, bz, key) { mirrorSpecks(bx, by, bz, R[key], H, extras, own, updates); },
       forklift(z, x0, x1) {
@@ -522,6 +532,50 @@ export function makeInterior(scene, g) {
         const msg = "  HEATWAVE CONTINUES · MARINA BOAT SHOW THIS WEEKEND · POLICE WARN OF STREET RACING DOWNTOWN · STOCKS UP 2% ·";
         x.fillText(msg + msg, 256 - ((t * 40) % 700), 138);
         x.fillStyle = "#fff"; x.font = "bold 13px sans-serif"; x.fillText("WEATHER", 176, 40); x.fillText("31°", 186, 70);
+      } else if (kind === "movie") {
+        // a car chase at sunset: sky, sea, palms streaming past, the hero car, letterbox bars and subtitles
+        const gr = x.createLinearGradient(0, 18, 0, 100); gr.addColorStop(0, "#2a1650"); gr.addColorStop(0.55, "#e0503a"); gr.addColorStop(1, "#ffc060");
+        x.fillStyle = gr; x.fillRect(0, 0, 256, 144);
+        x.fillStyle = "#ffe4a0"; x.beginPath(); x.arc(170, 92, 16, 0, 7); x.fill();
+        x.fillStyle = "#3a2a5a"; x.fillRect(0, 92, 256, 14); x.fillStyle = "rgba(255,200,120,.5)"; for (let i = 0; i < 6; i++) x.fillRect(150 + Math.sin(t * 3 + i) * 6, 95 + i * 2, 40 - i * 5, 1);
+        x.fillStyle = "#1a1018"; x.fillRect(0, 104, 256, 40);
+        for (let i = 0; i < 5; i++) { const px = ((i * 70 - t * 160) % 350 + 350) % 350 - 40; x.fillRect(px, 52, 4, 54); for (let f = 0; f < 5; f++) { x.beginPath(); x.ellipse(px + 2 + Math.cos(f * 1.3) * 12, 52 + Math.sin(f * 1.3) * 3, 14, 3, f * 1.3, 0, 7); x.fill(); } }
+        const cx = 96 + Math.sin(t * 0.8) * 10;
+        x.fillStyle = "#c81e2a"; x.fillRect(cx, 96, 48, 10); x.fillRect(cx + 10, 89, 24, 8); x.fillStyle = "#111"; x.beginPath(); x.arc(cx + 10, 107, 5, 0, 7); x.arc(cx + 38, 107, 5, 0, 7); x.fill();
+        x.fillStyle = "#ffe8a0"; x.fillRect(cx + 46, 98, 3, 3);
+        x.fillStyle = "#000"; x.fillRect(0, 0, 256, 18); x.fillRect(0, 126, 256, 18);
+        x.fillStyle = "#fff"; x.font = "10px sans-serif"; x.textAlign = "center"; x.fillText(["\"They're right behind us!\"", "\"Hold on to something.\"", "\"Palm City never sleeps.\""][Math.floor(t / 4) % 3], 128, 138); x.textAlign = "left";
+      } else if (kind === "game") {
+        // a racing game: perspective road, rumble strips, the player's car and a HUD
+        x.fillStyle = "#3a8ad8"; x.fillRect(0, 0, 256, 60); x.fillStyle = "#2a6a3a"; x.fillRect(0, 60, 256, 84);
+        x.fillStyle = "#4a4e56"; x.beginPath(); x.moveTo(118, 60); x.lineTo(138, 60); x.lineTo(240, 144); x.lineTo(16, 144); x.fill();
+        for (let i = 0; i < 8; i++) { const k = ((i / 8 + t * 1.6) % 1), y = 60 + k * k * 84, w = 2 + k * 6; x.fillStyle = "#f4f4f4"; x.fillRect(128 - w / 2, y, w, 2 + k * 8); x.fillStyle = i % 2 ? "#e83a3a" : "#fff"; x.fillRect(118 - k * 102 - 4 * k, y, 4 * k + 2, 2 + k * 6); x.fillRect(138 + k * 102, y, 4 * k + 2, 2 + k * 6); }
+        const px = 128 + Math.sin(t * 1.1) * 30; x.fillStyle = "#e8c020"; x.fillRect(px - 16, 112, 32, 16); x.fillStyle = "#111"; x.fillRect(px - 18, 124, 8, 8); x.fillRect(px + 10, 124, 8, 8); x.fillStyle = "#e83a3a"; x.fillRect(px - 14, 126, 6, 3); x.fillRect(px + 8, 126, 6, 3);
+        x.fillStyle = "rgba(0,0,0,.5)"; x.fillRect(4, 4, 70, 30); x.fillStyle = "#fff"; x.font = "bold 12px monospace"; x.fillText((180 + Math.floor(Math.sin(t) * 20)) + " KM/H", 8, 18); x.fillText("LAP 2/3", 8, 30);
+        x.fillStyle = "#ffd040"; x.font = "bold 14px monospace"; x.fillText("P1", 226, 18);
+      } else if (kind === "chart") {
+        // a quarterly results slide: title, growing bars, a trend line
+        x.fillStyle = "#f4f6f8"; x.fillRect(0, 0, 256, 144); x.fillStyle = "#1e3a5a"; x.fillRect(0, 0, 256, 22);
+        x.fillStyle = "#fff"; x.font = "bold 12px sans-serif"; x.fillText("Q3 RESULTS · PALM CITY HOLDINGS", 8, 15);
+        x.strokeStyle = "#9aa4ae"; x.lineWidth = 1; x.beginPath(); x.moveTo(20, 30); x.lineTo(20, 130); x.lineTo(240, 130); x.stroke();
+        const grow = Math.min(1, (t % 8) / 2);
+        const vals = [0.35, 0.5, 0.42, 0.66, 0.78, 0.92];
+        vals.forEach((v, i) => { x.fillStyle = i === 5 ? "#2aa86a" : "#3a7ab8"; const h = v * 90 * grow; x.fillRect(30 + i * 35, 130 - h, 24, h); });
+        x.strokeStyle = "#e8a020"; x.lineWidth = 2; x.beginPath(); vals.forEach((v, i) => { const px = 42 + i * 35, py = 120 - v * 80 * grow; i ? x.lineTo(px, py) : x.moveTo(px, py); }); x.stroke();
+        x.fillStyle = "#2aa86a"; x.font = "bold 14px sans-serif"; x.fillText("+18%", 196, 44);
+      } else if (kind === "cctv") {
+        // four security feeds: grainy grey rooms with a timestamp and a red REC dot
+        for (let q = 0; q < 4; q++) {
+          const ox = (q % 2) * 128, oy = Math.floor(q / 2) * 72;
+          x.fillStyle = "#2a2e30"; x.fillRect(ox, oy, 128, 72);
+          x.fillStyle = "#4a5054"; x.beginPath(); x.moveTo(ox + 20, oy + 72); x.lineTo(ox + 44, oy + 24); x.lineTo(ox + 90, oy + 24); x.lineTo(ox + 118, oy + 72); x.fill();
+          x.fillStyle = "#62686c"; x.fillRect(ox + 44 + q * 6, oy + 30, 18, 14); x.fillRect(ox + 76 - q * 4, oy + 40, 12, 22);
+          if (q === (Math.floor(t / 3) % 4)) { x.fillStyle = "#8a9094"; const mx = ox + 30 + ((t * 18) % 70); x.fillRect(mx, oy + 38, 6, 18); x.beginPath(); x.arc(mx + 3, oy + 35, 3.5, 0, 7); x.fill(); }
+          for (let i = 0; i < 160; i++) { x.fillStyle = `rgba(255,255,255,${Math.random() * 0.12})`; x.fillRect(ox + Math.random() * 128, oy + Math.random() * 72, 1, 1); }
+          x.fillStyle = "#e8e8e8"; x.font = "8px monospace"; x.fillText("CAM 0" + (q + 1), ox + 4, oy + 10); x.fillText("23:" + String(10 + Math.floor(t / 60) % 50).padStart(2, "0") + ":" + String(Math.floor(t) % 60).padStart(2, "0"), ox + 78, oy + 68);
+          if (Math.floor(t * 2) % 2) { x.fillStyle = "#e82020"; x.beginPath(); x.arc(ox + 120, oy + 8, 3, 0, 7); x.fill(); }
+        }
+        x.fillStyle = "#000"; x.fillRect(127, 0, 2, 144); x.fillRect(0, 71, 256, 2);
       } else {
         for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? "#2e8a3a" : "#34963f"; x.fillRect(i * 32, 0, 32, 144); }
         x.strokeStyle = "rgba(255,255,255,.8)"; x.lineWidth = 2; x.strokeRect(10, 14, 236, 120); x.beginPath(); x.moveTo(128, 14); x.lineTo(128, 134); x.stroke(); x.beginPath(); x.arc(128, 74, 20, 0, 7); x.stroke();

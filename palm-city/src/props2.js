@@ -55,7 +55,7 @@ export function gamingChair(K, col = 0xc82a3a) {
 export function guitarStand(K, col = 0xc8501e) {
   K.box("metal", 0.03, 0.02, 0.4, -0.12, 0.02, 0, C.black, { ry: 0.5 }); K.box("metal", 0.03, 0.02, 0.4, 0.12, 0.02, 0, C.black, { ry: -0.5 });
   K.box("metal", 0.02, 0.75, 0.02, 0, 0.4, -0.08, C.black, { rx: -0.12 });
-  K.push(0, 0.02, 0, 0.12); K.add;
+  K.push(0, 0.02, 0, 0.12);
   // body: two lobes and a waist, a sound hole, neck, headstock, tuning pegs, strings
   K.sph("gloss", 0.2, 0, 0.22, 0.04, col, { sx: 1, sy: 1.05, sz: 0.24, seg: 18 });
   K.sph("gloss", 0.15, 0, 0.5, 0.04, col, { sx: 1, sy: 1, sz: 0.3, seg: 18 });
@@ -286,7 +286,7 @@ export function teddy(K, x, y, z, ry = 0) {
   K.pop();
 }
 export function rocketLamp(K, x, z) {
-  K.cyl("gloss", 0.06, 0.08, 0.35, x, 0.95, z, C.white, { seg: 12 }); K.add;
+  K.cyl("gloss", 0.06, 0.08, 0.35, x, 0.95, z, C.white, { seg: 12 });
   K.lathe("gloss", [[0.06, 0], [0.04, 0.1], [0.001, 0.18]], x, 1.12, z, 0xe83a3a, { seg: 12 });
   for (let i = 0; i < 3; i++) { const a = i / 3 * TAU; K.box("gloss", 0.01, 0.12, 0.08, x + Math.sin(a) * 0.08, 0.84, z + Math.cos(a) * 0.08, 0xe83a3a, { ry: a }); }
   K.cyl("glow", 0.025, 0.025, 0.004, x, 1.0, z + 0.06, 0xbfe0ff, { rx: Math.PI / 2, em: 2, seg: 10 });
@@ -589,7 +589,7 @@ export function dockLeveler(K, w = 2.6) {
   K.box("metal", w, 0.06, 1.8, 0, 0.06, 0, 0x5a5e62);
   for (let i = 0; i < 12; i++) K.box("metal", w, 0.012, 0.02, 0, 0.095, -0.85 + i * 0.15, 0x7a7e82);
   for (const s of [-1, 1]) for (let i = 0; i < 6; i++) K.box("matte", 0.12, 0.12, 0.3, s * (w / 2 + 0.1), 0.06, -0.75 + i * 0.3, i % 2 ? 0x1a1a1a : 0xe8c020);
-  K.box("matte", 0.3, 0.5, 0.4, w / 2 + 0.4, 0.8, 0.8, 0x1a1a1e);                          // bumpers on the wall
+  for (const sd of [-1, 1]) K.box("matte", 0.3, 0.5, 0.16, sd * (w / 2 + 0.25), 0.55, -0.82, 0x1a1a1e, { r: 0.03 });   // rubber bumpers on the wall
 }
 export function wrappedPallet(K, x, z, ry = 0) {
   K.push(x, z, ry, 0);
