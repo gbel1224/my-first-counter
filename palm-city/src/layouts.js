@@ -255,7 +255,7 @@ function clubBackRooms(ctx) {
   const { K, R } = ctx;
   const gr = R.green, of = R.office, kg = R.kegs;
   // green room: bulb-lit mirrors, a velvet sofa, a rail of stage outfits, guitars, tour posters
-  ctx.paint("green", 0x5a4a4a, 0, "brick");
+  ctx.paint("green", 0x9a7a6e, 0, "brick");
   for (const x of [-6.0, -3.8]) { ctx.P(x, gr.z0 + 0.27, 0, () => P2.dressingTable(K, 1.6)); ctx.light(x, 1.5, gr.z0 + 0.6, 0xfff0c8, 3, 3); ctx.P(x, -9.0, PI, () => F.stool(K, { color: 0x1a1a1e })); }
   ctx.npc(-3.8, -9.0, PI, "perch", { shirt: 0xd82a6a, pants: 0x1a1a1e });
   ctx.P(-3.3, gr.z1 - 0.45, PI, () => F.sofa(K, 2.2, 0x6a1a3a, { legs: C.brass }));
@@ -272,7 +272,7 @@ function clubBackRooms(ctx) {
   ctx.poster(-5.2, 2.0, gr.z1 - 0.01, PI, 0.7, 1.0, "DJ KOBRA", 0x2a1a10, 0xe8c020);
   ctx.spot(-4.6, -7.9, 1.5, "HANG OUT", "🎤 Hang out backstage", "green");
   // manager's office: the cash, the safe, the cameras
-  ctx.paint("office", 0x4a2e22, 0, "panel");
+  ctx.paint("office", 0xd8c8b0, 0, null); ctx.paint("office", 0x6a4a32, 1.0, "panel", { layer: 1, color2: 0xc8a24a });
   ctx.P(1.5, of.z0 + 0.4, 0, () => F.desk(K, 1.7, { wood: C.walnut }));
   ctx.P(1.5, -8.8, PI, () => F.officeChair(K, { color: 0x1a1a1e }));
   ctx.npc(1.5, -8.8, PI, "type", { shirt: 0x1a1a1e, pants: 0x1a1a1e });
@@ -290,7 +290,7 @@ function clubBackRooms(ctx) {
   ctx.paint("kegs", 0x8a8e92, 0, "block");
   for (let i = 0; i < 6; i++) P2.keg(K, 4.5 + i * 0.44, -9.65);
   for (let i = 0; i < 5; i++) P2.keg(K, 4.72 + i * 0.44, -9.2);
-  for (let i = 0; i < 5; i++) P2.keg(K, 4.5 + i * 0.44, -9.65, 0.6);
+  for (let i = 0; i < 5; i++) P2.keg(K, 4.5 + i * 0.44, -9.65, 0.68);
   for (let i = 0; i < 5; i++) {
     const x = 4.6 + i * 0.1, c = [0xe8e4dc, 0xd82a2a, 0x2a5aa8, 0xe8e4dc, 0x2a9a4a][i];
     K.cyl("matte", 0.012, 0.012, ctx.H - 1.3, x, (1.3 + ctx.H) / 2 - 0.05, kg.z0 + 0.03, c, { seg: 6 });
@@ -783,9 +783,9 @@ export const PLANS = {
       bar: { r: [4, -6.5, 9, 2], floor: "darkwood", light: [0xffa060, 12], ceil: "spot", name: "Bar" },
       vip: { r: [-9, -1, -5, 6.5], floor: "carpetRed", light: [0xffa0a0, 18], ceil: "spot", name: "VIP lounge" },
       back: { r: [-9, -6.5, -5, -1], floor: "concrete", light: [0xf4f0e8, 14], ceil: "fluoro", name: "Backstage" },
-      green: { r: [-9, -10, -1, -6.5], floor: "darkwood", light: [0xffe0c0, 12], ceil: "round", name: "Green room" },
-      office: { r: [-1, -10, 4, -6.5], floor: "darkwood", light: [0xffd8a8, 10], ceil: "round", name: "Manager's office" },
-      kegs: { r: [4, -10, 9, -6.5], floor: "concrete", light: [0xe8f0ff, 12], ceil: "fluoro", name: "Keg room" },
+      green: { r: [-9, -10, -1, -6.5], floor: "darkwood", light: [0xffe0c0, 24], ceil: "round", name: "Green room" },
+      office: { r: [-1, -10, 4, -6.5], floor: "wood", light: [0xffd8a8, 24], ceil: "round", name: "Manager's office" },
+      kegs: { r: [4, -10, 9, -6.5], floor: "concrete", light: [0xe8f0ff, 22], ceil: "fluoro", name: "Keg room" },
     },
     links: [
       { a: "foyer", b: "hall", kind: "arch", at: 4.2, w: 1.8 },

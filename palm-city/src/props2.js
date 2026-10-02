@@ -334,7 +334,9 @@ export function guitarCase(K, x, z, ry) { K.push(x, z, ry, 0); K.box("leather", 
 export function keg(K, x, z, y = 0) {
   K.cyl("metal", 0.2, 0.2, 0.58, x, y + 0.29, z, C.steel, { seg: 18 });
   for (const yy of [0.06, 0.29, 0.52]) K.torus("metal", 0.205, 0.015, x, y + yy, z, 0x9aa0a6, { ts: 22 });
-  K.cyl("chrome", 0.04, 0.04, 0.05, x, y + 0.6, z, C.chrome, { seg: 10 });
+  K.cyl("metal", 0.2, 0.2, 0.1, x, y + 0.63, z, C.steel, { seg: 18, open: true });                   // the top skirt, with its handle cut-outs
+  for (const a of [0, Math.PI]) K.box("matte", 0.12, 0.04, 0.03, x + Math.sin(a) * 0.19, y + 0.645, z + Math.cos(a) * 0.19, 0x1a1a1a, { ry: a });
+  K.cyl("gloss", 0.045, 0.045, 0.04, x, y + 0.6, z, pick([0xd82a2a, 0x2a9a4a, 0x2a5aa8]), { seg: 12 });     // the spear cap
   K.block(x - 0.21, z - 0.21, x + 0.21, z + 0.21);
 }
 export function bottleCrate(K, x, y, z, ry = 0, col = 0x2a6a3a) {
