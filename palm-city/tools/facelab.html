@@ -1,0 +1,49 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Face lab</title>
+<style>html,body{margin:0;background:#1a1c20;color:#ccc;font:12px sans-serif}canvas{display:block}#l{position:fixed;inset:0;pointer-events:none}#l div{position:absolute;color:#fff;font-weight:700;text-shadow:0 1px 3px #000}</style></head>
+<body><div id="l"></div><script type="module">
+import * as THREE from "../vendor/three.module.js";
+import { makeCharacter, randomLook } from "../src/people.js";
+const q = new URLSearchParams(location.search);
+const exprs = (q.get("e") || "neutral,happy,laugh,sad,mad,annoyed,surprised,shocked,scared,flirty,smug,disgusted").split(",");
+const cols = +(q.get("c") || 4), rows = Math.ceil(exprs.length / cols), W = +(q.get("w") || 1200), Hh = Math.round(W / cols * 1.05) * rows;
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(W, Hh); r.setPixelRatio(1); document.body.appendChild(r.domElement);
+r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.0; r.outputColorSpace = THREE.SRGBColorSpace; r.setScissorTest(true);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x2a2e36);
+// a soft studio: sky/ground fill, a warm key from upper left, a cool rim from behind
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x5a4a40, 1.1));
+const key = new THREE.DirectionalLight(0xfff0e0, 2.6); key.position.set(-1.2, 2.2, 2.0); scene.add(key);
+const rim = new THREE.DirectionalLight(0xbfd4ff, 1.4); rim.position.set(1.5, 1.6, -2); scene.add(rim);
+{ // an environment for the eyes and lips to reflect
+  const pm = new THREE.PMREMGenerator(r), es = new THREE.Scene();
+  es.add(new THREE.Mesh(new THREE.SphereGeometry(10, 16, 8), new THREE.MeshBasicMaterial({ side: THREE.BackSide, color: 0x445060 })));
+  const win = new THREE.Mesh(new THREE.PlaneGeometry(6, 4), new THREE.MeshBasicMaterial({ color: 0xffffff })); win.position.set(-3, 4, 6); win.lookAt(0, 0, 0); es.add(win);
+  scene.environment = pm.fromScene(es).texture;
+}
+const beards = (q.get("b") || "full,,goatee,,stubble,mustache,,full,,goatee,,stubble").split(",");
+const chars = exprs.map((e, i) => {
+  let s = 1234 + i * 977; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const look = randomLook(rnd); look.beard = beards[i % beards.length] || null; look.long = !look.beard && i % 2 === 1; look.bald = !look.beard && i % 5 === 4; look.mood = e; look.h = 1; look.bulk = 1;
+  const ch = makeCharacter(look); scene.add(ch.group);
+  return { ch, e, x: i * 2 };
+});
+const cam = new THREE.PerspectiveCamera(22, 1, 0.05, 50);
+const yaw = +(q.get("yaw") || 0.35), t0 = performance.now();
+function frame(ts) {
+  const t = (ts - t0) / 1000;
+  const lab = document.getElementById("l"); lab.innerHTML = "";
+  chars.forEach((c, i) => {
+    c.ch.face.base = c.e; if (q.get("talk")) c.ch.face.talk = 1;
+    c.ch.pose(c.x, 0, 0, 0, 0, 0);
+    const hm = c.ch.group.children[2].matrix.elements, hy = hm[13] + 0.18;
+    const cx = i % cols, cy = Math.floor(i / cols), w = W / cols, h = Hh / rows;
+    cam.aspect = w / h; cam.updateProjectionMatrix();
+    cam.position.set(c.x + Math.sin(yaw) * 0.85, hy + 0.04, Math.cos(yaw) * 0.85); cam.lookAt(c.x, hy - 0.005, 0.02);
+    r.setViewport(cx * w, Hh - (cy + 1) * h, w, h); r.setScissor(cx * w, Hh - (cy + 1) * h, w, h);
+    r.render(scene, cam);
+    const d = document.createElement("div"); d.textContent = c.e; d.style.left = (cx * w + 8) + "px"; d.style.top = (cy * h + 6) + "px"; lab.appendChild(d);
+  });
+  window.__frames = (window.__frames || 0) + 1;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script></body></html>
