@@ -168,14 +168,14 @@ try {
       if (G.P.car) { const c = G.P.car; c.h = 0; c.x = hyd.x0; c.z = hyd.z0 - 6; c.vx = 0; c.vz = 14; c.speed = 14; run(30); G.exitCar(); }
       o.prop = hyd.loose;
       // talk to a stranger: they answer, their mouth moves, and an insult to a tough guy starts a fight
-      G.crime.S.wanted = 0;
+      G.crime.S.wanted = 0; if (G.P.car) G.exitCar(); G.crime.S.health = 100;
       const ped = G.crowd.nearest(G.P.x, G.P.z, 300, q => !q.gang && !q.goon && !q.crew && !q.hidden && !(q.knocked > 0));
       if (ped) {
         ped.persona = "tough"; ped.fear = 0; G.P.x = ped.x + 1.2; G.P.z = ped.z; run(2);
-        const ta = G.life.action(); if (ta && ta[0] === "TALK") ta[2]();
-        o.talkOpen = !!G.life.talkingTo() && ped.face && ped.face.talk > 0;
-        G.life.choose("insult"); run(150);
-        o.talkFight = ped.fightT > 0 && ped.face.expr === "mad";
+        const ta = G.life.action(); o.talkAct = ta && ta[0]; if (ta && ta[0] === "TALK") ta[2]();
+        const who = G.life.talkingTo();
+        o.talkOpen = !!who && !!who.face && who.face.talk > 0;
+        if (who) { who.persona = "tough"; G.life.choose("insult"); run(150); o.talkFight = who.fightT > 0 && who.face.expr === "mad"; }
       }
       return o;
     });
