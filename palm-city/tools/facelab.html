@@ -43,7 +43,7 @@ function frame(ts) {
     const d = document.createElement("div"); d.textContent = c.e; d.style.left = (cx * w + 8) + "px"; d.style.top = (cy * h + 6) + "px"; lab.appendChild(d);
   });
   window.__frames = (window.__frames || 0) + 1;
-  requestAnimationFrame(frame);
+  if (!(q.get("still") && window.__frames > 12)) requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 </script></body></html>
