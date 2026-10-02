@@ -338,14 +338,14 @@ export function makeInterior(scene, g) {
       const m = new THREE.Mesh(geo, floorMat(ft)); m.position.set((r.x0 + r.x1) / 2, 0.04, (r.z0 + r.z1) / 2); m.receiveShadow = true;
       own.push(geo); extras.push(m);
       const kind = plan.rooms[k].ceil || "round";
-      if (kind !== "none") {
+      {
         const nx = Math.max(1, Math.round((r.x1 - r.x0) / 4.5)), nz = Math.max(1, Math.round((r.z1 - r.z0) / 4.5));
         for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
           const fx = r.x0 + (i + 0.5) * (r.x1 - r.x0) / nx, fz = r.z0 + (j + 0.5) * (r.z1 - r.z0) / nz;
-          F.ceilingLight(K, fx, fz, H, kind, plan.rooms[k].light[0]);
+          if (kind !== "none") F.ceilingLight(K, fx, fz, H, kind, plan.rooms[k].light[0]);
           lights.push({ x: fx, y: H - 0.3, z: fz, col: new THREE.Color(plan.rooms[k].light[0]), I: plan.rooms[k].light[1] * 1.15 / Math.sqrt(nx * nz) * Math.max(1, Math.sqrt(nx * nz) * 0.75), range: 10 });
         }
-      } else lights.push({ x: (r.x0 + r.x1) / 2, y: H - 0.3, z: (r.z0 + r.z1) / 2, col: new THREE.Color(plan.rooms[k].light[0]), I: plan.rooms[k].light[1] * 0.9, range: 12 });
+      }
     }
     const cm = ceilMat.clone(); cm.color.setHex(plan.ceiling ?? 0xf0ece4); cm.envMapIntensity = 0.5; own.push(cm);
     const ceil = new THREE.Mesh(new THREE.BoxGeometry(W + 0.4, 0.2, D + 0.4), cm); ceil.position.y = H + 0.1; ceil.castShadow = true; ceil.receiveShadow = true;
@@ -615,7 +615,7 @@ export function makeInterior(scene, g) {
     for (const n of crew) n.ch.group.traverse(o => o.isMesh && roomLit(o.material));
     if (g.player && g.player().ch) g.player().ch.group.traverse(o => o.isMesh && roomLit(o.material));
     B.keys.slice(0, MAX_ROOMS).forEach((k, i) => {
-      const r = B.raw[k], c = new THREE.Color(B.plan.rooms[k].light[0]).multiplyScalar((B.plan.ambient ?? 0.6) * 0.85);
+      const r = B.raw[k], c = new THREE.Color(B.plan.rooms[k].light[0]).multiplyScalar((B.plan.ambient ?? 0.6) * 1.05);
       RL.uRoomBox.value[i].set(ROOM.x + r.x0, ROOM.z + r.z0, ROOM.x + r.x1, ROOM.z + r.z1);
       RL.uRoomAmb.value[i].set(c.r, c.g, c.b, B.grp[k]);
     });
