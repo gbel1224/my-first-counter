@@ -4,7 +4,7 @@ import { createRenderer, isMobile } from "./render.js";
 import { buildCity, Collider, groundY, district, blockC, blockMin, PLAZA, HALF, ROAD, BLOCK, CURB, mulberry32, clamp } from "./world.js";
 import { createSky } from "./sky.js";
 import { createCity } from "./city.js";
-import { bakeStreetLights, setStreetLights } from "./streetlight.js";
+import { bakeStreetLights, setStreetLights, setHeadlights } from "./streetlight.js";
 import { createOcean } from "./ocean.js";
 import { Crowd, randomLook } from "./people.js";
 import { Traffic, SIGNAL, Parked, signalState, walkState, RED } from "./traffic.js";
@@ -767,6 +767,22 @@ function render() {
   }
   setSignNight(signs, sky.state.night);
   setStreetLights(Math.min(1, sky.state.night * 1.6) * 8);
+  {
+    // headlights: the six nearest cars on the road (ahead of the camera first) light the street before them
+    const hl = [], night = sky.state.night, cx = camera.position.x, cz = camera.position.z;
+    if (night > 0.3) {
+      for (const t of traffic.cars) {
+        if (!t.alive) continue;
+        const d2 = (t.x - cx) ** 2 + (t.z - cz) ** 2;
+        if (d2 > 90 * 90) continue;
+        const half = (t.len || 4.6) / 2;
+        hl.push({ x: t.x + Math.sin(t.h) * half, z: t.z + Math.cos(t.h) * half, h: t.h, d: d2 });
+      }
+      for (const u of crime.units) if (u.active && u.x !== undefined) { const h = u.h ?? Math.atan2(u.vx || 0, u.vz || 1); hl.push({ x: u.x + Math.sin(h) * 2.3, z: u.z + Math.cos(h) * 2.3, h, d: (u.x - cx) ** 2 + (u.z - cz) ** 2 }); }
+      hl.sort((a, b) => a.d - b.d);
+    }
+    setHeadlights(hl, Math.min(1, (night - 0.3) * 3));
+  }
   const obj = state.phase === "play" ? currentObjective() : null;
   beacon.set(obj && (obj.main || obj.event) && obj.x !== undefined ? { x: obj.x, z: obj.z } : null, obj ? obj.r : 3);
   sideBeacon.set(obj && obj.side ? { x: obj.x, z: obj.z } : null, 3);
