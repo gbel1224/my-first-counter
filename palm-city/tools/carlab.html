@@ -2,7 +2,7 @@
 <style>html,body{margin:0;background:#1a1c20}canvas{display:block}</style></head>
 <body><script type="module">
 import * as THREE from "../vendor/three.module.js";
-import { makeCar, CAR_TYPES, LAMP_U } from "../src/cars.js";
+import { makeCar, CAR_TYPES, LAMP_U, carSpec } from "../src/cars.js";
 const q = new URLSearchParams(location.search);
 const W = +(q.get("w") || 1400), Hh = +(q.get("h") || 700);
 const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(W, Hh); r.setPixelRatio(1); document.body.appendChild(r.domElement);
@@ -16,10 +16,12 @@ const key = new THREE.DirectionalLight(0xfff0e0, q.get("night") ? 0.1 : 2.6); ke
 const gnd = new THREE.Mesh(new THREE.PlaneGeometry(80, 40), new THREE.MeshStandardMaterial({ color: 0x55585e, roughness: 0.85 })); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; scene.add(gnd);
 const cols = (q.get("c") || "b8bcc0,7a1c20,1f2d4a,f2f2f0").split(",").map(h => parseInt(h, 16));
 const types = (q.get("t") || CAR_TYPES.join(",")).split(",");
-LAMP_U.uTime.value = 0.1;
-types.forEach((t, i) => { const c = makeCar(t, cols[i % cols.length]);
+LAMP_U.uTime.value = +(q.get("ut") || 0.1);
+const spacing = +(q.get("sp") || 5.4);
+types.forEach((t, i) => { const c = makeCar(t, carSpec(t).paint || cols[i % cols.length]);
   if (q.get("door")) for (const k of q.get("door").split(",")) c.openDoor(k, +(q.get("ang") || 1.0));
-  if (q.get("lamps")) { const [b, h, ind, rv] = q.get("lamps").split(",").map(Number); c.setLamps(b, h, ind, rv); } c.group.position.set((i - (types.length - 1) / 2) * 5.4, 0, 0); c.group.rotation.y = +(q.get("ry") || 0.6); scene.add(c.group); });
+  if (q.get("lamps")) { const [b, h, ind, rv] = q.get("lamps").split(",").map(Number); c.setLamps(b, h, ind, rv); }
+  if (q.get("alldoors")) for (const k in c.doors) c.openDoor(k, +(q.get("ang") || 1.0)); c.group.position.set((i - (types.length - 1) / 2) * spacing, 0, 0); c.group.rotation.y = +(q.get("ry") || 0.6); scene.add(c.group); });
 const cam = new THREE.PerspectiveCamera(+(q.get("fov") || 30), W / Hh, 0.1, 200);
 cam.position.set(+(q.get("cx") || 0), +(q.get("cy") || 4), +(q.get("cz") || 18)); cam.lookAt(+(q.get("cx") || 0), +(q.get("ly") || 0.8), 0);
 r.render(scene, cam); window.__frames = 99;

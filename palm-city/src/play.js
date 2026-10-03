@@ -4,6 +4,7 @@ import * as THREE from "../vendor/three.module.js";
 import { clamp, lerp, lerpAngle, groundY, HALF, SHORE } from "./world.js";
 import { makeCharacter } from "./people.js";
 import { makeCar, carSpec } from "./cars.js";
+import { buildCraft, CRAFT_SPEC } from "./craft.js";
 
 // ============================================================================================
 // driving: a light bicycle-ish model. Grip bleeds sideways velocity (less with the handbrake,
@@ -137,6 +138,11 @@ export function poseOnFoot(P, time, over) {
 
 // a player-owned / taken car
 export function spawnCar(scene, type, color, x, z, h) {
+  if (type === "motorbike") {                    // a traffic motorbike becomes a rideable bike
+    const C = buildCraft("bike", color); scene.add(C.group);
+    const v = { ...C, kind: "bike", type, color, x, z, h, vx: 0, vz: 0, y: groundY(x, z), steer: 0, yawRate: 0, speed: 0, spec: { ...CRAFT_SPEC.bike, cabin: [[0, 1], [0, 1.2], [0, 1.2], [0, 1]] } };
+    syncCar(v); return v;
+  }
   const C = makeCar(type, color);
   scene.add(C.group);
   const v = { ...C, x, z, h, vx: 0, vz: 0, y: groundY(x, z), steer: 0, yawRate: 0, speed: 0, spec: carSpec(type) };

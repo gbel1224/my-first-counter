@@ -7,9 +7,10 @@ import { N, ROAD, CELL, HALF, roadC, clamp, lerp, mulberry32 } from "./world.js"
 import { CAR_TYPES, carGeometries, carSpec, MAT, PAINTS, REAL_PAINTS, lampGeometry } from "./cars.js";
 
 // the mix on the road: mostly everyday cars, some pickups, vans and taxis, a few trucks and buses
-const MIX = { sedan: 22, compact: 16, suv: 14, pickup: 10, van: 7, taxi: 8, coupe: 5, sports: 5, truck: 4, bus: 3 };
+const MIX = { sedan: 22, compact: 16, suv: 14, pickup: 10, van: 7, taxi: 8, coupe: 5, sports: 5, truck: 4, bus: 3, motorbike: 6, ambulance: 2, firetruck: 1.2 };
+const NO_PARK = ["bus", "truck", "firetruck", "motorbike"];
 function pickType(r, parked) {
-  const keys = Object.keys(MIX).filter(k => !(parked && (k === "bus" || k === "truck")));
+  const keys = Object.keys(MIX).filter(k => !(parked && NO_PARK.includes(k)));
   let t = r() * keys.reduce((a, k) => a + MIX[k], 0);
   for (const k of keys) { t -= MIX[k]; if (t <= 0) return k; }
   return keys[0];
@@ -17,7 +18,7 @@ function pickType(r, parked) {
 // a vehicle's paint: real-world colours; taxis yellow; buses in the city's livery
 const BUS_PAINT = [0xe8e6dc, 0x1f5a8a, 0xc8302a];
 function pickPaint(r, type) {
-  if (type === "taxi") return 0xf2c200;
+  if (carSpec(type).paint) return carSpec(type).paint;   // taxis, ambulances, fire engines
   if (type === "bus") return BUS_PAINT[(r() * BUS_PAINT.length) | 0];
   return REAL_PAINTS[(r() * REAL_PAINTS.length) | 0];
 }
@@ -60,7 +61,7 @@ export class Traffic {
       const lane = r() < 0.5 ? 0 : 1;
       const type = pickType(r, false);
       const c = {
-        type, color: pickPaint(r, type), axis, dir, road, lane, len: carSpec(type).len, wid: carSpec(type).wid,
+        type, color: pickPaint(r, type), axis, dir, road, lane, len: carSpec(type).len, wid: carSpec(type).wid, siren: !!carSpec(type).emergency && r() < 0.55,
         s: -HALF + 30 + r() * (HALF * 2 - 60), speed: 0, vmax: (carSpec(type).big ? 8 : 10) + r() * 5, brake: false,
         turn: null, x: 0, z: 0, h: 0, stun: 0, alive: true, honk: 0,
       };
@@ -230,7 +231,7 @@ export class Traffic {
       // lamps: brake lights when slowing or stopped, headlights after dark, indicators through a turn
       let ind = 0;
       if (c.turn) { const T = c.turn, ex = T.p1[0] - T.pc[0], ez = T.p1[1] - T.pc[1], nx = T.pc[0] - T.p0[0], nz = T.pc[1] - T.p0[1], cr = nx * ez - nz * ex; ind = Math.abs(cr) < 1e-3 ? 0 : cr < 0 ? 1 : 2; }
-      M.lights.geometry.attributes.aLamp.setXYZW(i, c.brake ? 1 : 0, night > 0.3 ? 1 : 0, ind, 0);
+      M.lights.geometry.attributes.aLamp.setXYZW(i, c.brake ? 1 : 0, night > 0.3 ? 1 : 0, c.siren ? 4 : ind, 0);
     }
     for (const t of CAR_TYPES) for (const far of [false, true]) {
       const M = (far ? this.meshFar : this.mesh)[t], n = counts[far ? t + "_f" : t] || 0;
