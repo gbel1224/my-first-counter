@@ -7,7 +7,7 @@ import { isMobile } from "./render.js";
 
 // Palette keyed by sun elevation (radians). Colours are linear-ish scene values.
 const KEYS = [
-  { e: -0.30, zen: 0x070b1c, hor: 0x141a30, sun: 0x000000, si: 0.0, hemi: 0.3, sky: 0x34407a, gnd: 0x181418, fog: 0x121a2c },
+  { e: -0.30, zen: 0x070b1c, hor: 0x141a30, sun: 0x000000, si: 0.0, hemi: 0.42, sky: 0x3c4a84, gnd: 0x2a2220, fog: 0x121a2c },
   { e: -0.05, zen: 0x16244e, hor: 0xc86a52, sun: 0xff6a3a, si: 0.3, hemi: 0.22, sky: 0x6a6a9a, gnd: 0x2a1e1c, fog: 0x7a5a5c },
   { e: 0.06, zen: 0x2a58a0, hor: 0xf2a070, sun: 0xff9050, si: 2.6, hemi: 0.26, sky: 0x98a8cc, gnd: 0x5a4030, fog: 0xd8a888 },
   // day: deep saturated blue overhead, a pale humid haze at the horizon, a hot hard sun

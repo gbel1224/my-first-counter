@@ -99,10 +99,12 @@ export function buildCity(seed = 0x9A1C17) {
         else if (kind !== "rough" && kind !== "downtown") palms.push([px, pz, 0.85 + r() * 0.35]);
         else if (kind === "downtown" && r() < 0.5) trees.push([px, pz, 0.8 + r() * 0.3]);
       }
-      // and one near the end of each side, so every corner and crosswalk is lit
-      const ex = ax === 0 ? x1 - 4.5 : (ax < 0 ? x0 + 1.1 : x1 - 1.1);
-      const ez = az === 0 ? z1 - 4.5 : (az < 0 ? z0 + 1.1 : z1 - 1.1);
-      lamps.push([ex, ez, rot]);
+      // and one near each end of the side, so every corner and crosswalk is lit
+      for (const e of [4.5, BLOCK - 4.5]) {
+        const ex = ax === 0 ? x0 + e : (ax < 0 ? x0 + 1.1 : x1 - 1.1);
+        const ez = az === 0 ? z0 + e : (az < 0 ? z0 + 1.1 : z1 - 1.1);
+        lamps.push([ex, ez, rot]);
+      }
     }
 
     if (kind === "plaza") {
@@ -112,9 +114,11 @@ export function buildCity(seed = 0x9A1C17) {
         palms.push([blockC(i) + Math.cos(a) * 17, blockC(j) + Math.sin(a) * 17, 1.05 + r() * 0.2]);
         if (k % 3 === 0) benches.push([blockC(i) + Math.cos(a + 0.26) * 12, blockC(j) + Math.sin(a + 0.26) * 12, -a - Math.PI / 2]);
       }
+      for (let k = 0; k < 8; k++) { const a = (k + 0.5) / 8 * Math.PI * 2; lamps.push([blockC(i) + Math.cos(a) * 21, blockC(j) + Math.sin(a) * 21, Math.PI / 2 - a]); }   // round the plaza
       continue;
     }
     if (kind === "park") {
+      for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 0]]) lamps.push([blockC(i) + a * 13, blockC(j) + b * 13 - (a || b ? 0 : 6), 0]);   // path lamps
       for (let k = 0; k < 26; k++) trees.push([ix0 + 3 + r() * (iw - 6), iz0 + 3 + r() * (iw - 6), 0.8 + r() * 0.6]);
       for (let k = 0; k < 4; k++) benches.push([blockC(i) + (k - 1.5) * 8, blockC(j) + 4, 0]);
       continue;
@@ -175,6 +179,7 @@ export function buildCity(seed = 0x9A1C17) {
     palms.push([x + r() * 4, HALF + 14 + r() * 3, 1.0 + r() * 0.35]);
     if (r() < 0.35) benches.push([x + 8, HALF + 10, 0]);
   }
+  for (let x = -HALF + 12; x < HALF; x += 24) lamps.push([x, HALF + 7.5, Math.PI]);   // promenade lamps
 
   // shrubs hug the base of buildings, fill front gardens and clump in parks (own stream: adding
   // them doesn't reshuffle the rest of the city)
