@@ -4,9 +4,10 @@
 // means detail is resolution-independent — as crisp on a 4K monitor as on a phone — with zero
 // texture memory, and the whole skyline is a handful of draw calls.
 import * as THREE from "../vendor/three.module.js";
-import { N, ROAD, BLOCK, WALK, CURB, CELL, HALF, STYLE, blockC, mulberry32, PLAZA } from "./world.js";
+import { N, ROAD, BLOCK, WALK, CURB, CELL, HALF, STYLE, blockC, blockMin, district, mulberry32, PLAZA } from "./world.js";
 import { paint, place, merge, vcMaterial, tileInstances } from "./geo.js";
 import { buildPalms } from "./palms.js";
+import { buildShrubs, buildGrass } from "./plants.js";
 import { addTile } from "./cull.js";
 
 // shared GLSL: hashing, value noise, and an anti-aliased "is this pixel inside a repeating cell
@@ -593,15 +594,30 @@ function blockMaterial() {
           } else {
             int k = int(vKind + 0.5);
             if (k == 1 || k == 3) {
-              // grass: two-tone mottled lawn, mower stripes in the suburbs
-              // sun-burnt Florida lawn: green where it's watered, straw where it isn't, bare dirt patches
-              float n = vnoise(vWP.xz * 0.6) * 0.6 + vnoise(vWP.xz * 3.0) * 0.4;
-              float dry = smoothstep(0.4, 0.75, vnoise(vWP.xz * 0.09 + 17.0));
-              col = mix(vec3(0.16, 0.27, 0.08), vec3(0.27, 0.36, 0.12), n);
-              col = mix(col, vec3(0.42, 0.38, 0.2) * (0.85 + n * 0.3), dry * 0.75);
-              col = mix(col, vec3(0.3, 0.24, 0.17), smoothstep(0.78, 0.9, vnoise(vWP.xz * 0.3 + 3.0)) * 0.8);
-              col *= 0.85 + vnoise(vWP.xz * 11.0) * 0.25;                                  // blades
-              if (k == 3) col *= 0.95 + 0.05 * band(vWP.x / 3.0, 0.0, 0.5);
+              // sun-burnt Florida lawn: St Augustine grass, green where it's watered, straw where it
+              // isn't; bare dirt and clover patches; blades at three scales; mowing stripes in the gardens
+              vec2 g = vWP.xz;
+              float n = vnoise(g * 0.6) * 0.6 + vnoise(g * 3.0) * 0.4;
+              float dry = smoothstep(0.4, 0.75, vnoise(g * 0.09 + 17.0));
+              vec3 lush = mix(vec3(0.1, 0.19, 0.05), vec3(0.19, 0.28, 0.08), n);
+              vec3 straw = vec3(0.45, 0.4, 0.21) * (0.85 + n * 0.3);
+              col = mix(lush, straw, dry * 0.75);
+              // clover and weeds: rounder, bluer-green clumps
+              float clover = smoothstep(0.66, 0.8, vnoise(g * 0.8 + 41.0));
+              col = mix(col, vec3(0.16, 0.3, 0.12) * (0.9 + vnoise(g * 9.0) * 0.2), clover * 0.6);
+              // bare, trodden dirt
+              float dirt = smoothstep(0.78, 0.9, vnoise(g * 0.3 + 3.0));
+              col = mix(col, vec3(0.32, 0.25, 0.17) * (0.8 + vnoise(g * 6.0) * 0.4), dirt * 0.85);
+              // blades: elongated noise in two crossing directions, faded out with distance so it never shimmers
+              float far = clamp(length(vWP - cameraPosition) / 40.0, 0.0, 1.0);
+              float bl = vnoise(vec2(g.x * 34.0, g.y * 9.0)) * 0.5 + vnoise(vec2(g.x * 9.0 + 3.0, g.y * 31.0)) * 0.5;
+              col *= mix(0.72 + bl * 0.5, 0.95, far);
+              col *= 0.9 + vnoise(g * 11.0) * 0.18;
+              // tiny white and yellow flowers here and there
+              vec2 fq = g * 3.0, fi = floor(fq);
+              float fl = step(0.985, h12(fi + 7.0)) * (1.0 - smoothstep(0.06, 0.12, length(fract(fq) - 0.5))) * (1.0 - dry) * (1.0 - far);
+              col = mix(col, mix(vec3(0.95, 0.93, 0.85), vec3(0.95, 0.8, 0.2), step(0.5, h12(fi))), fl);
+              if (k == 3) col *= 0.93 + 0.1 * smoothstep(0.3, 0.7, abs(fract(vWP.x / 3.0) - 0.5) * 2.0);   // mowing stripes
               bRough = 0.95;
             } else if (k == 2) {
               // plaza: radial stone rings around the fountain
@@ -737,20 +753,6 @@ function palmGeometry(kind) {
   }
   return merge(parts);
 }
-// low tropical shrub: a cluster of dark glossy leaf balls
-function shrubGeometry() {
-  const parts = [];
-  const r = mulberry32(99);
-  const greens = [0x2e4a1c, 0x3a5522, 0x2a4220, 0x445c26];
-  for (let k = 0; k < 6; k++) {
-    const g = new THREE.IcosahedronGeometry(0.55 + r() * 0.35, 1);
-    const pp = g.attributes.position;
-    for (let i = 0; i < pp.count; i++) { const f = 0.8 + r() * 0.35; pp.setXYZ(i, pp.getX(i) * f, pp.getY(i) * f * 0.85, pp.getZ(i) * f); }
-    g.computeVertexNormals();
-    parts.push(place(paint(g, greens[k % 4]), (r() - 0.5) * 1.4, 0.45 + r() * 0.35, (r() - 0.5) * 1.4));
-  }
-  return merge(parts);
-}
 function treeGeometry() {
   const parts = [];
   parts.push(place(paint(new THREE.CylinderGeometry(0.22, 0.32, 3.2, 8), 0x6a4a32), 0, 1.6, 0));
@@ -837,7 +839,35 @@ function buildProps(scene, city, U, gy) {
     // near tiles get the detailed palms, everything further the light ones (out to 420 m)
     tileInstances(scene, mesh, 120, far ? 420 : NEAR, far ? NEAR : -Infinity);
   });
-  if (city.shrubs && city.shrubs.length) instanced(scene, shrubGeometry(), vcMaterial({ roughness: 0.7 }), city.shrubs.map(([x, z, s]) => [x, z, r() * 6.28, s]), gy);
+  // shrubs and flowering bushes, by neighbourhood: clipped hedging round the city buildings,
+  // hibiscus and bougainvillea in the suburban gardens, ferns and agaves in the parks
+  const kindAt = (x, z) => { const i = Math.floor((x + HALF - ROAD) / CELL), j = Math.floor((z + HALF - ROAD) / CELL); return i >= 0 && j >= 0 && i < N && j < N ? district(i, j) : "edge"; };
+  const pickSp = (k, v) => {
+    const T = k === "suburb" ? [["hibiscus", 0.3], ["bougain", 0.25], ["broad", 0.25], ["agave", 0.1], ["small", 0.1]]
+      : k === "park" ? [["broad", 0.3], ["fern", 0.25], ["hibiscus", 0.15], ["bougain", 0.15], ["agave", 0.15]]
+      : [["small", 0.45], ["broad", 0.3], ["bougain", 0.15], ["agave", 0.1]];
+    for (const [sp, w] of T) { if (v < w) return sp; v -= w; }
+    return T[0][0];
+  };
+  if (city.shrubs && city.shrubs.length) {
+    const sl = city.shrubs.map(([x, z, s]) => [x, z, r() * 6.28, s, pickSp(kindAt(x, z), r())]);
+    buildShrubs(U, sl, (geo, mat, items, maxD, minD) => instanced(scene, geo, mat, items, gy, true, maxD, minD));
+  }
+  // grass: tufts and wildflowers over the lawns and parks (only drawn near you)
+  {
+    const gr = mulberry32(0x6A55), tufts = [];
+    for (const b of city.blocks) {
+      if (b.kind !== "park" && b.kind !== "suburb") continue;
+      const homes = city.buildings.filter(h => Math.abs(h.x - (b.x0 + b.x1) / 2) < BLOCK && Math.abs(h.z - (b.z0 + b.z1) / 2) < BLOCK);
+      for (let x = b.x0 + WALK + 0.4; x < b.x1 - WALK - 0.4; x += 0.85) for (let z = b.z0 + WALK + 0.4; z < b.z1 - WALK - 0.4; z += 0.85) {
+        const px = x + (gr() - 0.5) * 0.8, pz = z + (gr() - 0.5) * 0.8;
+        if (homes.some(h => Math.abs(px - h.x) < h.w / 2 + 0.5 && Math.abs(pz - h.z) < h.d / 2 + 0.5)) continue;
+        const k = gr();
+        tufts.push([px, pz, gr() * 6.28, 0.7 + gr() * 0.6, k < 0.07 ? "flower" : k < 0.15 ? "dry" : "grass"]);
+      }
+    }
+    buildGrass(U, tufts, (geo, mat, items, maxD, minD) => instanced(scene, geo, mat, items, (x, z) => gy(x, z) - 0.02, false, maxD, minD), GLSL_COMMON);
+  }
   const lampMat = vcMaterial({ roughness: 0.5, metalness: 0.3, emitMul: 0 });
   const lampList = city.lamps.map(([x, z, a]) => [x, z, a, 1]);
   instanced(scene, lampGeometry(), lampMat, lampList, gy, true, 95);              // detailed up close
