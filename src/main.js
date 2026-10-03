@@ -14,6 +14,7 @@ import { createHUD, askConfirm } from "./hud.js";
 import { makeProps } from "./props.js";
 import { makeSkids } from "./skid.js";
 import { makeDoors, seatPose } from "./doors.js";
+import { makeHijack } from "./hijack.js";
 import { createPlayer, updatePlayerOnFoot, poseOnFoot, spawnCar, syncCar, driveStep, createCamRig, updateCam } from "./play.js";
 import { makeCharacter } from "./people.js";
 import { setExpr, HAIR_U } from "./face.js";
@@ -283,6 +284,11 @@ const props = makeProps(street, {
 });
 const skids = makeSkids(scene);
 const doors = makeDoors();
+// hijacking: drivers at the wheel, dragged out; owners by their vans
+const hijack = makeHijack(scene, {
+  player: () => P, crowd, traffic, parked, crime, life, doors, toast: (m, t) => hud.toast(m, t),
+  finishEnter: (c, t0) => { P.car = c; P.ch.group.visible = true; AudioSys.play("door", 0.7); doors.play(c, "in", t0); },
+});
 // haptics: a short buzz on phones when something big hits (explosions, crashes, getting shot)
 let lastShake = 0, buzzCD = 0;
 function haptics(dt) {
@@ -470,14 +476,17 @@ function nearestCar() {
 }
 function enterCar(n) {
   let c = n.car;
-  if (n.traf) {                                     // take it from the traffic
-    const t = n.traf; traffic.take(t);
+  if (n.traf) {                                     // hijack it: the driver's in there
+    const t = n.traf;
+    if (t.speed > 9) { hud.toast("Too fast to grab — step out in front of it", 1.6); return; }
+    hijack.driverOf(t);
+    traffic.take(t);
     c = spawnCar(scene, t.type, t.color, t.x, t.z, t.h);
-    c.vx = Math.sin(t.h) * t.speed * 0.3; c.vz = Math.cos(t.h) * t.speed * 0.3;
     cars.push(c);
-    hud.toast("🚗 Car jacked", 1.6);
+    hud.toast(t.type === "motorbike" ? "🏍️ Bike jacked" : "🚗 Hijacked", 1.6);
     crowd.scare(t.x, t.z, 12, 4);
     if (crime.units.some(u => u.active && crime.los(u.x, u.z, t.x, t.z))) crime.addCrime(1);
+    if (hijack.start(t, c)) return;                 // the drag-out plays first, then you climb in
   }
   if (n.park) {                                     // break into a parked one
     const t = n.park; parked.take(t);
@@ -511,8 +520,9 @@ function update(dt) {
   time += dt;
   hud.update(dt);
   const inp = pollInput();
-  // mid get-in or get-out routine: hands off the controls until you're settled
+  // mid get-in or get-out routine, or dragging someone out: hands off the controls
   if ((P.car && doors.busy(P.car)) || (!P.car && doors.leaving())) { inp.mx = 0; inp.mz = 0; }
+  if (hijack.active()) { inp.mx = 0; inp.mz = 0; inp.action = false; inp.fire = false; }
   if (photoMode) { inp.mx = 0; inp.mz = 0; inp.action = false; inp.fire = false; inp.fireHeld = false; inp.jump = false; }
   if (state.phase === "play") {
     if (P.car) {
@@ -630,7 +640,7 @@ function update(dt) {
     }
   }
   fx.update(dt);
-  props.update(dt, time); haptics(dt); doors.update(dt);
+  props.update(dt, time); haptics(dt); doors.update(dt); hijack.update(dt);
   if (greyT > 0) { greyT -= dt; R.grade.uSat.value = 1.1 - Math.min(1, greyT) * 0.95; } else R.grade.uSat.value = 1.1;
   crowd.update(dt, time, focus.x, focus.z, hz);
   traffic.update(dt, time, [P.car ? { x: P.car.x, z: P.car.z, car: true } : { x: focus.x, z: focus.z, car: false }]);
@@ -697,10 +707,12 @@ function render() {
     if (P.danceT > 0 && P.speed < 0.3) over = { armL: -2.3 + Math.sin(time * 5) * 0.6, armR: -2.1 - Math.sin(time * 5) * 0.6, elbowL: -0.7, elbowR: -0.7, thighL: Math.max(0, Math.sin(time * 5)) * -0.5, thighR: Math.max(0, -Math.sin(time * 5)) * -0.5, kneeL: Math.max(0, Math.sin(time * 5)) * 0.8, kneeR: Math.max(0, -Math.sin(time * 5)) * 0.8 };
     const hands = !P.swim && combat.hands();
     if (hands) over = Object.assign({}, over || {}, hands);
+    const hj = hijack.playerPose(); if (hj) over = hj;
     poseOnFoot(P, time, over);
   }
   camera.updateMatrixWorld(); setView(camera);
   crowd.render(camera.position.x * 0.5 + focus.x * 0.5, camera.position.z * 0.5 + focus.z * 0.5, camera);
+  hijack.render(performance.now() / 1000);
   traffic.render(focus.x, focus.z, sky.state.night);
   parked.render(focus.x, focus.z);
   city.update(time, sky.state.night);
@@ -736,7 +748,7 @@ function render() {
     hud.buttons(!!P.car, !!near, wlab || actLabel, P.car && P.car.kind);
     if (wlab) hud.prompt(wlab === "CAST" ? "🎣 Stopped on the water — <b>CAST</b> a line" : wlab === "DIVE" ? "💰 Something glitters below — <b>DIVE</b>" : "🎣 Wait for the bite, then <b>REEL</b>");
     const key = I.touch ? "Tap" : "Press <b>E</b>";
-    hud.prompt(actPrompt ? (actLabel ? actPrompt + (I.touch ? "" : " · <b>E</b>") : actPrompt) : (!P.car && near ? (I.touch ? "Tap <b>DRIVE</b> to get in" : "Press <b>E</b> to drive") : ""));
+    hud.prompt(actPrompt ? (actLabel ? actPrompt + (I.touch ? "" : " · <b>E</b>") : actPrompt) : (!P.car && near ? (near.traf ? (I.touch ? "Tap <b>DRIVE</b> to hijack the " : "Press <b>E</b> to hijack the ") + near.traf.type : near.park ? (I.touch ? "Tap <b>DRIVE</b> to break into the " : "Press <b>E</b> to break into the ") + near.park.type : (I.touch ? "Tap <b>DRIVE</b> to get in" : "Press <b>E</b> to drive")) : ""));
     hud.level(st.lvl, st.xp, xpNeed(st.lvl), eco.incomeRate());
     hud.comboTick(combat.S.rampT);
     const w = combat.current();
@@ -776,7 +788,7 @@ requestAnimationFrame(frame);
 
 // debug / test hooks
 globalThis.__pc2 = {
-  THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, P, cars, state, rig, I,
+  THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, hijack, P, cars, state, rig, I,
   interior, props, skids, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },

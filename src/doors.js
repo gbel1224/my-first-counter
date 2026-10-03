@@ -90,13 +90,13 @@ export function makeDoors() {
     return (c.door = pivot);
   }
   // kind: "in" or "out"
-  function play(c, kind) {
+  function play(c, kind, startT = 0) {
     const style = styleOf(c);
     if (!style) return;
     const R = routine(style, c);
     for (const a of anims) if (a.c === c) a.t = 99;
     if (style !== "bike" && !(c.doors && (c.doors.FL || c.doors.BA)) && c.body) R.standIn = standIn(c);
-    anims.push({ c, kind, style, R, t: 0 });
+    anims.push({ c, kind, style, R, t: startT });
   }
   const doorAng = (w, t, OPEN) => {                  // open, hold, shut with a little bounce
     const [a, b, c2, d] = w;
