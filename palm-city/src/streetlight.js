@@ -19,8 +19,12 @@ const P = { k: 0, ox: 0, oz: 0, inv: 0 };
 // they compile, but this they share by reference, so turning the lamps up reaches all of them
 const PARAM = { get x() { return P.k; }, get y() { return P.ox; }, get z() { return P.oz; }, get w() { return P.inv; } };
 
+// headlights of the nearest traffic: [x, z, dirX * I, dirZ * I] each. A typed array is shared
+// by reference too, so filling it each frame reaches every material
+const HL = new Float32Array(6 * 4);
+
 THREE.ShaderChunk.lights_pars_begin += `
-uniform sampler2D uSLMap; uniform vec4 uSLParam;
+uniform sampler2D uSLMap; uniform vec4 uSLParam; uniform vec4 uHL[ 6 ];
 `;
 THREE.ShaderChunk.lights_fragment_end = `
 #if defined( RE_Direct )
@@ -44,14 +48,46 @@ if ( uSLParam.x > 0.001 ) {
       slLight.direction = normalize( mat3( viewMatrix ) * slL );
       slLight.visible = true;
       RE_Direct( slLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+      // lamplight doesn't only fall straight down: it bounces off the pavement and the walls, so
+      // a body, a face or a car door standing in a pool is lit all round, a little from below too
+      vec3 slAmb = vec3( 1.0, 0.78, 0.52 ) * ( slS.r * slS.r * 2.0 * uSLParam.x * slFade );
+      vec3 slNw = geometryNormal * mat3( viewMatrix );
+      reflectedLight.indirectDiffuse += slAmb * ( 0.34 - 0.28 * max( slNw.y, 0.0 ) ) * BRDF_Lambert( material.diffuseColor ) * 3.14159;
+      #ifdef STANDARD
+        // and every shiny thing (paint, clearcoat, chrome, glass) shows a warm sheen of it
+        reflectedLight.indirectSpecular += slAmb * 0.32 * EnvironmentBRDF( geometryNormal, geometryViewDir, material.specularColor, material.specularF90, material.roughness );
+        #ifdef USE_CLEARCOAT
+          clearcoatSpecularIndirect += slAmb * 0.32 * EnvironmentBRDF( geometryClearcoatNormal, geometryViewDir, material.clearcoatF0, material.clearcoatF90, material.clearcoatRoughness );
+        #endif
+      #endif
     }
+  }
+  // the traffic's headlights: a cone of light ahead of each of the nearest cars
+  for ( int i = 0; i < 6; i ++ ) {
+    vec4 hl = uHL[ i ];
+    float hI = length( hl.zw );
+    if ( hI < 0.01 ) continue;
+    vec2 hd = hl.zw / hI;
+    vec3 hv = slW - vec3( hl.x, 0.75, hl.y );
+    float along = dot( hv.xz, hd );
+    if ( along < 0.2 || along > 48.0 ) continue;
+    float lat = abs( hv.x * hd.y - hv.z * hd.x );
+    float cone = 1.0 - smoothstep( along * 0.16 + 0.7, along * 0.4 + 1.6, lat );
+    float hd2 = dot( hv, hv );
+    float fall = ( 1.0 - smoothstep( 32.0, 48.0, along ) ) * ( 1.0 - smoothstep( 2.5, 5.0, hv.y ) );
+    if ( cone * fall < 0.002 ) continue;
+    IncidentLight hLight;
+    hLight.color = vec3( 1.0, 0.95, 0.86 ) * ( hI * 60.0 * cone * fall / ( hd2 + 6.0 ) );
+    hLight.direction = normalize( mat3( viewMatrix ) * ( - hv ) );
+    hLight.visible = true;
+    RE_Direct( hLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
   }
 }
 #endif
 ` + THREE.ShaderChunk.lights_fragment_end;
 for (const k of ["lambert", "phong", "standard", "physical", "toon"]) {
   const u = THREE.ShaderLib[k] && THREE.ShaderLib[k].uniforms;
-  if (u) { u.uSLMap = { value: tex }; u.uSLParam = { value: PARAM }; }
+  if (u) { u.uSLMap = { value: tex }; u.uSLParam = { value: PARAM }; u.uHL = { value: HL }; }
 }
 
 // bake the lamps (heads as [x, y, z]) into the map; must run before the first frame is drawn
@@ -89,3 +125,12 @@ export function bakeStreetLights(heads, half) {
 
 // how bright the lamps are now (0 by day)
 export function setStreetLights(k) { P.k = k; }
+
+// the nearest cars with their lights on: [{ x, z, h }] (front bumper position, heading); I is brightness
+export function setHeadlights(list, I) {
+  HL.fill(0);
+  for (let n = 0; n < Math.min(6, list.length); n++) {
+    const c = list[n];
+    HL[n * 4] = c.x; HL[n * 4 + 1] = c.z; HL[n * 4 + 2] = Math.sin(c.h) * I; HL[n * 4 + 3] = Math.cos(c.h) * I;
+  }
+}
