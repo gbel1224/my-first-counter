@@ -21,6 +21,7 @@ const spacing = +(q.get("sp") || 5.4);
 types.forEach((t, i) => { const c = makeCar(t, carSpec(t).paint || cols[i % cols.length]);
   if (q.get("door")) for (const k of q.get("door").split(",")) c.openDoor(k, +(q.get("ang") || 1.0));
   if (q.get("lamps")) { const [b, h, ind, rv] = q.get("lamps").split(",").map(Number); c.setLamps(b, h, ind, rv); }
+  if (q.get("hide")) for (const o of c.chassis.children) if (o.isMesh && !o.isInstancedMesh && q.get("hide").split(",").includes(o.material === c.body.material ? "paint" : o.material.name || o.material.type)) o.visible = false;
   if (q.get("alldoors")) for (const k in c.doors) c.openDoor(k, +(q.get("ang") || 1.0)); c.group.position.set((i - (types.length - 1) / 2) * spacing, 0, 0); c.group.rotation.y = +(q.get("ry") || 0.6); scene.add(c.group); });
 const cam = new THREE.PerspectiveCamera(+(q.get("fov") || 30), W / Hh, 0.1, 200);
 cam.position.set(+(q.get("cx") || 0), +(q.get("cy") || 4), +(q.get("cz") || 18)); cam.lookAt(+(q.get("cx") || 0), +(q.get("ly") || 0.8), 0);
