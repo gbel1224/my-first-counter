@@ -535,7 +535,10 @@ function update(dt) {
       // shunt traffic you hit
       for (const t of traffic.cars) {
         if (!t.alive) continue;
-        const dx = t.x - c.x, dz = t.z - c.z, d2 = dx * dx + dz * dz;
+        // the nearest point along the other vehicle's length (a bus is long, not round)
+        const hl = Math.max(0, (t.len || 4.6) / 2 - 1.5), fx = Math.sin(t.h), fz = Math.cos(t.h);
+        const along = Math.max(-hl, Math.min(hl, (c.x - t.x) * fx + (c.z - t.z) * fz));
+        const dx = t.x + fx * along - c.x, dz = t.z + fz * along - c.z, d2 = dx * dx + dz * dz;
         if (d2 < 9) {
           const d = Math.sqrt(d2) || 1, nx = dx / d, nz = dz / d, rel = c.vx * nx + c.vz * nz;
           if (rel > 0) { c.vx -= nx * rel * 1.2; c.vz -= nz * rel * 1.2; t.stun = 2.5; t.speed = 0; if (rel > 5) { rig.shake = Math.min(1, rel / 20); AudioSys.play("door", 0.8, 0.5); combat.damageCar(t, rel * 2, "traffic"); combat.damageCar(c, rel * 0.8, "player"); } }

@@ -4,8 +4,23 @@
 import * as THREE from "../vendor/three.module.js";
 import { inView } from "./cull.js";
 import { N, ROAD, CELL, HALF, roadC, clamp, lerp, mulberry32 } from "./world.js";
-import { CAR_TYPES, carGeometries, MAT, PAINTS, REAL_PAINTS, lampGeometry } from "./cars.js";
+import { CAR_TYPES, carGeometries, carSpec, MAT, PAINTS, REAL_PAINTS, lampGeometry } from "./cars.js";
 
+// the mix on the road: mostly everyday cars, some pickups, vans and taxis, a few trucks and buses
+const MIX = { sedan: 22, compact: 16, suv: 14, pickup: 10, van: 7, taxi: 8, coupe: 5, sports: 5, truck: 4, bus: 3 };
+function pickType(r, parked) {
+  const keys = Object.keys(MIX).filter(k => !(parked && (k === "bus" || k === "truck")));
+  let t = r() * keys.reduce((a, k) => a + MIX[k], 0);
+  for (const k of keys) { t -= MIX[k]; if (t <= 0) return k; }
+  return keys[0];
+}
+// a vehicle's paint: real-world colours; taxis yellow; buses in the city's livery
+const BUS_PAINT = [0xe8e6dc, 0x1f5a8a, 0xc8302a];
+function pickPaint(r, type) {
+  if (type === "taxi") return 0xf2c200;
+  if (type === "bus") return BUS_PAINT[(r() * BUS_PAINT.length) | 0];
+  return REAL_PAINTS[(r() * REAL_PAINTS.length) | 0];
+}
 const LOD_D = 55;   // past this, cars are drawn from the lighter far geometry
 // one instanced mesh per car part (paint / glass / trim / lights) per type
 function carMeshes(scene, max, far) {
@@ -43,13 +58,12 @@ export class Traffic {
       const axis = r() < 0.5 ? "x" : "z", dir = r() < 0.5 ? 1 : -1;
       const road = 1 + ((r() * (N - 1)) | 0);
       const lane = r() < 0.5 ? 0 : 1;
-      const type = CAR_TYPES[(r() * CAR_TYPES.length) | 0];
+      const type = pickType(r, false);
       const c = {
-        type, color: REAL_PAINTS[(r() * REAL_PAINTS.length) | 0], axis, dir, road, lane,
-        s: -HALF + 30 + r() * (HALF * 2 - 60), speed: 0, vmax: 10 + r() * 5, brake: false,
+        type, color: pickPaint(r, type), axis, dir, road, lane, len: carSpec(type).len, wid: carSpec(type).wid,
+        s: -HALF + 30 + r() * (HALF * 2 - 60), speed: 0, vmax: (carSpec(type).big ? 8 : 10) + r() * 5, brake: false,
         turn: null, x: 0, z: 0, h: 0, stun: 0, alive: true, honk: 0,
       };
-      if (type === "sedan" && r() < 0.25) c.color = 0xffc93c;   // taxis
       this.syncPos(c);
       this.cars.push(c);
     }
@@ -130,7 +144,8 @@ export class Traffic {
         for (const o of a) {
           if (o === c) continue;
           const dx = o.x - c.x, dz = o.z - c.z, ahead = dx * fx + dz * fz, side = Math.abs(dx * fz - dz * fx);
-          if (ahead > 0 && ahead < gap && side < 2.2) gap = ahead;
+          const eff = ahead - ((o.len || 4.6) + (c.len || 4.6)) / 2 + 4.6;   // bumper to bumper, as if both were cars
+          if (ahead > 0 && eff < gap && side < 2.2) gap = eff;
         }
       }
       for (const p of player) {
@@ -251,9 +266,9 @@ export class Parked {
         for (let s = s0; s < s1; s += 6.4) {
           if (r() > fill) continue;
           const off = side * 6.95, cl = roadC(i) + off;
-          const type = CAR_TYPES[(r() * CAR_TYPES.length) | 0];
+          const type = pickType(r, true);
           const jitter = (r() - 0.5) * 0.6;
-          const c = { type, color: REAL_PAINTS[(r() * REAL_PAINTS.length) | 0], alive: true };
+          const c = { type, color: pickPaint(r, type), alive: true };
           if (axis === "z") { c.x = cl + (r() - 0.5) * 0.15; c.z = s + jitter; c.h = side < 0 ? 0 : Math.PI; }
           else { c.x = s + jitter; c.z = cl + (r() - 0.5) * 0.15; c.h = side > 0 ? Math.PI / 2 : -Math.PI / 2; }
           c.h += (r() - 0.5) * 0.04;
@@ -286,7 +301,8 @@ export class Parked {
     let impact = 0;
     for (const c of this.around(v.x, v.z)) {
       const fx = Math.sin(c.h), fz = Math.cos(c.h);
-      for (const o of [-1.1, 1.1]) {
+      const hl = carSpec(c.type).len / 2 - 1.2;      // circles along the parked car's length
+      for (const o of [-hl, hl]) {
         const cx = c.x + fx * o, cz = c.z + fz * o;
         const dx = v.x - cx, dz = v.z - cz, d2 = dx * dx + dz * dz, R = 2.05;
         if (d2 > R * R || d2 < 1e-6) continue;

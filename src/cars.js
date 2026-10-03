@@ -39,7 +39,49 @@ const TYPES = {
     zones: { rear: [-2.26, -2.05], ws: [0.6, 1.45], b: -0.35 },
     accel: 14, top: 46, grip: 7.0, turn: 2.2,
   },
+  // a muscle car: long bonnet, short deck, fastback glass
+  coupe: {
+    len: 4.75, wid: 1.92, wheelR: 0.36, wb: 2.8, ride: 0.13, mass: 1.2,
+    roof: [[-2.37, 0.84], [-2.28, 0.99], [-1.75, 1.01], [-1.2, 1.04], [-0.45, 1.3], [0.3, 1.32], [1.05, 0.94], [1.95, 0.9], [2.37, 0.72]],
+    belt: [[-2.37, 0.82], [-2.1, 0.97], [-1.2, 0.99], [1.05, 0.92], [1.95, 0.88], [2.37, 0.7]],
+    zones: { rear: [-1.2, -0.45], ws: [0.3, 1.05], b: 99 },
+    accel: 22, top: 60, grip: 8.2, turn: 2.35,
+  },
+  // a crew-cab pickup: the cab, then a covered bed behind it
+  pickup: {
+    len: 5.3, wid: 2.0, wheelR: 0.42, wb: 3.3, ride: 0.32, mass: 1.6, bed: [-2.65, -0.78],
+    roof: [[-2.65, 1.28], [-0.82, 1.3], [-0.74, 1.86], [-0.55, 1.95], [0.45, 1.97], [1.15, 1.32], [2.2, 1.22], [2.65, 1.0]],
+    belt: [[-2.65, 1.26], [-0.82, 1.28], [1.15, 1.27], [2.2, 1.2], [2.65, 0.98]],
+    zones: { rear: [-0.74, -0.6], ws: [0.45, 1.15], b: 0.22 },
+    accel: 15, top: 46, grip: 7.2, turn: 2.1,
+  },
+  // a people-carrier van: tall, glass all down the side
+  van: {
+    len: 5.2, wid: 2.0, wheelR: 0.38, wb: 3.3, ride: 0.2, mass: 1.6,
+    roof: [[-2.6, 1.9], [-2.56, 2.2], [-2.45, 2.28], [1.15, 2.3], [1.9, 1.38], [2.4, 1.15], [2.6, 0.95]],
+    belt: [[-2.6, 1.28], [-2.45, 1.32], [1.9, 1.3], [2.4, 1.12], [2.6, 0.93]],
+    zones: { rear: [-2.56, -2.45], ws: [1.15, 1.9], b: 0.55 },
+    accel: 12, top: 40, grip: 6.6, turn: 2.0,
+  },
+  // a city bus: long, flat-roofed, a raked glass front and a row of window pillars
+  bus: {
+    len: 11, wid: 2.5, wheelR: 0.5, wb: 6.3, ride: 0.3, mass: 3.5, noDoors: true, pillarPitch: 1.3, big: true,
+    roof: [[-5.5, 2.6], [-5.32, 3.02], [4.75, 3.05], [5.5, 1.35]],
+    belt: [[-5.5, 1.3], [-5.32, 1.35], [4.75, 1.3], [5.5, 1.25]],
+    zones: { rear: [-5.32, -5.31], ws: [4.75, 5.48], b: 99 },
+    accel: 7, top: 28, grip: 6, turn: 1.3,
+  },
+  // a box truck: a cab up front, a cargo box on the back
+  truck: {
+    len: 7.4, wid: 2.4, wheelR: 0.48, wb: 4.4, ride: 0.36, mass: 3, noDoors: true, big: true, box: [-3.65, 0.85, 3.45],
+    roof: [[-3.7, 1.22], [0.88, 1.24], [1.0, 2.55], [1.15, 2.72], [2.55, 2.78], [3.35, 1.92], [3.7, 1.38]],
+    belt: [[-3.7, 1.2], [0.88, 1.22], [3.35, 1.58], [3.7, 1.36]],
+    zones: { rear: [1.0, 1.15], ws: [2.55, 3.35], b: 99 },
+    accel: 8, top: 32, grip: 6.4, turn: 1.5,
+  },
 };
+// a taxi is a sedan with a roof sign and yellow paint
+TYPES.taxi = { ...TYPES.sedan, sign: true, paint: 0xf2c200 };
 // the roof's height (police light bars sit on it); `cabin` keeps the old shape for older callers
 for (const T of Object.values(TYPES)) {
   T.roofY = Math.max(...T.roof.map(p => p[1]));
@@ -55,6 +97,12 @@ function curve(pts) {
   for (let i = 0; i < n - 1; i++) d.push((pts[i + 1][1] - pts[i][1]) / (pts[i + 1][0] - pts[i][0]));
   m[0] = d[0]; m[n - 1] = d[n - 2];
   for (let i = 1; i < n - 1; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
+  // Fritsch-Carlson: keep each piece's tangents in check so the curve never bulges past its points
+  for (let i = 0; i < n - 1; i++) {
+    if (d[i] === 0) { m[i] = m[i + 1] = 0; continue; }
+    const a = m[i] / d[i], b = m[i + 1] / d[i], h = a * a + b * b;
+    if (h > 9) { const t = 3 / Math.sqrt(h); m[i] = t * a * d[i]; m[i + 1] = t * b * d[i]; }
+  }
   return z => {
     if (z <= pts[0][0]) return pts[0][1];
     if (z >= pts[n - 1][0]) return pts[n - 1][1];
@@ -99,6 +147,7 @@ function lofted(T, lod = 0) {
   if (!lod) for (const zz of seams) zs.push(zz - 0.03, zz - 0.008, zz + 0.008, zz + 0.03);
   const side0 = Z.rear[0] + (Z.rear[1] - Z.rear[0]) * (T.len > 4.7 ? 0.15 : 0.5), side1 = Z.ws[1] - 0.12;
   for (const zz of [Z.ws[0], Z.ws[1], Z.rear[0], Z.rear[1], side0, side1, Z.b - 0.06, Z.b + 0.06]) if (Math.abs(zz) < L / 2) zs.push(zz);
+  if (T.pillarPitch && !lod) for (let zz = side0; zz < side1; zz += T.pillarPitch) zs.push(zz + 0.0005, zz + 0.0895);   // window pillar edges
   zs.sort((a, b) => a - b);
   const isSeam = z => !lod && seams.some(zz => Math.abs(z - zz) < 0.0085);
   // control points of a half section (x >= 0), row index 0..9
@@ -161,6 +210,7 @@ function lofted(T, lod = 0) {
     if (row >= 5.25 && row <= 7.75) {
       if (z < side0 || z > side1) return false;                                 // side glass: rear pillar to A-pillar
       if (Math.abs(z - Z.b) < 0.06) return false;                               // B-pillar
+      if (T.pillarPitch && ((z - side0) % T.pillarPitch) < 0.09) return false;    // a bus's row of window pillars
       const tp = top(z), bl = belt(z); return tp - bl > 0.16;
     }
     return false;
@@ -168,14 +218,14 @@ function lofted(T, lod = 0) {
   const shade = (z, row) => {
     if (row <= 1.2) return 0.16;                                                 // plastic sills / belly
     if (row <= 4.6 && isSeam(z)) return 0.22;                                    // door shut-lines
-    if (Math.abs(z) > L / 2 - 0.1 && row <= 3.5) return 0.2;                      // bumper lower lips
+    if (T.bed && z > T.bed[0] && z < T.bed[1] && row >= 7.9) return 0.16;         // pickup bed cover
     return 1;
   };
   const out = { paint: [[], [], []], glass: [[], [], []] };
   // the doors: panels between the shut-lines, from the sill up to the window frame, each side.
   // Front doors hinge at their front edge; two-door cars have one long door a side.
   const zF = seams[0], zR = seams[seams.length - 1], twoDoor = Z.b >= 50;
-  const doorDefs = lod ? [] : [
+  const doorDefs = lod || T.noDoors ? [] : [
     { k: "F", z0: twoDoor ? zR : Z.b, z1: zF },
     ...(twoDoor ? [] : [{ k: "R", z0: zR, z1: Z.b }]),
   ];
@@ -205,8 +255,8 @@ function lofted(T, lod = 0) {
       const a = i * M + j, b = i * M + (j + 1) % M;
       const t = out.paint;
       for (const tri of [[a, b], [b, a]]) {          // both windings: the cap shows whichever way it's built
-        for (const v of tri) { t[0].push(P[v * 3], P[v * 3 + 1], P[v * 3 + 2]); t[1].push(0, 0, dir); const s = ROW[v] <= 3.5 ? 0.2 : 1; t[2].push(s, s, s); }
-        t[0].push(cx, cy, zc); t[1].push(0, 0, dir); t[2].push(0.6, 0.6, 0.6);
+        for (const v of tri) { t[0].push(P[v * 3], P[v * 3 + 1], P[v * 3 + 2]); t[1].push(0, 0, dir); const s = ROW[v] <= 1.2 ? 0.16 : 1; t[2].push(s, s, s); }
+        t[0].push(cx, cy, zc); t[1].push(0, 0, dir); t[2].push(1, 1, 1);
       }
     }
   }
@@ -246,6 +296,14 @@ function wheelParts(R, w, sx, x, y, z, rimCol, rimMetal = 0.65) {
   return parts;
 }
 
+function cargoBox(T) {
+  const [b0, b1, bh] = T.box, bl = b1 - b0, y0 = 1.24, out = [];
+  out.push(place(paint(new THREE.BoxGeometry(T.wid, bh - y0, bl), 0xe6e6e2, 0.2), 0, (bh + y0) / 2, (b0 + b1) / 2));
+  out.push(place(paint(new THREE.BoxGeometry(T.wid + 0.02, 0.07, bl + 0.02), 0x9a9a96, 0.6), 0, bh, (b0 + b1) / 2));
+  for (const sx of [-1, 1]) out.push(place(paint(new THREE.BoxGeometry(0.03, bh - y0, 0.06), 0x9a9a96, 0.6), sx * T.wid / 2, (bh + y0) / 2, b0 + 0.03));
+  for (let k = 0; k < 7; k++) out.push(place(paint(new THREE.BoxGeometry(T.wid * 0.92, 0.018, 0.012), 0xb4b4b0, 0.3), 0, y0 + 0.12 + k * (bh - y0 - 0.2) / 6, b0 - 0.007));
+  return out;
+}
 // a far-away car: the same shape from fewer sections, plain wheels, no small parts
 function farGeometries(type) {
   const T = TYPES[type], body = lofted(T, 1), fz = T.wb / 2, R = T.wheelR, bz = T.len / 2;
@@ -259,12 +317,14 @@ function farGeometries(type) {
   }
   const yf = body.belt(bz - 0.15);
   trim.push(place(paint(new THREE.BoxGeometry(T.wid * 0.5, 0.16, 0.05), 0x101011), 0, yf - 0.2, bz - 0.008));
+  if (T.box) trim.push(...cargoBox(T));
   const Lg = [];
   for (const sx of [-1, 1]) {
     Lg.push(place(paint(new THREE.BoxGeometry(0.36, 0.1, 0.05), 0xfff4e2, 1), sx * (body.plan(bz - 0.1) - 0.27), yf - 0.08, bz - 0.03, 0, sx * 0.3, 0));
     Lg.push(place(paint(new THREE.BoxGeometry(0.4, 0.1, 0.05), 0xff1e1e, 2), sx * (body.plan(-bz + 0.1) - 0.27), body.belt(-bz + 0.15) - 0.07, -bz + 0.03, 0, -sx * 0.25, 0));
     Lg.push(place(paint(new THREE.BoxGeometry(0.08, 0.05, 0.05), 0xffa31a, sx > 0 ? 3 : 4), sx * (body.plan(-bz + 0.1) - 0.1), body.belt(-bz + 0.15) - 0.15, -bz + 0.03));
   }
+  if (T.sign) Lg.push(place(paint(new THREE.BoxGeometry(0.5, 0.13, 0.16), 0xffd23a, 6), 0, T.roofY + 0.14, (T.zones.ws[0] + T.zones.rear[1]) / 2));
   return { paint: body.paint, glass: body.glass, trim: merge(trim), lights: merge(Lg), spec: T };
 }
 const cache = {}, farCache = {};
@@ -304,7 +364,6 @@ export function carGeometries(type, far = false) {
   trim.push(place(paint(new THREE.BoxGeometry(gW, gH, 0.05), 0x101011, 0.3), 0, yf - 0.12 - gH / 2, bz - 0.008));
   trim.push(place(paint(new THREE.BoxGeometry(gW + 0.04, 0.02, 0.055), 0xd8dce2, 1), 0, yf - 0.12, bz - 0.004));
   for (let k = 1; k < 4; k++) trim.push(place(paint(new THREE.BoxGeometry(gW - 0.02, 0.008, 0.055), 0x8a8e94, 0.9), 0, yf - 0.12 - gH * k / 4, bz - 0.004));
-  trim.push(place(paint(new THREE.BoxGeometry(gW * 1.2, 0.08, 0.05), 0x0d0d0e), 0, T.ride + 0.2, bz - 0.012));
   const plate = (zz, sgn) => {
     trim.push(place(paint(new THREE.BoxGeometry(0.52, 0.12, 0.012), 0xe8e6dc), 0, T.ride + 0.33, zz + sgn * 0.006));
     trim.push(place(paint(new THREE.BoxGeometry(0.42, 0.05, 0.004), 0x22314a), 0, T.ride + 0.33, zz + sgn * 0.013));
@@ -344,8 +403,10 @@ export function carGeometries(type, far = false) {
     const zf = Z.rear[1] - 0.25;
     if (zf > Z.rear[0]) { const fin = new THREE.CylinderGeometry(0.0, 0.035, 0.07, 4, 1); fin.scale(0.5, 1, 2.2); trim.push(place(paint(fin, 0x0c0c0d, 0.3), 0, body.top(zf) + 0.035, zf)); }
     if (type === "compact" || type === "suv") trim.push(place(paint(new THREE.BoxGeometry(0.34, 0.012, 0.018), 0x0c0c0d, 0.3), 0, (body.top(Z.rear[0]) + body.top(Z.rear[1])) / 2 - 0.12, (Z.rear[0] + Z.rear[1]) / 2 + 0.02, -0.6, 0, 0));
-    for (const sx of [-1, 1]) trim.push(place(paint(new THREE.BoxGeometry(0.16, 0.08, 0.03), 0x111112, 0.3), sx * body.plan(bz - 0.1) * 0.62, T.ride + 0.3, bz - 0.03));
   }
+  // a box truck's cargo box (with a roller door's ribs at the back); a taxi's roof sign base
+  if (T.box) trim.push(...cargoBox(T));
+  if (T.sign) trim.push(place(paint(new THREE.BoxGeometry(0.62, 0.05, 0.24), 0x111112, 0.3), 0, T.roofY + 0.05, (Z.ws[0] + Z.rear[1]) / 2));
   // the cabin, seen through the glass and the open door: floor, inner sides, dash, wheel, seats,
   // all fitted under this car's own roofline
   const cab = [];
@@ -353,7 +414,7 @@ export function carGeometries(type, far = false) {
   const fourDoor = Z.b < 50, z1 = Z.ws[1] - 0.08, fl = T.ride + 0.22;
   const zfs = fourDoor ? Z.b + 0.28 : Z.ws[1] - 1.05;                          // front seats (their cushion's middle)
   const zrs = fourDoor ? Z.b - 0.62 : null;                                    // rear bench
-  const z0 = Math.max(-L / 2 + 0.45, (fourDoor ? zrs : zfs) - 0.5);             // the back of the cabin
+  const z0 = type === "bus" ? -L / 2 + 0.4 : Math.max(-L / 2 + 0.45, (fourDoor ? zrs : zfs) - 0.5);   // the back of the cabin
   const zc = (z0 + z1) / 2, cl = z1 - z0, iw = Math.min(body.plan(zc), body.plan(z1)) * 1.8;
   const head = z => body.top(z) - 0.1 - fl;                                     // headroom above the floor here
   cab.push(place(paint(new THREE.BoxGeometry(iw, 0.04, cl), IN), 0, fl, zc));
@@ -378,6 +439,10 @@ export function carGeometries(type, far = false) {
     cab.push(place(paint(new THREE.BoxGeometry(iw * 0.86, hh * 0.55, 0.11), SEAT), 0, fl + hh * 0.6, zrs - 0.27, -0.12, 0, 0));
   }
   cab.push(place(paint(new THREE.BoxGeometry(iw, Math.max(0.1, body.belt(z0) - fl - 0.06), 0.04), IN), 0, (fl + body.belt(z0) - 0.06) / 2, z0));   // behind the seats
+  if (type === "bus") for (let z = zfs - 1.4; z > -L / 2 + 0.9; z -= 0.92) for (const sx of [-1, 1]) {   // rows of passenger seats
+    cab.push(place(paint(new THREE.BoxGeometry(0.85, 0.12, 0.44), 0x2a3a5a), sx * iw * 0.27, fl + 0.42, z));
+    cab.push(place(paint(new THREE.BoxGeometry(0.85, 0.55, 0.08), 0x2a3a5a), sx * iw * 0.27, fl + 0.72, z - 0.24, -0.12, 0, 0));
+  }
   const trimGeo = merge([...trim, ...cab, ...Object.values(handles).flat()]);
   const trimBody = merge([...trim, ...cab]);
   // lights: headlamps swept round the front corners, tail lamps wrapping onto the flanks, a high stop lamp
@@ -400,6 +465,7 @@ export function carGeometries(type, far = false) {
     Lg.push(place(paint(new THREE.BoxGeometry(0.1, 0.04, 0.03), 0xf4f4f4, 5), sx * (hwr - (type === "suv" ? 0.3 : 0.5)), type === "suv" ? ty - 0.1 : ty - 0.01, -bz + 0.04, 0, -sx * 0.1, 0));   // reversing lamps
   }
   Lg.push(place(paint(new THREE.BoxGeometry(0.3, 0.025, 0.02), 0xff1e1e, 7), 0, body.top(Z.rear[0] + 0.03) - 0.03, Z.rear[0] + 0.02));
+  if (T.sign) Lg.push(place(paint(new THREE.BoxGeometry(0.5, 0.13, 0.16), 0xffd23a, 6), 0, T.roofY + 0.14, (Z.ws[0] + Z.rear[1]) / 2));
   const lights = merge(Lg);
   // for a single car (the player's): the body without its doors, and each door on its own
   const split = { paint: bodyPaint, glass: body.glass, trim: trimBody, doors: {} };
@@ -423,8 +489,8 @@ function lampMaterial() {
       { float k = floor(vKind + 0.5), brake = vLamp.x, head = vLamp.y, ind = vLamp.z, rev = vLamp.w;
         float blink = step(0.5, fract(uTime * 1.5)), m = 1.0;
         bool plusX = (ind > 0.5 && ind < 1.5) || ind > 2.5, minusX = ind > 1.5;
-        if (k == 1.0) m = 0.2 + head * 4.5;
-        else if (k == 2.0) m = 0.28 + head * 1.1 + brake * 4.2;
+        if (k == 1.0) m = 0.8 + head * 4.0;            // clear lenses by day, bright at night
+        else if (k == 2.0) m = 0.5 + head * 0.9 + brake * 4.0;
         else if (k == 3.0) m = 0.14 + (plusX ? blink * 5.5 : 0.0);
         else if (k == 4.0) m = 0.14 + (minusX ? blink * 5.5 : 0.0);
         else if (k == 5.0) m = 0.12 + rev * 3.5;
