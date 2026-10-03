@@ -13,7 +13,7 @@ import { initInput, pollInput, I } from "./input.js";
 import { createHUD, askConfirm } from "./hud.js";
 import { makeProps } from "./props.js";
 import { makeSkids } from "./skid.js";
-import { makeDoors } from "./doors.js";
+import { makeDoors, seatPose } from "./doors.js";
 import { createPlayer, updatePlayerOnFoot, poseOnFoot, spawnCar, syncCar, driveStep, createCamRig, updateCam } from "./play.js";
 import { makeCharacter } from "./people.js";
 import { setExpr, HAIR_U } from "./face.js";
@@ -485,16 +485,18 @@ function enterCar(n) {
     cars.push(c);
     hud.toast("🔓 Hot-wired a parked " + t.type, 2.0);
   }
-  P.car = c; P.ch.group.visible = !!(c.kind === "bike" || c.kind === "jetski");
+  P.car = c; P.ch.group.visible = true;
   AudioSys.play("door", 0.7); doors.play(c, "in");
   if (c.kind === "heli") hud.toast("🚁 ▲ (Shift) to lift off, ▼ (Space) to descend · stick flies", 3.5);
   if (c.kind === "plane") hud.toast("✈️ Push forward to build speed, hold ▲ (Shift) to take off", 3.5);
 }
 function exitCar() {
   const c = P.car;
-  // step out on the driver's side (left of the heading)
-  const lx = Math.cos(c.h), lz = -Math.sin(c.h);
-  P.x = c.x + lx * 1.9; P.z = c.z + lz * 1.9; P.yaw = c.h; P.speed = 0;
+  // step out where the get-in routine starts: the driver's side (the bus: its door, kerb side)
+  const spot = doors.exitSpot(c);
+  if (spot) { P.x = spot.x; P.z = spot.z; P.yaw = spot.yaw; }
+  else { const lx = Math.cos(c.h), lz = -Math.sin(c.h); P.x = c.x + lx * 1.9; P.z = c.z + lz * 1.9; P.yaw = c.h; }
+  P.speed = 0;
   const res = collider.resolve(P.x, P.z, 0.4); P.x = res.x; P.z = res.z; P.y = groundY(P.x, P.z);
   if (c.setLamps) c.setLamps(false, 0, 0, false);           // engine off: lamps out
   P.car = null; P.ch.group.visible = true;
@@ -509,6 +511,8 @@ function update(dt) {
   time += dt;
   hud.update(dt);
   const inp = pollInput();
+  // mid get-in or get-out routine: hands off the controls until you're settled
+  if ((P.car && doors.busy(P.car)) || (!P.car && doors.leaving())) { inp.mx = 0; inp.mz = 0; }
   if (photoMode) { inp.mx = 0; inp.mz = 0; inp.action = false; inp.fire = false; inp.fireHeld = false; inp.jump = false; }
   if (state.phase === "play") {
     if (P.car) {
@@ -669,17 +673,24 @@ function render() {
     if (on && beam.parent !== c.chassis) { c.chassis.add(beam); beam.position.set(0, (c.spec.ride || 0.2) + 0.55, c.spec.len / 2 + 0.1); }
     beam.intensity = on ? 180 * Math.min(1, (sky.state.night - 0.3) * 3) : 0;
   }
-  if (P.car && (P.car.kind === "bike" || P.car.kind === "jetski")) {
+  const mount = P.car && doors.pose(P.car, P.ch.look);       // mid get-in routine
+  if (mount) {
+    P.ch.group.visible = true;
+    P.ch.pose(mount.x, mount.y, mount.z, mount.yaw, time * 7, mount.walk ? 0.55 : 0.04, { override: mount.over, headPitch: mount.headPitch });
+  } else if (P.car && (P.car.kind === "bike" || P.car.kind === "jetski")) {
     const c = P.car; P.ch.group.visible = true;
     const seat = c.kind === "bike" ? 0.62 : 0.55;
     P.ch.pose(c.x - Math.sin(c.h) * 0.25, (c.y || 0) + seat - 0.97 + 0.12, c.z - Math.cos(c.h) * 0.25, c.h, 0, 0,
       { tilt: 0, override: { thighL: -1.45, thighR: -1.45, kneeL: 1.5, kneeR: 1.5, armL: -1.1, armR: -1.1, elbowL: -0.3, elbowR: -0.3, lean: 0.35, roll: (c.roll || 0) } });
   } else if (P.car) {
-    const cl = doors.climber(P.car);                  // still ducking in through the door
-    P.ch.group.visible = !!cl;
-    if (cl) P.ch.pose(cl.x, cl.y, cl.z, cl.yaw, time * 7, 0.4 * (1 - cl.duck), { override: { lean: cl.duck * 0.55 } });
+    // at the wheel: you can see the driver through the glass
+    const sp = seatPose(P.car, P.ch.look, P.car.steer || 0);
+    P.ch.group.visible = !!sp;
+    if (sp) P.ch.pose(sp.x, sp.y, sp.z, sp.yaw, 0, 0.04, { override: sp.over });
   }
-  if (!P.car) {
+  const leave = !P.car && doors.pose(null, P.ch.look);       // mid get-out routine
+  if (leave) P.ch.pose(leave.x, leave.y, leave.z, leave.yaw, time * 7, leave.walk ? 0.55 : 0.04, { override: leave.over, headPitch: leave.headPitch });
+  else if (!P.car) {
     let over = combat.pose();
     if (P.swim) over = { tilt: 1.25, armL: Math.sin(time * 4) * 2.6, armR: -Math.sin(time * 4) * 2.6, thighL: Math.sin(time * 8) * 0.3, thighR: -Math.sin(time * 8) * 0.3, kneeL: 0.2, kneeR: 0.2, elbowL: -0.3, elbowR: -0.3 };
     if (!over && combat.current().id !== "fists") over = { armR: -1.45, elbowR: -0.1, armL: -1.2, elbowL: -0.5 };   // weapon up
