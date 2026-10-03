@@ -64,7 +64,21 @@ const sky = createSky(scene, R.renderer);
 await step(35);
 const city = createCity(scene, plan, groundY);
 // every street lamp's light, baked into the map the lit materials read after dark (head 1.8 m out on its arm)
-bakeStreetLights(plan.lamps.map(([x, z, a]) => [x - Math.sin(a) * 1.8, groundY(x, z) + 6.2, z - Math.cos(a) * 1.8]), HALF);
+{
+  const heads = plan.lamps.map(([x, z, a]) => [x - Math.sin(a) * 1.8, groundY(x, z) + 6.2, z - Math.cos(a) * 1.8]);
+  // shop windows and lobbies spill a softer light onto the pavement in front of them
+  for (const b of plan.buildings) {
+    if (b.y > 0.5 || b.h < 7 || b.style === 3) continue;          // not the houses
+    for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const len = nx ? b.d : b.w, n = Math.max(1, Math.round(len / 11));
+      for (let k = 0; k < n; k++) {
+        const t = (k + 0.5) / n - 0.5;
+        heads.push([b.x + (nx ? nx * (b.w / 2 + 1.2) : t * b.w), 3.2, b.z + (nz ? nz * (b.d / 2 + 1.2) : t * b.d), 0.22, 12]);
+      }
+    }
+  }
+  bakeStreetLights(heads, HALF);
+}
 const facade = buildFacadeDetail(scene, plan);
 const street = buildStreetDetail(scene, plan);
 await step(55);
@@ -752,7 +766,7 @@ function render() {
     n.ch.pose(n.at.x, groundY(n.at.x, n.at.z), n.at.z, n.yaw, time * 0.9, 0.04, null);
   }
   setSignNight(signs, sky.state.night);
-  setStreetLights(Math.min(1, sky.state.night * 1.6) * 10);
+  setStreetLights(Math.min(1, sky.state.night * 1.6) * 8);
   const obj = state.phase === "play" ? currentObjective() : null;
   beacon.set(obj && (obj.main || obj.event) && obj.x !== undefined ? { x: obj.x, z: obj.z } : null, obj ? obj.r : 3);
   sideBeacon.set(obj && obj.side ? { x: obj.x, z: obj.z } : null, 3);

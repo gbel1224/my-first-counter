@@ -36,11 +36,11 @@ if ( uSLParam.x > 0.001 ) {
       vec3 slL = normalize( vec3( slOff.x, slH, slOff.y ) );
       // the map holds light on the ground; nearer the lamp head it's brighter, and a wall or a face
       // turned to the lamp catches more than the flat ground did
-      float slNear = clamp( ( ${(H * H).toFixed(2)} + slR2 ) / ( slH * slH + slR2 ), 0.0, 3.5 );
+      float slNear = clamp( ( ${(H * H).toFixed(2)} + slR2 ) / ( slH * slH + slR2 ), 0.0, 2.0 );
       float slCos = ${H.toFixed(2)} * inversesqrt( ${(H * H).toFixed(2)} + slR2 );
       float slFade = 1.0 - smoothstep( 8.0, 15.0, slW.y );
       IncidentLight slLight;
-      slLight.color = vec3( 1.0, 0.76, 0.48 ) * ( slS.r * slS.r * 2.0 * uSLParam.x * slNear * slFade / max( slCos, 0.3 ) );
+      slLight.color = vec3( 1.0, 0.76, 0.48 ) * ( slS.r * slS.r * 2.0 * uSLParam.x * slNear * slFade / max( slCos, 0.65 ) );
       slLight.direction = normalize( mat3( viewMatrix ) * slL );
       slLight.visible = true;
       RE_Direct( slLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
@@ -59,17 +59,17 @@ export function bakeStreetLights(heads, half) {
   const ext = half + 40, mpp = (ext * 2) / RES;
   P.ox = -ext; P.oz = -ext; P.inv = 1 / (ext * 2);
   const E = new Float32Array(RES * RES), VX = new Float32Array(RES * RES), VZ = new Float32Array(RES * RES);
-  const rp = Math.ceil(REACH / mpp);
-  for (const [lx, ly, lz] of heads) {
-    const h = Math.max(3, ly), ci = Math.round((lx + ext) / mpp), cj = Math.round((lz + ext) / mpp);
+  for (const [lx, ly, lz, I = 1, reach = REACH] of heads) {
+    const h = Math.max(2.5, ly), ci = Math.round((lx + ext) / mpp), cj = Math.round((lz + ext) / mpp), rp = Math.ceil(reach / mpp);
     for (let j = Math.max(0, cj - rp); j <= Math.min(RES - 1, cj + rp); j++) {
       const wz = -ext + (j + 0.5) * mpp, dz = lz - wz;
       for (let i = Math.max(0, ci - rp); i <= Math.min(RES - 1, ci + rp); i++) {
         const wx = -ext + (i + 0.5) * mpp, dx = lx - wx, r2 = dx * dx + dz * dz;
-        if (r2 > REACH * REACH) continue;
-        const d2 = r2 + h * h, cut = 1 - r2 / (REACH * REACH);
-        // ground irradiance from a point light: cos / d^2; the lens throws light down and out
-        const e = (h / (d2 * Math.sqrt(d2))) * cut * cut * H * H;
+        if (r2 > reach * reach) continue;
+        const d2 = r2 + h * h, cut = 1 - r2 / (reach * reach);
+        // ground irradiance from a point light (cos / d^2), plus the soft glow a real lamp spreads
+        // well past its pool (bounce off the pavement, haze), so the gaps between lamps aren't black
+        const e = I * ((h / (d2 * Math.sqrt(d2))) * cut * cut * H * H + 0.07 * cut * cut);
         const k = j * RES + i;
         E[k] += e; VX[k] += e * dx; VZ[k] += e * dz;
       }
