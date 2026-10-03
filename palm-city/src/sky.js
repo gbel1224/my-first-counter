@@ -161,5 +161,5 @@ export function createSky(scene, renderer) {
     sun.position.set(fx + sunDir.x * 300, Math.max(40, sunDir.y * 300), fz + sunDir.z * 300);
   }
 
-  return Object.assign(out, { set, update, state, sun, hemi, uniforms: U, sunDir, envTex: () => envRT.texture });
+  return Object.assign(out, { set, update, state, sun, hemi, uniforms: U, sunDir, dome, envTex: () => envRT.texture });
 }

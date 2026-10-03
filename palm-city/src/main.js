@@ -42,6 +42,7 @@ import { AudioSys } from "./audio.js";
 import { makeInterior } from "./interior.js";
 import { loadHumans, humansReady } from "./human.js";
 import { setView } from "./cull.js";
+import { makeProbe } from "./reflect.js";
 
 const bootBar = document.getElementById("bootbar");
 const step = async (pct) => { bootBar.style.width = pct + "%"; await new Promise(r => setTimeout(r, 0)); };
@@ -652,6 +653,8 @@ function frame(now) {
   update(dt);
   render();
 }
+// the street the cars reflect, filmed around you a face at a time
+const probe = makeProbe(R.renderer, scene, sky, { mobile: isMobile });
 // the headlight beams of the car you're driving: real light on the road ahead after dark
 const beam = new THREE.SpotLight(0xfff1dc, 0, 70, 0.55, 0.55, 1.3);
 beam.target.position.set(0, -1.2, 22); beam.add(beam.target); scene.add(beam);
@@ -746,6 +749,7 @@ function render() {
     for (const p of gangs.members) if (!p.hidden && p.knocked <= 0 && (p.goon || (p.x - focus.x) ** 2 + (p.z - focus.z) ** 2 < 3600)) dots.push({ x: p.x, z: p.z, c: p.boss ? "#ff00aa" : "#ff5a3a", r: p.boss ? 4 : 2.5 });
     hud.minimap(focus.x, focus.z, P.car ? P.car.h : P.yaw, rig.yaw, dots, obj && obj.x !== undefined ? { x: obj.x, z: obj.z, c: obj.side ? "#ff8a4c" : "#ffc861" } : null);
   }
+  probe.update(P.car || P, [P.car && P.car.group, P.ch.group], interior.inside);
   R.render(scene, camera, time);
 }
 
