@@ -18,6 +18,7 @@ for (const k of Object.values(BEARD_CARDS)) FACE_SLOTS[k] = 1;
 const CARD_PARTS = Object.keys(FACE_SLOTS).filter(k => k.startsWith("hairc_") || k.startsWith("beardc"));
 const hairPart = look => look.bald || !look.hairStyle ? null : "hair_" + look.hairStyle;
 const faceCol = (k, look) => { const c = FACE_COLOR[k]; return typeof c === "string" ? look[c] : c; };
+import { walkState } from "./traffic.js";
 import { mulberry32, clamp, lerp, lerpAngle, N, ROAD, BLOCK, WALK, CELL, CURB, HALF, blockMin, roadC, groundY, district } from "./world.js";
 
 // ---------------------------------------------------------------------------------------------
@@ -453,7 +454,15 @@ export class Crowd {
         if (r() < dt * 0.05) p.pause = 2 + r() * 5;
       } else if (p.cross) {
         // walking across the road to the next block
-        const c = p.cross; c.t += sp * dt / c.len;
+        const c = p.cross;
+        // at the kerb: wait for the little white man (unless something's chasing them)
+        if (c.wait) {
+          c.waitT += dt;
+          p.yaw = lerpAngle(p.yaw, Math.atan2(c.x1 - c.x0, c.z1 - c.z0), Math.min(1, dt * 6));
+          if (walkState(c.si, c.sj, c.road) === 2 || fleeing || c.waitT > 40) c.wait = false;
+          else { p.amt = 0; p.phase = 0; continue; }
+        }
+        c.t += sp * dt / c.len;
         p.x = lerp(c.x0, c.x1, c.t); p.z = lerp(c.z0, c.z1, c.t);
         p.yaw = Math.atan2(c.x1 - c.x0, c.z1 - c.z0);
         if (c.t >= 1) { p.bi = c.bi; p.bj = c.bj; p.t = c.tt; p.cross = null; this.place(p); }
@@ -516,11 +525,13 @@ export class Crowd {
     const z1 = ew ? z0 : z0 + (cz ? 1 : -1) * (ROAD + p.inset * 2);
     // the matching corner on the new block's ring
     const nc = ew ? [1, 0, 3, 2][corner] : [3, 2, 1, 0][corner];
-    p.cross = { x0, z0, x1, z1, len: Math.hypot(x1 - x0, z1 - z0), t: 0, bi: ni, bj: nj, tt: nc + 0.001 };
+    // the junction whose crosswalk this is, and the road being crossed
+    const si = cx ? p.bi + 1 : p.bi, sj = cz ? p.bj + 1 : p.bj, road = ew ? "z" : "x";
+    p.cross = { x0, z0, x1, z1, len: Math.hypot(x1 - x0, z1 - z0), t: 0, bi: ni, bj: nj, tt: nc + 0.001, si, sj, road, wait: walkState(si, sj, road) !== 2, waitT: 0 };
   }
   // a person's joint angles this frame
   poseOf(p, g) {
-    gait(p.phase, p.pause > 0 || p.knocked > 0 ? 0 : (p.amt || 1), g, p.style);
+    gait(p.phase, p.pause > 0 || p.knocked > 0 || (p.cross && p.cross.wait) ? 0 : (p.amt || 1), g, p.style);
     g.gripL = g.gripR = g.indexL = g.indexR = undefined; g.gun = null;
     const y = groundY(p.x, p.z) + (p.y || 0);
     let extra = null;

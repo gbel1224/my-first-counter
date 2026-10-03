@@ -99,6 +99,10 @@ export function buildCity(seed = 0x9A1C17) {
         else if (kind !== "rough" && kind !== "downtown") palms.push([px, pz, 0.85 + r() * 0.35]);
         else if (kind === "downtown" && r() < 0.5) trees.push([px, pz, 0.8 + r() * 0.3]);
       }
+      // and one near the end of each side, so every corner and crosswalk is lit
+      const ex = ax === 0 ? x1 - 4.5 : (ax < 0 ? x0 + 1.1 : x1 - 1.1);
+      const ez = az === 0 ? z1 - 4.5 : (az < 0 ? z0 + 1.1 : z1 - 1.1);
+      lamps.push([ex, ez, rot]);
     }
 
     if (kind === "plaza") {

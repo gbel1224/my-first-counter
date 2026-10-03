@@ -46,12 +46,30 @@ export function laneOffset(axis, dir, lane) {
   const o = lane === 0 ? 1.8 : 4.9;          // two 3 m lanes each way, then the parking strip at 6.95
   return axis === "z" ? -dir * o : dir * o;
 }
-// signal phase: 0 = N-S green, 1 = N-S amber, 2 = E-W green, 3 = E-W amber
-export const SIGNAL = { phase: 0, t: 0 };
-const PHASE_T = [11, 2.5, 11, 2.5];
-export function greenFor(axis) {
-  return axis === "z" ? SIGNAL.phase === 0 : SIGNAL.phase === 2;
+// signals: every junction runs its own cycle, offset from its neighbours — N-S green, amber, a
+// moment of all-red to clear the box, then the cross street's turn. Pedestrians get a WALK at the
+// start of the green that runs alongside their crossing, then a flashing hand, then the hand.
+export const SIGNAL = { t: 0 };
+export const CYCLE = 33;
+const GREEN = 12, AMBER = 3;
+export const RED = 0, AMB = 1, GRN = 2;
+export function sigOffset(i, j) { return ((i * 7 + j * 13) % 11) / 11 * CYCLE; }
+function cycleAt(i, j, axis, t) {
+  const u = ((t + sigOffset(i, j)) % CYCLE + CYCLE) % CYCLE;
+  return axis === "z" ? u : (u + CYCLE / 2) % CYCLE;     // the cross street runs half a cycle later
 }
+// the lights facing traffic travelling along `axis` at junction (i, j): GRN, AMB or RED
+export function signalState(i, j, axis, t = SIGNAL.t) {
+  const v = cycleAt(i, j, axis, t);
+  return v < GREEN ? GRN : v < GREEN + AMBER ? AMB : RED;
+}
+// the walk signal for crossing the road that runs along `roadAxis`: 2 WALK, 1 flashing hand, 0 hand
+export function walkState(i, j, roadAxis, t = SIGNAL.t) {
+  const v = cycleAt(i, j, roadAxis === "z" ? "x" : "z", t);
+  return v < 7 ? 2 : v < GREEN ? 1 : 0;
+}
+// the junction (i, j) a car on `axis`/`road` reaches at index k along it
+const jIJ = (axis, road, k) => axis === "z" ? [road, k] : [k, road];
 
 const MAXI = 160;   // max instances drawn per type
 export class Traffic {
@@ -121,12 +139,11 @@ export class Traffic {
       p0 = [ex, lz]; p1 = [ox, ez]; pc = [ox, lz];
     }
     const len = Math.hypot(pc[0] - p0[0], pc[1] - p0[1]) + Math.hypot(p1[0] - pc[0], p1[1] - pc[1]);
-    return { p0, p1, pc, len: len * 0.85, t: 0, out, startS: j.at - c.dir * e };
+    return { p0, p1, pc, len: len * 0.85, t: 0, out, startS: j.at - c.dir * e, left: c.lane === 0, jat: j.at };
   }
   update(dt, time, player) {
-    // signals
-    SIGNAL.t += dt;
-    if (SIGNAL.t > PHASE_T[SIGNAL.phase]) { SIGNAL.t = 0; SIGNAL.phase = (SIGNAL.phase + 1) % 4; }
+    SIGNAL.t = time;
+    const walkers = this.walkers ? this.walkers() : [];
     // spatial hash for following
     const grid = this.grid; grid.clear();
     for (const c of this.cars) {
@@ -152,9 +169,14 @@ export class Traffic {
           if (ahead > 0 && eff < gap && side < 2.2) gap = eff;
         }
       }
+      let byYou = false;
       for (const p of player) {
         const dx = p.x - c.x, dz = p.z - c.z, ahead = dx * fx + dz * fz, side = Math.abs(dx * fz - dz * fx);
-        if (ahead > 0 && ahead < gap && side < (p.car ? 2.4 : 1.6)) gap = ahead;
+        if (ahead > 0 && ahead < gap && side < (p.car ? 2.4 : 1.6)) { gap = ahead; byYou = ahead < 12; }
+      }
+      for (const p of walkers) {                       // people on the crosswalk: wait for them
+        const dx = p.x - c.x, dz = p.z - c.z, ahead = dx * fx + dz * fz, side = Math.abs(dx * fz - dz * fx);
+        if (ahead > 0 && ahead < gap && side < 2.4) gap = ahead;
       }
       let target = c.vmax;
       if (gap < 18) target = Math.min(target, Math.max(0, (gap - 5.5) * 1.3));
@@ -165,7 +187,12 @@ export class Traffic {
         } else {
           const stopAt = j.at - c.dir * (ROAD / 2 + 4.8);
           const dStop = (stopAt - c.s) * c.dir;
-          if (!greenFor(c.axis) && dStop > -0.5 && dStop < 26) target = Math.min(target, Math.max(0, dStop * 0.8));
+          const [ji, jj] = jIJ(c.axis, c.road, j.k), st = signalState(ji, jj, c.axis, time);
+          // red: stop at the line. Amber: stop if there's room to, otherwise carry on through
+          if (st !== GRN && dStop > -0.5 && dStop < 30) {
+            if (st === RED || c.amberStop || dStop > c.speed * c.speed / 9 + 1.5) { c.amberStop = st === AMB; target = Math.min(target, Math.max(0, dStop * 0.8)); }
+          } else c.amberStop = false;
+          c.atRed = st === RED && dStop > -0.5 && dStop < 8;
           const entry = j.at - c.dir * (ROAD / 2 + 1);
           if ((entry - c.s) * c.dir < 0.4 && !c.planned) {
             c.planned = true;
@@ -173,6 +200,17 @@ export class Traffic {
           }
         }
       }
+      // turning left across the oncoming lanes: pull into the box and wait for a gap
+      if (c.turn && c.turn.left && c.turn.t < 0.34 && this.oncoming(c)) target = Math.min(target, Math.max(0, (0.3 - c.turn.t) * c.turn.len * 0.9));
+      // stuck behind something that isn't moving (a wreck, a double-parked van): change lanes
+      if (!c.turn && c.speed < 0.5 && gap < 9 && !c.atRed) {
+        c.stuckT = (c.stuckT || 0) + dt;
+        if (c.stuckT > 2.5 && this.laneFree(c, 1 - c.lane)) { c.lane = 1 - c.lane; c.stuckT = 0; c.planned = false; this.syncPos(c); }
+      } else c.stuckT = 0;
+      // and lean on the horn if it's you in the way on a green
+      c.honk = Math.max(0, (c.honk || 0) - dt);
+      c.waitYou = byYou && c.speed < 0.8 && !c.atRed ? (c.waitYou || 0) + dt : 0;
+      if (c.waitYou > 2.2 && c.honk <= 0) { c.honk = 3 + this.r() * 3; if (this.onHonk) this.onHonk(c); }
       c.speed += clamp(target - c.speed, -14 * dt, 5 * dt);
       c.brake = target < c.speed - 0.5 || c.speed < 0.3;
       if (c.turn) {
@@ -194,6 +232,24 @@ export class Traffic {
         if (c.planned && this.nextJunctionPassed(c)) c.planned = false;
       }
     }
+  }
+  // is anyone coming the other way through this car's junction (for a left turn)?
+  oncoming(c) {
+    const at = c.turn.jat;
+    for (const o of this.cars) {
+      if (o === c || !o.alive || o.axis !== c.axis || o.road !== c.road || o.dir !== -c.dir || (o.turn && o.turn.left)) continue;
+      const d = (at - o.s) * o.dir;                     // how far short of the junction centre they are
+      if (d > -ROAD / 2 && d < 34 && (o.speed > 1.5 || d < ROAD / 2 + 1)) return true;
+    }
+    return false;
+  }
+  // room to slot into the other lane alongside?
+  laneFree(c, lane) {
+    for (const o of this.cars) {
+      if (o === c || !o.alive || o.axis !== c.axis || o.road !== c.road || o.dir !== c.dir || o.lane !== lane) continue;
+      if (Math.abs(o.s - c.s) < 11) return false;
+    }
+    return true;
   }
   // drop a far-away car back into a lane minD-330 m from the player (by default out of the immediate view)
   respawnNear(c, fx, fz, minD = 180) {

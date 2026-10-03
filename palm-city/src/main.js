@@ -4,9 +4,10 @@ import { createRenderer, isMobile } from "./render.js";
 import { buildCity, Collider, groundY, district, blockC, blockMin, PLAZA, HALF, ROAD, BLOCK, CURB, mulberry32, clamp } from "./world.js";
 import { createSky } from "./sky.js";
 import { createCity } from "./city.js";
+import { bakeStreetLights, setStreetLights } from "./streetlight.js";
 import { createOcean } from "./ocean.js";
 import { Crowd, randomLook } from "./people.js";
-import { Traffic, SIGNAL, Parked } from "./traffic.js";
+import { Traffic, SIGNAL, Parked, signalState, walkState, RED } from "./traffic.js";
 import { buildFacadeDetail, buildStreetDetail, updateSignals } from "./detail.js";
 import { PAINTS, LAMP_U, driveLamps } from "./cars.js";
 import { initInput, pollInput, I } from "./input.js";
@@ -62,6 +63,8 @@ await step(20);
 const sky = createSky(scene, R.renderer);
 await step(35);
 const city = createCity(scene, plan, groundY);
+// every street lamp's light, baked into the map the lit materials read after dark (head 1.8 m out on its arm)
+bakeStreetLights(plan.lamps.map(([x, z, a]) => [x - Math.sin(a) * 1.8, groundY(x, z) + 6.2, z - Math.cos(a) * 1.8]), HALF);
 const facade = buildFacadeDetail(scene, plan);
 const street = buildStreetDetail(scene, plan);
 await step(55);
@@ -644,6 +647,7 @@ function update(dt) {
   if (greyT > 0) { greyT -= dt; R.grade.uSat.value = 1.1 - Math.min(1, greyT) * 0.95; } else R.grade.uSat.value = 1.1;
   crowd.update(dt, time, focus.x, focus.z, hz);
   traffic.update(dt, time, [P.car ? { x: P.car.x, z: P.car.z, car: true } : { x: focus.x, z: focus.z, car: false }]);
+  if (state.phase === "play" && P.car && !interior.inside) redLight(P.car);
   if (state.phase === "title") {
     // slow cinematic orbit over the plaza, high enough to clear the rooftops
     const a = 0.7 + time * 0.03, r = 150 + Math.sin(time * 0.1) * 20;
@@ -672,6 +676,29 @@ function frame(now) {
 }
 // the street the cars reflect, filmed around you a face at a time
 const probe = makeProbe(R.renderer, scene, sky, { mobile: isMobile });
+// running a red light in front of a cop is a crime; anywhere else the other drivers just lean on the horn
+let lastBox = null;
+function redLight(c) {
+  const i = Math.round((c.x + HALF - ROAD / 2) / (BLOCK + ROAD)), j = Math.round((c.z + HALF - ROAD / 2) / (BLOCK + ROAD));
+  const cx = -HALF + ROAD / 2 + i * (BLOCK + ROAD), cz = -HALF + ROAD / 2 + j * (BLOCK + ROAD);
+  const inBox = Math.abs(c.x - cx) < ROAD / 2 && Math.abs(c.z - cz) < ROAD / 2 && i > 0 && j > 0 && i < 14 && j < 14;
+  const key = inBox ? i + "," + j : null;
+  if (key && key !== lastBox) {
+    const vx = c.vx || Math.sin(c.h) * c.speed, vz = c.vz || Math.cos(c.h) * c.speed;
+    const axis = Math.abs(vx) > Math.abs(vz) ? "x" : "z", sp = Math.hypot(vx, vz);
+    // only if they came in from the approach (not if they were already turning in the box)
+    const edge = axis === "x" ? Math.abs(c.x - cx) > ROAD / 2 - 2.5 : Math.abs(c.z - cz) > ROAD / 2 - 2.5;
+    if (edge && sp > 5 && signalState(i, j, axis, SIGNAL.t) === RED) {
+      const cop = crime.units.some(u => u.active && (u.x - c.x) ** 2 + (u.z - c.z) ** 2 < 70 * 70);
+      if (cop) { hud.toast("🚦 Ran a red light — in front of the cops"); crime.addCrime(1); }
+      else { if (Math.random() < 0.6) AudioSys.play("horn", 0.5, 0.9 + Math.random() * 0.2); hud.toast("🚦 Ran a red light", 1.2); }
+    }
+  }
+  lastBox = key;
+}
+traffic.walkers = () => crowd.people.filter(p => p.cross && !p.cross.wait && p.knocked <= 0);
+traffic.onHonk = c => { const d2 = (c.x - P.x) ** 2 + (c.z - P.z) ** 2; if (d2 < 40 * 40) AudioSys.play("horn", Math.max(0.15, 0.7 - Math.sqrt(d2) / 60), 0.85 + Math.random() * 0.3); };
+
 // the headlight beams of the car you're driving: real light on the road ahead after dark
 const beam = new THREE.SpotLight(0xfff1dc, 0, 70, 0.55, 0.55, 1.3);
 beam.target.position.set(0, -1.2, 22); beam.add(beam.target); scene.add(beam);
@@ -716,7 +743,7 @@ function render() {
   traffic.render(focus.x, focus.z, sky.state.night);
   parked.render(focus.x, focus.z);
   city.update(time, sky.state.night);
-  updateSignals(street.lampMats, SIGNAL.phase);
+  updateSignals(street.signals, SIGNAL.t, signalState, walkState, camera.position, sky.state.night);
   ocean.update(time, scene.fog);
   for (const id in npcs) {
     const n = npcs[id]; if (!n.at) continue;
@@ -725,6 +752,7 @@ function render() {
     n.ch.pose(n.at.x, groundY(n.at.x, n.at.z), n.at.z, n.yaw, time * 0.9, 0.04, null);
   }
   setSignNight(signs, sky.state.night);
+  setStreetLights(Math.min(1, sky.state.night * 1.6) * 10);
   const obj = state.phase === "play" ? currentObjective() : null;
   beacon.set(obj && (obj.main || obj.event) && obj.x !== undefined ? { x: obj.x, z: obj.z } : null, obj ? obj.r : 3);
   sideBeacon.set(obj && obj.side ? { x: obj.x, z: obj.z } : null, 3);

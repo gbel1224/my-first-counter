@@ -124,9 +124,11 @@ export function buildFacadeDetail(scene, plan) {
 export function buildStreetDetail(scene, plan) {
   const r = mulberry32(0x57EE7);
   const kerb = ROAD / 2;
-  // ---- traffic signals: one mast arm per approach, on the far-right corner ----
-  const poles = [], heads = [];
-  const lamps = { z: [[], [], []], x: [[], [], []] };       // [red, amber, green] instances per axis
+  // ---- traffic signals: one mast arm per approach, on the far-right corner, with walk / don't-walk
+  // heads on the same pole for the two crosswalks that start at that corner ----
+  const poles = [], heads = [], peds = [];
+  const lampList = [], lampMeta = [];      // every signal lens, and the junction / axis / colour it shows
+  const pedList = [], pedMeta = [];        // every walk-signal panel (hand above, walking figure below)
   for (let i = 1; i < N; i++) for (let j = 1; j < N; j++) {
     const cx = roadC(i), cz = roadC(j);
     for (const [dx, dz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
@@ -138,8 +140,18 @@ export function buildStreetDetail(scene, plan) {
       heads.push([hx, 5.6, hz, face]);
       const axis = dz ? "z" : "x";
       for (let k = 0; k < 3; k++) {
-        const up = 0.32 - k * 0.32;
-        lamps[axis][k].push([hx, 5.6 + up, hz, face]);
+        lampList.push([hx + Math.sin(face) * 0.17, 5.92 - k * 0.32, hz + Math.cos(face) * 0.17, face]);
+        lampMeta.push([i, j, axis, k]);
+      }
+      // walk signals on this corner's pole: one looking across each road, at the far kerb
+      const sx = Math.sign(px - cx), sz = Math.sign(pz - cz);
+      for (const [road, fa] of [["z", Math.atan2(-sx, 0)], ["x", Math.atan2(0, -sz)]]) {
+        const ox = px + Math.sin(fa) * 0.2, oz = pz + Math.cos(fa) * 0.2;
+        peds.push([ox, 2.9, oz, fa]);
+        for (let k = 0; k < 2; k++) {
+          pedList.push([ox + Math.sin(fa) * 0.11, 3.06 - k * 0.3, oz + Math.cos(fa) * 0.11, fa]);
+          pedMeta.push([i, j, road, k]);
+        }
       }
     }
   }
@@ -149,19 +161,54 @@ export function buildStreetDetail(scene, plan) {
       place(paint(new THREE.CylinderGeometry(0.13, 0.17, 6.2, 8), 0x55585c), 0, 3.1, 0),
       place(paint(new THREE.CylinderGeometry(0.07, 0.09, 5.2, 6), 0x55585c), 0, 6.0, 2.5, Math.PI / 2, 0, 0),
       place(paint(new THREE.BoxGeometry(0.5, 0.35, 0.1), 0x2a5a3a), 0, 6.45, 1.2),        // street-name blade
+      place(paint(new THREE.BoxGeometry(0.2, 0.3, 0.14), 0x3a3d40), 0.18, 1.1, 0),      // push-button box
     ]);
     inst(scene, g, dark, poles);
-    inst(scene, merge([place(paint(new THREE.BoxGeometry(0.42, 1.15, 0.32), 0x222326), 0, 0, 0),
-      place(paint(new THREE.BoxGeometry(0.62, 1.35, 0.03), 0x151516), 0, 0, -0.17)]), dark, heads);
+    const hp = [place(paint(new THREE.BoxGeometry(0.42, 1.15, 0.32), 0x222326), 0, 0, 0),
+      place(paint(new THREE.BoxGeometry(0.62, 1.35, 0.03), 0x151516), 0, 0, -0.17)];      // backplate
+    for (let k = 0; k < 3; k++) hp.push(place(paint(new THREE.CylinderGeometry(0.15, 0.15, 0.22, 10, 1, true, Math.PI / 2, Math.PI), 0x1a1a1c), 0, 0.32 - k * 0.32, 0.27, Math.PI / 2, 0, 0));   // visors
+    inst(scene, merge(hp), dark, heads);
+    inst(scene, merge([place(paint(new THREE.BoxGeometry(0.4, 0.66, 0.2), 0x2a2b2e), 0, 0, 0),
+      place(paint(new THREE.BoxGeometry(0.12, 0.08, 0.2), 0x2a2b2e), 0, 0, -0.14)]), dark, peds);
   }
-  const lampGeo = new THREE.CircleGeometry(0.12, 12); lampGeo.translate(0, 0, 0.17);
-  const COL = [0xff2a1a, 0xffa000, 0x2aff7a];
-  const lampMats = { z: [], x: [] };
-  for (const axis of ["z", "x"]) for (let k = 0; k < 3; k++) {
-    const mat = new THREE.MeshBasicMaterial({ color: COL[k], toneMapped: false });
-    lampMats[axis].push(mat);
-    inst(scene, lampGeo, mat, lamps[axis][k], null, false);
-  }
+  // the lenses: one mesh, coloured per lens each frame (see updateSignals)
+  const lampGeo = new THREE.CircleGeometry(0.14, 16);
+  const lampMesh = inst(scene, lampGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }), lampList, lampList.map(() => 0x000000), false, false);
+  // walk panels: a raised hand over a walking figure, drawn once onto a little texture
+  const cv = document.createElement("canvas"); cv.width = 128; cv.height = 64;
+  const x = cv.getContext("2d");
+  x.fillStyle = "#050505"; x.fillRect(0, 0, 128, 64);
+  x.fillStyle = "#fff";
+  // hand (left half)
+  x.beginPath(); x.ellipse(32, 40, 13, 15, 0, 0, Math.PI * 2); x.fill();
+  for (let f = 0; f < 4; f++) { x.beginPath(); x.roundRect(20 + f * 6.5, 10 + Math.abs(f - 1.5) * 3, 5, 26, 2.5); x.fill(); }
+  x.beginPath(); x.roundRect(40, 30, 14, 5, 2.5); x.fill();
+  // walking figure (right half)
+  x.beginPath(); x.arc(96, 12, 5.5, 0, Math.PI * 2); x.fill();
+  x.lineCap = "round"; x.strokeStyle = "#fff"; x.lineWidth = 6;
+  x.beginPath(); x.moveTo(95, 20); x.lineTo(93, 38); x.moveTo(93, 38); x.lineTo(84, 56); x.moveTo(93, 38); x.lineTo(103, 56);
+  x.moveTo(95, 22); x.lineTo(86, 32); x.moveTo(95, 22); x.lineTo(104, 30); x.stroke();
+  const icon = new THREE.CanvasTexture(cv); icon.colorSpace = THREE.SRGBColorSpace;
+  const pedGeo = new THREE.PlaneGeometry(0.3, 0.27);
+  const uv = pedGeo.attributes.uv;   // each panel picks its half of the texture by its row (k): 0 hand, 1 walk
+  const pedGeoHand = pedGeo.clone(), pedGeoWalk = pedGeo.clone();
+  for (let v = 0; v < uv.count; v++) { pedGeoHand.attributes.uv.setX(v, uv.getX(v) * 0.5); pedGeoWalk.attributes.uv.setX(v, 0.5 + uv.getX(v) * 0.5); }
+  const pedMat = new THREE.MeshBasicMaterial({ map: icon, toneMapped: false });
+  const handIdx = [], walkIdx = [];
+  pedMeta.forEach((m, n) => (m[3] === 0 ? handIdx : walkIdx).push(n));
+  const handMesh = inst(scene, pedGeoHand, pedMat, handIdx.map(n => pedList[n]), handIdx.map(() => 0), false, false);
+  const walkMesh = inst(scene, pedGeoWalk, pedMat, walkIdx.map(n => pedList[n]), walkIdx.map(() => 0), false, false);
+  // a soft glow round each lit lens, so you can read the lights from down the street
+  const gc = document.createElement("canvas"); gc.width = gc.height = 64;
+  const gx = gc.getContext("2d"), gr = gx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.18, "rgba(255,255,255,0.55)"); gr.addColorStop(0.5, "rgba(255,255,255,0.12)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+  gx.fillStyle = gr; gx.fillRect(0, 0, 64, 64);
+  const glowGeo = new THREE.BufferGeometry();
+  glowGeo.setAttribute("position", new THREE.Float32BufferAttribute(lampList.flatMap(([x, y, z, f]) => [x + Math.sin(f) * 0.05, y, z + Math.cos(f) * 0.05]), 3));
+  glowGeo.setAttribute("color", new THREE.Float32BufferAttribute(new Float32Array(lampList.length * 3), 3));
+  const glow = new THREE.Points(glowGeo, new THREE.PointsMaterial({ size: 1.6, map: new THREE.CanvasTexture(gc), vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+  glow.frustumCulled = false; scene.add(glow);
+  const signals = { glow, lampList, lampMesh, lampMeta, handMesh, walkMesh, handMeta: handIdx.map(n => pedMeta[n]), walkMeta: walkIdx.map(n => pedMeta[n]) };
 
   // ---- utility poles + sagging wires, along one side of the streets outside downtown ----
   const up = [], wires = [];
@@ -247,19 +294,39 @@ export function buildStreetDetail(scene, plan) {
   ]), vcMaterial({ roughness: 0.5, metalness: 0.4 }), sign);
 
   // the loose stuff a car can send flying (see props.js)
-  return { lampMats, props: [["hydrant", hydM, hyd], ["bin", binM, bin], ["news", newsM, news]] };
+  return { signals, props: [["hydrant", hydM, hyd], ["bin", binM, bin], ["news", newsM, news]] };
 }
 
-// light the signal lamps for the current phase (0 NS green, 1 NS amber, 2 EW green, 3 EW amber)
-export function updateSignals(lampMats, phase) {
-  const on = (axis, k) => {
-    const ph = axis === "z" ? phase : (phase + 2) % 4;       // the cross street is offset by half a cycle
-    const lit = ph === 0 ? 2 : ph === 1 ? 1 : 0;
-    return k === lit;
-  };
-  const BASE = [[1, 0.1, 0.05], [1, 0.55, 0], [0.1, 1, 0.45]];
-  for (const axis of ["z", "x"]) for (let k = 0; k < 3; k++) {
-    const m = lampMats[axis][k], b = BASE[k], s = on(axis, k) ? 4 : 0.06;
-    m.color.setRGB(b[0] * s, b[1] * s, b[2] * s);
+// light every signal for this moment: each junction's own phase (see signalState / walkState)
+const LENS = [[1.0, 0.08, 0.04], [1.0, 0.5, 0.0], [0.1, 1.0, 0.5]];   // red, amber, green
+export function updateSignals(S, t, signalState, walkState, cam, night = 0) {
+  const lc = S.lampMesh.instanceColor.array, D = 0.035;
+  S.lampMeta.forEach(([i, j, axis, k], n) => {
+    const st = signalState(i, j, axis, t), lit = st === 2 ? 2 : st === 1 ? 1 : 0;   // GRN -> green lens (row 2)
+    const on = (k === 0 && lit === 0) || (k === 1 && lit === 1) || (k === 2 && lit === 2);
+    const c = LENS[k], s = on ? 5 : D;
+    lc[n * 3] = c[0] * s; lc[n * 3 + 1] = c[1] * s; lc[n * 3 + 2] = c[2] * s;
+  });
+  S.lampMesh.instanceColor.needsUpdate = true;
+  // glows: only the lit lens, only from in front, stronger after dark
+  if (cam) {
+    const gcol = S.glow.geometry.attributes.color.array, g = 0.12 + 0.5 * night;
+    S.lampList.forEach(([x, y, z, f], n) => {
+      const dx = cam.x - x, dz = cam.z - z, d = Math.hypot(dx, dz) || 1, front = Math.max(0, (Math.sin(f) * dx + Math.cos(f) * dz) / d);
+      const k = lc[n * 3] + lc[n * 3 + 1] + lc[n * 3 + 2] > 1 ? g * front * front : 0;
+      gcol[n * 3] = lc[n * 3] * k; gcol[n * 3 + 1] = lc[n * 3 + 1] * k; gcol[n * 3 + 2] = lc[n * 3 + 2] * k;
+    });
+    S.glow.geometry.attributes.color.needsUpdate = true;
   }
+  const blink = (t % 1) < 0.5;
+  const hc = S.handMesh.instanceColor.array, wc = S.walkMesh.instanceColor.array;
+  S.handMeta.forEach(([i, j, road], n) => {
+    const w = walkState(i, j, road, t), on = w === 0 || (w === 1 && blink);
+    hc[n * 3] = on ? 3.2 : 0.06; hc[n * 3 + 1] = on ? 1.5 : 0.03; hc[n * 3 + 2] = on ? 0.3 : 0.01;
+  });
+  S.walkMeta.forEach(([i, j, road], n) => {
+    const on = walkState(i, j, road, t) === 2;
+    wc[n * 3] = on ? 2.6 : 0.05; wc[n * 3 + 1] = on ? 2.9 : 0.05; wc[n * 3 + 2] = on ? 3.0 : 0.05;
+  });
+  S.handMesh.instanceColor.needsUpdate = true; S.walkMesh.instanceColor.needsUpdate = true;
 }
