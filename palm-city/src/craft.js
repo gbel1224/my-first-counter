@@ -7,7 +7,7 @@ import { clamp, lerp, groundY, HALF } from "./world.js";
 import { SEA_Y } from "./ocean.js";
 
 const M = (geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.castShadow = true; m.receiveShadow = true; return m; };
-const paintMat = c => { const m = MAT.paint.clone(); m.vertexColors = false; m.color.set(c); return m; };
+const paintMat = c => { const m = MAT.paint.clone(); m.onBeforeCompile = () => {}; m.customProgramCacheKey = () => "craftpaint"; m.vertexColors = false; m.color.set(c); return m; };
 const dark = new THREE.MeshStandardMaterial({ color: 0x1c1c1e, roughness: 0.6, metalness: 0.3 });
 const chrome = new THREE.MeshStandardMaterial({ color: 0xd0d4d8, roughness: 0.25, metalness: 0.9 });
 const white = new THREE.MeshStandardMaterial({ color: 0xf2f2ee, roughness: 0.4 });

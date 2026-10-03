@@ -885,9 +885,23 @@ const FLAKE = typeof document !== "undefined" ? flakeTexture() : null;
 function trimMaterial() {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0 });
   m.onBeforeCompile = sh => {
-    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float aEmit; varying float vFin;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvFin = aEmit;");
-    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vFin;")
-      .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = mix(0.82, 0.06, smoothstep(0.0, 1.0, vFin));")
+    const [vc, vb] = WEAR_VERT(false);
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", vc + "\nattribute float aEmit; varying float vFin;").replace("#include <begin_vertex>", vb + "\nvFin = aEmit;");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vFin; varying vec3 vObjP; varying vec3 vObjN; varying float vWear;\nfloat tGrain;" + NOISE)
+      .replace("#include <color_fragment>", `#include <color_fragment>
+      {
+        float n = wFbm(vObjP * 9.0), g = wNoise(vObjP * 260.0);
+        tGrain = g;
+        float alloy = smoothstep(0.45, 0.6, vFin) * (1.0 - smoothstep(0.85, 0.95, vFin));
+        float plastic = 1.0 - smoothstep(0.2, 0.5, vFin);
+        // brake dust: alloy wheels go dark brown-grey, worse on the lower half
+        float dust = alloy * smoothstep(0.75, 0.0, vObjP.y) * (0.35 + 0.65 * n) * (0.3 + vWear * 0.9);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.17, 0.14), clamp(dust, 0.0, 0.85));
+        // plastics and rubber: a grained, slightly faded surface
+        diffuseColor.rgb *= mix(1.0, 0.86 + 0.28 * g, plastic);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.3, 0.29, 0.27), plastic * 0.12 * n);
+      }`)
+      .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = mix(0.82, 0.06, smoothstep(0.0, 1.0, vFin)) + 0.08 * (tGrain - 0.5);")
       .replace("#include <metalnessmap_fragment>", "#include <metalnessmap_fragment>\nmetalnessFactor = smoothstep(0.45, 0.95, vFin);");
   };
   m.customProgramCacheKey = () => "cartrim";
@@ -895,7 +909,19 @@ function trimMaterial() {
 }
 // tyres: rubber with the tread and lettering in a texture; plates: the number-plate sheet, each
 // instance picking its own plate (aPlate)
-function tyreMaterial() { const t = tyreTexture(); return new THREE.MeshStandardMaterial({ map: t, bumpMap: t, bumpScale: 1.5, roughness: 0.9, metalness: 0 }); }
+function tyreMaterial() {
+  const t = tyreTexture(), m = new THREE.MeshStandardMaterial({ map: t, bumpMap: t, bumpScale: 1.5, roughness: 0.9, metalness: 0 });
+  // road dust in the rubber, browner down where it meets the road
+  m.onBeforeCompile = sh => {
+    const [vc, vb] = WEAR_VERT(false);
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", vc).replace("#include <begin_vertex>", vb);
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vObjP; varying vec3 vObjN; varying float vWear;" + NOISE)
+      .replace("#include <map_fragment>", `#include <map_fragment>
+      { float n = wFbm(vObjP * 14.0); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.25, 0.23, 0.2), (0.12 + 0.3 * n) * (0.4 + vWear)); }`);
+  };
+  m.customProgramCacheKey = () => "cartyre";
+  return m;
+}
 function plateMaterial() {
   const m = new THREE.MeshStandardMaterial({ map: plateTexture(), roughness: 0.45, metalness: 0.15, polygonOffset: true, polygonOffsetFactor: -10, polygonOffsetUnits: -10 });
   m.onBeforeCompile = sh => {
@@ -905,10 +931,116 @@ function plateMaterial() {
   m.customProgramCacheKey = () => "plate";
   return m;
 }
+// ---- wear: what makes a car look like it's been driven ----
+// value noise and fbm in the vehicle's own space (so the marks stay put as it drives)
+const NOISE = `
+float wHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float wNoise(vec3 x) {
+  vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(wHash(i), wHash(i + vec3(1,0,0)), f.x), mix(wHash(i + vec3(0,1,0)), wHash(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(wHash(i + vec3(0,0,1)), wHash(i + vec3(1,0,1)), f.x), mix(wHash(i + vec3(0,1,1)), wHash(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+float wFbm(vec3 p) { float a = 0.5, s = 0.0; for (int k = 0; k < 4; k++) { s += a * wNoise(p); p = p * 2.03 + 1.7; a *= 0.5; } return s; }
+// bump the normal by a height field h (screen-space derivative bump, like three's bump map)
+vec3 wBump(vec3 n, float h, vec3 vpos) {
+  vec3 sx = dFdx(-vpos), sy = dFdy(-vpos), r1 = cross(sy, n), r2 = cross(n, sx);
+  float det = dot(sx, r1); vec3 grad = sign(det) * (dFdx(h) * r1 + dFdy(h) * r2);
+  return normalize(abs(det) * n - grad);
+}`;
+const WEAR_VERT = (seed) => [
+  "#include <common>\nvarying vec3 vObjP; varying vec3 vObjN; varying float vWear;" + (seed ? "\nuniform float uWear;" : ""),
+  `#include <begin_vertex>
+  vObjP = position; vObjN = normal;
+  #ifdef USE_INSTANCING_COLOR
+    vWear = fract(sin(dot(instanceColor, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+  #else
+    vWear = ${seed ? "uWear" : "0.5"};
+  #endif`,
+];
+// car paint: orange peel in the clear coat, swirl marks and dried water spots that catch the
+// light, road dirt thrown up low and behind the wheels, dust settled on the top. How dirty a car
+// is varies car to car (from just-washed to filthy)
+function paintMaterial() {
+  const m = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.26, metalness: 0.45, clearcoat: 1.0, clearcoatRoughness: 0.02, normalMap: FLAKE, normalScale: new THREE.Vector2(0.15, 0.15), envMapIntensity: 1.5 });
+  m.userData.wear = { value: Math.random() };
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uWear = m.userData.wear;
+    const [vc, vb] = WEAR_VERT(true);
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", vc).replace("#include <begin_vertex>", vb);
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vObjP; varying vec3 vObjN; varying float vWear;\nfloat wDirt; float wSpec;" + NOISE)
+      .replace("#include <color_fragment>", `#include <color_fragment>
+      {
+        float n1 = wFbm(vObjP * 2.6), n2 = wFbm(vObjP * 11.0 + 3.1), n3 = wFbm(vObjP * 30.0);
+        float amt = 0.06 + vWear * vWear * 0.85;                                  // this car's grime
+        float low = smoothstep(0.95, 0.2, vObjP.y);                               // spray off the road
+        float sidew = 1.0 - abs(vObjN.y);
+        float top = smoothstep(0.55, 0.95, vObjN.y);                              // dust on the roof and bonnet
+        float streak = smoothstep(0.3, 0.8, wFbm(vec3(vObjP.x * 9.0, vObjP.y * 1.2, vObjP.z * 9.0)));   // runs where rain dripped down
+        wDirt = clamp((low * sidew * (0.45 + 0.8 * n1) + top * 0.12 * smoothstep(0.45, 0.8, n2) + sidew * streak * 0.15 * smoothstep(1.4, 0.6, vObjP.y)) * amt, 0.0, 1.0);
+        vec3 grime = mix(vec3(0.36, 0.33, 0.28), vec3(0.5, 0.46, 0.4), n2) * (0.9 + 0.2 * n3);
+        #ifdef USE_COLOR
+          wDirt *= smoothstep(0.12, 0.5, vColor.g);   // dark trim (arch lips, sills, shut-lines) stays dark
+        #endif
+        diffuseColor.rgb = mix(diffuseColor.rgb, grime, wDirt * 0.82);
+        // dried water spots on the flat tops: little rings of mineral left behind
+        vec3 cp = vObjP * vec3(26.0, 26.0, 26.0); vec3 ci = floor(cp); vec3 cf = fract(cp) - 0.5;
+        vec3 off = vec3(wHash(ci), wHash(ci + 7.1), wHash(ci + 3.3)) - 0.5;
+        float r = length((cf - off * 0.6).xz), rad = 0.12 + 0.18 * wHash(ci + 1.9);
+        float spot = top * smoothstep(0.02, 0.0, abs(r - rad)) * step(0.8, wHash(ci + 5.5)) * (0.15 + amt * 0.6);
+        // swirl marks: fine circular scratches from years of car washes, only seen in the light
+        float sw = abs(sin(length(vObjP.xz * 9.0 + n1 * 2.0) * 90.0 + n2 * 20.0));
+        wSpec = smoothstep(0.985, 1.0, sw) * (0.4 + 0.6 * n1) * 0.35 + spot * 0.6;
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.78, 0.76, 0.72), spot * 0.07);
+      }`)
+      .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.92, wDirt);")
+      // orange peel: a faint ripple in the lacquer that shows as wobble in the reflections
+      .replace("#include <clearcoat_normal_fragment_maps>", `#include <clearcoat_normal_fragment_maps>
+      #ifdef USE_CLEARCOAT
+        // (faded out where it would be finer than a pixel, so it never turns to blocky noise)
+        float peelFade = clamp(0.004 / max(1e-5, length(fwidth(vObjP))) - 0.6, 0.0, 1.0);
+        clearcoatNormal = wBump(clearcoatNormal, wNoise(vObjP * 40.0) * 0.0006 * peelFade, vViewPosition);
+      #endif`)
+      .replace("#include <lights_physical_fragment>", `#include <lights_physical_fragment>
+      #ifdef USE_COLOR
+        // wheel wells, sills and shut-lines are raw, matte: no lacquer to mirror the sky
+        float bare = 1.0 - smoothstep(0.1, 0.45, vColor.g);
+        #ifdef USE_CLEARCOAT
+          material.clearcoat *= 1.0 - bare;
+        #endif
+        material.roughness = mix(material.roughness, 0.95, bare);
+        material.specularColor *= 1.0 - bare * 0.85;
+      #endif
+      #ifdef USE_CLEARCOAT
+        material.clearcoat *= 1.0 - wDirt * 0.9;
+        material.clearcoatRoughness = min(1.0, material.clearcoatRoughness + wSpec + wDirt * 0.6);
+      #endif`);
+  };
+  m.customProgramCacheKey = () => "carpaint";
+  return m;
+}
+// glass: a light film of dust and water marks, thicker toward the bottom of each pane
+function glassMaterial(opts) {
+  const m = new THREE.MeshPhysicalMaterial(opts);
+  m.onBeforeCompile = sh => {
+    const [vc, vb] = WEAR_VERT(false);
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", vc).replace("#include <begin_vertex>", vb);
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vObjP; varying vec3 vObjN; varying float vWear;\nfloat gDust;" + NOISE)
+      .replace("#include <color_fragment>", `#include <color_fragment>
+      {
+        float n = wFbm(vObjP * 6.0), sp = smoothstep(0.86, 0.97, wNoise(vObjP * 45.0));
+        gDust = clamp(smoothstep(0.35, 0.75, n) * 0.3 + sp * 0.12, 0.0, 1.0) * (0.2 + vWear * 0.6);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.48, 0.45), gDust * 0.25);
+        diffuseColor.a = min(1.0, diffuseColor.a + gDust * 0.08);
+      }`)
+      .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = min(1.0, roughnessFactor + gDust * 0.35);");
+  };
+  m.customProgramCacheKey = () => "carglass" + (opts.transparent ? "t" : "");
+  return m;
+}
 export const MAT = {
-  paint: new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.26, metalness: 0.45, clearcoat: 1.0, clearcoatRoughness: 0.02, normalMap: FLAKE, normalScale: new THREE.Vector2(0.15, 0.15), envMapIntensity: 1.5 }),
+  paint: paintMaterial(),
   // close up the glass is tinted, not black: you see the cabin through it
-  glass: new THREE.MeshPhysicalMaterial({ color: 0x1e2832, roughness: 0.015, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.01, envMapIntensity: 1.9, transparent: true, opacity: 0.6 }),
+  glass: glassMaterial({ color: 0x1e2832, roughness: 0.015, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.01, envMapIntensity: 1.9, transparent: true, opacity: 0.6 }),
   glassFar: new THREE.MeshPhysicalMaterial({ color: 0x1b2430, roughness: 0.05, metalness: 0.2, clearcoat: 1, envMapIntensity: 1.4 }),
   trim: trimMaterial(),
   lights: lampMaterial(),
@@ -960,7 +1092,7 @@ export function makeCar(type, color) {
   const G = carGeometries(type), T = G.spec, S = G.split;
   const group = new THREE.Group(), chassis = new THREE.Group();
   group.add(chassis);
-  const pm = reflective(MAT.paint.clone()); pm.color.set(color);   // vertex colours carry the shut-lines and sills
+  const pm = reflective(paintMaterial()); pm.color.set(color);   // vertex colours carry the shut-lines and sills
   const body = new THREE.Mesh(S.paint, pm), glass = new THREE.Mesh(S.glass, MAT.glass), trim = new THREE.Mesh(S.trim, MAT.trim);
   const lampGeo = lampGeometry(G.lights, 1);
   const lights = new THREE.InstancedMesh(lampGeo, MAT.lights, 1);

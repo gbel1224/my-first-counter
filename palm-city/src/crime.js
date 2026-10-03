@@ -14,11 +14,15 @@ const MAX_UNITS = 6;
 function makeCruiser(scene) {
   const C = makeCar("sedan", 0xf2f2f0);
   // black-and-white livery: dark lower body under the beltline
-  C.body.material.onBeforeCompile = sh => {
+  // (on top of the paint's own wear shader: the livery goes on first, the road grime over it)
+  const wear = C.body.material.onBeforeCompile, bm = C.body.material;
+  bm.onBeforeCompile = (sh, r) => {
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying float vLy;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvLy = position.y;");
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vLy;")
       .replace("#include <color_fragment>", "#include <color_fragment>\nif (vLy < 0.78) diffuseColor.rgb = vec3(0.03, 0.03, 0.035);");
+    wear(sh, r);
   };
+  bm.customProgramCacheKey = () => "carpaint-police";
   const barMatR = new THREE.MeshBasicMaterial({ color: 0xff2020, toneMapped: false });
   const barMatB = new THREE.MeshBasicMaterial({ color: 0x2050ff, toneMapped: false });
   const base = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.12, 0.34), new THREE.MeshStandardMaterial({ color: 0x111111 }));
