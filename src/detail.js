@@ -129,6 +129,7 @@ export function buildStreetDetail(scene, plan) {
   const poles = [], heads = [], peds = [];
   const lampList = [], lampMeta = [];      // every signal lens, and the junction / axis / colour it shows
   const pedList = [], pedMeta = [];        // every walk-signal panel (hand above, walking figure below)
+  const cabs = [];
   for (let i = 1; i < N; i++) for (let j = 1; j < N; j++) {
     const cx = roadC(i), cz = roadC(j);
     for (const [dx, dz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
@@ -137,12 +138,17 @@ export function buildStreetDetail(scene, plan) {
       const hx = cx + dx * (kerb + 1.2) + rx * 3.6, hz = cz + dz * (kerb + 1.2) + rz * 3.6;
       const face = Math.atan2(-dx, -dz);                    // head faces the oncoming traffic
       poles.push([px, 0, pz, Math.atan2(hx - px, hz - pz)]);
-      heads.push([hx, 5.6, hz, face]);
       const axis = dz ? "z" : "x";
-      for (let k = 0; k < 3; k++) {
-        lampList.push([hx + Math.sin(face) * 0.17, 5.92 - k * 0.32, hz + Math.cos(face) * 0.17, face]);
-        lampMeta.push([i, j, axis, k]);
+      // two heads over the lanes: one over the inside lane at the arm's tip, one over the outside lane
+      for (const off of [3.6, 6.6]) {
+        const ax = cx + dx * (kerb + 1.2) + rx * off, az = cz + dz * (kerb + 1.2) + rz * off;
+        heads.push([ax, 5.6, az, face]);
+        for (let k = 0; k < 3; k++) {
+          lampList.push([ax + Math.sin(face) * 0.17, 5.92 - k * 0.32, az + Math.cos(face) * 0.17, face]);
+          lampMeta.push([i, j, axis, k]);
+        }
       }
+      if (dx === 1) cabs.push([px + 1.6, CURB, pz + 1.6, Math.PI / 4]);   // one signal controller per junction
       // walk signals on this corner's pole: one looking across each road, at the far kerb
       const sx = Math.sign(px - cx), sz = Math.sign(pz - cz);
       for (const [road, fa] of [["z", Math.atan2(-sx, 0)], ["x", Math.atan2(0, -sz)]]) {
@@ -157,17 +163,45 @@ export function buildStreetDetail(scene, plan) {
   }
   const dark = vcMaterial({ roughness: 0.55, metalness: 0.5 });
   {
+    const P = 0x55585c, tie = Math.hypot(4.4, 1.3);
     const g = merge([
-      place(paint(new THREE.CylinderGeometry(0.13, 0.17, 6.2, 8), 0x55585c), 0, 3.1, 0),
-      place(paint(new THREE.CylinderGeometry(0.07, 0.09, 5.2, 6), 0x55585c), 0, 6.0, 2.5, Math.PI / 2, 0, 0),
-      place(paint(new THREE.BoxGeometry(0.5, 0.35, 0.1), 0x2a5a3a), 0, 6.45, 1.2),        // street-name blade
-      place(paint(new THREE.BoxGeometry(0.2, 0.3, 0.14), 0x3a3d40), 0.18, 1.1, 0),      // push-button box
+      place(paint(new THREE.CylinderGeometry(0.42, 0.42, 0.12, 8), 0x8a8780), 0, 0.06, 0),                    // concrete footing
+      place(paint(new THREE.CylinderGeometry(0.2, 0.27, 0.45, 8, 1, true), P), 0, 0.34, 0),                              // flared base
+      place(paint(new THREE.CylinderGeometry(0.12, 0.17, 6.2, 8, 1, true), P), 0, 3.1, 0),
+      place(paint(new THREE.CylinderGeometry(0.15, 0.15, 0.22, 8, 1, true), P), 0, 6.0, 0),                                // arm clamp
+      place(paint(new THREE.CylinderGeometry(0.11, 0.11, 0.16, 8), 0x3a3d40), 0, 6.28, 0),                        // pole cap
+      place(paint(new THREE.CylinderGeometry(0.06, 0.1, 5.4, 6, 1, true), P), 0, 6.0, 2.6, Math.PI / 2, 0, 0),             // tapered mast arm
+      place(paint(new THREE.CylinderGeometry(0.018, 0.018, tie, 4, 1, true), P), 0, 6.65, 2.2, Math.PI / 2 + Math.atan2(1.3, 4.4), 0, 0),   // tie rod
+      place(paint(new THREE.BoxGeometry(0.06, 0.08, 0.06), P), 0, 7.3, 0.02),
+      // street-name sign hung under the arm: green with a white border
+      place(paint(new THREE.BoxGeometry(0.04, 0.42, 1.5), 0xf2f2ee), 0, 5.62, 1.15),
+      place(paint(new THREE.BoxGeometry(0.05, 0.36, 1.44), 0x1f6a3a), 0, 5.62, 1.15),
+      ...[0.62, 1.68].map(z => place(paint(new THREE.CylinderGeometry(0.01, 0.01, 0.3, 4), P), 0, 5.95, z)),
+      // push-button with its instruction plate, on the pole
+      place(paint(new THREE.BoxGeometry(0.16, 0.24, 0.12), 0xd8b020), 0.17, 1.1, 0),
+      place(paint(new THREE.CylinderGeometry(0.035, 0.035, 0.03, 10), 0x2a2a2a), 0.25, 1.1, 0, 0, 0, Math.PI / 2),
+      place(paint(new THREE.BoxGeometry(0.02, 0.3, 0.22), 0xf2f2ee), 0.13, 1.42, 0),
     ]);
     inst(scene, g, dark, poles);
     const hp = [place(paint(new THREE.BoxGeometry(0.42, 1.15, 0.32), 0x222326), 0, 0, 0),
-      place(paint(new THREE.BoxGeometry(0.62, 1.35, 0.03), 0x151516), 0, 0, -0.17)];      // backplate
-    for (let k = 0; k < 3; k++) hp.push(place(paint(new THREE.CylinderGeometry(0.15, 0.15, 0.22, 10, 1, true, Math.PI / 2, Math.PI), 0x1a1a1c), 0, 0.32 - k * 0.32, 0.27, Math.PI / 2, 0, 0));   // visors
+      place(paint(new THREE.BoxGeometry(0.62, 1.35, 0.03), 0x151516), 0, 0, -0.17),       // backplate
+      // its retro-reflective yellow border
+      place(paint(new THREE.BoxGeometry(0.62, 0.06, 0.035), 0xe8c018), 0, 0.645, -0.165), place(paint(new THREE.BoxGeometry(0.62, 0.06, 0.035), 0xe8c018), 0, -0.645, -0.165),
+      place(paint(new THREE.BoxGeometry(0.06, 1.35, 0.035), 0xe8c018), 0.28, 0, -0.165), place(paint(new THREE.BoxGeometry(0.06, 1.35, 0.035), 0xe8c018), -0.28, 0, -0.165),
+      // the bracket hanging it from the arm
+      place(paint(new THREE.CylinderGeometry(0.035, 0.035, 0.42, 6), 0x2a2b2e), 0, 0.78, 0),
+      place(paint(new THREE.BoxGeometry(0.16, 0.08, 0.16), 0x2a2b2e), 0, 0.6, 0)];
+    for (let k = 0; k < 3; k++) hp.push(place(paint(new THREE.CylinderGeometry(0.15, 0.15, 0.22, 6, 1, true, Math.PI / 2, Math.PI), 0x1a1a1c), 0, 0.32 - k * 0.32, 0.27, Math.PI / 2, 0, 0));   // visors
     inst(scene, merge(hp), dark, heads);
+    // signal controller cabinets: grey steel, vents, a sticker or two
+    inst(scene, merge([
+      place(paint(new THREE.BoxGeometry(1.0, 0.25, 0.65), 0x8a8780), 0, 0.12, 0),
+      place(paint(new THREE.BoxGeometry(0.9, 1.45, 0.55), 0x9a9c98), 0, 0.97, 0),
+      place(paint(new THREE.BoxGeometry(0.96, 0.05, 0.6), 0x8a8c88), 0, 1.71, 0),
+      place(paint(new THREE.BoxGeometry(0.6, 0.18, 0.01), 0x5a5c58), 0, 1.4, 0.28),
+      place(paint(new THREE.BoxGeometry(0.02, 0.12, 0.02), 0x3a3a3a), 0.38, 1.0, 0.28),
+      place(paint(new THREE.BoxGeometry(0.18, 0.12, 0.01), 0xd8d0b0), -0.2, 0.75, 0.28),
+    ]), dark, cabs);
     inst(scene, merge([place(paint(new THREE.BoxGeometry(0.4, 0.66, 0.2), 0x2a2b2e), 0, 0, 0),
       place(paint(new THREE.BoxGeometry(0.12, 0.08, 0.2), 0x2a2b2e), 0, 0, -0.14)]), dark, peds);
   }

@@ -42,7 +42,7 @@ if ( uSLParam.x > 0.001 ) {
       // turned to the lamp catches more than the flat ground did
       float slNear = clamp( ( ${(H * H).toFixed(2)} + slR2 ) / ( slH * slH + slR2 ), 0.0, 2.0 );
       float slCos = ${H.toFixed(2)} * inversesqrt( ${(H * H).toFixed(2)} + slR2 );
-      float slFade = 1.0 - smoothstep( 8.0, 15.0, slW.y );
+      float slFade = 1.0 - smoothstep( 5.5, 11.0, slW.y );
       IncidentLight slLight;
       slLight.color = vec3( 1.0, 0.76, 0.48 ) * ( slS.r * slS.r * 2.0 * uSLParam.x * slNear * slFade / max( slCos, 0.65 ) );
       slLight.direction = normalize( mat3( viewMatrix ) * slL );
