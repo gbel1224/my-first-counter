@@ -1,0 +1,29 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Palm lab</title>
+<style>html,body{margin:0;background:#1a1c20}canvas{display:block}</style></head>
+<body><script type="module">
+import * as THREE from "../vendor/three.module.js";
+import { buildPalms, SPECIES } from "../src/palms.js";
+const q = new URLSearchParams(location.search);
+const W = +(q.get("w") || 1600), Hh = +(q.get("h") || 800);
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(W, Hh); r.setPixelRatio(1); document.body.appendChild(r.domElement);
+r.toneMapping = THREE.ACESFilmicToneMapping; r.outputColorSpace = THREE.SRGBColorSpace; r.shadowMap.enabled = true;
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x9fc0e0);
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x6a5a40, 1.1));
+const key = new THREE.DirectionalLight(0xfff0dc, 2.8); key.position.set(-20, 30, 18); key.castShadow = true; Object.assign(key.shadow.camera, { left: -40, right: 40, top: 30, bottom: -10 }); key.shadow.mapSize.set(2048, 2048); key.shadow.normalBias = 0.05; scene.add(key);
+const gnd = new THREE.Mesh(new THREE.PlaneGeometry(200, 80), new THREE.MeshStandardMaterial({ color: 0xc8b896, roughness: 0.95 })); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; scene.add(gnd);
+const U = { uTime: { value: 0.7 } };
+const far = q.get("far") === "1";
+const items = []; let i = 0;
+const sps = (q.get("s") || SPECIES.join(",")).split(",");
+for (const sp of sps) for (let v = 0; v < 2; v++) { items.push([(i - (sps.length * 2 - 1) / 2) * +(q.get("sp") || 7), 0, 0.4 + i, 1, sp, v]); i++; }
+buildPalms(U, items, (geo, mat, list, isFar) => {
+  if (isFar !== far) return;
+  const mesh = new THREE.InstancedMesh(geo, mat, list.length);
+  const m = new THREE.Matrix4(), qq = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3();
+  list.forEach(([x, z, a, k], j) => { m.compose(p.set(x, 0, z), qq.setFromEuler(e.set(0, a, 0)), sc.setScalar(k)); mesh.setMatrixAt(j, m); });
+  mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false; scene.add(mesh);
+});
+const cam = new THREE.PerspectiveCamera(+(q.get("fov") || 40), W / Hh, 0.1, 500);
+cam.position.set(+(q.get("cx") || 0), +(q.get("cy") || 6), +(q.get("cz") || 45)); cam.lookAt(+(q.get("cx") || 0), +(q.get("ly") || 7), 0);
+r.render(scene, cam); window.__frames = 99;
+</script></body></html>

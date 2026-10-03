@@ -11,7 +11,8 @@ export function setView(camera) {
   if (!VIEW.all) { VIEW.fx = fx / l; VIEW.fz = fz / l; }
   for (const t of tiles) {
     const dx = t.cx - VIEW.x, dz = t.cz - VIEW.z;
-    t.mesh.visible = Math.sqrt(dx * dx + dz * dz) - t.r < t.max;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    t.mesh.visible = d - t.r < t.max && d - t.r >= t.min;
   }
 }
 // in front of the camera (or close enough that it might cast into view)
@@ -21,7 +22,7 @@ export function inView(x, z, margin = 15) {
   return dx * VIEW.fx + dz * VIEW.fz > -margin;
 }
 // a static tile that only draws within `max` metres of the camera
-export function addTile(mesh, max) {
+export function addTile(mesh, max, min = -Infinity) {
   const s = mesh.boundingSphere;
-  tiles.push({ mesh, cx: s.center.x, cz: s.center.z, r: s.radius, max });
+  tiles.push({ mesh, cx: s.center.x, cz: s.center.z, r: s.radius, max, min });
 }

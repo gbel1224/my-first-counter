@@ -6,6 +6,7 @@
 import * as THREE from "../vendor/three.module.js";
 import { N, ROAD, BLOCK, WALK, CURB, CELL, HALF, STYLE, blockC, mulberry32, PLAZA } from "./world.js";
 import { paint, place, merge, vcMaterial, tileInstances } from "./geo.js";
+import { buildPalms } from "./palms.js";
 
 // shared GLSL: hashing, value noise, and an anti-aliased "is this pixel inside a repeating cell
 // rectangle" test that fades to its average coverage when the cells shrink below a few pixels
@@ -600,15 +601,26 @@ function instanced(scene, geo, mat, list, yOf, cast = true) {
 
 function buildProps(scene, city, U, gy) {
   const r = mulberry32(0x7A1A);
-  // royal palms line the streets; shaggy sabal palms on the beach and in gardens
-  const palmMat = swayMaterial(U, { roughness: 0.75, side: THREE.DoubleSide });
-  const royal = [], sabal = [];
-  city.palms.forEach(([x, z, s]) => (z > HALF || r() < 0.25 ? sabal : royal).push([x, z, r() * Math.PI * 2, s * (0.85 + r() * 0.3)]));
-  instanced(scene, palmGeometry("royal"), palmMat, royal, gy);
-  instanced(scene, palmGeometry("sabal"), palmMat, sabal, gy);
+  // palms everywhere: coconut palms on the beach, royal and fan palms down the streets, big
+  // canary date palms in the parks and gardens (the old leafy trees are palms now too)
+  const items = [];
+  const wave = (x, z) => Math.sin(x * 0.011) + Math.cos(z * 0.013);        // whole stretches of street share a species
+  city.palms.forEach(([x, z, s]) => {
+    const sp = z > HALF ? "coconut" : r() < 0.15 ? "coconut" : wave(x, z) > 0.2 ? "washingtonia" : "royal";
+    items.push([x, z, r() * Math.PI * 2, s * (0.85 + r() * 0.3), sp, r() < 0.5 ? 0 : 1]);
+  });
+  city.trees.forEach(([x, z, s]) => items.push([x, z, r() * Math.PI * 2, s * (0.9 + r() * 0.25), r() < 0.65 ? "canary" : "royal", r() < 0.5 ? 0 : 1]));
+  const NEAR = 95;
+  buildPalms(U, items, (geo, mat, list, far) => {
+    const mesh = new THREE.InstancedMesh(geo, mat, list.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3();
+    list.forEach(([x, z, a, k], i) => { m.compose(p.set(x, gy(x, z), z), q.setFromEuler(e.set(0, a, 0)), sc.setScalar(k)); mesh.setMatrixAt(i, m); });
+    mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false;
+    scene.add(mesh);
+    // near tiles get the detailed palms, everything further the light ones (out to 420 m)
+    tileInstances(scene, mesh, 120, far ? 420 : NEAR, far ? NEAR : -Infinity);
+  });
   if (city.shrubs && city.shrubs.length) instanced(scene, shrubGeometry(), vcMaterial({ roughness: 0.7 }), city.shrubs.map(([x, z, s]) => [x, z, r() * 6.28, s]), gy);
-  const trees = city.trees.map(([x, z, s]) => [x, z, r() * Math.PI * 2, s]);
-  instanced(scene, treeGeometry(), swayMaterial(U, { roughness: 0.85 }), trees, gy);
   const lampMat = vcMaterial({ roughness: 0.5, metalness: 0.3, emitMul: 0 });
   instanced(scene, lampGeometry(), lampMat, city.lamps.map(([x, z, a]) => [x, z, a, 1]), gy);
   instanced(scene, benchGeometry(), vcMaterial({ roughness: 0.7 }), city.benches.map(([x, z, a]) => [x, z, a, 1]), gy);
