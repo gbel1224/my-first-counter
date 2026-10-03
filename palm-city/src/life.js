@@ -313,5 +313,7 @@ export function makeLife(scene, g) {
     layoutBubbles();
   }
   function quiet() { endConv(); for (const b of [bubNpc, bubYou, bubAmb]) { b.t = 0; b.el.style.display = "none"; } }
-  return { update, quiet, action, applyLook, tutorial, arcadeOpen: () => arcadeOpen, closeArcade, court, ATMS, fuelOf: v => v && v.fuel, talkingTo: () => conv && conv.p, choose };
+  // someone yells something (a hijack victim, an owner by their van)
+  const shout = (p, line, expr) => { npcSays(p, line, expr, bubAmb); bubAmb.t = Math.max(2.2, line.length * 0.06); };
+  return { update, quiet, action, applyLook, tutorial, arcadeOpen: () => arcadeOpen, closeArcade, court, ATMS, fuelOf: v => v && v.fuel, talkingTo: () => conv && conv.p, choose, shout, personaOf, fightBack };
 }

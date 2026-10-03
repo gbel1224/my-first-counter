@@ -533,6 +533,8 @@ export class Crowd {
         // shooting: gun arm out, the trigger finger pulls on each shot
         Object.assign(g, { armR: -1.45, elbowR: -0.1, armL: -1.2, elbowL: -0.5, gun: p.weapon || "pistol", gripR: 0.95, indexR: p.shotT > 0 ? 1 : 0.3, gripL: 0.6 });
       } else if (p.fear > 0 && p.amt > 1.5) { g.gripL = g.gripR = 0.6; }
+      else if (p.phoneT > 0) Object.assign(g, { armR: -2.6, elbowR: -2.3, armL: -0.2 });                  // on the phone
+      else if (p.workT > 0) Object.assign(g, { armL: -0.9 + Math.sin(p.workT * 2) * 0.15, armR: -1.0, elbowL: -0.8, elbowR: -0.7, lean: 0.25 });   // busy at the back of the van
     }
     if (p.knocked > 0) {
       // tumbling in the air, then flat on the ground
