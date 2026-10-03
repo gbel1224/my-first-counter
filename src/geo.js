@@ -83,7 +83,7 @@ export function limb(r0, r1, len, seg = 10) {
 // Split a static InstancedMesh into city tiles, each its own InstancedMesh with a real bounding
 // sphere, so the renderer skips tiles that are off screen (and out of the shadow map). The tiles
 // share the original's vertex buffers and material; per-instance attributes are sliced per tile.
-export function tileInstances(scene, mesh, size = 200, maxDist = Infinity) {
+export function tileInstances(scene, mesh, size = 200, maxDist = Infinity, minDist = -Infinity) {
   const n = mesh.count, groups = new Map(), m = new THREE.Matrix4(), p = new THREE.Vector3();
   for (let i = 0; i < n; i++) {
     mesh.getMatrixAt(i, m); p.setFromMatrixPosition(m);
@@ -114,7 +114,7 @@ export function tileInstances(scene, mesh, size = 200, maxDist = Infinity) {
     t.renderOrder = mesh.renderOrder; t.name = mesh.name;
     t.computeBoundingSphere(); t.frustumCulled = true;
     scene.add(t); tiles.push(t);
-    if (maxDist < Infinity) addTile(t, maxDist);
+    if (maxDist < Infinity || minDist > -Infinity) addTile(t, maxDist, minDist);
   }
   scene.remove(mesh);
   return tiles;
