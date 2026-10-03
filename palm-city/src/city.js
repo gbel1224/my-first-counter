@@ -7,6 +7,7 @@ import * as THREE from "../vendor/three.module.js";
 import { N, ROAD, BLOCK, WALK, CURB, CELL, HALF, STYLE, blockC, mulberry32, PLAZA } from "./world.js";
 import { paint, place, merge, vcMaterial, tileInstances } from "./geo.js";
 import { buildPalms } from "./palms.js";
+import { addTile } from "./cull.js";
 
 // shared GLSL: hashing, value noise, and an anti-aliased "is this pixel inside a repeating cell
 // rectangle" test that fades to its average coverage when the cells shrink below a few pixels
@@ -134,6 +135,7 @@ function facadeMaterial(U) {
             float glass = 0.0; float blind = 0.0;
             vec2 cellId = vec2(0.0);
             float winTop = 0.0, winX = 0.0, below = 0.0;
+            float curt = 0.0; vec3 curC = vec3(0.0);
             if (style == 0) {
               // curtain wall: tinted glass panels, dark metal mullions, opaque spandrels
               vec2 c = vec2(u / 2.4, v / 3.9);
@@ -188,13 +190,43 @@ function facadeMaterial(U) {
                 if (style == 4) col = mix(col, concrete * (0.95 + blot * 0.1), 0.55);   // raw concrete slab office
               }
               glass = win;
-              gH -= win * 0.14;                                              // the opening is set back into the wall
+              // the window in metres, and the view into it
+              float W = (wx1 - wx0) * bay, Hh = (wy1 - wy0) * fh;
+              float lx = (f.x - wx0) * bay, ly = (f.y - wy0) * fh;
+              vec3 vdw = normalize(vWP - cameraPosition);
+              vec3 Tw0 = an.x > 0.5 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+              float dx0 = dot(vdw, Tw0), dz0 = max(dot(vdw, -normalize(vON)), 0.08);
+              // the reveal: the opening is 16 cm deep, so from an angle you see its inside faces
+              float RD = 0.16;
+              float jamb = dx0 > 0.0 ? step(W - RD * dx0 / dz0, lx) : step(lx, RD * -dx0 / dz0);
+              float head = vdw.y > 0.0 ? step(Hh - RD * vdw.y / dz0, ly) : 0.0;
+              float sillIn = vdw.y < 0.0 ? step(ly, RD * -vdw.y / dz0) : 0.0;
+              float rev = win * max(max(jamb, head), sillIn);
+              vec3 revC = (style == 2 ? vec3(0.62, 0.58, 0.52) : wall * 1.02) * (head > 0.5 ? 0.55 : sillIn > 0.5 ? 0.95 : 0.78);
+              // glazing bars: a centre mullion in the wider windows, a transom near the top
+              vec3 mf = style == 2 ? vec3(0.84, 0.82, 0.78) : (style == 3 ? vec3(0.92, 0.9, 0.86) : vec3(0.3, 0.31, 0.33));
+              float bars = (W > 1.2 ? 1.0 - step(0.035, abs(lx - W * 0.5)) : 0.0) + (style != 4 ? 1.0 - step(0.03, abs(ly - Hh * 0.72)) : 0.0);
+              bars += 1.0 - step(0.045, min(min(lx, W - lx), min(ly, Hh - ly)));          // the frame round the glass
+              bars = clamp(bars, 0.0, 1.0) * win * (1.0 - rev);
+              col = mix(col, revC, rev);
+              col = mix(col, mf, bars);
+              gH += bars * 0.025;
+              glass = win * (1.0 - rev) * (1.0 - bars);
               winTop = line1(f.y, wy1 - 0.12, wy1) * win;          // recess shadow cast by the head of the opening
               winX = line1(f.x, wx0, wx0 + 0.07) * win;            // and by the side jamb
               // blinds / curtains: every window drawn to its own height
               float bl = h12(cellId * vec2(2.3, 1.7) + seed * 5.0);
               float bh = wy1 - (wy1 - wy0) * bl * 0.9;
               blind = win * step(bh, f.y) * step(0.25, bl);
+              // flats: some windows have curtains drawn to the sides instead, in their own colours
+              float hc = h12(cellId * vec2(4.1, 2.9) + seed * 3.0);
+              if (style != 4 && hc > 0.5) {
+                float cw = W * (0.12 + 0.3 * h12(cellId + 17.0));
+                curt = win * max(step(lx, cw), step(W - cw, lx));
+                blind = max(blind * 0.0, curt);
+                curC = mix(mix(vec3(0.7, 0.25, 0.2), vec3(0.85, 0.78, 0.6), step(0.4, hc)), vec3(0.3, 0.4, 0.55), step(0.75, hc)) * (0.75 + 0.25 * sin(lx * 28.0));
+              }
+              blind *= 1.0 - bars;
               // grime streaks washing down from each sill
               below = band(c.x, wx0 + 0.04, wx1 - 0.04) * valid * smoothstep(wy0 + 0.02, wy0 - 0.9, f.y + (f.y > wy0 ? 0.0 : 0.0)) * step(f.y, wy0);
               // ground floor: shopfronts with shutters, signage band
@@ -252,7 +284,7 @@ function facadeMaterial(U) {
             col *= 1.0 - 0.55 * (winTop + winX) * glass * blind;
             // blinds sit just behind the glass: pale, matte, lit by day, glowing when the room's lit
             vec3 blindC = mix(vec3(0.72, 0.68, 0.6), vec3(0.8, 0.8, 0.78), h12(cellId + 11.0));
-            col = mix(col, blindC * (0.85 + band(vWP.y * 9.0, 0.0, 0.5) * 0.1), blind * 0.85);
+            col = mix(col, mix(blindC * (0.85 + band(vWP.y * 9.0, 0.0, 0.5) * 0.1), curC, curt), blind * 0.85);
             fRough = mix(fRough, 0.8, blind); fMetal = mix(fMetal, 0.0, blind);
             vec3 warm = mix(vec3(1.0, 0.7, 0.36), vec3(0.72, 0.84, 1.0), step(0.8, h12(cellId + seed)));
             fEmit += warm * blind * glass * lit * uNight * 1.1;
@@ -262,7 +294,7 @@ function facadeMaterial(U) {
             col *= 1.0 - smoothstep(9.0, 0.0, top) * streak * 0.35;                          // rain streaks from the parapet
             float damp = smoothstep(1.4 + vnoise(vec2(u * 0.8, 0.0)) * 0.9, 0.0, v + (baseY > 0.5 ? 9.0 : 0.0));
             col = mix(col, col * vec3(0.62, 0.64, 0.58), damp * 0.8);                        // rising damp / splash-back
-            float peel = smoothstep(0.8, 0.84, vnoise(vec2(u, v) * 0.55 + seed * 21.0)) * (1.0 - glass) * step(float(style), 1.5) * step(0.5, float(style));
+            float peel = 0.4 * smoothstep(0.78, 0.9, vnoise(vec2(u, v) * 0.55 + seed * 21.0)) * smoothstep(0.4, 0.7, vnoise(vec2(u, v) * 3.1)) * (1.0 - glass) * step(float(style), 1.5) * step(0.5, float(style));
             col = mix(col, concrete * (0.9 + streak * 0.2), peel * 0.85);                    // paint gone, render showing
             // corners and parapet: AO into the corners, a concrete coping on top
             col *= 0.8 + 0.2 * smoothstep(0.0, 0.8, edgeD);
@@ -330,8 +362,10 @@ function buildBuildings(scene, city, U) {
   const r = mulberry32(0xC0FFEE);
   const parts = [];
   const houses = [];
+  const byTile = new Map();
   for (const b of B) {
     if (b.style === STYLE.HOUSE) { houses.push(b); continue; }
+    const p0 = parts.length;
     const top = b.y + b.h;
     const n = Math.min(5, Math.floor(b.w * b.d / 180) + 1);
     for (let k = 0; k < n; k++) {
@@ -343,14 +377,60 @@ function buildBuildings(scene, city, U) {
         for (const [ox, oz] of [[-0.8, -0.8], [0.8, -0.8], [-0.8, 0.8], [0.8, 0.8]]) parts.push(place(paint(new THREE.CylinderGeometry(0.08, 0.08, 1.4, 5), 0x444444), x + ox, top + 0.7, z + oz));
       }
     }
+    // a stair / lift housing with its door, vent stacks and pipes, a satellite dish on the flats
+    {
+      const hx = b.x + (r() - 0.5) * Math.max(0, b.w - 8), hz = b.z + (r() - 0.5) * Math.max(0, b.d - 8);
+      if (b.w > 9 && b.d > 9) {
+        parts.push(place(paint(new THREE.BoxGeometry(3.2, 3.0, 3.6), 0x9a958c), hx, top + 1.5, hz));
+        parts.push(place(paint(new THREE.BoxGeometry(3.5, 0.2, 3.9), 0x77736c), hx, top + 3.1, hz));
+        parts.push(place(paint(new THREE.BoxGeometry(1.0, 2.1, 0.06), 0x4a4c50), hx, top + 1.05, hz + 1.82));
+      }
+      for (let k = 0; k < 2; k++) {
+        const vx = b.x + (r() - 0.5) * (b.w - 3), vz = b.z + (r() - 0.5) * (b.d - 3);
+        parts.push(place(paint(new THREE.CylinderGeometry(0.16, 0.16, 1.2, 6, 1, true), 0x8c8f92), vx, top + 0.6, vz));
+        parts.push(place(paint(new THREE.CylinderGeometry(0.24, 0.24, 0.12, 6), 0x6c6f72), vx, top + 1.25, vz));
+      }
+      if (b.style !== STYLE.GLASS && r() < 0.6) {
+        const sx = b.x + (r() - 0.5) * (b.w - 3), sz = b.z + (r() - 0.5) * (b.d - 3);
+        parts.push(place(paint(new THREE.CylinderGeometry(0.04, 0.04, 1.0, 5), 0x555555), sx, top + 0.5, sz));
+        parts.push(place(paint(new THREE.SphereGeometry(0.45, 7, 3, 0, Math.PI * 2, 0, 1.1), 0xd8d8d4), sx, top + 1.0, sz, 1.0, r() * 6, 0));
+      }
+    }
+    // stone cornice round the roof line and a string course over the shops (not on the glass towers)
+    if (b.style !== STYLE.GLASS) {
+      const cc = b.style === STYLE.BRICK ? 0xb8ad9c : b.style === STYLE.CONCRETE ? 0x9a978f : 0xece6da;
+      const ring = (y, h, out, hex) => {
+        parts.push(place(paint(new THREE.BoxGeometry(b.w + out * 2, h, out), hex), b.x, y, b.z + b.d / 2 + out / 2));
+        parts.push(place(paint(new THREE.BoxGeometry(b.w + out * 2, h, out), hex), b.x, y, b.z - b.d / 2 - out / 2));
+        parts.push(place(paint(new THREE.BoxGeometry(out, h, b.d), hex), b.x + b.w / 2 + out / 2, y, b.z));
+        parts.push(place(paint(new THREE.BoxGeometry(out, h, b.d), hex), b.x - b.w / 2 - out / 2, y, b.z));
+      };
+      ring(top - 0.25, 0.42, 0.32, cc);                 // cornice
+      ring(top - 0.58, 0.16, 0.16, cc);                 // bed moulding under it
+      if (b.y < 0.5 && b.h > 8) ring(4.25, 0.24, 0.14, cc);   // string course above the shopfronts
+    } else {
+      // the towers' crown: a band of metal fins round the roof
+      const t = 0.22, H = 1.6, C = 0x6a6e72;
+      parts.push(place(paint(new THREE.BoxGeometry(b.w + t * 2, H, t), C), b.x, top + H / 2 - 0.2, b.z + b.d / 2 + t / 2));
+      parts.push(place(paint(new THREE.BoxGeometry(b.w + t * 2, H, t), C), b.x, top + H / 2 - 0.2, b.z - b.d / 2 - t / 2));
+      parts.push(place(paint(new THREE.BoxGeometry(t, H, b.d), C), b.x + b.w / 2 + t / 2, top + H / 2 - 0.2, b.z));
+      parts.push(place(paint(new THREE.BoxGeometry(t, H, b.d), C), b.x - b.w / 2 - t / 2, top + H / 2 - 0.2, b.z));
+    }
     if (b.style === STYLE.GLASS && b.h > 90 && r() < 0.6) {
       parts.push(place(paint(new THREE.CylinderGeometry(0.18, 0.3, 14, 6), 0xd0d0d0), b.x, top + 7, b.z));
       parts.push(place(paint(new THREE.SphereGeometry(0.45, 8, 6), 0xff3030, 6), b.x, top + 14.2, b.z));   // aircraft warning light
     }
+    const key = Math.floor(b.x / 240) + "," + Math.floor(b.z / 240);
+    if (!byTile.has(key)) byTile.set(key, []);
+    byTile.get(key).push(...parts.splice(p0));
   }
-  if (parts.length) {
-    const mm = new THREE.Mesh(merge(parts), vcMaterial({ roughness: 0.7 }));
+  // merged per 240 m tile, so the renderer can skip the ones off screen or far away
+  const clutterMat = vcMaterial({ roughness: 0.7 });
+  for (const list of byTile.values()) {
+    const mm = new THREE.Mesh(merge(list), clutterMat);
     mm.castShadow = true; mm.receiveShadow = true; scene.add(mm);
+    mm.geometry.computeBoundingSphere(); mm.boundingSphere = mm.geometry.boundingSphere;
+    addTile(mm, 520);
   }
   // pitched roofs: a prism per house, terracotta or slate
   if (houses.length) {
@@ -679,14 +759,40 @@ function treeGeometry() {
   blobs.forEach(([x, y, z, r], i) => parts.push(place(paint(new THREE.IcosahedronGeometry(r, 2), greens[i]), x, y, z)));
   return merge(parts);
 }
+// street lamp: flared cast base, tapered pole with a collar, a swan-neck arm sweeping out over the
+// road to a cobra-head luminaire with a glowing lens bowl and a photocell; city banners on the pole.
+// The head sits 1.8 m out at 6.2 m (the street-light map is baked from that point).
 function lampGeometry() {
-  const parts = [];
-  parts.push(place(paint(new THREE.CylinderGeometry(0.09, 0.13, 6.5, 8), 0x3a3f45), 0, 3.25, 0));
-  parts.push(place(paint(new THREE.CylinderGeometry(0.2, 0.25, 0.4, 8), 0x3a3f45), 0, 0.2, 0));
-  parts.push(place(paint(new THREE.BoxGeometry(0.1, 0.1, 2.0), 0x3a3f45), 0, 6.4, -0.9));
-  parts.push(place(paint(new THREE.BoxGeometry(0.5, 0.18, 0.9), 0x2f3338), 0, 6.35, -1.8));
-  parts.push(place(paint(new THREE.BoxGeometry(0.4, 0.05, 0.75), 0xfff0cc, 1), 0, 6.24, -1.8));   // lens: emissive
-  return merge(parts);
+  const M = 0x3a3f45, D = 0x2c3034, p = [];
+  p.push(place(paint(new THREE.CylinderGeometry(0.2, 0.3, 0.55, 8, 1, true), D), 0, 0.275, 0));                // cast base
+  p.push(place(paint(new THREE.CylinderGeometry(0.34, 0.34, 0.08, 8), 0x55595c), 0, 0.04, 0));         // footing plate
+  p.push(place(paint(new THREE.BoxGeometry(0.14, 0.22, 0.03), 0x4a4f54), 0, 0.3, 0.205));              // access hatch
+  p.push(place(paint(new THREE.CylinderGeometry(0.075, 0.125, 5.9, 8, 1, true), M), 0, 3.5, 0));               // tapered shaft
+  p.push(place(paint(new THREE.CylinderGeometry(0.15, 0.15, 0.12, 8, 1, true), D), 0, 2.6, 0));                // collar
+  p.push(place(paint(new THREE.CylinderGeometry(0.1, 0.1, 0.1, 6), D), 0, 6.42, 0));                  // cap
+  // swan-neck arm
+  const arm = new THREE.QuadraticBezierCurve3(new THREE.Vector3(0, 6.1, 0), new THREE.Vector3(0, 6.75, -0.15), new THREE.Vector3(0, 6.48, -1.55));
+  p.push(paint(new THREE.TubeGeometry(arm, 7, 0.055, 5), M));
+  // cobra head: a streamlined shell, the lens bowl underneath, a photocell on top
+  p.push(place(paint(new THREE.SphereGeometry(1, 8, 5), 0x8a8f94), 0, 6.42, -1.85, 0.06, 0, 0, 0.19, 0.1, 0.48));
+  p.push(place(paint(new THREE.SphereGeometry(1, 8, 3, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), 0xfff0cc, 1), 0, 6.36, -1.88, 0.06, 0, 0, 0.15, 0.07, 0.38));   // lens: emissive
+  p.push(place(paint(new THREE.CylinderGeometry(0.035, 0.035, 0.06, 6), 0x222222), 0, 6.55, -1.7));
+  // banners: two brackets and a pair of pennants, Palm City teal with a sunset stripe
+  for (const y of [4.1, 5.5]) p.push(place(paint(new THREE.CylinderGeometry(0.02, 0.02, 0.62, 4, 1, true), D), 0.31, y, 0, 0, 0, Math.PI / 2));
+  p.push(place(paint(new THREE.BoxGeometry(0.5, 1.3, 0.015), 0x16807a), 0.36, 4.82, 0));
+  p.push(place(paint(new THREE.BoxGeometry(0.5, 0.16, 0.02), 0xf08a32), 0.36, 4.5, 0));
+  p.push(place(paint(new THREE.BoxGeometry(0.5, 0.06, 0.02), 0xf4e3c0), 0.36, 4.98, 0));
+  return merge(p);
+}
+// the same lamp from a distance: a few boxes
+function lampGeometryFar() {
+  const p = [];
+  p.push(place(paint(new THREE.CylinderGeometry(0.09, 0.15, 6.5, 6), 0x3a3f45), 0, 3.25, 0));
+  p.push(place(paint(new THREE.BoxGeometry(0.1, 0.1, 1.7), 0x3a3f45), 0, 6.45, -0.85));
+  p.push(place(paint(new THREE.BoxGeometry(0.48, 0.16, 0.95), 0x8a8f94), 0, 6.4, -1.85));
+  p.push(place(paint(new THREE.BoxGeometry(0.4, 0.05, 0.8), 0xfff0cc, 1), 0, 6.3, -1.88));
+  p.push(place(paint(new THREE.BoxGeometry(0.5, 1.3, 0.02), 0x16807a), 0.36, 4.82, 0));
+  return merge(p);
 }
 function benchGeometry() {
   const parts = [];
@@ -695,7 +801,7 @@ function benchGeometry() {
   for (const x of [-0.8, 0.8]) parts.push(place(paint(new THREE.BoxGeometry(0.08, 0.46, 0.5), 0x33363a), x, 0.23, 0));
   return merge(parts);
 }
-function instanced(scene, geo, mat, list, yOf, cast = true) {
+function instanced(scene, geo, mat, list, yOf, cast = true, maxD = 400, minD = -Infinity) {
   const mesh = new THREE.InstancedMesh(geo, mat, list.length);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), s = new THREE.Vector3();
   list.forEach((it, i) => {
@@ -706,7 +812,7 @@ function instanced(scene, geo, mat, list, yOf, cast = true) {
   mesh.castShadow = cast; mesh.receiveShadow = true;
   mesh.frustumCulled = false;
   scene.add(mesh);
-  tileInstances(scene, mesh, 140, 400);   // static: split into tiles the renderer can skip, drawn out to ~500 m
+  tileInstances(scene, mesh, 140, maxD, minD);   // static: split into tiles the renderer can skip, drawn out to ~500 m
   return mesh;
 }
 
@@ -733,7 +839,18 @@ function buildProps(scene, city, U, gy) {
   });
   if (city.shrubs && city.shrubs.length) instanced(scene, shrubGeometry(), vcMaterial({ roughness: 0.7 }), city.shrubs.map(([x, z, s]) => [x, z, r() * 6.28, s]), gy);
   const lampMat = vcMaterial({ roughness: 0.5, metalness: 0.3, emitMul: 0 });
-  instanced(scene, lampGeometry(), lampMat, city.lamps.map(([x, z, a]) => [x, z, a, 1]), gy);
+  const lampList = city.lamps.map(([x, z, a]) => [x, z, a, 1]);
+  instanced(scene, lampGeometry(), lampMat, lampList, gy, true, 95);              // detailed up close
+  instanced(scene, lampGeometryFar(), lampMat, lampList, gy, false, 420, 95);     // simple further out
+  // after dark each lamp has a soft halo round its lens (the bloom does the rest)
+  const gc = document.createElement("canvas"); gc.width = gc.height = 64;
+  const gx = gc.getContext("2d"), gr = gx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, "rgba(255,240,215,1)"); gr.addColorStop(0.15, "rgba(255,225,180,0.5)"); gr.addColorStop(0.45, "rgba(255,200,140,0.1)"); gr.addColorStop(1, "rgba(255,200,140,0)");
+  gx.fillStyle = gr; gx.fillRect(0, 0, 64, 64);
+  const hg = new THREE.BufferGeometry();
+  hg.setAttribute("position", new THREE.Float32BufferAttribute(city.lamps.flatMap(([x, z, a]) => [x - Math.sin(a) * 1.9, gy(x, z) + 6.28, z - Math.cos(a) * 1.9]), 3));
+  const halo = new THREE.Points(hg, new THREE.PointsMaterial({ size: 2.6, map: new THREE.CanvasTexture(gc), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+  halo.frustumCulled = false; halo.visible = false; scene.add(halo);
   instanced(scene, benchGeometry(), vcMaterial({ roughness: 0.7 }), city.benches.map(([x, z, a]) => [x, z, a, 1]), gy);
 
   // plaza fountain: tiered basin, a column, water discs that shimmer
@@ -763,7 +880,7 @@ function buildProps(scene, city, U, gy) {
   }
   const umm = new THREE.Mesh(merge(um), vcMaterial({ roughness: 0.8, side: THREE.DoubleSide }));
   umm.castShadow = true; umm.receiveShadow = true; scene.add(umm);
-  return { lampMat, spray };
+  return { lampMat, halo, spray };
 }
 
 export function createCity(scene, city, gy) {
@@ -786,6 +903,7 @@ export function createCity(scene, city, gy) {
   function update(time, night) {
     U.uTime.value = time; U.uNight.value = night;
     props.lampMat.userData.emit.value = night * 3.0;
+    props.halo.visible = night > 0.05; props.halo.material.opacity = Math.min(1, night * 1.5) * 0.9;
     props.spray.scale.y = 1 + Math.sin(time * 5) * 0.06;
   }
   return { update, U, buildings };
