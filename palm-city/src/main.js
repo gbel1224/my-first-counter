@@ -8,7 +8,7 @@ import { createOcean } from "./ocean.js";
 import { Crowd, randomLook } from "./people.js";
 import { Traffic, SIGNAL, Parked } from "./traffic.js";
 import { buildFacadeDetail, buildStreetDetail, updateSignals } from "./detail.js";
-import { PAINTS } from "./cars.js";
+import { PAINTS, LAMP_U, driveLamps } from "./cars.js";
 import { initInput, pollInput, I } from "./input.js";
 import { createHUD, askConfirm } from "./hud.js";
 import { makeProps } from "./props.js";
@@ -495,6 +495,7 @@ function exitCar() {
   const lx = Math.cos(c.h), lz = -Math.sin(c.h);
   P.x = c.x + lx * 1.9; P.z = c.z + lz * 1.9; P.yaw = c.h; P.speed = 0;
   const res = collider.resolve(P.x, P.z, 0.4); P.x = res.x; P.z = res.z; P.y = groundY(P.x, P.z);
+  if (c.setLamps) c.setLamps(false, 0, 0, false);           // engine off: lamps out
   P.car = null; P.ch.group.visible = true;
   AudioSys.play("door", 0.6); if (!c.boom) doors.play(c, "out");
   AudioSys.engine(0);
@@ -517,6 +518,7 @@ function update(dt) {
       else if (c.kind === "heli") heliStep(c, inp, dt, time, collider);
       else if (c.kind === "plane") { planeStep(c, inp, dt, time, collider); if (c.crash && !c.boom) combat.explodeCar(c, "player"); }
       else { impact = Math.max(driveStep(c, inp, dt, collider), parked.collide(c)); skids.track(c, (c.drift > 3.8 || (inp.handbrakeHeld && Math.abs(c.speed) > 6)) && !c.air, groundY(c.x, c.z) + 0.02); }
+      driveLamps(c, c.kind ? null : inp, dt);
       if (impact > 4) { rig.shake = Math.min(1, impact / 18); AudioSys.play("door", Math.min(1, impact / 20), 0.6); fx.sparks(c.x + Math.sin(c.h) * 2, 0.8, c.z + Math.cos(c.h) * 2, 8); }
       if (impact > 9) combat.damageCar(c, (impact - 8) * 2.2, "player");
       // ram the cops: it's a crime, and it hurts both of you
@@ -650,8 +652,17 @@ function frame(now) {
   update(dt);
   render();
 }
+// the headlight beams of the car you're driving: real light on the road ahead after dark
+const beam = new THREE.SpotLight(0xfff1dc, 0, 70, 0.55, 0.55, 1.3);
+beam.target.position.set(0, -1.2, 22); beam.add(beam.target); scene.add(beam);
 function render() {
   const focus = interior.inside ? interior.doorWorld() : P.car || P;
+  LAMP_U.uTime.value = time; LAMP_U.night = sky.state.night;
+  {
+    const c = P.car, on = c && !c.kind && c.setLamps && sky.state.night > 0.3;
+    if (on && beam.parent !== c.chassis) { c.chassis.add(beam); beam.position.set(0, (c.spec.ride || 0.2) + 0.55, c.spec.len / 2 + 0.1); }
+    beam.intensity = on ? 180 * Math.min(1, (sky.state.night - 0.3) * 3) : 0;
+  }
   if (P.car && (P.car.kind === "bike" || P.car.kind === "jetski")) {
     const c = P.car; P.ch.group.visible = true;
     const seat = c.kind === "bike" ? 0.62 : 0.55;

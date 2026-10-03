@@ -2,21 +2,24 @@
 <style>html,body{margin:0;background:#1a1c20}canvas{display:block}</style></head>
 <body><script type="module">
 import * as THREE from "../vendor/three.module.js";
-import { makeCar, CAR_TYPES } from "../src/cars.js";
+import { makeCar, CAR_TYPES, LAMP_U } from "../src/cars.js";
 const q = new URLSearchParams(location.search);
 const W = +(q.get("w") || 1400), Hh = +(q.get("h") || 700);
 const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(W, Hh); r.setPixelRatio(1); document.body.appendChild(r.domElement);
 r.toneMapping = THREE.ACESFilmicToneMapping; r.outputColorSpace = THREE.SRGBColorSpace; r.shadowMap.enabled = true;
-const scene = new THREE.Scene(); scene.background = new THREE.Color(0x9fb2c8);
-scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x5a4a40, 1.0));
-const key = new THREE.DirectionalLight(0xfff0e0, 2.6); key.position.set(-4, 8, 6); key.castShadow = true; Object.assign(key.shadow.camera, { left: -14, right: 14, top: 8, bottom: -8 }); key.shadow.mapSize.set(2048, 2048); key.shadow.normalBias = 0.02; scene.add(key);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(q.get("night") ? 0x0b0f18 : 0x9fb2c8);
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x5a4a40, q.get("night") ? 0.08 : 1.0));
+const key = new THREE.DirectionalLight(0xfff0e0, q.get("night") ? 0.1 : 2.6); key.position.set(-4, 8, 6); key.castShadow = true; Object.assign(key.shadow.camera, { left: -14, right: 14, top: 8, bottom: -8 }); key.shadow.mapSize.set(2048, 2048); key.shadow.normalBias = 0.02; scene.add(key);
 { const pm = new THREE.PMREMGenerator(r), es = new THREE.Scene();
   const sky = new THREE.Mesh(new THREE.SphereGeometry(20, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, vertexShader: "varying vec3 p; void main(){ p = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }", fragmentShader: "varying vec3 p; void main(){ float h = normalize(p).y; vec3 c = mix(vec3(0.35,0.33,0.3), mix(vec3(0.85,0.9,1.0), vec3(0.35,0.55,0.9), max(h,0.)), smoothstep(-0.05,0.05,h)); gl_FragColor = vec4(c,1.); }" }));
   es.add(sky); scene.environment = pm.fromScene(es).texture; }
 const gnd = new THREE.Mesh(new THREE.PlaneGeometry(80, 40), new THREE.MeshStandardMaterial({ color: 0x55585e, roughness: 0.85 })); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; scene.add(gnd);
 const cols = (q.get("c") || "b8bcc0,7a1c20,1f2d4a,f2f2f0").split(",").map(h => parseInt(h, 16));
 const types = (q.get("t") || CAR_TYPES.join(",")).split(",");
-types.forEach((t, i) => { const c = makeCar(t, cols[i % cols.length]); c.group.position.set((i - (types.length - 1) / 2) * 5.4, 0, 0); c.group.rotation.y = +(q.get("ry") || 0.6); scene.add(c.group); });
+LAMP_U.uTime.value = 0.1;
+types.forEach((t, i) => { const c = makeCar(t, cols[i % cols.length]);
+  if (q.get("door")) for (const k of q.get("door").split(",")) c.openDoor(k, +(q.get("ang") || 1.0));
+  if (q.get("lamps")) { const [b, h, ind, rv] = q.get("lamps").split(",").map(Number); c.setLamps(b, h, ind, rv); } c.group.position.set((i - (types.length - 1) / 2) * 5.4, 0, 0); c.group.rotation.y = +(q.get("ry") || 0.6); scene.add(c.group); });
 const cam = new THREE.PerspectiveCamera(+(q.get("fov") || 30), W / Hh, 0.1, 200);
 cam.position.set(+(q.get("cx") || 0), +(q.get("cy") || 4), +(q.get("cz") || 18)); cam.lookAt(+(q.get("cx") || 0), +(q.get("ly") || 0.8), 0);
 r.render(scene, cam); window.__frames = 99;

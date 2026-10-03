@@ -4,7 +4,7 @@
 import * as THREE from "../vendor/three.module.js";
 import { inView } from "./cull.js";
 import { N, ROAD, CELL, HALF, roadC, clamp, lerp, mulberry32 } from "./world.js";
-import { CAR_TYPES, carGeometries, MAT, PAINTS, REAL_PAINTS } from "./cars.js";
+import { CAR_TYPES, carGeometries, MAT, PAINTS, REAL_PAINTS, lampGeometry } from "./cars.js";
 
 const LOD_D = 55;   // past this, cars are drawn from the lighter far geometry
 // one instanced mesh per car part (paint / glass / trim / lights) per type
@@ -15,9 +15,8 @@ function carMeshes(scene, max, far) {
     const mk = (geo, mat, shadow) => { const m = new THREE.InstancedMesh(geo, mat, max); m.castShadow = shadow; m.receiveShadow = true; m.frustumCulled = false; m.count = 0; scene.add(m); return m; };
     const paintM = mk(G.paint, MAT.paint, true);
     paintM.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3);
-    const lightsM = mk(G.lights, MAT.lights, false);
-    lightsM.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3);
-    out[t] = { paint: paintM, glass: mk(G.glass, MAT.glass, false), trim: mk(G.trim, MAT.trim, !far), lights: lightsM };
+    const lightsM = mk(lampGeometry(G.lights, max), MAT.lights, false);          // per-car lamp state in aLamp
+    out[t] = { paint: paintM, glass: mk(G.glass, far ? MAT.glassFar : MAT.glass, false), trim: mk(G.trim, MAT.trim, !far), lights: lightsM };
   }
   return out;
 }
@@ -213,13 +212,15 @@ export class Traffic {
       m.compose(v.set(c.x, 0, c.z), q, this._s);
       M.paint.setMatrixAt(i, m); M.glass.setMatrixAt(i, m); M.trim.setMatrixAt(i, m); M.lights.setMatrixAt(i, m);
       col.set(c.color); M.paint.setColorAt(i, col);
-      // brake lights flare, headlights come up at night
-      const b = c.brake ? 3.2 : 1.0 + night * 1.2;
-      col.setRGB(b, b * (c.brake ? 0.9 : 1), b * (c.brake ? 0.9 : 1)); M.lights.setColorAt(i, col);
+      // lamps: brake lights when slowing or stopped, headlights after dark, indicators through a turn
+      let ind = 0;
+      if (c.turn) { const T = c.turn, ex = T.p1[0] - T.pc[0], ez = T.p1[1] - T.pc[1], nx = T.pc[0] - T.p0[0], nz = T.pc[1] - T.p0[1], cr = nx * ez - nz * ex; ind = Math.abs(cr) < 1e-3 ? 0 : cr < 0 ? 1 : 2; }
+      M.lights.geometry.attributes.aLamp.setXYZW(i, c.brake ? 1 : 0, night > 0.3 ? 1 : 0, ind, 0);
     }
     for (const t of CAR_TYPES) for (const far of [false, true]) {
       const M = (far ? this.meshFar : this.mesh)[t], n = counts[far ? t + "_f" : t] || 0;
       for (const k in M) { M[k].count = n; M[k].instanceMatrix.needsUpdate = true; if (M[k].instanceColor) M[k].instanceColor.needsUpdate = true; }
+      M.lights.geometry.attributes.aLamp.needsUpdate = true;
     }
   }
   // remove a car from the traffic (the player took it)
@@ -310,8 +311,8 @@ export class Parked {
       this._m.compose(this._v.set(c.x, 0, c.z), this._q, this._s);
       M.paint.setMatrixAt(ii, this._m); M.glass.setMatrixAt(ii, this._m); M.trim.setMatrixAt(ii, this._m); M.lights.setMatrixAt(ii, this._m);
       this._c.set(c.color); M.paint.setColorAt(ii, this._c);
-      this._c.setRGB(0.35, 0.35, 0.35); M.lights.setColorAt(ii, this._c);     // engine off: lamps dark
+      M.lights.geometry.attributes.aLamp.setXYZW(ii, 0, 0, 0, 0);     // engine off: lamps dark
     }
-    for (const t of CAR_TYPES) for (const far of [false, true]) { const M = (far ? this.meshFar : this.mesh)[t]; for (const k in M) { M[k].count = Math.min(PMAX, counts[far ? t + "_f" : t] || 0); M[k].instanceMatrix.needsUpdate = true; if (M[k].instanceColor) M[k].instanceColor.needsUpdate = true; } }
+    for (const t of CAR_TYPES) for (const far of [false, true]) { const M = (far ? this.meshFar : this.mesh)[t]; for (const k in M) { M[k].count = Math.min(PMAX, counts[far ? t + "_f" : t] || 0); M[k].instanceMatrix.needsUpdate = true; if (M[k].instanceColor) M[k].instanceColor.needsUpdate = true; } M.lights.geometry.attributes.aLamp.needsUpdate = true; }
   }
 }
