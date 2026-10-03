@@ -4,7 +4,7 @@
 import * as THREE from "../vendor/three.module.js";
 import { inView } from "./cull.js";
 import { N, ROAD, CELL, HALF, roadC, clamp, lerp, mulberry32 } from "./world.js";
-import { CAR_TYPES, carGeometries, carSpec, MAT, PAINTS, REAL_PAINTS, lampGeometry } from "./cars.js";
+import { CAR_TYPES, carGeometries, carSpec, MAT, PAINTS, REAL_PAINTS, lampGeometry, plateGeometry } from "./cars.js";
 
 // the mix on the road: mostly everyday cars, some pickups, vans and taxis, a few trucks and buses
 const MIX = { sedan: 22, compact: 16, suv: 14, pickup: 10, van: 7, taxi: 8, coupe: 5, sports: 5, truck: 4, bus: 3, motorbike: 6, ambulance: 2, firetruck: 1.2 };
@@ -22,7 +22,7 @@ function pickPaint(r, type) {
   if (type === "bus") return BUS_PAINT[(r() * BUS_PAINT.length) | 0];
   return REAL_PAINTS[(r() * REAL_PAINTS.length) | 0];
 }
-const LOD_D = 55;   // past this, cars are drawn from the lighter far geometry
+const LOD_D = 45;   // past this, cars are drawn from the lighter far geometry
 // one instanced mesh per car part (paint / glass / trim / lights) per type
 function carMeshes(scene, max, far) {
   const out = {};
@@ -33,6 +33,9 @@ function carMeshes(scene, max, far) {
     paintM.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3);
     const lightsM = mk(lampGeometry(G.lights, max), MAT.lights, false);          // per-car lamp state in aLamp
     out[t] = { paint: paintM, glass: mk(G.glass, far ? MAT.glassFar : MAT.glass, false), trim: mk(G.trim, MAT.trim, !far), lights: lightsM };
+    // up close: textured tyres and each car's own number plate
+    if (!far && G.tyres && G.tyres.attributes.position.count) out[t].tyres = mk(G.tyres, MAT.tyre, true);
+    if (!far && G.plates && G.plates.attributes.position.count) out[t].plates = mk(plateGeometry(G.plates, max), MAT.plate, false);
   }
   return out;
 }
@@ -226,7 +229,8 @@ export class Traffic {
       counts[key] = i + 1;
       q.setFromAxisAngle(this._y, c.h);
       m.compose(v.set(c.x, 0, c.z), q, this._s);
-      M.paint.setMatrixAt(i, m); M.glass.setMatrixAt(i, m); M.trim.setMatrixAt(i, m); M.lights.setMatrixAt(i, m);
+      for (const k in M) M[k].setMatrixAt(i, m);
+      if (M.plates) { M.plates.geometry.attributes.aPlate.setX(i, c.plate ?? (c.plate = (Math.random() * 16) | 0)); M.plates.geometry.attributes.aPlate.needsUpdate = true; }
       col.set(c.color); M.paint.setColorAt(i, col);
       // lamps: brake lights when slowing or stopped, headlights after dark, indicators through a turn
       let ind = 0;
@@ -326,7 +330,8 @@ export class Parked {
       if (ii >= PMAX) continue;
       this._q.setFromAxisAngle(this._y, c.h);
       this._m.compose(this._v.set(c.x, 0, c.z), this._q, this._s);
-      M.paint.setMatrixAt(ii, this._m); M.glass.setMatrixAt(ii, this._m); M.trim.setMatrixAt(ii, this._m); M.lights.setMatrixAt(ii, this._m);
+      for (const k in M) M[k].setMatrixAt(ii, this._m);
+      if (M.plates) { M.plates.geometry.attributes.aPlate.setX(ii, c.plate ?? (c.plate = (Math.random() * 16) | 0)); M.plates.geometry.attributes.aPlate.needsUpdate = true; }
       this._c.set(c.color); M.paint.setColorAt(ii, this._c);
       M.lights.geometry.attributes.aLamp.setXYZW(ii, 0, 0, 0, 0);     // engine off: lamps dark
     }
