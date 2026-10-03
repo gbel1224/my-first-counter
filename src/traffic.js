@@ -6,6 +6,22 @@ import { inView } from "./cull.js";
 import { N, ROAD, CELL, HALF, roadC, clamp, lerp, mulberry32 } from "./world.js";
 import { CAR_TYPES, carGeometries, MAT, PAINTS, REAL_PAINTS } from "./cars.js";
 
+const LOD_D = 55;   // past this, cars are drawn from the lighter far geometry
+// one instanced mesh per car part (paint / glass / trim / lights) per type
+function carMeshes(scene, max, far) {
+  const out = {};
+  for (const t of CAR_TYPES) {
+    const G = carGeometries(t, far);
+    const mk = (geo, mat, shadow) => { const m = new THREE.InstancedMesh(geo, mat, max); m.castShadow = shadow; m.receiveShadow = true; m.frustumCulled = false; m.count = 0; scene.add(m); return m; };
+    const paintM = mk(G.paint, MAT.paint, true);
+    paintM.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3);
+    const lightsM = mk(G.lights, MAT.lights, false);
+    lightsM.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3);
+    out[t] = { paint: paintM, glass: mk(G.glass, MAT.glass, false), trim: mk(G.trim, MAT.trim, !far), lights: lightsM };
+  }
+  return out;
+}
+
 // lane offset from the road centre line for a travel direction. Axis "z" = N-S road.
 // Right-hand traffic: heading +z (south) keeps to -x; heading +x (east) keeps to +z.
 export function laneOffset(axis, dir, lane) {
@@ -39,21 +55,8 @@ export class Traffic {
       this.cars.push(c);
     }
     this.grid = new Map();
-    // instanced meshes
-    this.mesh = {};
-    for (const t of CAR_TYPES) {
-      const G = carGeometries(t);
-      const mk = (geo, mat, shadow) => {
-        const m = new THREE.InstancedMesh(geo, mat, MAXI);
-        m.castShadow = shadow; m.receiveShadow = true; m.frustumCulled = false; m.count = 0;
-        scene.add(m); return m;
-      };
-      const paintM = mk(G.paint, MAT.paint, true);
-      paintM.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAXI * 3), 3);
-      const lightsM = mk(G.lights, MAT.lights, false);
-      lightsM.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAXI * 3), 3);
-      this.mesh[t] = { paint: paintM, glass: mk(G.glass, MAT.glass, false), trim: mk(G.trim, MAT.trim, true), lights: lightsM };
-    }
+    // instanced meshes: detailed cars up close, a lighter version of each further out
+    this.mesh = carMeshes(scene, MAXI, false); this.meshFar = carMeshes(scene, MAXI, true);
     this._m = new THREE.Matrix4(); this._c = new THREE.Color(); this._q = new THREE.Quaternion(); this._v = new THREE.Vector3(); this._s = new THREE.Vector3(1, 1, 1);
     this._y = new THREE.Vector3(0, 1, 0);
   }
@@ -202,9 +205,10 @@ export class Traffic {
       if (!c.alive) continue;
       const dx = c.x - fx, dz = c.z - fz;
       if (dx * dx + dz * dz > 280 * 280 || !inView(c.x, c.z)) continue;
-      const M = this.mesh[c.type], i = counts[c.type];
+      const far = dx * dx + dz * dz > LOD_D * LOD_D, key = far ? c.type + "_f" : c.type;
+      const M = (far ? this.meshFar : this.mesh)[c.type], i = counts[key] || 0;
       if (i >= MAXI) continue;
-      counts[c.type] = i + 1;
+      counts[key] = i + 1;
       q.setFromAxisAngle(this._y, c.h);
       m.compose(v.set(c.x, 0, c.z), q, this._s);
       M.paint.setMatrixAt(i, m); M.glass.setMatrixAt(i, m); M.trim.setMatrixAt(i, m); M.lights.setMatrixAt(i, m);
@@ -213,8 +217,8 @@ export class Traffic {
       const b = c.brake ? 3.2 : 1.0 + night * 1.2;
       col.setRGB(b, b * (c.brake ? 0.9 : 1), b * (c.brake ? 0.9 : 1)); M.lights.setColorAt(i, col);
     }
-    for (const t of CAR_TYPES) {
-      const M = this.mesh[t], n = counts[t];
+    for (const t of CAR_TYPES) for (const far of [false, true]) {
+      const M = (far ? this.meshFar : this.mesh)[t], n = counts[far ? t + "_f" : t] || 0;
       for (const k in M) { M[k].count = n; M[k].instanceMatrix.needsUpdate = true; if (M[k].instanceColor) M[k].instanceColor.needsUpdate = true; }
     }
   }
@@ -259,16 +263,7 @@ export class Parked {
     // static grid for collisions / lookups
     this.grid = new Map();
     for (const c of this.cars) this.gridAdd(c);
-    this.mesh = {};
-    for (const t of CAR_TYPES) {
-      const G = carGeometries(t);
-      const mk = (geo, mat, shadow) => { const m = new THREE.InstancedMesh(geo, mat, PMAX); m.castShadow = shadow; m.receiveShadow = true; m.frustumCulled = false; m.count = 0; scene.add(m); return m; };
-      const paintM = mk(G.paint, MAT.paint, true);
-      paintM.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(PMAX * 3), 3);
-      const lightsM = mk(G.lights, MAT.lights, false);
-      lightsM.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(PMAX * 3), 3);
-      this.mesh[t] = { paint: paintM, glass: mk(G.glass, MAT.glass, false), trim: mk(G.trim, MAT.trim, true), lights: lightsM };
-    }
+    this.mesh = carMeshes(scene, PMAX, false); this.meshFar = carMeshes(scene, PMAX, true);
     this._m = new THREE.Matrix4(); this._c = new THREE.Color(); this._q = new THREE.Quaternion(); this._v = new THREE.Vector3(); this._s = new THREE.Vector3(1, 1, 1); this._y = new THREE.Vector3(0, 1, 0);
     this.near = [];
   }
@@ -306,16 +301,17 @@ export class Parked {
     const near = this.near; near.length = 0;
     for (const c of this.cars) { if (!c.alive) continue; const d = (c.x - fx) ** 2 + (c.z - fz) ** 2; if (d < 200 * 200 && inView(c.x, c.z)) { c._d = d; near.push(c); } }
     if (near.length > PMAX) { near.sort((a, b) => a._d - b._d); near.length = PMAX; }
-    const counts = {}; for (const t of CAR_TYPES) counts[t] = 0;
+    const counts = {};
     for (const c of near) {
-      const M = this.mesh[c.type], i = counts[c.type]++;
-      if (i >= PMAX) continue;
+      const far = c._d > LOD_D * LOD_D, key = far ? c.type + "_f" : c.type;
+      const M = (far ? this.meshFar : this.mesh)[c.type], i = counts[key] = (counts[key] || 0) + 1, ii = i - 1;
+      if (ii >= PMAX) continue;
       this._q.setFromAxisAngle(this._y, c.h);
       this._m.compose(this._v.set(c.x, 0, c.z), this._q, this._s);
-      M.paint.setMatrixAt(i, this._m); M.glass.setMatrixAt(i, this._m); M.trim.setMatrixAt(i, this._m); M.lights.setMatrixAt(i, this._m);
-      this._c.set(c.color); M.paint.setColorAt(i, this._c);
-      this._c.setRGB(0.35, 0.35, 0.35); M.lights.setColorAt(i, this._c);     // engine off: lamps dark
+      M.paint.setMatrixAt(ii, this._m); M.glass.setMatrixAt(ii, this._m); M.trim.setMatrixAt(ii, this._m); M.lights.setMatrixAt(ii, this._m);
+      this._c.set(c.color); M.paint.setColorAt(ii, this._c);
+      this._c.setRGB(0.35, 0.35, 0.35); M.lights.setColorAt(ii, this._c);     // engine off: lamps dark
     }
-    for (const t of CAR_TYPES) { const M = this.mesh[t]; for (const k in M) { M[k].count = Math.min(PMAX, counts[t]); M[k].instanceMatrix.needsUpdate = true; if (M[k].instanceColor) M[k].instanceColor.needsUpdate = true; } }
+    for (const t of CAR_TYPES) for (const far of [false, true]) { const M = (far ? this.meshFar : this.mesh)[t]; for (const k in M) { M[k].count = Math.min(PMAX, counts[far ? t + "_f" : t] || 0); M[k].instanceMatrix.needsUpdate = true; if (M[k].instanceColor) M[k].instanceColor.needsUpdate = true; } }
   }
 }
