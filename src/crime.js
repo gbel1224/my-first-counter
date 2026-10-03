@@ -4,7 +4,7 @@
 // are now real cars driving the road grid with the same physics as yours.
 import * as THREE from "../vendor/three.module.js";
 import { clamp, lerpAngle, HALF, N, CELL, ROAD, roadC, nearestRoad, groundY } from "./world.js";
-import { makeCar, carSpec } from "./cars.js";
+import { makeCar, carSpec, driveLamps } from "./cars.js";
 import { driveStep, syncCar } from "./play.js";
 import { buildCraft } from "./craft.js";
 
@@ -245,7 +245,7 @@ export function makeCrime(scene, g) {
       if (u.reverseT > 0) { u.reverseT -= dt; aiInp.mz = -1; aiInp.mx = -aiInp.mx; aiInp.handbrakeHeld = false; }
       else if (aiInp.mz > 0.3 && u.speed < 1.5 && d > 6) { u.stuckT = (u.stuckT || 0) + dt; if (u.stuckT > 1.2) { u.stuckT = 0; u.reverseT = 1.1; } }
       else u.stuckT = 0;
-      driveStep(u, aiInp, dt, g.collider);
+      driveStep(u, aiInp, dt, g.collider); driveLamps(u, aiInp, dt);
       syncCar(u);
       const blink = Math.floor(time * 7) % 2;
       u.barMatR.color.setRGB(blink ? 6 : 0.4, 0.1, 0.1); u.barMatB.color.setRGB(0.1, 0.2, blink ? 0.4 : 7);
