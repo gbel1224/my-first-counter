@@ -23,6 +23,12 @@ const GLSL_COMMON = `
     return mix(c, b - a, smoothstep(0.25, 0.6, w));
   }
   float line1(float x, float a, float b){ float w = max(fwidth(x), 1e-4); return smoothstep(a - w, a + w, x) - smoothstep(b - w, b + w, x); }
+  // bump the (view-space) normal by a height field h (metres), using screen-space derivatives
+  vec3 bumpN(vec3 n, float h, vec3 vpos) {
+    vec3 sx = dFdx(-vpos), sy = dFdy(-vpos), r1 = cross(sy, n), r2 = cross(n, sx);
+    float det = dot(sx, r1); vec3 grad = sign(det) * (dFdx(h) * r1 + dFdy(h) * r2);
+    return normalize(abs(det) * n - grad);
+  }
 `;
 
 // ============================================================================================
@@ -45,9 +51,58 @@ function facadeMaterial(U) {
       .replace("#include <common>", `#include <common>
         uniform float uNight;
         varying vec3 vWP; varying vec3 vON; varying vec4 vStyle; varying vec3 vBase; varying vec3 vBoxC; varying vec3 vBoxS;
-        ${GLSL_COMMON}`)
+        ${GLSL_COMMON}
+        // what's behind a window: a room, ray-traced as a box (interior mapping). cf: where in the
+        // cell this pixel is (0..1), sz: the cell in metres, d: the view ray in the wall's frame
+        // (x along the wall, y up, z into the building). Returns the light leaving the room.
+        vec3 room(vec2 cf, vec2 sz, vec3 d, vec2 cid, float seed, float lit, float office, float night) {
+          float D = office > 0.5 ? 7.0 : sz.x * 0.9 + 1.6;
+          vec3 p = vec3(cf.x * sz.x, cf.y * sz.y, 0.0);
+          vec3 ad = vec3(abs(d.x) < 1e-4 ? 1e-4 : d.x, abs(d.y) < 1e-4 ? 1e-4 : d.y, max(d.z, 1e-3));
+          float tx = ((ad.x > 0.0 ? sz.x : 0.0) - p.x) / ad.x, ty = ((ad.y > 0.0 ? sz.y : 0.0) - p.y) / ad.y, tz = D / ad.z;
+          float t = min(min(tx, ty), tz);
+          vec3 h = p + ad * t, hn = h / vec3(sz, D);
+          float r1 = h12(cid + seed * 3.7), r2 = h12(cid * 1.9 + 4.1), r3 = h12(cid * 2.7 + 8.3);
+          vec3 wallC = office > 0.5 ? vec3(0.72, 0.73, 0.72) : mix(mix(vec3(0.82, 0.76, 0.66), vec3(0.66, 0.7, 0.74), step(0.5, r1)), vec3(0.8, 0.66, 0.6), step(0.82, r1));
+          vec3 c; float ceilF = 0.0;
+          if (t == tz) {
+            c = wallC;
+            if (office > 0.5) {
+              // open-plan office: desks and monitors along the back, a partition line
+              float desk = step(hn.y, 0.24) * step(0.04, fract(hn.x * 2.0));
+              c = mix(c, vec3(0.3, 0.3, 0.31), desk);
+              c = mix(c, vec3(0.05, 0.06, 0.08), step(abs(hn.y - 0.31), 0.05) * step(abs(fract(hn.x * 3.0 + r2) - 0.5), 0.15));
+            } else {
+              // a sofa or bed, a picture, a doorway
+              float furn = step(hn.y, 0.22 + 0.12 * r2) * step(abs(hn.x - 0.3 - r3 * 0.4), 0.2 + 0.15 * r2);
+              c = mix(c, mix(vec3(0.3, 0.22, 0.16), vec3(0.32, 0.34, 0.4), r3), furn);
+              float pic = step(abs(hn.x - 0.25 - r2 * 0.5), 0.1) * step(abs(hn.y - 0.6), 0.09) * step(0.35, r3);
+              c = mix(c, vec3(0.2 + r1 * 0.5, 0.3, 0.25 + r2 * 0.4), pic);
+              float door = step(abs(hn.x - 0.8 + r1 * 0.6), 0.1) * step(hn.y, 0.7) * step(r3, 0.4);
+              c = mix(c, c * 0.45, door);
+            }
+          } else if (t == ty) {
+            if (ad.y > 0.0) { c = vec3(0.86, 0.86, 0.84); ceilF = 1.0;
+              if (office > 0.5) c = mix(c, vec3(1.15), band(h.x / 1.2, 0.2, 0.8) * band(h.z / 1.8, 0.3, 0.7));   // light panels
+            } else {
+              c = office > 0.5 ? vec3(0.32, 0.33, 0.36) : mix(vec3(0.46, 0.32, 0.2), vec3(0.6, 0.58, 0.54), step(0.6, r2));   // carpet / wood / tile
+              if (office < 0.5) c *= 0.9 + 0.1 * band(h.x / 0.15, 0.0, 0.5);
+              c = mix(c, vec3(0.28, 0.2, 0.15), step(length(vec2(hn.x - 0.5 + (r1 - 0.5) * 0.4, hn.z - 0.5)), 0.18) * step(0.5, r2));   // a rug or table
+            }
+          } else c = wallC * 0.82;
+          // daylight from the window, fading into the room; at night the room's own lamps
+          float back = hn.z;
+          vec3 day = c * (0.24 - 0.17 * back) * (1.0 - night);
+          vec3 warm = mix(vec3(1.0, 0.72, 0.42), vec3(0.85, 0.92, 1.0), step(0.75, r2) + office * 0.8);
+          float lampPos = length(vec2(hn.x - 0.5, hn.z - 0.45));
+          vec3 lamp = c * warm * (0.55 + 0.6 * (1.0 - smoothstep(0.0, 0.8, lampPos))) + warm * ceilF * (1.0 - smoothstep(0.0, 0.18, lampPos)) * (office > 0.5 ? 0.0 : 3.0);
+          // a TV's blue flicker in some dark flats
+          vec3 tv = vec3(0.2, 0.3, 0.6) * step(0.85, r3) * (1.0 - lit) * night * (0.4 + 0.3 * h12(vec2(floor(r1 * 40.0), 1.0)));
+          return day + lamp * lit * night * 1.4 + tv * c;
+        }`)
       .replace("#include <color_fragment>", `#include <color_fragment>
         float fRough = 0.9, fMetal = 0.0; vec3 fEmit = vec3(0.0);
+        float gH = 0.0, gGl = 0.0, gF = 0.0, gRough = 0.05, gHt = 0.0; vec3 gTint = vec3(1.0), gRw = vec3(0.0, 1.0, 0.0);
         {
           int style = int(vStyle.x + 0.5);
           float seed = vStyle.y;
@@ -57,6 +112,7 @@ function facadeMaterial(U) {
           float v = vWP.y - baseY;                         // height up this building
           float top = vBoxS.y - v;                         // distance below the roof line
           vec3 concrete = vec3(0.46, 0.44, 0.41);
+          vec2 cellF = vec2(0.5), cellSz = vec2(3.0); float office = 0.0;
           if (an.y > 0.5) {
             // ---- roof: tar and gravel, stained, patched, with a concrete parapet cap ----
             float edge = min(vBoxS.x * 0.5 - abs(vWP.x - vBoxC.x), vBoxS.z * 0.5 - abs(vWP.z - vBoxC.z));
@@ -85,6 +141,8 @@ function facadeMaterial(U) {
               float mull = 1.0 - band(c.x, 0.035, 0.965) * band(c.y, 0.05, 0.95);
               float spandrel = 1.0 - band(c.y, 0.0, 0.76);
               float tint = h12(cellId + seed * 17.0);
+              cellF = fract(c); cellSz = vec2(2.4, 3.9); office = 1.0;
+              gH += 0.03 * mull - 0.02 * spandrel;
               col = mix(wall * (0.7 + tint * 0.2), vec3(0.2, 0.21, 0.22), mull);
               col = mix(col, wall * 0.45, spandrel * (1.0 - mull));
               glass = (1.0 - mull) * (1.0 - spandrel);
@@ -100,6 +158,9 @@ function facadeMaterial(U) {
               float valid = step(0.0, vo) * step(0.6, top);
               float win = band(c.x, wx0, wx1) * band(c.y, wy0, wy1) * valid;
               vec2 f = fract(c);
+              cellF = vec2((f.x - wx0) / (wx1 - wx0), (f.y - wy0) / (wy1 - wy0)); cellSz = vec2(bay * (wx1 - wx0), fh * (wy1 - wy0)) + vec2(0.8, 0.6);
+              cellF = (cellF * (cellSz - vec2(0.8, 0.6)) + vec2(0.4, 0.3)) / cellSz;
+              office = style == 4 ? 1.0 : 0.0;
               if (style == 2) {
                 // brick: running bond, recessed mortar, per-brick tone, soot
                 vec2 bb = vec2(vWP.y / 0.28, u / 0.62);
@@ -107,6 +168,7 @@ function facadeMaterial(U) {
                 float mortar = 1.0 - band(bb.x, 0.08, 1.0) * band(bb.y, 0.04, 1.0);
                 float tone = h12(floor(bb) + seed) * 0.2 - 0.1;
                 col = mix(wall * (0.9 + tone + blot * 0.15), vec3(0.5, 0.47, 0.43), mortar * 0.75);
+                gH -= mortar * 0.012 - tone * 0.004;
                 col = mix(col, vec3(0.62, 0.58, 0.52), band(c.x, wx0 - 0.05, wx1 + 0.05) * line1(f.y, wy0 - 0.07, wy0) * valid);  // stone sills
                 col = mix(col, vec3(0.55, 0.51, 0.46), band(c.x, wx0 - 0.03, wx1 + 0.03) * line1(f.y, wy1, wy1 + 0.07) * valid);  // lintels
               } else {
@@ -114,8 +176,10 @@ function facadeMaterial(U) {
                 float fr = band(c.x, wx0 - 0.035, wx1 + 0.035) * band(c.y, wy0 - 0.03, wy1 + 0.03) * valid - win;
                 vec3 frameC = style == 3 ? vec3(0.9, 0.88, 0.84) : mix(vec3(0.72, 0.72, 0.7), vec3(0.25, 0.25, 0.26), step(0.5, h12(vec2(seed, 3.0))));
                 col = mix(col, frameC, fr);
+                gH += fr * 0.03;
                 float sill = band(c.x, wx0 - 0.07, wx1 + 0.07) * line1(f.y, wy0 - 0.08, wy0 - 0.03) * valid;
                 col = mix(col, wall * 1.08 + 0.05, sill);
+                gH += sill * 0.06;
                 col *= 1.0 - 0.35 * band(c.x, wx0 - 0.07, wx1 + 0.07) * line1(f.y, wy0 - 0.13, wy0 - 0.08) * valid;   // shadow under the sill
                 if (style == 3) {
                   float sh = (band(c.x, wx0 - 0.2, wx0 - 0.04) + band(c.x, wx1 + 0.04, wx1 + 0.2)) * band(c.y, wy0, wy1) * valid;
@@ -124,6 +188,7 @@ function facadeMaterial(U) {
                 if (style == 4) col = mix(col, concrete * (0.95 + blot * 0.1), 0.55);   // raw concrete slab office
               }
               glass = win;
+              gH -= win * 0.14;                                              // the opening is set back into the wall
               winTop = line1(f.y, wy1 - 0.12, wy1) * win;          // recess shadow cast by the head of the opening
               winX = line1(f.x, wx0, wx0 + 0.07) * win;            // and by the side jamb
               // blinds / curtains: every window drawn to its own height
@@ -145,8 +210,10 @@ function facadeMaterial(U) {
                   float tag = step(0.6, vnoise(vec2(u * 1.3, v * 2.0) + seed * 3.0)) * line1(v, 0.6, 2.2);
                   steel = mix(steel, mix(vec3(0.7, 0.15, 0.25), vec3(0.15, 0.3, 0.7), step(0.5, h12(vec2(sb, 1.0)))), tag * 0.8);
                   col = mix(col, steel, open); fRough = 0.55; fMetal = 0.4 * open;
+                  gH += open * 0.012 * band(v * 7.0, 0.0, 0.5);
                 } else {
                   glass = open;
+                  cellF = vec2(fu, clamp((v - 0.3) / 2.8, 0.0, 1.0)); cellSz = vec2(5.5, 3.2); office = 0.0;
                   col = mix(col, vec3(0.12, 0.12, 0.13), band(u / 5.5, 0.05, 0.95) * line1(v, 0.2, 3.2) - open);   // dark aluminium frames
                 }
                 // signage band above the shop
@@ -159,20 +226,36 @@ function facadeMaterial(U) {
                 below = 0.0; blind = 0.0;
               }
             }
-            // ---- glass ----
-            vec3 glassCol = style == 0 ? col : vec3(0.09, 0.1, 0.11);
-            col = mix(col, glassCol, glass);
+            // ---- glass: no paint of its own; what you see is the room behind it and the world it
+            // reflects (both added in the lighting, below) ----
+            float lit = step(style == 0 ? 0.7 : 0.64, h12(cellId * vec2(1.7, 3.1) + seed * 41.0));
+            if (cellId.y < -0.5) lit = 1.0;                                // shops keep their lights on
+            vec3 vd = normalize(vWP - cameraPosition);
+            vec3 Tw = an.x > 0.5 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+            vec3 Nw = normalize(vON);
+            vec3 dl = vec3(dot(vd, Tw), vd.y, dot(vd, -Nw));
+            gGl = glass * (1.0 - blind);
+            if (gGl > 0.001) {
+              vec3 inside = room(clamp(cellF, 0.0, 1.0), cellSz, dl, cellId + vec2(seed * 7.0, 0.0), seed, lit, office, uNight);
+              float ndv = clamp(dot(Nw, -vd), 0.0, 1.0);
+              gF = (style == 0 ? 0.16 : 0.05) + (1.0 - (style == 0 ? 0.16 : 0.05)) * pow(1.0 - ndv, 5.0);
+              // tinted glass on the towers: the building's own colour, brightened to a tint
+              gTint = style == 0 ? mix(vec3(1.0), wall / max(max(wall.r, wall.g), max(wall.b, 0.05)), 0.55) : vec3(0.92, 0.95, 0.96);
+              fEmit += inside * gGl * (1.0 - gF) * (style == 0 ? gTint * 0.8 : vec3(1.0));
+              gRw = reflect(vd, Nw);
+              gRough = style == 0 ? 0.02 + h12(cellId + 3.0) * 0.05 : 0.04 + h12(cellId + 3.0) * 0.06;
+              gHt = vWP.y;
+            }
+            col = mix(col, vec3(0.0), gGl);
             if (style != 0) fRough = mix(style == 2 ? 0.95 : 0.9, 0.12 + h12(cellId + 3.0) * 0.1, glass);
-            fMetal = max(fMetal, glass * (style == 0 ? 0.8 : 0.35));
-            col *= 1.0 - 0.55 * (winTop + winX) * glass;
-            // blinds sit behind the glass: pale, matte
+            fMetal = mix(fMetal, 0.0, glass);
+            col *= 1.0 - 0.55 * (winTop + winX) * glass * blind;
+            // blinds sit just behind the glass: pale, matte, lit by day, glowing when the room's lit
             vec3 blindC = mix(vec3(0.72, 0.68, 0.6), vec3(0.8, 0.8, 0.78), h12(cellId + 11.0));
             col = mix(col, blindC * (0.85 + band(vWP.y * 9.0, 0.0, 0.5) * 0.1), blind * 0.85);
             fRough = mix(fRough, 0.8, blind); fMetal = mix(fMetal, 0.0, blind);
-            float lit = step(0.5, h12(cellId * vec2(1.7, 3.1) + seed * 41.0));
             vec3 warm = mix(vec3(1.0, 0.7, 0.36), vec3(0.72, 0.84, 1.0), step(0.8, h12(cellId + seed)));
-            fEmit += warm * max(glass, blind) * lit * uNight * 2.0;
-            if (cellId.y < -0.5) fEmit += warm * glass * uNight * 1.5;
+            fEmit += warm * blind * glass * lit * uNight * 1.1;
             // ---- weathering ----
             float streak = vnoise(vec2(u * 4.5, v * 0.35)) * vnoise(vec2(u * 11.0, v * 0.2));
             col *= 1.0 - below * (0.25 + streak * 0.5) * (1.0 - glass);                       // sill run-off
@@ -188,9 +271,37 @@ function facadeMaterial(U) {
             diffuseColor.rgb = col;
           }
         }`)
-      .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = fRough;")
+      .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = mix(fRough, gRough, gGl);")
       .replace("#include <metalnessmap_fragment>", "#include <metalnessmap_fragment>\nmetalnessFactor = fMetal;")
-      .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += fEmit;");
+      // relief: recessed windows, sills, frames, mortar; faded out with distance (no shimmer)
+      .replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
+        normal = bumpN(normal, gH * clamp(1.0 - length(vViewPosition) / 140.0, 0.0, 1.0), vViewPosition);`)
+      .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += fEmit;")
+      // glass reflects the sky and, below the skyline, the city across the street
+      .replace("#include <lights_fragment_end>", `#include <lights_fragment_end>
+        if (gGl > 0.001) {
+          vec3 env = vec3(0.0);
+          #ifdef USE_ENVMAP
+            env = getIBLRadiance(geometryViewDir, geometryNormal, gRough);
+            vec3 envH = getIBLRadiance(geometryViewDir, normalize(geometryNormal + vec3(0.0, -0.6, 0.0)), 0.6);
+          #else
+            vec3 envH = vec3(0.3);
+          #endif
+          float az = atan(gRw.z, gRw.x);
+          float colI = floor(az * 7.0 + vStyle.y * 5.0);
+          float hgt = 0.04 + 0.42 * h12(vec2(colI, 3.0)) * h12(vec2(colI, 9.0) + 1.0);
+          hgt *= 1.0 - clamp(gHt / 260.0, 0.0, 0.85);                    // high floors see over the rooftops
+          float edgeW = fwidth(gRw.y) + 0.004;
+          float bld = 1.0 - smoothstep(hgt - edgeW, hgt + edgeW, gRw.y);
+          vec2 wg = vec2(az * 70.0, gRw.y * 90.0);
+          float wins = band(wg.x, 0.2, 0.8) * band(wg.y, 0.25, 0.75);
+          vec3 city = envH * mix(0.32, 0.55, h12(vec2(colI, 5.0))) * (1.0 - wins * 0.35);
+          city += vec3(1.0, 0.75, 0.45) * wins * step(0.6, h12(floor(wg) + colI)) * uNight * 0.9;
+          vec3 refl = mix(env, city, bld);
+          reflectedLight.indirectSpecular = mix(reflectedLight.indirectSpecular, refl * gF * gTint, gGl);
+          reflectedLight.indirectDiffuse *= 1.0 - gGl;
+          reflectedLight.directDiffuse *= 1.0 - gGl;
+        }`);
   };
   return m;
 }
