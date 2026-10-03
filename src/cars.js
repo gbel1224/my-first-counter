@@ -291,8 +291,12 @@ export function carGeometries(type, far = false) {
   const tw = type === "suv" ? 0.27 : 0.24;
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     trim.push(...wheelParts(R, tw, sx, sx * (T.wid / 2 - tw / 2 - 0.02), R, sz * fz, rimCol, type === "sports" ? 0.4 : 0.7));
-    const liner = new THREE.CylinderGeometry(R + 0.07, R + 0.07, tw + 0.08, 18, 1, true, 0, Math.PI); liner.rotateZ(Math.PI / 2);
-    trim.push(place(paint(liner, 0x0b0b0c), sx * (T.wid / 2 - tw / 2 - 0.05), R, sz * fz));
+    // the dark wheel-well lining: squashed to stay under this car's own fender line, so it never
+    // shows through the paint on low cars
+    let low = 9; for (let k = -4; k <= 4; k++) low = Math.min(low, body.belt(sz * fz + k * R / 4));
+    const ly = Math.max(0.35, Math.min(1, (low - 0.08 - R) / (R + 0.06)));
+    const liner = new THREE.CylinderGeometry(R + 0.06, R + 0.06, tw + 0.02, 18, 1, true, 0, Math.PI); liner.rotateZ(Math.PI / 2); liner.scale(1, ly, 1);
+    trim.push(place(paint(liner, 0x0b0b0c), sx * (T.wid / 2 - tw / 2 - 0.06), R, sz * fz));
   }
   // front: grille in a chrome frame, lower intake, plate
   const yf = body.belt(bz - 0.15), hwF = body.plan(bz - 0.05) * 0.62;
