@@ -68,7 +68,13 @@ export function makeWater(scene, g) {
   });
   // ---- treasure ----
   const TREASURE = [[-320, 150], [-90, 210], [140, 170], [330, 240], [-420, 280], [40, 320]].map(([x, dz]) => ({ x, z: HALF + dz }));
-  const glint = new THREE.MeshBasicMaterial({ color: 0xffd060, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+  // a soft golden shimmer on the water over each wreck: no hard edge, a scatter of glints
+  const glintTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const x = c.getContext("2d");
+    const g0 = x.createRadialGradient(64, 64, 0, 64, 64, 64); g0.addColorStop(0, "rgba(255,210,110,0.5)"); g0.addColorStop(0.6, "rgba(255,200,90,0.12)"); g0.addColorStop(1, "rgba(255,200,90,0)");
+    x.fillStyle = g0; x.fillRect(0, 0, 128, 128);
+    for (let k = 0; k < 40; k++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * 50; x.fillStyle = `rgba(255,240,190,${0.4 + Math.random() * 0.6})`; x.beginPath(); x.arc(64 + Math.cos(a) * r, 64 + Math.sin(a) * r, 0.8 + Math.random() * 1.6, 0, 7); x.fill(); }
+    return new THREE.CanvasTexture(c); })();
+  const glint = new THREE.MeshBasicMaterial({ map: glintTex, color: 0xffffff, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
   const tMarks = TREASURE.map((t, i) => { const m = new THREE.Mesh(new THREE.CircleGeometry(2.2, 20), glint); m.rotation.x = -Math.PI / 2; m.position.set(t.x, SEA_Y + 0.15, t.z); m.visible = !st.treasure.includes(i); scene.add(m); return m; });
 
   // ---- fishing ----
@@ -108,7 +114,7 @@ export function makeWater(scene, g) {
     // jetpack pickup
     if (jp.visible) { jp.rotation.y += dt * 1.5; jp.position.y = 1.2 + Math.sin(t * 2) * 0.2; if (!P.car && (P.x - jpSpot.x) ** 2 + (P.z - jpSpot.z) ** 2 < 4) { jp.visible = false; st.jetpack = true; g.banner("JETPACK", "Hold RUN / Shift in the air to fly", "SECRET FOUND", 3.4); g.sound("jingle", 1); g.save(); } }
     // treasure shimmer
-    for (const m of tMarks) if (m.visible) { m.material.opacity = 0.35 + Math.sin(t * 3) * 0.25; m.rotation.z = t * 0.4; }
+    for (const m of tMarks) if (m.visible) { m.material.opacity = 0.3 + Math.sin(t * 3) * 0.15; m.rotation.z = t * 0.4; }
     // fishing
     if (fish) {
       const v = P.car;
