@@ -202,7 +202,9 @@ try {
         o.photoFollowers = (G.st.followers || 0) - f0;
         ph.setApp("music"); q('[data-station="1"]').click(); o.earbuds = G.radio.earbuds; q('[data-act="musicOff"]').click(); ph.show(false); }
       // police chase: down a long straight at speed, the cruisers line up BEHIND you — no circling
-      { if (G.P.car) G.exitCar(); G.crime.reset(); G.events.cancel(); G.events.forceIdle && G.events.forceIdle(999); const W = await import("/src/world.js");
+      { if (G.P.car) G.exitCar(); G.crime.reset(); G.events.cancel(); G.events.forceIdle && G.events.forceIdle(999);
+        { let k = 0; while (G.hud.talking() && k++ < 80) { G.hud.advance(); G.hud.advance(); } } G.hud.closePanel(); G.state.phase = "play";   // nothing on screen holding the game
+        const W = await import("/src/world.js");
         const Pm = await import("/src/play.js"), rx = W.roadC(3) + 2.2, home = [G.P.x, G.P.z];
         // a clear road (the test drives blind in a straight line; a real player swerves round traffic)
         for (const t of G.traffic.cars) if (Math.abs(t.x - W.roadC(3)) < 12) G.traffic.respawnNear(t, W.roadC(11), 0, 30);
@@ -216,7 +218,7 @@ try {
               if (lastH[i] !== undefined && d < 40) { let dh = u.h - lastH[i]; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); spin = Math.max(spin, (u._sp = (u._sp || 0) + Math.abs(dh))); }
               lastH[i] = u.h; if (d < 40) { near++; if ((u.x - car.x) * Math.sin(car.h) + (u.z - car.z) * Math.cos(car.h) < 0) behind++; } });
           }
-          G.I.mz = 0; G.I.mx = 0; o.chaseSpeed = +car.speed.toFixed(1); o.chaseZ = Math.round(car.z); o.chaseBehind = near ? +(behind / near).toFixed(2) : 0; o.chaseNear = near; o.chaseSpin = +(spin / 6.283).toFixed(2); o.chaseWanted = G.crime.S.wanted;
+          G.I.mz = 0; G.I.mx = 0; o.chasePaused = G.hud.talking() || G.state.phase; o.chaseSpeed = +car.speed.toFixed(1); o.chaseZ = Math.round(car.z); o.chaseBehind = near ? +(behind / near).toFixed(2) : 0; o.chaseNear = near; o.chaseSpin = +(spin / 6.283).toFixed(2); o.chaseWanted = G.crime.S.wanted;
           G.exitCar(); G.crime.reset(); }
         G.P.x = home[0]; G.P.z = home[1]; for (const p of G.crowd.people) if (!p.beach && !p.gang) G.crowd.respawnNear(p, G.P.x, G.P.z); run(60);
         G.events.forceIdle && G.events.forceIdle(30); }
