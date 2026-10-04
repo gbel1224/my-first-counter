@@ -16,7 +16,7 @@ import { Crowd, randomLook } from "./people.js";
 import { Traffic, SIGNAL, Parked, signalState, walkState, RED } from "./traffic.js";
 import { buildFacadeDetail, buildStreetDetail, updateSignals } from "./detail.js";
 import { buildBladeSigns } from "./signs.js";
-import { PAINTS, REAL_PAINTS, LAMP_U, driveLamps } from "./cars.js";
+import { PAINTS, REAL_PAINTS, LAMP_U, driveLamps, carSpec } from "./cars.js";
 import { initInput, pollInput, I } from "./input.js";
 import { createHUD, askConfirm } from "./hud.js";
 import { makeProps } from "./props.js";
@@ -40,10 +40,11 @@ import { initHeists, updateHeists, heistObjective, heistActive, startHeist, abor
 import { makeEvents } from "./events.js";
 import { makeJobs } from "./jobs.js";
 import { makeRoadblocks } from "./roadblock.js";
+import { makeCustoms, applyCarMods } from "./customs.js";
 import { makeExtras, CIRCUITS } from "./extras.js";
 import { createWeather } from "./weather.js";
 import { createMenu } from "./menu.js";
-import { setSurface } from "./play.js";
+import { setSurface, setRoadWet } from "./play.js";
 import { makeWater } from "./water.js";
 import { makeLife } from "./life.js";
 import { inWater, waterStep, heliStep, planeStep } from "./craft.js";
@@ -144,7 +145,7 @@ await step(88);
 // save. The first time you open the new city, progress from the original game comes with you
 // (cash, businesses, homes, story chapter, level).
 const SAVE_KEY = "palmcity_save";
-const SAVE_FIELDS = ["money", "xp", "lvl", "owned", "apt", "home", "house", "mi", "bank", "stats", "weapons", "ammo", "turf", "nem", "term", "shares", "sprice", "sfair", "scost", "ledger", "pcars", "mods", "palms", "races", "medals", "ach", "treasure", "jetpack", "look", "decor", "decorBy", "beach", "villa", "pent"];
+const SAVE_FIELDS = ["money", "xp", "lvl", "owned", "apt", "home", "house", "mi", "bank", "stats", "weapons", "ammo", "turf", "nem", "term", "shares", "sprice", "sfair", "scost", "ledger", "pcars", "mods", "palms", "races", "medals", "ach", "treasure", "jetpack", "look", "decor", "decorBy", "beach", "villa", "pent", "garage", "cmods"];
 let save = null, imported = false;
 try { save = JSON.parse(localStorage.getItem(SAVE_KEY) || localStorage.getItem("palmcity2_save") || "null"); } catch (e) {}
 if ((!save || save.mi === undefined) && !localStorage.getItem("sunset_city_save_v1_imported")) {
@@ -519,6 +520,12 @@ for (const c of traffic.cars) traffic.respawnNear(c, P.x, P.z, 30);
 // ---------------------------------------------------------------------------------------------
 const hud = createHUD(plan);
 initInput(hud.ui);
+// Palm Customs, and the garages at your homes
+const customs = makeCustoms(scene, {
+  st, cars, toast: (m, t) => hud.toast(m, t), banner: (a, b, k, t) => hud.banner(a, b, k, t), sound: (k, v, r) => AudioSys.play(k, v, r), save: () => writeSave(),
+  panel: (t, rows) => hud.panel(t, rows), closePanel: () => hud.closePanel(), repair: c => damage.repair(c),
+  spawn: (type, color, x, z, h) => { const v = spawnCar(scene, type, color, x, z, h); cars.push(v); return v; },
+});
 // tap the ammo count to reload
 hud.ui.wpn.classList.add("pe");
 hud.ui.wpn.addEventListener("pointerdown", e => { e.stopPropagation(); if (!P.car) combat.reload(); });
@@ -704,6 +711,19 @@ function update(dt) {
         if (parkHit > 4 && ph) { damage.crash(c, ph.x, ph.z, ph.nx, ph.nz, parkHit); damage.crash(ph.car, ph.x, ph.z, -ph.nx, -ph.nz, parkHit * 0.9); }
         skids.track(c, (c.drift > 3.8 || (inp.handbrakeHeld && Math.abs(c.speed) > 6)) && !c.air, groundY(c.x, c.z) + 0.02); }
       driveLamps(c, c.kind ? null : inp, dt);
+      // drifts score: hold a slide and it pays when you straighten out (hit something and it's gone)
+      if (!c.kind) {
+        const D = c._drift || (c._drift = { t: 0, pts: 0, calm: 0 });
+        if (c.drift > 4 && Math.abs(c.speed) > 9 && !c.air) { D.t += dt; D.pts += dt * c.drift * Math.abs(c.speed) * 0.2; D.calm = 0; }
+        else if (D.t > 0) {
+          D.calm += dt;
+          if (D.calm > 0.45) {
+            if (D.t > 1.2) { const got = eco.earn(Math.round(D.pts)); hud.toast("🏁 Drift " + D.t.toFixed(1) + "s · +$" + got, 2); AudioSys.play("cash", 0.4); st.stats.bestDrift = Math.max(st.stats.bestDrift || 0, +D.t.toFixed(1)); }
+            D.t = 0; D.pts = 0; D.calm = 0;
+          }
+        }
+        if (impact > 6 && D.t > 0) { if (D.t > 1.2) hud.toast("💥 Drift lost", 1.2); D.t = 0; D.pts = 0; }
+      }
       if (impact > 4) { rig.shake = Math.min(1, impact / 18); AudioSys.play("door", Math.min(1, impact / 20), 0.6); fx.sparks(c.x + Math.sin(c.h) * 2, 0.8, c.z + Math.cos(c.h) * 2, 8); }
       if (impact > 9) combat.damageCar(c, (impact - 8) * 2.2, "player");
       // ram the cops: it's a crime, and it hurts both of you
@@ -726,7 +746,9 @@ function update(dt) {
         const dx = t.x + fx * along - c.x, dz = t.z + fz * along - c.z, d2 = dx * dx + dz * dz;
         if (d2 < 9) {
           const d = Math.sqrt(d2) || 1, nx = dx / d, nz = dz / d, rel = c.vx * nx + c.vz * nz;
-          if (rel > 0) { c.vx -= nx * rel * 1.2; c.vz -= nz * rel * 1.2; t.stun = 2.5; t.speed = 0;
+          // who gives way depends on weight: a bus barely notices a compact, a compact bounces off a bus
+          const mt = (carSpec(t.type) && carSpec(t.type).mass) || 1, mp = (c.spec && c.spec.mass) || 1, kb = clamp(2.4 * mt / (mp + mt), 0.35, 1.9);
+          if (rel > 0) { c.vx -= nx * rel * kb; c.vz -= nz * rel * kb; t.stun = 2.5; t.speed = 0;
             if (rel > 4) { const hx = c.x + nx * Math.min(d, 2.2), hz = c.z + nz * Math.min(d, 2.2); damage.crash(c, hx, hz, -nx, -nz, rel); damage.crash(t, hx, hz, nx, nz, rel * 0.9); }
             if (rel > 5) { rig.shake = Math.min(1, rel / 20); AudioSys.play("door", 0.8, 0.5); combat.damageCar(t, rel * 2, "traffic"); combat.damageCar(c, rel * 0.8, "player"); } }
           c.x -= nx * (3 - d) * 0.5; c.z -= nz * (3 - d) * 0.5;
@@ -755,13 +777,23 @@ function update(dt) {
         if (!near) c.shopHint = false;
       }
       syncCar(c);
-      AudioSys.engine(isFinite(c.speed) ? c.speed / c.spec.top : 0);
+      // the engine through the gears: revs climb, the box shifts up, they drop back and climb again
+      {
+        const f = isFinite(c.speed) ? Math.min(1.05, Math.abs(c.lon ?? c.speed) / c.spec.top) : 0, G5 = [0, 0.16, 0.34, 0.54, 0.76, 1.06];
+        let gi = 0; while (gi < 4 && f > G5[gi + 1]) gi++;
+        const rpm = 0.28 + 0.72 * clamp((f - G5[gi]) / (G5[gi + 1] - G5[gi]), 0, 1) * (gi === 0 ? 1 : 0.85) + (gi > 0 ? 0.12 : 0);
+        if (c._gear !== undefined && gi > c._gear && !c.kind) AudioSys.play("blip", 0.06, 0.5);   // the shift
+        c._gear = gi;
+        AudioSys.engine(c.kind ? (isFinite(c.speed) ? c.speed / c.spec.top : 0) * 26 : rpm * 26);
+      }
       AudioSys.skid(clamp((c.drift - 3) / 8, 0, 1));
       if (inp.hornHeld) AudioSys.horn();
       if (inp.radio && hasRadio(c)) { const s = radio.tune(1); hud.toast("📻 " + s.name + (s.tag ? " · " + s.tag : ""), 2.2); }
       if (inp.action && !hud.talking()) {
-        const wact = water.action(P);
+        const wact = water.action(P), cact = customs.carAction(c);
         if (wact) water.doAction(P);
+        else if (cact && cact[0] === "STORE") { if (customs.store(c)) { exitCar(); scene.remove(c.group); const ci = cars.indexOf(c); if (ci >= 0) cars.splice(ci, 1); } }
+        else if (cact) cact[2]();
         else if ((c.kind === "heli" || c.kind === "plane") && c.y > groundY(c.x, c.z) + 2) hud.toast("Land first");
         else exitCar();
       }
@@ -801,7 +833,9 @@ function update(dt) {
       const lact = life.action();
       const vid = !(act && act.kind !== "bizmax") && interior.venueAt(P.x, P.z);
       if (inp.action && !hud.talking()) {
-        if (atGuns) openGunShop();
+        const gact = customs.footAction(P.x, P.z);
+        if (gact) gact[2]();
+        else if (atGuns) openGunShop();
         else if (atGarage && !n) extras.garagePanel();
         else if (lact && !(act && act.kind !== "bizmax") && (lact[0] !== "TALK" || (!n && !vid))) lact[2]();
         else if (act && act.kind === "rest") { if (canGoIn()) interior.enter(act.pr, P); }
@@ -889,6 +923,7 @@ function update(dt) {
     updateCam(rig, dt, P.car ? { x: P.car.x, z: P.car.z, y: P.car.y, h: P.car.h, speed: P.car.speed } : { x: P.x, z: P.z, y: P.y, h: P.yaw, speed: 0 }, inp, collider, !!P.car, time);
   }
   weather.update(dt, camera, interior.inside);
+  setRoadWet(Math.min(1, ((weather.W && weather.W.rain) || 0) * 1.3));
   // the breeze the hair blows in: a sea wind off the bay, swinging round slowly, stronger in a storm (none indoors)
   {
     const storm = (weather.W && (weather.W.rain || weather.W.amt || weather.W.k)) || 0, ang = time * 0.03 + 0.6, str = interior.inside ? 0.12 : 0.55 + storm * 1.4;
@@ -979,6 +1014,7 @@ function hideEmptyInstances() {
 }
 function render() {
   hideEmptyInstances();
+  for (const c of cars) if (c.neon && c.neon.visible) c.neon.material.opacity = 0.18 + 0.82 * sky.state.night;   // underglow: faint by day, vivid after dark
   const focus = interior.inside ? interior.doorWorld() : P.car || P;
   LAMP_U.uTime.value = time; LAMP_U.night = sky.state.night;
   LAMP_U.uRain.value = interior.inside ? 0 : Math.min(1, ((weather.W && weather.W.rain) || 0) * 1.3);
@@ -1074,6 +1110,8 @@ function render() {
     const vid = !P.car && !interior.inside && !(act && act.kind !== "bizmax") && interior.venueAt(P.x, P.z);
     if (vid && !(la && la[0] !== "TALK")) { actLabel = "ENTER"; actPrompt = "<b>" + (PLACES[vid].label || vid) + "</b> · walk in"; }
     const wlab = water.action(P);
+    const cact = !wlab && !(act && act.kind !== "bizmax") && (P.car ? customs.carAction(P.car) : customs.footAction(P.x, P.z));
+    if (cact) { actLabel = cact[0]; actPrompt = cact[1]; }
     hud.buttons(!!P.car, !!near, wlab || actLabel, P.car && P.car.kind);
     if (wlab) hud.prompt(wlab === "CAST" ? "🎣 Stopped on the water — <b>CAST</b> a line" : wlab === "DIVE" ? "💰 Something glitters below — <b>DIVE</b>" : "🎣 Wait for the bite, then <b>REEL</b>");
     const key = I.touch ? "Tap" : "Press <b>E</b>";
@@ -1122,6 +1160,7 @@ function render() {
     for (const b of BIZ) dots.push({ x: b.p.x, z: b.p.z, c: st.owned[b.id] ? "#2fae6a" : "#d9962a", r: 5, t: "$" });
     for (const pr of PROPS) dots.push({ x: pr.p.x, z: pr.p.z, c: st[pr.flag] ? "#2fae6a" : "#7a6ad8", r: 5, t: "⌂" });
     if (st.mi >= 5) dots.push({ x: PLACES.depot.x, z: PLACES.depot.z, c: "#8a6a3a", r: 5, t: "D" });
+    dots.push({ x: PLACES.customs.x, z: PLACES.customs.z, c: "#e0601a", r: 5, t: "C" });
     for (const c of cars) if (c !== P.car) dots.push({ x: c.x, z: c.z, c: "#2f7cff", r: 3 });
     const W = gangs.war();
     for (const G of GANGS) dots.unshift({ x: G.x, z: G.z, c: st.turf[G.id] ? (W && W.G === G && Math.floor(time * 3) % 2 ? "rgba(255,60,40,.35)" : "rgba(230,175,40,.24)") : ["rgba(200,40,40,.22)", "rgba(40,80,200,.22)", "rgba(40,150,70,.22)"][GANGS.indexOf(G)], r: G.r * 0.5 });
@@ -1143,7 +1182,7 @@ requestAnimationFrame(frame);
 
 // debug / test hooks
 globalThis.__pc2 = {
-  THREE, scene, camera, coverState: () => cov, coverMult, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, hijack, P, cars, state, rig, I,
+  THREE, scene, camera, customs, applyCarMods, coverState: () => cov, coverMult, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, hijack, P, cars, state, rig, I,
   interior, props, skids, animals, damage, radio, roadblocks, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },
