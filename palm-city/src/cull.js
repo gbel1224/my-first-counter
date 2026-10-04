@@ -3,6 +3,9 @@
 // are skipped, so the GPU only works on what you can actually see.
 const VIEW = { x: 0, z: 0, fx: 0, fz: 1, all: true };
 const tiles = [];
+let SCALE = 1;
+// phones / low graphics draw the city tiles a little less far out
+export function setCullScale(k) { SCALE = k; }
 export function setView(camera) {
   const e = camera.matrixWorld.elements;
   VIEW.x = camera.position.x; VIEW.z = camera.position.z;
@@ -12,7 +15,7 @@ export function setView(camera) {
   for (const t of tiles) {
     const dx = t.cx - VIEW.x, dz = t.cz - VIEW.z;
     const d = Math.sqrt(dx * dx + dz * dz);
-    t.mesh.visible = d - t.r < t.max && d - t.r >= t.min;
+    t.mesh.visible = d - t.r < t.max * SCALE && d - t.r >= t.min;
   }
 }
 // in front of the camera (or close enough that it might cast into view)

@@ -50,7 +50,7 @@ import { SEA_Y } from "./ocean.js";
 import { AudioSys } from "./audio.js";
 import { makeInterior } from "./interior.js";
 import { loadHumans, humansReady } from "./human.js";
-import { setView } from "./cull.js";
+import { setView, setCullScale } from "./cull.js";
 import { makeProbe } from "./reflect.js";
 
 const bootBar = document.getElementById("bootbar");
@@ -456,13 +456,33 @@ initInput(hud.ui);
 phone = makePhone();
 // settings (persisted per device) + the ☰ menu
 const SET_KEY = "palmcity_settings";
-let settings = { quality: "high", cycle: "false", time: "0.63", weather: "0", sound: "true" };
+let settings = { quality: isMobile ? "balanced" : "high", cycle: "false", time: "0.63", weather: "0", sound: "true" };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(SET_KEY) || "{}")); } catch (e) {}
 let menuPaused = false, photoMode = false;
+// low-FX: shorter draw distance for the city tiles, and the small stuff (props, plants, street
+// furniture, little instanced bits) stops casting sun shadows — the shadow pass is a second draw of
+// everything, and on a phone the little shadows are the ones nobody notices
+let lowOn = null;
+function lowFX(on) {
+  if (lowOn === on) return; lowOn = on;
+  setCullScale(on ? 0.72 : 1);
+  scene.traverse(o => {
+    if (!o.isMesh || o.isSkinnedMesh) return;
+    if (o.userData.castOrig === undefined) o.userData.castOrig = o.castShadow;
+    if (!o.userData.castOrig) return;
+    const g = o.geometry; if (!g.boundingSphere) g.computeBoundingSphere();
+    const small = o.isInstancedMesh ? g.boundingSphere.radius < 3 : (g.boundingSphere.radius * Math.max(o.scale.x, o.scale.y, o.scale.z) < 1.2);
+    // (cars and people are thousands of vertices: their shadows stay — they're what the eye follows)
+    o.castShadow = on && small && g.attributes.position.count < 5000 ? false : o.userData.castOrig;
+  });
+}
 function applySetting(k, v) {
   settings[k] = v;
   if (k === "quality") {
-    R.renderer.setPixelRatio(v === "perf" ? 1 : Math.min(devicePixelRatio || 1, 2)); R.resize();
+    // phones: 1.5x at most ("high"), 1.25x on "balanced", 1x on "perf"; desktops up to 1.75x
+    const cap = isMobile ? (v === "perf" ? 1 : v === "balanced" ? 1.25 : 1.5) : (v === "perf" ? 1 : 1.75);
+    R.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, cap)); R.resize();
+    lowFX(v === "perf" || (isMobile && v === "balanced"));
     const sz = v === "perf" ? 1024 : (isMobile ? 2048 : 4096);
     if (sky.sun.shadow.mapSize.x !== sz) { sky.sun.shadow.mapSize.set(sz, sz); if (sky.sun.shadow.map) { sky.sun.shadow.map.dispose(); sky.sun.shadow.map = null; } }
   }
@@ -818,7 +838,21 @@ traffic.onHonk = c => { const d2 = (c.x - P.x) ** 2 + (c.z - P.z) ** 2; if (d2 <
 // the headlight beams of the car you're driving: real light on the road ahead after dark
 const beam = new THREE.SpotLight(0xfff1dc, 0, 70, 0.55, 0.55, 1.3);
 beam.target.position.set(0, -1.2, 22); beam.add(beam.target); scene.add(beam);
+// instanced meshes with nothing to draw this frame cost a draw call (and a shadow-pass one) anyway:
+// they hide themselves while their count is 0 (scanned for new ones now and then)
+let instScanT = 0, instLen = -1;
+const instSeen = new WeakSet();
+function hideEmptyInstances() {
+  if (--instScanT > 0 && scene.children.length === instLen) return; instScanT = 90; instLen = scene.children.length;
+  scene.traverse(o => {
+    if (!o.isInstancedMesh || instSeen.has(o)) return;
+    instSeen.add(o);
+    let vis = o.visible;
+    Object.defineProperty(o, "visible", { get() { return vis && this.count > 0; }, set(v) { vis = v; }, configurable: true });
+  });
+}
 function render() {
+  hideEmptyInstances();
   const focus = interior.inside ? interior.doorWorld() : P.car || P;
   LAMP_U.uTime.value = time; LAMP_U.night = sky.state.night;
   LAMP_U.uRain.value = interior.inside ? 0 : Math.min(1, ((weather.W && weather.W.rain) || 0) * 1.3);
