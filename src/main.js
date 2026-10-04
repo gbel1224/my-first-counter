@@ -1205,6 +1205,7 @@ function render() {
     for (const pr of PROPS) dots.push({ x: pr.p.x, z: pr.p.z, c: st[pr.flag] ? "#2fae6a" : "#7a6ad8", r: 5, t: "⌂" });
     if (st.mi >= 5) dots.push({ x: PLACES.depot.x, z: PLACES.depot.z, c: "#8a6a3a", r: 5, t: "D" });
     dots.push({ x: PLACES.customs.x, z: PLACES.customs.z, c: "#e0601a", r: 5, t: "C" });
+    dots.push({ x: PLACES.tattoo.x, z: PLACES.tattoo.z, c: "#8a4a8a", r: 4.5, t: "T" });
     for (const c of cars) if (c !== P.car) dots.push({ x: c.x, z: c.z, c: "#2f7cff", r: 3 });
     const W = gangs.war();
     for (const G of GANGS) dots.unshift({ x: G.x, z: G.z, c: st.turf[G.id] ? (W && W.G === G && Math.floor(time * 3) % 2 ? "rgba(255,60,40,.35)" : "rgba(230,175,40,.24)") : ["rgba(200,40,40,.22)", "rgba(40,80,200,.22)", "rgba(40,150,70,.22)"][GANGS.indexOf(G)], r: G.r * 0.5 });

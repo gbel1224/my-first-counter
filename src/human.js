@@ -445,8 +445,8 @@ export function tint(h) {
   for (const k in h.meshes) {
     const m = h.meshes[k], mat = m.material, n = (mat.name || "").toLowerCase();
     if (/(skin|body|head)$/.test(n) && !/eye|teeth/.test(n)) mat.color.copy(sk);
-    else if (/casualsuit/.test(n)) dye(mat, L.shirt, 1, L.pants, 0.43);   // top and jeans share one texture: split by its layout
-    else if (/outfit_top/.test(n)) dye(mat, L.shirt, 1);
+    else if (/casualsuit/.test(n)) dye(mat, L.shirt, 1, L.pants, 0.43, L.pat || 0);   // top and jeans share one texture: split by its layout
+    else if (/outfit_top/.test(n)) dye(mat, L.shirt, 1, undefined, 0, L.pat || 0);
     else if (/avaturn_look/.test(n)) dye(mat, L.shirt, 1, suitOf(L), -1);   // a suit over a light shirt: dyed by brightness
     else if (/outfit_bottom/.test(n)) dye(mat, L.pants, 1);
     else if (/hair|ponytail|brow/.test(n)) dye(mat, L.hair, 0.85);
@@ -463,19 +463,28 @@ export function suitOf(L) {
   return SUIT[(h >>> 0) % SUIT.length];
 }
 // re-dye a texture: keep its light and shade, swap its colour for `col`
-function dye(mat, col, amt, col2, split = 0) {
-  const u = mat.userData.dye || (mat.userData.dye = { col: { value: new THREE.Color() }, col2: { value: new THREE.Color() }, amt: { value: 0 }, split: { value: 0 } });
-  u.col.value.set(col ?? 0x808080); u.col2.value.set(col2 ?? col ?? 0x808080); u.amt.value = amt; u.split.value = split;
+function dye(mat, col, amt, col2, split = 0, pat = 0) {
+  const u = mat.userData.dye || (mat.userData.dye = { col: { value: new THREE.Color() }, col2: { value: new THREE.Color() }, amt: { value: 0 }, split: { value: 0 }, pat: { value: 0 } });
+  u.col.value.set(col ?? 0x808080); u.col2.value.set(col2 ?? col ?? 0x808080); u.amt.value = amt; u.split.value = split; u.pat.value = pat;
   if (mat.userData.dyed) return;
   mat.userData.dyed = true;
   mat.onBeforeCompile = s => {
-    s.uniforms.uDye = u.col; s.uniforms.uDye2 = u.col2; s.uniforms.uDyeAmt = u.amt; s.uniforms.uSplit = u.split;
-    s.fragmentShader = s.fragmentShader.replace("#include <common>", "#include <common>\nuniform vec3 uDye, uDye2; uniform float uDyeAmt, uSplit;")
+    s.uniforms.uDye = u.col; s.uniforms.uDye2 = u.col2; s.uniforms.uDyeAmt = u.amt; s.uniforms.uSplit = u.split; s.uniforms.uPat = u.pat;
+    s.fragmentShader = s.fragmentShader.replace("#include <common>", "#include <common>\nuniform vec3 uDye, uDye2; uniform float uDyeAmt, uSplit, uPat;")
       .replace("#include <map_fragment>", `#include <map_fragment>
       { float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
         vec3 dc = uDye;
         #ifdef USE_MAP
           if (uSplit > 0.0 && vMapUv.y > uSplit) dc = uDye2;
+          // a print on the top: stripes, camo, a check, or a loud Hawaiian
+          else if (uPat > 0.5) {
+            vec2 q = vMapUv * 34.0; float pm = 0.0;
+            if (uPat < 1.5) pm = step(0.55, fract(q.y));
+            else if (uPat < 2.5) { float n = sin(q.x * 0.9 + sin(q.y * 0.7) * 2.0) * sin(q.y * 1.1 + sin(q.x * 0.5) * 2.0); pm = n > 0.25 ? 1.0 : n < -0.35 ? 2.0 : 0.0; }
+            else if (uPat < 3.5) pm = mod(floor(q.x * 0.5) + floor(q.y * 0.5), 2.0);
+            else { vec2 f = fract(q * 0.33) - 0.5; float r = length(f), a = atan(f.y, f.x); pm = r < 0.12 + 0.1 * abs(sin(a * 2.5)) ? 1.0 : r < 0.26 && fract((q.x + q.y) * 0.13) > 0.6 ? 2.0 : 0.0; }
+            dc = pm > 1.5 ? (uPat > 3.5 ? vec3(0.18, 0.5, 0.25) : dc * 0.38) : pm > 0.5 ? (uPat < 1.5 || uPat > 3.5 ? mix(dc, vec3(0.95, 0.9, 0.82), 0.8) : dc * 0.55) : dc;
+          }
         #endif
         vec3 dyed = dc * smoothstep(0.0, 0.55, lum) * 1.7;
         if (uSplit < 0.0) {
