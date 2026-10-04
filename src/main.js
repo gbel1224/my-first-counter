@@ -5,6 +5,8 @@ import { buildCity, Collider, groundY, district, blockC, blockMin, PLAZA, HALF, 
 import { createSky } from "./sky.js";
 import { createCity } from "./city.js";
 import { bakeStreetLights, setStreetLights, setHeadlights } from "./streetlight.js";
+import { makeAnimals } from "./animals.js";
+import { buildCarts } from "./streetlife.js";
 import { createOcean } from "./ocean.js";
 import { Crowd, randomLook } from "./people.js";
 import { Traffic, SIGNAL, Parked, signalState, walkState, RED } from "./traffic.js";
@@ -88,6 +90,18 @@ await step(55);
 const ocean = createOcean(scene, sky);
 await step(65);
 const crowd = new Crowd(scene, plan, isMobile ? 380 : 520);
+// the animals: pigeons and gulls, and dogs out with some of the walkers; and the street-food carts
+const animals = makeAnimals(scene, plan, city.U);
+{
+  const r = mulberry32(0xD06);
+  for (const p of crowd.people) {
+    if (p.fixed || p.gang || p.jog) continue;
+    if (r() < (p.park ? 0.3 : p.beach ? 0.15 : 0.07)) animals.giveDog(p, r);
+  }
+  const scare0 = crowd.scare.bind(crowd);
+  crowd.scare = (x, z, rad, t) => { scare0(x, z, rad, t); animals.scare(x, z, rad + 10); };    // gunfire sends the birds up too
+}
+buildCarts(scene, plan);
 await step(78);
 const traffic = new Traffic(scene, isMobile ? 110 : 150);
 const parked = new Parked(scene, district);
@@ -675,6 +689,7 @@ function update(dt) {
   props.update(dt, time); haptics(dt); doors.update(dt); hijack.update(dt);
   if (greyT > 0) { greyT -= dt; R.grade.uSat.value = 1.1 - Math.min(1, greyT) * 0.95; } else R.grade.uSat.value = 1.1;
   crowd.update(dt, time, focus.x, focus.z, hz);
+  animals.update(dt, time, { px: (P.car || P).x, pz: (P.car || P).z, pspeed: P.car ? Math.abs(P.car.speed || 0) : (P.speed || 0), cars: traffic.cars, people: crowd.people });
   traffic.update(dt, time, [P.car ? { x: P.car.x, z: P.car.z, car: true } : { x: focus.x, z: focus.z, car: false }]);
   if (state.phase === "play" && P.car && !interior.inside) redLight(P.car);
   if (state.phase === "title") {
@@ -768,6 +783,7 @@ function render() {
   }
   camera.updateMatrixWorld(); setView(camera);
   crowd.render(camera.position.x * 0.5 + focus.x * 0.5, camera.position.z * 0.5 + focus.z * 0.5, camera);
+  animals.render(camera);
   hijack.render(performance.now() / 1000);
   traffic.render(focus.x, focus.z, sky.state.night);
   parked.render(focus.x, focus.z);
@@ -862,7 +878,7 @@ requestAnimationFrame(frame);
 // debug / test hooks
 globalThis.__pc2 = {
   THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, hijack, P, cars, state, rig, I,
-  interior, props, skids, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
+  interior, props, skids, animals, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },
 };
