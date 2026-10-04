@@ -53,7 +53,7 @@ import { inWater, waterStep, heliStep, planeStep } from "./craft.js";
 import { SEA_Y } from "./ocean.js";
 import { AudioSys } from "./audio.js";
 import { makeInterior } from "./interior.js";
-import { loadHumans, humansReady } from "./human.js";
+import { loadHumans, humansReady, loadWeapons } from "./human.js";
 import { setView, setCullScale, inView } from "./cull.js";
 import { makeProbe } from "./reflect.js";
 
@@ -67,6 +67,7 @@ addEventListener("resize", () => { camera.aspect = innerWidth / innerHeight; cam
 
 // the real people (rigged, textured models) load alongside the city; the built-up figures stand in until they arrive
 const humansLoad = loadHumans();
+humansLoad.then(() => loadWeapons());                  // the real guns, once the people are in
 await step(8);
 const plan = buildCity();
 const collider = new Collider(plan.buildings);
@@ -528,9 +529,9 @@ const water = makeWater(scene, {
 function openGunShop() {
   hud.panel("AMMU-PALM", WEAPONS.filter(w => w.id !== "fists").map(w => {
     const owned = combat.own(w);
-    return { label: w.name + (owned ? "  ✓" : ""), sub: owned ? "Ammo: " + (st.ammo[w.id] || 0) + " · +" + w.ammo + " rounds" : "Damage " + w.dmg + " · range " + w.range + " m",
-      btn: owned ? "AMMO $" + w.ammoCost : "BUY $" + w.cost.toLocaleString(),
-      onClick: () => { const err = combat.buy(w); if (err) { hud.toast(err); AudioSys.play("door", 0.3); } else { AudioSys.play("cash", 0.8); writeSave(); } openGunShop(); } };
+    return { label: w.name + (owned ? "  ✓" : ""), sub: w.melee ? (owned ? "Yours · swing it with FIRE" : "Melee · hits hard, no ammo") : w.thrown ? (owned ? "Carrying " + (st.ammo[w.id] || 0) + " · +" + w.ammo : "Thrown · blast radius") : owned ? "Ammo: " + (st.ammo[w.id] || 0) + " · +" + w.ammo + " rounds" : "Damage " + w.dmg + " · range " + w.range + " m",
+      btn: owned ? (w.melee ? "OWNED" : "AMMO $" + w.ammoCost) : "BUY $" + w.cost.toLocaleString(), disabled: owned && w.melee,
+      onClick: () => { if (owned && w.melee) return; const err = combat.buy(w); if (err) { hud.toast(err); AudioSys.play("door", 0.3); } else { AudioSys.play("cash", 0.8); writeSave(); } openGunShop(); } };
   }));
 }
 
@@ -876,7 +877,7 @@ function update(dt) {
       if (!hud.talking() && !hud.panelOpen()) {
         if (inp.cycle) { const w = combat.cycle(); hud.toast(w.name, 1.2); }
         const w = combat.current();
-        if (inp.fire || (inp.fireHeld && w.id !== "fists" && w.id !== "pistol" && w.id !== "shotgun")) combat.fire(rig.yaw);
+        if (inp.fire || (inp.fireHeld && w.id !== "fists" && w.id !== "pistol" && w.id !== "shotgun" && !w.thrown && !w.melee)) combat.fire(rig.yaw);
       }
     }
     eco.tick(dt, P.x, P.z, !P.car);
@@ -1082,7 +1083,7 @@ function render() {
   else if (!P.car) {
     let over = combat.pose();
     if (P.swim) over = { tilt: 1.25, armL: Math.sin(time * 4) * 2.6, armR: -Math.sin(time * 4) * 2.6, thighL: Math.sin(time * 8) * 0.3, thighR: -Math.sin(time * 8) * 0.3, kneeL: 0.2, kneeR: 0.2, elbowL: -0.3, elbowR: -0.3 };
-    if (!over && combat.current().id !== "fists") over = { armR: -1.45, elbowR: -0.1, armL: -1.2, elbowL: -0.5 };   // weapon up
+    if (!over && combat.current().id !== "fists" && !combat.current().thrown) over = { armR: -1.45, elbowR: -0.1, armL: -1.2, elbowL: -0.5 };   // weapon up
     if (P.danceT > 0 && P.speed < 0.3) over = { armL: -2.3 + Math.sin(time * 5) * 0.6, armR: -2.1 - Math.sin(time * 5) * 0.6, elbowL: -0.7, elbowR: -0.7, thighL: Math.max(0, Math.sin(time * 5)) * -0.5, thighR: Math.max(0, -Math.sin(time * 5)) * -0.5, kneeL: Math.max(0, Math.sin(time * 5)) * 0.8, kneeR: Math.max(0, -Math.sin(time * 5)) * 0.8 };
     const hands = !P.swim && combat.hands();
     if (hands) over = Object.assign({}, over || {}, hands);
@@ -1160,7 +1161,7 @@ function render() {
     const w = combat.current();
     // ammo: what's in the gun / what's left in your pockets (tap it to reload)
     const tot = st.ammo[w.id] || 0, inMag = combat.mag(w);
-    const ammoTxt = w.id === "fists" ? null : combat.S.reloadT > 0 ? '<span class="rl">RELOADING</span>' : w.clip ? inMag + " <small>/ " + Math.max(0, tot - inMag) + "</small>" : String(tot);
+    const ammoTxt = w.id === "fists" || w.melee ? null : combat.S.reloadT > 0 ? '<span class="rl">RELOADING</span>' : w.clip ? inMag + " <small>/ " + Math.max(0, tot - inMag) + "</small>" : String(tot);
     hud.vitals(crime.S.health, crime.S.wanted, crime.S.searching, w.name, ammoTxt, !P.car);
     hud.cover(cov.on && !P.car, cov.peekT > 0);
     // the reticle on whoever the gun is on
