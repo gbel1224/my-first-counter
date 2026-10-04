@@ -42,6 +42,7 @@ import { initHeists, updateHeists, heistObjective, heistActive, startHeist, abor
 import { makeEvents } from "./events.js";
 import { makeJobs } from "./jobs.js";
 import { makeRoadblocks } from "./roadblock.js";
+import { makeFootCops } from "./footcops.js";
 import { makeCustoms, applyCarMods } from "./customs.js";
 import { makeAct2 } from "./act2.js";
 import { makeServices } from "./services.js";
@@ -253,11 +254,13 @@ function respawnAt(place, label) {
   P.x = place.x + Math.sin(place.face) * 2; P.z = place.z + Math.cos(place.face) * 2; P.y = groundY(P.x, P.z); P.speed = 0; P.yaw = place.face;
   rig.init = false; rig.yaw = place.face + Math.PI;
 }
+const crimeHooks = {};
 const crime = makeCrime(scene, {
+  footSees: () => crimeHooks.footSees && crimeHooks.footSees(), footGrab: () => crimeHooks.footGrab && crimeHooks.footGrab(),
   collider, fxParticles: fx,
   focus: () => P.car ? { x: P.car.x, z: P.car.z, car: true, speed: P.car.speed, vx: P.car.vx, vz: P.car.vz, h: P.car.h, ref: P.car } : { x: P.x, z: P.z, car: false, speed: P.speed, h: P.yaw },
   // what a cruiser has to drive round: live traffic and parked cars near the action
-  obstacles: (x, z) => traffic.cars.filter(c => c.alive && (c.x - x) ** 2 + (c.z - z) ** 2 < 200 * 200).concat(parked.around(x, z)),
+  obstacles: (x, z) => traffic.cars.filter(c => c.alive && (c.x - x) ** 2 + (c.z - z) ** 2 < 200 * 200).concat(parked.around(x, z), roadblocks.B.active ? roadblocks.cars : []),
   sound: (k, v, r) => AudioSys.play(k, v, r), toast: m => hud.toast(m), shake: a => { rig.shake = Math.max(rig.shake, a); },
   paused: () => hud.talking() || state.phase !== "play",
   cover: (sx, sz, air) => coverMult(sx, sz, air),
@@ -380,6 +383,16 @@ const roadblocks = makeRoadblocks(scene, {
   sound: (k, v, r) => AudioSys.play(k, v, r), toast: (m, t) => hud.toast(m, t), shake: a => { rig.shake = Math.max(rig.shake, a); },
   paused: () => hud.talking() || state.phase !== "play" || !!interior.inside,
 });
+// officers on foot: out of their cruisers after you when you're running
+const footcops = makeFootCops({
+  crowd, crime, collider, fx,
+  focus: () => P.car ? { x: P.car.x, z: P.car.z, car: P.car, speed: P.car.speed } : { x: P.x, z: P.z, car: null, speed: P.speed },
+  sound: (k, v, r) => AudioSys.play(k, v, r), inView: (x, z) => inView(x, z, 0),
+  paused: () => hud.talking() || state.phase !== "play" || !!interior.inside,
+  tackle: o => { if (P.car || P.tackleT > 0) return; P.tackleT = 2.4; P.speed = 0; P.yaw = Math.atan2(P.x - o.x, P.z - o.z); rig.shake = Math.max(rig.shake, 0.45); AudioSys.play("door", 0.9, 0.55); hud.toast("👮 Tackled!", 1.6); },
+});
+crimeHooks.footSees = () => footcops.sees(); crimeHooks.footGrab = () => footcops.grabbing();
+{ const r0 = crime.reset; crime.reset = () => { r0(); footcops.reset(); }; }
 // Act Two: the Shark's chapters, once the first story's done
 const act2 = makeAct2(scene, {
   st, P, crime, combat, gangs, crowd, collider, fx,
@@ -936,7 +949,8 @@ function update(dt) {
     } else {
       if (hud.talking()) { inp.mx = 0; inp.mz = 0; inp.jump = false; inp.action = false; }
       if (inWater(P.x, P.z)) { inp.sprintHeld = false; inp.jump = false; }
-      updatePlayerOnFoot(P, inp, dt, rig.yaw, collider);
+      if (P.tackleT > 0) { P.tackleT -= dt; P.speed = 0; }          // pinned down by an officer
+      else updatePlayerOnFoot(P, inp, dt, rig.yaw, collider);
       P.swim = inWater(P.x, P.z);
       if (P.swim) { P.speed = Math.min(P.speed, 2.3); P.y = SEA_Y - 1.05 + Math.sin(time * 1.6) * 0.06; P.vy = 0; P.grounded = true; }
       else if (st.jetpack && I.sprintHeld && (!P.grounded || inp.jump || P.jetOn)) {
@@ -1019,7 +1033,7 @@ function update(dt) {
     }
     // whatever shoved you this frame (a cruiser, a blast, a door), you never end up inside a wall
     if (!P.car && !P.swim) { const q = collider.resolve(P.x, P.z, 0.38); if (q.hit) { P.x = q.x; P.z = q.z; } }
-    crime.update(dt, time); roadblocks.update(dt, time); combat.update(dt, time); gangs.update(dt);
+    crime.update(dt, time); footcops.update(dt); roadblocks.update(dt, time); combat.update(dt, time); gangs.update(dt);
     updateHeists(dt, time); events.update(dt); jobs.update(dt); act2.update(dt); services.update(dt);
     // sirens you can hear: the nearest ambulance / fire engine on a call, or the police on your tail
     { let cop = 0; if (crime.S.wanted > 0) for (const u of crime.units) if (u.active) cop = Math.max(cop, 1 - Math.hypot(u.x - focus0().x, u.z - focus0().z) / 200);
@@ -1186,6 +1200,7 @@ function render() {
     const hands = !P.swim && combat.hands();
     if (hands) over = Object.assign({}, over || {}, hands);
     const hj = hijack.playerPose(); if (hj) over = hj;
+    if (P.tackleT > 0) over = { tilt: 1.15, armL: -0.4, armR: -0.4, elbowL: -1.6, elbowR: -1.6, thighL: -0.2, thighR: -0.2, kneeL: 0.3, kneeR: 0.3 };   // face down, hands behind
     if (P.selfie) over = Object.assign({}, over || {}, { armR: -1.6, elbowR: -0.95, armL: 0, elbowL: -0.1 });   // phone held out for the selfie
     // down behind cover: a deep crouch, the gun held low, ready to come up
     const crouch = cov.on && cov.peekT <= 0 && !P.swim && !interior.inside && !hj;
@@ -1312,7 +1327,7 @@ function render() {
     for (const G of GANGS) dots.unshift({ x: G.x, z: G.z, c: st.turf[G.id] ? (W && W.G === G && Math.floor(time * 3) % 2 ? "rgba(255,60,40,.35)" : "rgba(230,175,40,.24)") : ["rgba(200,40,40,.22)", "rgba(40,80,200,.22)", "rgba(40,150,70,.22)"][GANGS.indexOf(G)], r: G.r * 0.5 });
     if (crime.heli.active) dots.push({ x: crime.heli.x, z: crime.heli.z, c: "#ffffff", r: 4.5 });
     for (const p of gangs.members) if (!p.hidden && p.knocked <= 0 && (p.goon || (p.x - focus.x) ** 2 + (p.z - focus.z) ** 2 < 3600)) dots.push({ x: p.x, z: p.z, c: p.boss ? "#ff00aa" : "#ff5a3a", r: p.boss ? 4 : 2.5 });
-    hud.minimap(focus.x, focus.z, P.car ? P.car.h : P.yaw, rig.yaw, dots, obj && obj.x !== undefined ? { x: obj.x, z: obj.z, c: obj.side ? "#ff8a4c" : "#ffc861" } : null, st.gps, crime.S.wanted > 0 ? crime.radar() : null, time);
+    hud.minimap(focus.x, focus.z, P.car ? P.car.h : P.yaw, rig.yaw, dots, obj && obj.x !== undefined ? { x: obj.x, z: obj.z, c: obj.side ? "#ff8a4c" : "#ffc861" } : null, st.gps, crime.S.wanted > 0 ? crime.radar().concat(footcops.officers.filter(o => o.mode === "chase" && !o.hidden).map(o => ({ x: o.x, z: o.z, h: o.yaw, foot: true, cone: crime.S.searching, seen: o.sees }))) : null, time);
   }
   probe.update(P.car || P, [P.car && P.car.group, P.ch.group], interior.inside);
   R.render(scene, camera, time);
@@ -1328,7 +1343,7 @@ requestAnimationFrame(frame);
 // debug / test hooks
 globalThis.__pc2 = {
   THREE, scene, camera, customs, applyCarMods, act2, services, coverState: () => cov, coverMult, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, hijack, P, cars, state, rig, I,
-  interior, props, street, skids, animals, damage, radio, roadblocks, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
+  interior, props, street, skids, animals, damage, radio, roadblocks, footcops, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },
 };
