@@ -101,6 +101,7 @@ const animals = makeAnimals(scene, plan, city.U);
   const scare0 = crowd.scare.bind(crowd);
   crowd.scare = (x, z, rad, t) => { scare0(x, z, rad, t); animals.scare(x, z, rad + 10); };    // gunfire sends the birds up too
 }
+animals.onTakeOff = f => { const o = P.car || P, d = Math.hypot(f.x - o.x, f.z - o.z); if (d < 45) AudioSys.wings(Math.max(0.2, 1 - d / 45) * (f.kind === "gull" ? 0.7 : 1)); };
 buildCarts(scene, plan);
 await step(78);
 const traffic = new Traffic(scene, isMobile ? 110 : 150);
@@ -690,6 +691,7 @@ function update(dt) {
   if (greyT > 0) { greyT -= dt; R.grade.uSat.value = 1.1 - Math.min(1, greyT) * 0.95; } else R.grade.uSat.value = 1.1;
   crowd.update(dt, time, focus.x, focus.z, hz);
   animals.update(dt, time, { px: (P.car || P).x, pz: (P.car || P).z, pspeed: P.car ? Math.abs(P.car.speed || 0) : (P.speed || 0), cars: traffic.cars, people: crowd.people });
+  ambienceTick(dt, focus);
   traffic.update(dt, time, [P.car ? { x: P.car.x, z: P.car.z, car: true } : { x: focus.x, z: focus.z, car: false }]);
   if (state.phase === "play" && P.car && !interior.inside) redLight(P.car);
   if (state.phase === "title") {
@@ -720,6 +722,25 @@ function frame(now) {
 }
 // the street the cars reflect, filmed around you a face at a time
 const probe = makeProbe(R.renderer, scene, sky, { mobile: isMobile });
+// the city's sound: how busy, green, close to the surf and wet it is right where you are
+const AMB = { green: 0, downtown: 0, traffic: 0, crowd: 0, beach: 0, t: 0 };
+function ambienceTick(dt, f) {
+  AMB.t -= dt;
+  if (AMB.t <= 0) {
+    AMB.t = 0.25;                                  // the counts don't need doing every frame
+    let nc = 0, np = 0;
+    for (const c of traffic.cars) if (c.alive && (c.x - f.x) ** 2 + (c.z - f.z) ** 2 < 55 * 55) nc++;
+    for (const p of crowd.people) if (!p.hidden && (p.x - f.x) ** 2 + (p.z - f.z) ** 2 < 28 * 28) np++;
+    const i = Math.floor((f.x + HALF - ROAD) / (BLOCK + ROAD)), j = Math.floor((f.z + HALF - ROAD) / (BLOCK + ROAD));
+    const k = i >= 0 && j >= 0 && i < 14 && j < 14 ? district(i, j) : f.z > HALF ? "beach" : "edge";
+    AMB.tg = { traffic: Math.min(1, nc / 14), crowd: Math.min(1, np / 22), green: k === "park" || k === "suburb" ? 1 : k === "plaza" || k === "edge" ? 0.4 : 0.1, downtown: k === "downtown" ? 1 : 0,
+      beach: Math.max(0, Math.min(1, 1 - (HALF + 42 - f.z) / 110)) };
+  }
+  if (AMB.tg) for (const key of ["traffic", "crowd", "green", "downtown", "beach"]) AMB[key] += (AMB.tg[key] - AMB[key]) * Math.min(1, dt * 1.5);
+  const rain = (weather.W && weather.W.rain) || 0;
+  AudioSys.ambience({ dt, traffic: AMB.traffic, crowd: AMB.crowd, green: AMB.green, downtown: AMB.downtown, beach: AMB.beach, night: sky.state.night, rain, wind: 0.25 + rain * 0.75, indoor: !!interior.inside });
+}
+
 // running a red light in front of a cop is a crime; anywhere else the other drivers just lean on the horn
 let lastBox = null;
 function redLight(c) {
