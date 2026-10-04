@@ -6,6 +6,7 @@
 import * as THREE from "../vendor/three.module.js";
 import { paint, place, merge } from "./geo.js";
 import { reflective } from "./reflect.js";
+import { dentable } from "./damage.js";
 
 // Each type: overall size and handling, then its shape as height curves along the length
 // (z, + = front): `roof` the roofline over bonnet, glass and boot; `belt` the shoulder line where
@@ -1048,6 +1049,9 @@ export const MAT = {
   plate: typeof document !== "undefined" ? plateMaterial() : null,
 };
 for (const k of ["paint", "glass", "glassFar", "trim"]) reflective(MAT[k]);
+// traffic and parked cars take a dent each (damage.js); the glass cracks round it
+for (const k of ["paint", "trim", "lights", "plate"]) if (MAT[k]) dentable(MAT[k]);
+for (const k of ["glass", "glassFar"]) dentable(MAT[k], true);
 
 // real-world paint mix: mostly silver, white, black and grey, a few colours
 export const REAL_PAINTS = [0xb8bcc0, 0xc6c9cc, 0xe8e8e6, 0xf2f2f0, 0x1a1b1d, 0x222428, 0x5a5e62, 0x6b6f73, 0x1f2d4a, 0x2a3a5c, 0x5a1a1e, 0x7a1c20, 0xb9a98c, 0x2a3a2e, 0x8a2a1c, 0x3a4c6a, 0x9aa0a4, 0x2c2c2e];
@@ -1137,5 +1141,5 @@ export function driveLamps(c, inp, dt, night = LAMP_U.night) {
   if (Math.abs(steer) > 0.45 && Math.abs(sp) > 1 && Math.abs(sp) < 16) c._indT = 1.2, c._ind = steer < 0 ? 1 : 2;
   else c._indT = Math.max(0, (c._indT || 0) - dt);
   const ind = c.hp !== undefined && c.hp < 35 ? 3 : c._indT > 0 ? c._ind : 0;
-  c.setLamps(c._brakeT > 0, night > 0.3 ? 1 : 0, ind, sp < -0.3);
+  c.setLamps(c._brakeT > 0, night > 0.3 && !c.headOut ? 1 : 0, ind, sp < -0.3);
 }
