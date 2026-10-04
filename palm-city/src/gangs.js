@@ -284,5 +284,5 @@ export function makeGangs(g) {
     }
     if (showdown) g.boss(true, NEM_NAME, Math.max(0, boss.hp) / (520 + N.defeated * 120));
   }
-  return { update, grudge, GANGS, boss, goons, YARD, showdown: () => showdown, members, crew, dismiss, objective, war: () => war, startWar, endWar };
+  return { update, grudge, GANGS, boss, goons, YARD, showdown: () => showdown, members, crew, dismiss, objective, war: () => war, startWar, endWar, startShowdown };
 }

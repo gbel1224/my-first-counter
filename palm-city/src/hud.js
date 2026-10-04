@@ -70,7 +70,7 @@ export function createHUD(plan) {
 
   let toastT = 0, bannerT = 0;
   let dlgLines = null, dlgI = 0, dlgCb = null, dlgShown = 0, dlgFull = "";
-  const WHO = { marco: ["Marco", "#ffc861"], rosa: ["Rosa", "#ff8fc8"], vince: ["Vince Sterling", "#ff6a5a"], narrator: ["Palm City", "#9fd8ff"], you: ["You", "#b8f0a0"] };
+  const WHO = { marco: ["Marco", "#ffc861"], rosa: ["Rosa", "#ff8fc8"], vince: ["Vince Sterling", "#ff6a5a"], vic: ["Vic \"The Shark\" Moreno", "#ff4a8a"], ruiz: ["Det. Ruiz", "#8ab8ff"], narrator: ["Palm City", "#9fd8ff"], you: ["You", "#b8f0a0"] };
   function renderDlg() {
     const [who, text] = dlgLines[dlgI];
     const w = WHO[who] || [who, "#fff"];
