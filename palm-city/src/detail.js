@@ -5,6 +5,7 @@
 import * as THREE from "../vendor/three.module.js";
 import { N, ROAD, CELL, BLOCK, WALK, HALF, CURB, STYLE, roadC, blockMin, district, mulberry32 } from "./world.js";
 import { paint, place, merge, vcMaterial, tileInstances } from "./geo.js";
+import { BLADE_COUNT } from "./signs.js";
 
 // the facade window grid, mirrored from the facade shader so props land exactly under real windows
 const GRID = {
@@ -72,7 +73,8 @@ function inst(scene, geo, mat, list, colors, cast = true, tile = true) {
 
 export function buildFacadeDetail(scene, plan) {
   const r = mulberry32(0xFACADE);
-  const ac = [], bal = [], awn = [], awnC = [], fe = [];
+  const ac = [], bal = [], awn = [], awnC = [], fe = [], blades = [];
+  const br = mulberry32(0xB1ADE);
   const AWN = [0x2f4a3a, 0x6a2a2a, 0x23344e, 0x8a7a5a, 0x3a3a3a, 0x7a4a2a, 0x2a5a5a, 0x5a2a4a];
   for (const b of plan.buildings) {
     const G = GRID[b.style];
@@ -87,12 +89,20 @@ export function buildFacadeDetail(scene, plan) {
       const bays = Math.floor(width / G.bay);
       const floors = Math.floor((b.h - G.vo - 0.6) / G.fh);
       const shopFloor = b.style !== STYLE.HOUSE && b.y < 0.5;
+      // a projecting neon sign between some of the shops, above the awnings
+      if (shopFloor && b.h > 7) {
+        const sb = Math.floor(width / 5.5);
+        for (let k = 1; k < sb; k++) if (br() < 0.13) {
+          const [x, z] = along(k * 5.5);
+          blades.push([x, b.y + 5.7, z, rot, (br() * BLADE_COUNT) | 0, br()]);
+        }
+      }
       // shop awnings on the ground floor
       if (shopFloor) {
         const sb = Math.floor(width / 5.5);
         for (let k = 0; k < sb; k++) if (r() < 0.45) {
           const [x, z] = along((k + 0.5) * 5.5);
-          awn.push([x + nx * 0.02, b.y + 3.3, z + nz * 0.02, rot]); awnC.push(AWN[(r() * AWN.length) | 0]);
+          awn.push([x + nx * 0.02, b.y + 3.08, z + nz * 0.02, rot]); awnC.push(AWN[(r() * AWN.length) | 0]);
         }
       }
       for (let fl = 0; fl < floors; fl++) {
@@ -115,7 +125,7 @@ export function buildFacadeDetail(scene, plan) {
   inst(scene, balconyGeo(), mat, bal);
   inst(scene, fireEscapeGeo(3.3), vcMaterial({ roughness: 0.6, metalness: 0.5 }), fe);
   inst(scene, awningGeo(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }), awn, awnC);
-  return { counts: { ac: ac.length, bal: bal.length, awn: awn.length, fe: fe.length } };
+  return { blades, counts: { ac: ac.length, bal: bal.length, awn: awn.length, fe: fe.length, blades: blades.length } };
 }
 
 // ============================================================================================

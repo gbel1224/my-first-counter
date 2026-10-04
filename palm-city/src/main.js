@@ -9,6 +9,7 @@ import { createOcean } from "./ocean.js";
 import { Crowd, randomLook } from "./people.js";
 import { Traffic, SIGNAL, Parked, signalState, walkState, RED } from "./traffic.js";
 import { buildFacadeDetail, buildStreetDetail, updateSignals } from "./detail.js";
+import { buildBladeSigns } from "./signs.js";
 import { PAINTS, REAL_PAINTS, LAMP_U, driveLamps } from "./cars.js";
 import { initInput, pollInput, I } from "./input.js";
 import { createHUD, askConfirm } from "./hud.js";
@@ -82,6 +83,7 @@ const city = createCity(scene, plan, groundY);
 }
 const facade = buildFacadeDetail(scene, plan);
 const street = buildStreetDetail(scene, plan);
+buildBladeSigns(scene, facade.blades, city.U);                 // projecting neon signs over the shops
 await step(55);
 const ocean = createOcean(scene, sky);
 await step(65);
