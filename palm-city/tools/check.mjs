@@ -104,7 +104,7 @@ try {
       const stages = [H().stage];
       go(H().tx, H().tz); G.step(1 / 60); stages.push(H().stage);
       go(H().sx, H().sz); G.step(1 / 60); stages.push(H().stage);
-      for (let i = 0; i < 60 * 14 && H() && H().stage === "grab"; i++) { go(H().tx, H().tz); G.crime.S.health = 100; G.crime.S.wanted = Math.min(G.crime.S.wanted, 3); G.step(1 / 60); }   // (≤3★: this tests the heist, not the tank)
+      for (let i = 0; i < 60 * 14 && H() && H().stage === "grab"; i++) { go(H().tx, H().tz); G.crime.S.health = 100; G.crime.S.bustT = 0; G.crime.S.wanted = Math.min(G.crime.S.wanted, 3); G.step(1 / 60); }   // (≤3★: this tests the heist, not the tank)
       stages.push(H() && H().stage);
       const hm = G.st.money; go(H().sx, H().sz); G.step(1 / 60);
       out.heistStages = stages.join(); out.heistPaid = !H() && G.st.money > hm;
