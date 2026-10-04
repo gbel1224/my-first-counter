@@ -4,11 +4,12 @@
 // means detail is resolution-independent — as crisp on a 4K monitor as on a phone — with zero
 // texture memory, and the whole skyline is a handful of draw calls.
 import * as THREE from "../vendor/three.module.js";
-import { N, ROAD, BLOCK, WALK, CURB, CELL, HALF, STYLE, blockC, blockMin, district, mulberry32, PLAZA } from "./world.js";
+import { N, ROAD, BLOCK, WALK, CURB, CELL, HALF, STYLE, blockC, blockMin, district, mulberry32, PLAZA, parkPathD } from "./world.js";
 import { paint, place, merge, vcMaterial, tileInstances } from "./geo.js";
 import { buildPalms } from "./palms.js";
 import { buildShrubs, buildGrass } from "./plants.js";
 import { buildHouses } from "./houses.js";
+import { buildParks } from "./parks.js";
 import { signAtlas } from "./signs.js";
 import { addTile } from "./cull.js";
 
@@ -668,7 +669,10 @@ function blockMaterial() {
       .replace("#include <common>", `#include <common>
         varying float vKind; varying vec3 vWP; varying vec3 vON; varying vec3 vBC;
         ${GLSL_COMMON}
-        const float BLOCK = ${BLOCK.toFixed(3)}, WALK = ${WALK.toFixed(3)};`)
+        const float BLOCK = ${BLOCK.toFixed(3)}, WALK = ${WALK.toFixed(3)};
+        // the park paths (world.js parkPathD): a gravel loop, cross paths, a paved round
+        float parkLoop(vec2 q) { vec2 a = abs(q) - 12.0; return length(max(a, 0.0)) + min(max(a.x, a.y), 0.0) - 3.0; }
+        float parkPathD(vec2 q) { vec2 a = abs(q); return min(min(abs(parkLoop(q)) - 1.4, min(a.x, a.y) - 1.2), length(q) - 6.5); }`)
       .replace("#include <color_fragment>", `#include <color_fragment>
         float bRough = 0.85;
         {
@@ -726,6 +730,26 @@ function blockMaterial() {
               float fl = step(0.985, h12(fi + 7.0)) * (1.0 - smoothstep(0.06, 0.12, length(fract(fq) - 0.5))) * (1.0 - dry) * (1.0 - far);
               col = mix(col, mix(vec3(0.95, 0.93, 0.85), vec3(0.95, 0.8, 0.2), step(0.5, h12(fi))), fl);
               if (k == 3) col *= 0.93 + 0.1 * smoothstep(0.3, 0.7, abs(fract(vWP.x / 3.0) - 0.5) * 2.0);   // mowing stripes
+              if (k == 1) {
+                // park paths: crushed-shell gravel between steel edging; worn grass along their sides;
+                // the round in the middle laid in concentric stone pavers
+                float pd = parkPathD(q), aa = fwidth(pd) + 0.02;
+                float onPath = 1.0 - smoothstep(-aa, aa, pd);
+                col = mix(col, col * vec3(1.15, 1.05, 0.8) * 0.9, (1.0 - smoothstep(0.0, 0.7, pd)) * 0.6);   // worn verge
+                vec3 grav = vec3(0.66, 0.6, 0.5) * (0.84 + vnoise(vWP.xz * 5.0) * 0.18);
+                grav *= 0.9 + step(0.7, h12(floor(vWP.xz * 16.0))) * 0.2 - step(0.93, h12(floor(vWP.xz * 11.0) + 3.0)) * 0.25;   // pebbles
+                grav *= 1.0 - smoothstep(0.55, 0.85, vnoise(vWP.xz * 0.6 + 2.0)) * 0.15;
+                float r = length(q);
+                if (r < 6.6) {
+                  float ring = fract(r / 0.6), ang = atan(q.y, q.x) * max(6.0, floor(r / 0.6) * 6.0) / 6.2832;
+                  float joint = (1.0 - smoothstep(0.0, 0.06, min(ring, 1.0 - ring))) + (1.0 - smoothstep(0.0, 0.04, min(fract(ang), 1.0 - fract(ang))));
+                  grav = mix(vec3(0.7, 0.66, 0.6), vec3(0.6, 0.55, 0.5), h12(vec2(floor(r / 0.6), floor(ang)))) * (0.9 + vnoise(vWP.xz * 4.0) * 0.12);
+                  grav *= 1.0 - clamp(joint, 0.0, 1.0) * 0.3;
+                }
+                col = mix(col, grav, onPath);
+                col *= 1.0 - (line1(pd, -0.07, 0.0)) * 0.55;                                    // steel edging
+                bRough = mix(bRough, 0.9, onPath);
+              }
               bRough = 0.95;
             } else if (k == 2) {
               // plaza: radial stone rings around the fountain
@@ -968,11 +992,13 @@ function buildProps(scene, city, U, gy) {
     for (const L of city.lots || []) { hardRects.push(L.drive, L.path, L.porch); if (L.deck) hardRects.push(L.deck); }
     for (const b of city.blocks) {
       if (b.kind !== "park" && b.kind !== "suburb") continue;
+      const pk = (city.parks || []).find(q => q.i === b.i && q.j === b.j);
       const homes = city.buildings.filter(h => Math.abs(h.x - (b.x0 + b.x1) / 2) < BLOCK && Math.abs(h.z - (b.z0 + b.z1) / 2) < BLOCK);
       for (let x = b.x0 + WALK + 0.4; x < b.x1 - WALK - 0.4; x += 0.85) for (let z = b.z0 + WALK + 0.4; z < b.z1 - WALK - 0.4; z += 0.85) {
         const px = x + (gr() - 0.5) * 0.8, pz = z + (gr() - 0.5) * 0.8;
         if (homes.some(h => Math.abs(px - h.x) < h.w / 2 + 0.5 && Math.abs(pz - h.z) < h.d / 2 + 0.5)) continue;
         if (hardRects.some(([a0, b0, a1, b1]) => px > a0 - 0.3 && px < a1 + 0.3 && pz > b0 - 0.3 && pz < b1 + 0.3)) continue;
+        if (pk && (parkPathD(px - pk.cx, pz - pk.cz) < 0.3 || pk.quads.some(([a, c]) => Math.abs(px - pk.cx - a * 9) < 4.3 && Math.abs(pz - pk.cz - c * 9) < 4.3))) continue;
         const k = gr();
         tufts.push([px, pz, gr() * 6.28, 0.7 + gr() * 0.6, k < 0.07 ? "flower" : k < 0.15 ? "dry" : "grass"]);
       }
@@ -1042,6 +1068,7 @@ export function createCity(scene, city, gy) {
   const buildings = buildBuildings(scene, city, U);
   const props = buildProps(scene, city, U, gy);
   const houses = buildHouses(scene, city, U, GLSL_COMMON);
+  buildParks(scene, city, U, GLSL_COMMON);
   function update(time, night) {
     houses.update(night);
     U.uTime.value = time; U.uNight.value = night;

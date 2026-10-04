@@ -80,6 +80,7 @@ export function buildCity(seed = 0x9A1C17) {
   const benches = [];     // [x, z, rotY]
 
   const homeLots = [];    // suburban lots (see the suburb blocks)
+  const parks = [];       // the parks' layout (paths, features, who's sitting on the benches)
   const lr = mulberry32(seed ^ 0x10755);   // own stream: the lots don't reshuffle the rest of the city
   const add = (x, z, w, d, h, style, color, y = 0) => {
     buildings.push({ x, z, w, d, h, y, style, color, seed: r(), roof: r() });
@@ -120,9 +121,28 @@ export function buildCity(seed = 0x9A1C17) {
       continue;
     }
     if (kind === "park") {
-      for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 0]]) lamps.push([blockC(i) + a * 13, blockC(j) + b * 13 - (a || b ? 0 : 6), 0]);   // path lamps
-      for (let k = 0; k < 26; k++) trees.push([ix0 + 3 + r() * (iw - 6), iz0 + 3 + r() * (iw - 6), 0.8 + r() * 0.6]);
-      for (let k = 0; k < 4; k++) benches.push([blockC(i) + (k - 1.5) * 8, blockC(j) + 4, 0]);
+      // a gravel loop with paths in from every side to a paved round in the middle; a fountain, a
+      // gazebo or a statue there, and two of playground / half court / picnic area in the quarters
+      const cx = blockC(i), cz = blockC(j), pk = parks.length;
+      const park = { i, j, cx, cz, centre: ["fountain", "gazebo", "statue"][pk % 3], quads: [[1, -1, ["playground", "court", "playground"][pk % 3]], [-1, 1, ["picnic", "picnic", "court"][pk % 3]]], sitters: [] };
+      parks.push(park);
+      const feat = (x, z) => park.quads.some(([a, b]) => Math.abs(x - (cx + a * 9)) < 4.8 && Math.abs(z - (cz + b * 9)) < 4.8);
+      for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        lamps.push([cx + a * 17.4, cz + b * 17.4, Math.atan2(a, b)]);                       // round the loop
+        lamps.push([cx + a * 5.2, cz + b * 5.2, Math.atan2(a, b) + Math.PI]);                 // round the middle
+      }
+      for (let k = 0; k < 26; k++) {
+        const x = ix0 + 3 + r() * (iw - 6), z = iz0 + 3 + r() * (iw - 6), sc = 0.8 + r() * 0.6;
+        if (parkPathD(x - cx, z - cz) > 2.2 && !feat(x, z)) trees.push([x, z, sc]);
+      }
+      // benches along the loop, facing the path, and round the middle facing in
+      const pr = mulberry32(seed ^ (0x9A2C + pk));
+      const bench = (x, z, fx, fz) => { const a = Math.atan2(-fx, -fz); benches.push([x, z, a]); if (pr() < 0.45) park.sitters.push([x - fx * 0.05, z - fz * 0.05, Math.atan2(fx, fz)]); if (pr() < 0.4) park.bins = (park.bins || []).concat([[x + fz * 1.4, z - fx * 1.4]]); };
+      for (const [sa, sb] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const along of [-7.5, 7.5]) {
+        const x = cx + (sa ? sa * 17.0 : along), z = cz + (sb ? sb * 17.0 : along);
+        bench(x, z, -sa, -sb);
+      }
+      for (let k = 0; k < 6; k++) { const a = (k + 0.5) / 6 * Math.PI * 2; if (Math.abs(Math.sin(a * 2)) < 0.35) continue; bench(cx + Math.cos(a) * 5.4, cz + Math.sin(a) * 5.4, -Math.cos(a), -Math.sin(a)); }
       continue;
     }
     if (kind === "suburb") {
@@ -241,10 +261,30 @@ export function buildCity(seed = 0x9A1C17) {
     const x0 = L.qx - BLOCK / 4 + WALK / 2 + 0.6, x1 = L.qx + BLOCK / 4 - WALK / 2 - 0.6, z = L.zE - L.fz * 0.7;
     for (let x = x0; x < x1; x += 1.5) if (clear([x, z])) shrubs.push([x, z, 0.75 + sr() * 0.15, "small"]);
   }
-  for (const bl of blocks) if (bl.kind === "park") {
-    for (let k = 0; k < 30; k++) shrubs.push([bl.x0 + WALK + 2 + sr() * (BLOCK - WALK * 2 - 4), bl.z0 + WALK + 2 + sr() * (BLOCK - WALK * 2 - 4), 0.8 + sr() * 0.8]);
+  // nothing grows on the park paths or the play areas
+  for (const pk of parks) for (let k = shrubs.length - 1; k >= 0; k--) {
+    const [x, z] = shrubs[k], lx = x - pk.cx, lz = z - pk.cz;
+    if (Math.abs(lx) < BLOCK / 2 && Math.abs(lz) < BLOCK / 2 && (parkPathD(lx, lz) < 1.6 || pk.quads.some(([a, b]) => Math.abs(lx - a * 9) < 5.4 && Math.abs(lz - b * 9) < 5.4))) shrubs.splice(k, 1);
   }
-  return { buildings, blocks, palms, trees, lamps, benches, shrubs, lots: homeLots };
+  for (const bl of blocks) if (bl.kind === "park") {
+    const pk = parks.find(q => q.i === bl.i && q.j === bl.j);
+    for (let k = 0; k < 30; k++) {
+      const x = bl.x0 + WALK + 2 + sr() * (BLOCK - WALK * 2 - 4), z = bl.z0 + WALK + 2 + sr() * (BLOCK - WALK * 2 - 4), sc = 0.8 + sr() * 0.8;
+      const lx = x - pk.cx, lz = z - pk.cz;
+      if (parkPathD(lx, lz) > 1.6 && !pk.quads.some(([a, b]) => Math.abs(lx - a * 9) < 5.4 && Math.abs(lz - b * 9) < 5.4)) shrubs.push([x, z, sc]);
+    }
+  }
+  return { buildings, blocks, palms, trees, lamps, benches, shrubs, lots: homeLots, parks };
+}
+
+// the park paths: signed distance (m, negative on the path) from a point given relative to the park's
+// centre — a gravel loop round a rounded square 15 m out, cross paths along both axes, a paved round
+// of 6.5 m in the middle. The block shader draws the same shape.
+export function parkPathD(x, z) {
+  const ax = Math.abs(x), az = Math.abs(z);
+  const qx = ax - 12, qz = az - 12;
+  const box = Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0) - 3;
+  return Math.min(Math.abs(box) - 1.4, Math.min(ax, az) - 1.2, Math.hypot(x, z) - 6.5);
 }
 
 // ---------------------------------------------------------------------------------------------
