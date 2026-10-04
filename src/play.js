@@ -21,7 +21,7 @@ export function driveStep(v, inp, dt, collider) {
   let lon = v.vx * fx + v.vz * fz, lat = v.vx * rx + v.vz * rz;
   const thr = clamp(inp.mz, -1, 1);
   const boost = inp.sprintHeld && thr > 0;
-  const top = S.top * (boost ? 1.22 : 1);
+  const top = S.top * (boost ? 1.22 : 1) * (v.limp || 1);          // a bent car won't do its top speed
   if (thr > 0.02) {
     if (lon < -0.5) lon += 30 * thr * dt;                            // braking out of reverse
     else lon += S.accel * (boost ? 1.5 : 1) * thr * Math.max(0, 1 - (lon / top) ** 2) * dt;
@@ -33,7 +33,7 @@ export function driveStep(v, inp, dt, collider) {
   const grip = inp.handbrakeHeld ? 1.3 : S.grip * (1 - clamp(Math.abs(lat) / 22, 0, 0.5));
   lat *= Math.exp(-grip * dt);
   // steering
-  v.steer = lerp(v.steer || 0, clamp(inp.mx, -1, 1), 1 - Math.exp(-10 * dt));
+  v.steer = lerp(v.steer || 0, clamp(inp.mx + (v.pull || 0) * clamp(Math.abs(lon) / 8, 0, 1), -1, 1), 1 - Math.exp(-10 * dt));   // ...and pulls to one side
   const sp = Math.abs(lon);
   const auth = clamp(sp / 7, 0, 1) * (1 - 0.5 * clamp(sp / S.top, 0, 1));
   const yawT = -v.steer * S.turn * auth * Math.sign(lon || 1) * (inp.handbrakeHeld ? 1.45 : 1);
@@ -46,7 +46,7 @@ export function driveStep(v, inp, dt, collider) {
   v.x += v.vx * dt; v.z += v.vz * dt;
   v.x = clamp(v.x, -HALF - 420, HALF + 420); v.z = clamp(v.z, -HALF - 300, SHORE - 6);
   // collision: two circles along the body
-  let impact = 0;
+  let impact = 0; v.hit = null;
   const half = S.len * 0.3, rad = S.wid * 0.55;
   for (const o of [half, -half]) {
     const cx = v.x + nfx * o, cz = v.z + nfz * o;
@@ -55,6 +55,7 @@ export function driveStep(v, inp, dt, collider) {
       v.x += res.x - cx; v.z += res.z - cz;
       const vn = v.vx * res.nx + v.vz * res.nz;
       if (vn < 0) {
+        if (-vn > impact) v.hit = { x: cx - res.nx * rad, z: cz - res.nz * rad, nx: res.nx, nz: res.nz };
         impact = Math.max(impact, -vn);
         v.vx -= res.nx * vn * 1.35; v.vz -= res.nz * vn * 1.35;   // bounce off
         v.vx *= 0.8; v.vz *= 0.8;

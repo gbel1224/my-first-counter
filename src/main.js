@@ -6,6 +6,7 @@ import { createSky } from "./sky.js";
 import { createCity } from "./city.js";
 import { bakeStreetLights, setStreetLights, setHeadlights } from "./streetlight.js";
 import { makeAnimals } from "./animals.js";
+import { makeDamage } from "./damage.js";
 import { buildCarts } from "./streetlife.js";
 import { createOcean } from "./ocean.js";
 import { Crowd, randomLook } from "./people.js";
@@ -92,6 +93,7 @@ await step(65);
 const crowd = new Crowd(scene, plan, isMobile ? 380 : 520);
 // the animals: pigeons and gulls, and dogs out with some of the walkers; and the street-food carts
 const animals = makeAnimals(scene, plan, city.U);
+const dmgCtx = { fx: null, groundY }, damage = makeDamage(scene, dmgCtx);   // (its fx arrive once they exist, below)
 {
   const r = mulberry32(0xD06);
   for (const p of crowd.people) {
@@ -216,6 +218,7 @@ const story = makeStory({
 // ---------------------------------------------------------------------------------------------
 // heat + fighting
 const fx = createFX(scene);
+dmgCtx.fx = fx;
 let greyT = 0;
 function respawnAt(place, label) {
   if (P.car) { const c = P.car; P.car = null; P.ch.group.visible = true; c.vx = c.vz = 0; }
@@ -579,7 +582,14 @@ function update(dt) {
       if (c.kind === "boat" || c.kind === "jetski") waterStep(c, inp, dt, time, fx);
       else if (c.kind === "heli") heliStep(c, inp, dt, time, collider);
       else if (c.kind === "plane") { planeStep(c, inp, dt, time, collider); if (c.crash && !c.boom) combat.explodeCar(c, "player"); }
-      else { impact = Math.max(driveStep(c, inp, dt, collider), parked.collide(c)); skids.track(c, (c.drift > 3.8 || (inp.handbrakeHeld && Math.abs(c.speed) > 6)) && !c.air, groundY(c.x, c.z) + 0.02); }
+      else {
+        const wallHit = driveStep(c, inp, dt, collider), wh = c.hit;
+        const parkHit = parked.collide(c), ph = parked.lastHit;
+        impact = Math.max(wallHit, parkHit);
+        // the damage shows: on your car where it hit, and on whatever you hit
+        if (wallHit > 4 && wh) damage.crash(c, wh.x, wh.z, wh.nx, wh.nz, wallHit);
+        if (parkHit > 4 && ph) { damage.crash(c, ph.x, ph.z, ph.nx, ph.nz, parkHit); damage.crash(ph.car, ph.x, ph.z, -ph.nx, -ph.nz, parkHit * 0.9); }
+        skids.track(c, (c.drift > 3.8 || (inp.handbrakeHeld && Math.abs(c.speed) > 6)) && !c.air, groundY(c.x, c.z) + 0.02); }
       driveLamps(c, c.kind ? null : inp, dt);
       if (impact > 4) { rig.shake = Math.min(1, impact / 18); AudioSys.play("door", Math.min(1, impact / 20), 0.6); fx.sparks(c.x + Math.sin(c.h) * 2, 0.8, c.z + Math.cos(c.h) * 2, 8); }
       if (impact > 9) combat.damageCar(c, (impact - 8) * 2.2, "player");
@@ -589,7 +599,8 @@ function update(dt) {
         const dx = u.x - c.x, dz = u.z - c.z, d2 = dx * dx + dz * dz;
         if (d2 < 10) {
           const d = Math.sqrt(d2) || 1, nx = dx / d, nz = dz / d, rel = (c.vx - u.vx) * nx + (c.vz - u.vz) * nz;
-          if (rel > 0) { c.vx -= nx * rel * 0.7; c.vz -= nz * rel * 0.7; u.vx += nx * rel * 0.7; u.vz += nz * rel * 0.7; if (rel > 6) { crime.addCrime(1); combat.damageCar(u, rel * 1.5, "cop"); } }
+          if (rel > 0) { c.vx -= nx * rel * 0.7; c.vz -= nz * rel * 0.7; u.vx += nx * rel * 0.7; u.vz += nz * rel * 0.7; if (rel > 6) { crime.addCrime(1); combat.damageCar(u, rel * 1.5, "cop"); }
+            if (rel > 4) { const hx = (c.x + u.x) / 2, hz = (c.z + u.z) / 2; damage.crash(c, hx, hz, -nx, -nz, rel); damage.crash(u, hx, hz, nx, nz, rel); } }
           c.x -= nx * (3.2 - d) * 0.5; c.z -= nz * (3.2 - d) * 0.5; u.x += nx * (3.2 - d) * 0.5; u.z += nz * (3.2 - d) * 0.5;
         }
       }
@@ -602,7 +613,9 @@ function update(dt) {
         const dx = t.x + fx * along - c.x, dz = t.z + fz * along - c.z, d2 = dx * dx + dz * dz;
         if (d2 < 9) {
           const d = Math.sqrt(d2) || 1, nx = dx / d, nz = dz / d, rel = c.vx * nx + c.vz * nz;
-          if (rel > 0) { c.vx -= nx * rel * 1.2; c.vz -= nz * rel * 1.2; t.stun = 2.5; t.speed = 0; if (rel > 5) { rig.shake = Math.min(1, rel / 20); AudioSys.play("door", 0.8, 0.5); combat.damageCar(t, rel * 2, "traffic"); combat.damageCar(c, rel * 0.8, "player"); } }
+          if (rel > 0) { c.vx -= nx * rel * 1.2; c.vz -= nz * rel * 1.2; t.stun = 2.5; t.speed = 0;
+            if (rel > 4) { const hx = c.x + nx * Math.min(d, 2.2), hz = c.z + nz * Math.min(d, 2.2); damage.crash(c, hx, hz, -nx, -nz, rel); damage.crash(t, hx, hz, nx, nz, rel * 0.9); }
+            if (rel > 5) { rig.shake = Math.min(1, rel / 20); AudioSys.play("door", 0.8, 0.5); combat.damageCar(t, rel * 2, "traffic"); combat.damageCar(c, rel * 0.8, "player"); } }
           c.x -= nx * (3 - d) * 0.5; c.z -= nz * (3 - d) * 0.5;
         }
       }
@@ -687,6 +700,7 @@ function update(dt) {
     }
   }
   fx.update(dt);
+  damage.update(dt, [P.car, ...crime.units.filter(u => u.active)]);
   props.update(dt, time); haptics(dt); doors.update(dt); hijack.update(dt);
   if (greyT > 0) { greyT -= dt; R.grade.uSat.value = 1.1 - Math.min(1, greyT) * 0.95; } else R.grade.uSat.value = 1.1;
   crowd.update(dt, time, focus.x, focus.z, hz);
@@ -899,7 +913,7 @@ requestAnimationFrame(frame);
 // debug / test hooks
 globalThis.__pc2 = {
   THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, hijack, P, cars, state, rig, I,
-  interior, props, skids, animals, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
+  interior, props, skids, animals, damage, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },
 };
