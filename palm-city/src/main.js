@@ -859,7 +859,7 @@ function update(dt) {
         const dx = u.x - c.x, dz = u.z - c.z, d2 = dx * dx + dz * dz;
         if (d2 < 10) {
           const d = Math.sqrt(d2) || 1, nx = dx / d, nz = dz / d, rel = (c.vx - u.vx) * nx + (c.vz - u.vz) * nz;
-          if (rel > 0) { c.vx -= nx * rel * 0.7; c.vz -= nz * rel * 0.7; u.vx += nx * rel * 0.7; u.vz += nz * rel * 0.7; if (rel > 6) { if (c.vx * nx + c.vz * nz > -(u.vx * nx + u.vz * nz)) crime.addCrime(1); combat.damageCar(u, rel * 1.5, "cop"); }   // (only YOU ramming THEM is a crime — not them shunting you)
+          if (rel > 0) { c.vx -= nx * rel * 0.7; c.vz -= nz * rel * 0.7; u.vx += nx * rel * 0.7; u.vz += nz * rel * 0.7; if (rel > 6) { if (crime.S.wanted === 0 && c.vx * nx + c.vz * nz > -(u.vx * nx + u.vz * nz)) crime.addCrime(1); combat.damageCar(u, rel * 1.5, "cop"); }   // (only YOU ramming THEM starts trouble — not them shunting you, and mid-chase it doesn't stack)
             if (rel > 4) { const hx = (c.x + u.x) / 2, hz = (c.z + u.z) / 2; damage.crash(c, hx, hz, -nx, -nz, rel); damage.crash(u, hx, hz, nx, nz, rel); } }
           c.x -= nx * (3.2 - d) * 0.5; c.z -= nz * (3.2 - d) * 0.5; u.x += nx * (3.2 - d) * 0.5; u.z += nz * (3.2 - d) * 0.5;
         }
