@@ -338,6 +338,7 @@ const extras = makeExtras(scene, {
 });
 setSurface(extras.rampHeight);
 const weather = createWeather(scene, sky, city);
+weather.setGround(groundY);
 const life = makeLife(scene, {
   st, P, crowd, crime, combat, cars, camera, focus: focusInfo, isMobile, time: () => time,
   get hud() { return hud; }, earn: n => eco.earn(n), toast: (m, t) => hud.toast(m, t), banner: (a, b, k, t) => hud.banner(a, b, k, t),
@@ -723,6 +724,7 @@ function update(dt) {
   damage.update(dt, [P.car, ...crime.units.filter(u => u.active)]);
   props.update(dt, time); haptics(dt); doors.update(dt); hijack.update(dt);
   if (greyT > 0) { greyT -= dt; R.grade.uSat.value = 1.1 - Math.min(1, greyT) * 0.95; } else R.grade.uSat.value = 1.1;
+  crowd.rain = (weather.W && weather.W.rain) || 0;
   crowd.update(dt, time, focus.x, focus.z, hz);
   animals.update(dt, time, { px: (P.car || P).x, pz: (P.car || P).z, pspeed: P.car ? Math.abs(P.car.speed || 0) : (P.speed || 0), cars: traffic.cars, people: crowd.people });
   ambienceTick(dt, focus);
@@ -819,6 +821,7 @@ beam.target.position.set(0, -1.2, 22); beam.add(beam.target); scene.add(beam);
 function render() {
   const focus = interior.inside ? interior.doorWorld() : P.car || P;
   LAMP_U.uTime.value = time; LAMP_U.night = sky.state.night;
+  LAMP_U.uRain.value = interior.inside ? 0 : Math.min(1, ((weather.W && weather.W.rain) || 0) * 1.3);
   {
     const c = P.car, on = c && !c.kind && c.setLamps && sky.state.night > 0.3;
     if (on && beam.parent !== c.chassis) { c.chassis.add(beam); beam.position.set(0, (c.spec.ride || 0.2) + 0.55, c.spec.len / 2 + 0.1); }

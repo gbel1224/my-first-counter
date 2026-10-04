@@ -303,6 +303,16 @@ export function makeCharacter(look) {
   return { group, pose, look, mats, setAcc, recolor, face, get human() { return human; } };
 }
 
+// merge plain geometries (position, normal), indexed or not
+function mergeSimple(list) {
+  const geos = list.map(g => g.index ? g.toNonIndexed() : g), out = new THREE.BufferGeometry();
+  for (const nm of ["position", "normal"]) {
+    let n = 0; for (const g of geos) n += g.attributes[nm].array.length;
+    const a = new Float32Array(n); let o = 0; for (const g of geos) { a.set(g.attributes[nm].array, o); o += g.attributes[nm].array.length; }
+    out.setAttribute(nm, new THREE.BufferAttribute(a, 3));
+  }
+  return out;
+}
 // ---------------------------------------------------------------------------------------------
 // the crowd: pedestrians walking the sidewalk ring of their block, now and then crossing to the
 // next block at a crosswalk. Simulation is trivially cheap, so everyone moves all the time;
@@ -501,7 +511,10 @@ export class Crowd {
         if (h.speed > 6 && d2 < 50) { fleeing = true; }
       }
       if (p.knocked > 0) continue;
-      const sp = p.speed * (fleeing ? (p.jog ? 1.2 : 2.4) : 1);
+      // in the rain: those with an umbrella put it up; the rest hurry along with their heads down
+      const wet = (this.rain || 0) > 0.35 && !p.park;
+      p.umb = wet && (p.look.hs || 0.5) < 0.55 && !fleeing && !p.jog;
+      const sp = p.speed * (fleeing ? (p.jog ? 1.2 : 2.4) : 1) * (wet && !p.umb && !p.jog ? 1.45 : 1);
       p.amt = fleeing ? 2 : p.jog ? 1.75 : 1;
       if (p.beach && p.fixed) {
         // beach people stay at what they're doing unless something sends them running up the sand
@@ -619,6 +632,7 @@ export class Crowd {
         Object.assign(g, { armR: -1.45, elbowR: -0.1, armL: -1.2, elbowL: -0.5, gun: p.weapon || "pistol", gripR: 0.95, indexR: p.shotT > 0 ? 1 : 0.3, gripL: 0.6 });
       } else if (p.fear > 0 && p.amt > 1.5) { g.gripL = g.gripR = 0.6; }
       else if (p.phoneT > 0) Object.assign(g, { armR: -2.6, elbowR: -2.3, armL: -0.2 });                  // on the phone
+      else if (p.umb) Object.assign(g, { armR: -0.9, elbowR: -1.75, gripR: 1 });                          // holding an umbrella
       else if (p.workT > 0) Object.assign(g, { armL: -0.9 + Math.sin(p.workT * 2) * 0.15, armR: -1.0, elbowL: -0.8, elbowR: -0.7, lean: 0.25 });   // busy at the back of the van
     }
     if (p.beach && p.fixed && p.knocked <= 0) {
@@ -717,8 +731,9 @@ export class Crowd {
     const moving = !(p.pause > 0 || (p.cross && p.cross.wait)) && (p.amt ?? 1) > 0.05;
     if (p.phoneT > 0 && !moving) return ["phone", 0];
     if (p.workT > 0) return ["work", p.workT * 0.6];
-    if (!moving) return ["idle", now * 0.3 + p.phase];
+    if (!moving) return [p.umb ? "idleU" : "idle", now * 0.3 + p.phase];
     const ph = (((p.phase % 6.2832) + 6.2832) % 6.2832) / 6.2832;
+    if (p.umb) return ["walkU", ph * 16];
     return (p.amt ?? 1) > 1.5 ? ["run", ph * 12] : ["walk", ph * 16];
   }
   renderVat(near) {
@@ -761,6 +776,34 @@ export class Crowd {
       V.add(p, modelFor(p.look), dc2, p.x, y, p.z, p.yaw, clip, t, tilt);
     }
     V.end();
+    this.renderUmbrellas(near);
+  }
+  // umbrellas over the heads of the people who put one up
+  renderUmbrellas(near) {
+    if (!this.umbM) {
+      const cols = [0x1a1a1c, 0x2a3a6a, 0x8a1a2a, 0x2a5a3a, 0xd8c030, 0x6a2a6a, 0xc8c8c8, 0x1a5a8a];
+      const can = new THREE.ConeGeometry(0.62, 0.3, 8, 1, true); can.translate(0, 0, 0);
+      const ribs = [];
+      for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; const g = new THREE.CylinderGeometry(0.008, 0.008, 0.68, 3); g.rotateZ(Math.PI / 2 - 0.45); g.rotateY(-a); g.translate(Math.cos(a) * 0.3, -0.02, Math.sin(a) * 0.3); ribs.push(g); }
+      const shaft = new THREE.CylinderGeometry(0.012, 0.012, 0.95, 5); shaft.translate(0, -0.47, 0);
+      const hook = new THREE.TorusGeometry(0.05, 0.012, 4, 8, Math.PI); hook.rotateX(Math.PI / 2); hook.translate(0.05, -0.95, 0);
+      const geo = mergeSimple([can, shaft, hook, ...ribs]);
+      this.umbM = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: 0.45, side: THREE.DoubleSide }), 220);
+      this.umbM.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(220 * 3), 3);
+      this.umbM.frustumCulled = false; this.umbM.castShadow = true; this._scene.add(this.umbM);
+      this.umbCols = cols;
+    }
+    let n = 0;
+    for (const p of near) {
+      if (!p.umb || n >= 220 || p.knocked > 0) continue;
+      const h = p.look.h || 1, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw), rx = -fz, rz = fx;
+      const x = p.x + fx * 0.22 - rx * 0.1, z = p.z + fz * 0.22 - rz * 0.1, y = groundY(p.x, p.z) + 2.05 * h + Math.abs(Math.sin(p.phase)) * 0.02;
+      _m.compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.12, p.yaw, 0, "YXZ")), new THREE.Vector3(1, 1, 1));
+      this.umbM.setMatrixAt(n, _m);
+      this._c.set(this.umbCols[((p.look.shirt || 0) >>> 3) % this.umbCols.length]); this.umbM.setColorAt(n, this._c);
+      n++;
+    }
+    this.umbM.count = n; this.umbM.instanceMatrix.needsUpdate = true; this.umbM.instanceColor.needsUpdate = true;
   }
   renderFaces(near, n) {
     const now = performance.now() / 1000, dt = Math.min(0.1, now - this._ft); this._ft = now;

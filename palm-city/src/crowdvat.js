@@ -37,6 +37,10 @@ function buildPoses(gait) {
   const clip = (name, list, loop = false) => { CLIPS[name] = { start: P.length, n: list.length, loop }; P.push(...list); };
   const base = (amt, ph = 0) => gait(ph, amt, {}, st);
   clip("walk", Array.from({ length: 16 }, (_, k) => ({ g: base(1, k / 16 * Math.PI * 2) })), true);
+  // walking under an umbrella: the right hand up by the shoulder, holding the shaft
+  const UMB = { armR: -0.9, elbowR: -1.75, gripR: 1 };
+  clip("walkU", Array.from({ length: 16 }, (_, k) => ({ g: Object.assign(base(1, k / 16 * Math.PI * 2), UMB) })), true);
+  clip("idleU", [{ g: Object.assign(base(0), UMB) }]);
   clip("run", Array.from({ length: 12 }, (_, k) => ({ g: base(2, k / 12 * Math.PI * 2) })), true);
   clip("idle", [{ g: base(0) }, { g: Object.assign(base(0), { lean: 0.03, armL: 0.04, armR: -0.03 }) }], true);
   clip("sit", [{ g: Object.assign(base(0), SIT), y: 0.5 - 0.97 }]);

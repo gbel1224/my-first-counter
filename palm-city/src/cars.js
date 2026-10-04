@@ -837,7 +837,7 @@ export function carGeometries(type, far = false) {
 // lamps: each lamp's kind rides in the geometry (1 head, 2 tail, 3/4 indicators on the +x/-x side,
 // 5 reversing, 6 running light, 7 high stop) and each car's state in a per-instance vec4 aLamp:
 // (brake 0/1, headlights 0..1, indicators 0 off / 1 +x / 2 -x / 3 hazards, reversing 0/1)
-export const LAMP_U = { uTime: { value: 0 }, night: 0 };   // night: how dark it is (main sets it each frame)
+export const LAMP_U = { uTime: { value: 0 }, night: 0, uRain: { value: 0 } };   // night: how dark it is; uRain: how wet (main sets both each frame)   // night: how dark it is (main sets it each frame)
 function lampMaterial() {
   // laid on the body like a decal: biased toward the camera in depth so the paint never shows through
   const m = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -10, polygonOffsetUnits: -10 });
@@ -965,10 +965,10 @@ function paintMaterial() {
   const m = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.26, metalness: 0.45, clearcoat: 1.0, clearcoatRoughness: 0.02, normalMap: FLAKE, normalScale: new THREE.Vector2(0.15, 0.15), envMapIntensity: 1.5 });
   m.userData.wear = { value: Math.random() };
   m.onBeforeCompile = sh => {
-    sh.uniforms.uWear = m.userData.wear;
+    sh.uniforms.uWear = m.userData.wear; sh.uniforms.uRain = LAMP_U.uRain; sh.uniforms.uTimeP = LAMP_U.uTime;
     const [vc, vb] = WEAR_VERT(true);
     sh.vertexShader = sh.vertexShader.replace("#include <common>", vc).replace("#include <begin_vertex>", vb);
-    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vObjP; varying vec3 vObjN; varying float vWear;\nfloat wDirt; float wSpec;" + NOISE)
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vObjP; varying vec3 vObjN; varying float vWear;\nfloat wDirt; float wSpec; float wWet; uniform float uRain, uTimeP;" + NOISE)
       .replace("#include <color_fragment>", `#include <color_fragment>
       {
         float n1 = wFbm(vObjP * 2.6), n2 = wFbm(vObjP * 11.0 + 3.1), n3 = wFbm(vObjP * 30.0);
@@ -992,6 +992,20 @@ function paintMaterial() {
         float sw = abs(sin(length(vObjP.xz * 9.0 + n1 * 2.0) * 90.0 + n2 * 20.0));
         wSpec = smoothstep(0.985, 1.0, sw) * (0.4 + 0.6 * n1) * 0.35 + spot * 0.6;
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.78, 0.76, 0.72), spot * 0.07);
+        // rain: the paint darkens a touch and the dirt washes thin; beads of water stand on the flat
+        // panels and run down the sides in rivulets
+        wWet = uRain;
+        if (wWet > 0.01) {
+          diffuseColor.rgb *= 1.0 - wWet * 0.12;
+          wDirt *= 1.0 - wWet * 0.5;
+          vec3 bp = vObjP * 34.0; vec3 bi = floor(bp); vec3 bo = vec3(wHash(bi), wHash(bi + 3.1), wHash(bi + 7.7)) - 0.5;
+          float bead = smoothstep(0.17, 0.08, length((fract(bp) - 0.5 - bo * 0.5).xz)) * top * step(0.35, wHash(bi + 1.3));
+          float riv = smoothstep(0.93, 1.0, sin(vObjP.x * 70.0 + vObjP.z * 50.0 + wNoise(vObjP * vec3(4.0, 0.5, 4.0)) * 9.0)) * sidew * smoothstep(0.2, 0.6, fract(vObjP.y * 0.6 - uTimeP * 0.35 + wHash(floor(vObjP.xz * 6.0).xyy)));
+          wSpec = max(wSpec - wWet * 0.4, 0.0);
+          wWet *= 1.0 + bead * 0.0 + riv * 0.0;
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.75, (bead + riv * 0.6) * wWet);
+          wDirt = max(wDirt - (bead + riv) * 0.3 * wWet, 0.0);
+        }
       }`)
       .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.92, wDirt);")
       // orange peel: a faint ripple in the lacquer that shows as wobble in the reflections
@@ -1014,7 +1028,9 @@ function paintMaterial() {
       #ifdef USE_CLEARCOAT
         material.clearcoat *= 1.0 - wDirt * 0.9;
         material.clearcoatRoughness = min(1.0, material.clearcoatRoughness + wSpec + wDirt * 0.6);
-      #endif`);
+        material.clearcoat = mix(material.clearcoat, 1.0, wWet * 0.8);   // wet lacquer: a mirror
+      #endif
+      material.roughness = mix(material.roughness, material.roughness * 0.6, wWet);`);
   };
   m.customProgramCacheKey = () => "carpaint";
   return m;
