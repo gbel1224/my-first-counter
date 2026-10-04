@@ -138,25 +138,6 @@ try {
     const r2 = await pg.evaluate(async () => {
       const G = window.__pc2, run = n => { for (let i = 0; i < n; i++) { G.crime.S.health = 100; G.step(1 / 60); G.crime.S.bustT = 0; } }, o = {};
       if (G.P.car) G.exitCar(); G.crime.reset(); G.st.mi = 12; G.st.money = 200000; G.hud.closePanel();
-      // police chase: down a long straight at speed, the cruisers line up BEHIND you — no circling
-      { if (G.P.car) G.exitCar(); G.crime.reset(); G.events.cancel(); G.events.forceIdle && G.events.forceIdle(999); const W = await import("/src/world.js");
-        const Pm = await import("/src/play.js"), rx = W.roadC(3) + 2.2, home = [G.P.x, G.P.z];
-        // a clear road (the test drives blind in a straight line; a real player swerves round traffic)
-        for (const t of G.traffic.cars) if (Math.abs(t.x - W.roadC(3)) < 12) G.traffic.respawnNear(t, W.roadC(11), 0, 30);
-        const c = Pm.spawnCar(G.scene, "sedan", 0xd0d0d0, rx, -W.HALF + 60, 0); G.cars.push(c);
-        G.P.x = c.x - 1.5; G.P.z = c.z; G.P.car = null; G.enterNearest(); run(40); const car = G.P.car; o.chaseCar = car === c ? "fresh" : (car ? car.kind || car.type : "none");
-        if (car) { car.x = rx; car.z = -W.HALF + 60; car.h = 0; car.vx = car.vz = 0;
-          G.crime.addCrime(2); let behind = 0, near = 0; const lastH = {}; let spin = 0;
-          for (let f = 0; f < 60 * 12; f++) {
-            G.I.mz = car.speed < 22 ? 0.8 : 0.05; G.I.mx = Math.max(-1, Math.min(1, (car.x - rx) * 0.25 + car.h * 2)); run(1);
-            G.crime.units.forEach((u, i) => { if (!u.active) return; const d = Math.hypot(u.x - car.x, u.z - car.z);
-              if (lastH[i] !== undefined && d < 40) { let dh = u.h - lastH[i]; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); spin = Math.max(spin, (u._sp = (u._sp || 0) + Math.abs(dh))); }
-              lastH[i] = u.h; if (d < 40) { near++; if ((u.x - car.x) * Math.sin(car.h) + (u.z - car.z) * Math.cos(car.h) < 0) behind++; } });
-          }
-          G.I.mz = 0; G.I.mx = 0; o.chaseSpeed = +car.speed.toFixed(1); o.chaseZ = Math.round(car.z); o.chaseBehind = near ? +(behind / near).toFixed(2) : 0; o.chaseNear = near; o.chaseSpin = +(spin / 6.283).toFixed(2); o.chaseWanted = G.crime.S.wanted;
-          G.exitCar(); G.crime.reset(); }
-        G.P.x = home[0]; G.P.z = home[1]; for (const p of G.crowd.people) if (!p.beach && !p.gang) G.crowd.respawnNear(p, G.P.x, G.P.z); run(60);
-        G.events.forceIdle && G.events.forceIdle(30); }
       // RPG: a rocket at a traffic car wrecks it
       const W = id => G.combat.WEAPONS.find(w => w.id === id);
       G.combat.buy(W("rpg")); G.combat.S.weapon = G.combat.WEAPONS.indexOf(W("rpg"));
@@ -220,6 +201,25 @@ try {
         ph.setApp("cam"); q('[data-act="snap"]').click(); q('[data-act="postPhoto"]').click(); const f0 = G.st.followers || 0; run(900);
         o.photoFollowers = (G.st.followers || 0) - f0;
         ph.setApp("music"); q('[data-station="1"]').click(); o.earbuds = G.radio.earbuds; q('[data-act="musicOff"]').click(); ph.show(false); }
+      // police chase: down a long straight at speed, the cruisers line up BEHIND you — no circling
+      { if (G.P.car) G.exitCar(); G.crime.reset(); G.events.cancel(); G.events.forceIdle && G.events.forceIdle(999); const W = await import("/src/world.js");
+        const Pm = await import("/src/play.js"), rx = W.roadC(3) + 2.2, home = [G.P.x, G.P.z];
+        // a clear road (the test drives blind in a straight line; a real player swerves round traffic)
+        for (const t of G.traffic.cars) if (Math.abs(t.x - W.roadC(3)) < 12) G.traffic.respawnNear(t, W.roadC(11), 0, 30);
+        const c = Pm.spawnCar(G.scene, "sedan", 0xd0d0d0, rx, -W.HALF + 60, 0); G.cars.push(c);
+        G.P.x = c.x - 1.5; G.P.z = c.z; G.P.car = null; G.enterNearest(); run(40); const car = G.P.car; o.chaseCar = car === c ? "fresh" : (car ? car.kind || car.type : "none");
+        if (car) { car.x = rx; car.z = -W.HALF + 60; car.h = 0; car.vx = car.vz = 0;
+          G.crime.addCrime(2); let behind = 0, near = 0; const lastH = {}; let spin = 0;
+          for (let f = 0; f < 60 * 12; f++) {
+            G.I.mz = car.speed < 22 ? 0.8 : 0.05; G.I.mx = Math.max(-1, Math.min(1, (car.x - rx) * 0.25 + car.h * 2)); run(1);
+            G.crime.units.forEach((u, i) => { if (!u.active) return; const d = Math.hypot(u.x - car.x, u.z - car.z);
+              if (lastH[i] !== undefined && d < 40) { let dh = u.h - lastH[i]; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); spin = Math.max(spin, (u._sp = (u._sp || 0) + Math.abs(dh))); }
+              lastH[i] = u.h; if (d < 40) { near++; if ((u.x - car.x) * Math.sin(car.h) + (u.z - car.z) * Math.cos(car.h) < 0) behind++; } });
+          }
+          G.I.mz = 0; G.I.mx = 0; o.chaseSpeed = +car.speed.toFixed(1); o.chaseZ = Math.round(car.z); o.chaseBehind = near ? +(behind / near).toFixed(2) : 0; o.chaseNear = near; o.chaseSpin = +(spin / 6.283).toFixed(2); o.chaseWanted = G.crime.S.wanted;
+          G.exitCar(); G.crime.reset(); }
+        G.P.x = home[0]; G.P.z = home[1]; for (const p of G.crowd.people) if (!p.beach && !p.gang) G.crowd.respawnNear(p, G.P.x, G.P.z); run(60);
+        G.events.forceIdle && G.events.forceIdle(30); }
       return o;
     });
     ok("RPG rocket wrecks a car", r2.rpgWreck, r2);
