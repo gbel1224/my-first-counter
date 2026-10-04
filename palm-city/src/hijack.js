@@ -67,7 +67,7 @@ export function makeHijack(scene, g) {
   // far off-screen, moved here and dressed to match
   function borrowPed(x, z, look) {
     const P = g.player();
-    const cands = g.crowd.people.filter(p => !p.hidden && !p.gang && !p.goon && !p.crew && !p.ally && !p.ai && !(p.knocked > 0) && !p.owner && (p.x - P.x) ** 2 + (p.z - P.z) ** 2 > 110 * 110);
+    const cands = g.crowd.people.filter(p => !p.hidden && !p.gang && !p.goon && !p.crew && !p.ally && !p.ai && !(p.knocked > 0) && !p.owner && !p.beach && !p.fixed && !p.park && !p.sit && !p.vendor && !p.chat && (p.x - P.x) ** 2 + (p.z - P.z) ** 2 > 110 * 110);
     if (!cands.length) return null;
     const p = cands[(r() * cands.length) | 0];
     p.look = { ...look }; finishLook(p.look);

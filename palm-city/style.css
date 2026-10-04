@@ -17,7 +17,7 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #120c1c; color: var(--ink);
   font-family: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif; touch-action: none;
-  -webkit-user-select: none; user-select: none; overscroll-behavior: none; }
+  -webkit-user-select: none; user-select: none; overscroll-behavior: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 #ui { position: fixed; inset: 0; pointer-events: none; }
 #ui .pe, #ui button { pointer-events: auto; }

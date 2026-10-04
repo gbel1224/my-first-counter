@@ -244,10 +244,15 @@ export function makeCrime(scene, g) {
       aiInp.mx = clamp(-dh * 2.2, -1, 1);
       const cruise = g.paused() ? 0 : S.searching ? 0.55 : 1;
       aiInp.mz = Math.abs(dh) > 1.8 ? -0.4 : cruise * (d < 8 && !F.car ? 0.2 : 1);
+      // you're on foot and they've got you in sight: pull up beside you rather than through you
+      // (brake on the forward speed only: holding "brake" once stopped would mean reversing)
+      const lon = u.vx * Math.sin(u.h) + u.vz * Math.cos(u.h);
+      if (!F.car && !S.searching && d < 16 && Math.abs(dh) < 1.8) aiInp.mz = d < 4.5 ? (lon > 1 ? -1 : 0) : (lon > 3 + d * 0.55 ? -0.6 : 0.35);
       aiInp.handbrakeHeld = Math.abs(dh) > 0.9 && u.speed > 12;
       // wedged against a wall or a car: back out, swinging the nose the other way, then try again
-      if (u.reverseT > 0) { u.reverseT -= dt; aiInp.mz = -1; aiInp.mx = -aiInp.mx; aiInp.handbrakeHeld = false; }
-      else if (aiInp.mz > 0.3 && u.speed < 1.5 && d > 6) { u.stuckT = (u.stuckT || 0) + dt; if (u.stuckT > 1.2) { u.stuckT = 0; u.reverseT = 1.1; } }
+      // (either way: one trying to back out of a tight spot can wedge too — then it pulls forward)
+      if (u.reverseT > 0) { u.reverseT -= dt; aiInp.mz = u.unstick; aiInp.mx = -aiInp.mx; aiInp.handbrakeHeld = false; }
+      else if (Math.abs(aiInp.mz) > 0.3 && u.speed < 1.5 && d > 6) { u.stuckT = (u.stuckT || 0) + dt; if (u.stuckT > 1.2) { u.stuckT = 0; u.reverseT = 1.1; u.unstick = aiInp.mz > 0 ? -1 : 1; } }
       else u.stuckT = 0;
       driveStep(u, aiInp, dt, g.collider); driveLamps(u, aiInp, dt);
       syncCar(u);
@@ -256,7 +261,7 @@ export function makeCrime(scene, g) {
       // PIT: a cruiser hitting your car hurts
       if (F.car && d < 3.4 && u.speed > 5 && !u.pitCD) { u.pitCD = 1; hurt(18); g.shake(0.6); g.sound("door", 0.9, 0.5); }
       if (u.pitCD) u.pitCD = Math.max(0, u.pitCD - dt);
-      if (!F.car && d < 4.5 && !S.searching && u.speed < 6) grabbing = true;
+      if (!F.car && d < 6 && !S.searching && u.speed < 4) grabbing = true;
       if (u.tank) {                                     // the turret tracks you; the cannon fires shells
         u.turret.rotation.y = lerpAngle(u.turret.rotation.y, Math.atan2(px - u.x, pz - u.z) - u.h, Math.min(1, dt * 2));
         u.shootCD -= dt;
