@@ -134,7 +134,7 @@ try {
       const tc = G.traffic.cars.find(c => c.alive);
       // stand 16 m down the car's own road and fire straight at it (a few tries: auto-aim may grab a passer-by)
       for (let k = 0; k < 3 && tc.alive; k++) {
-        G.P.x = tc.x + Math.sin(tc.h) * 16; G.P.z = tc.z + Math.cos(tc.h) * 16; tc.speed = 0; tc.stun = 30; G.combat.S.cd = 0;
+        G.P.x = tc.x + Math.sin(tc.h) * 16; G.P.z = tc.z + Math.cos(tc.h) * 16; tc.speed = 0; tc.stun = 30; G.combat.S.cd = 0; G.combat.S.reloadT = 0; G.combat.S.mag.rpg = 1;   // (one rocket per tube: reload between tries)
         G.combat.fire(Math.atan2(tc.x - G.P.x, tc.z - G.P.z)); run(60);
       }
       o.rpgWreck = !tc.alive;
