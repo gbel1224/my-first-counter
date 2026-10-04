@@ -194,6 +194,7 @@ export function makeAnimals(scene, plan, U) {
       b.st = "fly"; b.t = 0; b.vx = (ax + (r() - 0.5) * 0.8) * sp; b.vz = (az + (r() - 0.5) * 0.8) * sp; b.vy = 3 + r() * 2.5; b.flap = 1;
     }
     f.cd = 25 + r() * 25;
+    if (api.onTakeOff) api.onTakeOff(f);
   }
   function update(dt, time, ctx) {
     const { px: PX, pz: PZ, pspeed, cars } = ctx;
@@ -314,10 +315,11 @@ export function makeAnimals(scene, plan, U) {
     leashGeo.setDrawRange(0, nl * 12); leashGeo.attributes.position.needsUpdate = true;
   }
   const ctx2 = { people: [] };
-  return {
+  const api = {
     scare, render,
     update(dt, time, ctx) { ctx2.people = ctx.people; update(dt, time, ctx); },
     giveDog(p, rr = Math.random) { p.dog = { size: [0.55, 0.7, 0.85, 1.0][(rr() * 4) | 0], color: DOG_COLS[(rr() * DOG_COLS.length) | 0] }; },
     counts: () => ({ birds: birds.length, flocks: flocks.length }), flocks,
   };
+  return api;
 }

@@ -177,5 +177,126 @@ export const AudioSys = (() => {
       nextStep += spb; step++;
     }
   }
-  return { init, play, gun, boom, horn, engine, intensity, skid, setMuted, indoor, beat, get muted() { return muted; } };
+  // ---- the city's ambience, all synthesized: a bed of layers whose levels follow where you are ----
+  // traffic rumble (more near busy roads and downtown), wind in the palms (stronger in a storm),
+  // waves breaking on the beach (each one a swell and a wash), the murmur of a crowd, rain on the
+  // pavement; birdsong in the parks and suburbs by day, crickets at night, gulls crying over the
+  // beach, wings clattering when pigeons take off, a distant siren now and then downtown.
+  let amb = null;
+  function loopNoise(buf, filt) {
+    const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; s.loopStart = 0; s.loopEnd = buf.duration;
+    const g = ctx.createGain(); g.gain.value = 0;
+    let n = s; for (const f of filt) { n.connect(f); n = f; }
+    n.connect(g); g.connect(amb.out); s.start(0, Math.random() * buf.duration);
+    return g;
+  }
+  function bq(type, f, Q = 0.7) { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = Q; return b; }
+  function ambInit() {
+    if (amb || !ctx || !noiseBuf) return;
+    // brown noise (integrated white): the low roar of a city
+    const len = ctx.sampleRate * 6, brown = ctx.createBuffer(1, len, ctx.sampleRate), bd = brown.getChannelData(0);
+    let last = 0; for (let i = 0; i < len; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; bd[i] = last * 3.5; }
+    // pink-ish noise for wind, crowd and rain
+    const pink = ctx.createBuffer(1, len, ctx.sampleRate), pd = pink.getChannelData(0);
+    let b0 = 0, b1 = 0, b2 = 0; for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; b0 = 0.997 * b0 + w * 0.029591; b1 = 0.985 * b1 + w * 0.032534; b2 = 0.95 * b2 + w * 0.048056; pd[i] = (b0 + b1 + b2 + w * 0.1848) * 0.35; }
+    amb = { out: ctx.createGain(), t: 0, birdT: 2, gullT: 4, cricketT: 0, sirenT: 40, waveT: 0 };
+    amb.out.gain.value = 0.9; amb.out.connect(comp);
+    amb.traffic = loopNoise(brown, [bq("lowpass", 260)]);
+    amb.trafficHi = loopNoise(pink, [bq("bandpass", 900, 0.5)]);               // tyres on asphalt
+    const windF = bq("bandpass", 1400, 0.6); amb.windF = windF;
+    amb.wind = loopNoise(pink, [windF]);
+    amb.waveLo = loopNoise(brown, [bq("lowpass", 400)]);
+    const waveF = bq("bandpass", 1800, 0.4); amb.waveF = waveF;
+    amb.waveHi = loopNoise(pink, [waveF]);
+    amb.crowd = loopNoise(pink, [bq("bandpass", 600, 1.4), bq("peaking", 1200, 1)]);
+    amb.rain = loopNoise(noiseBuf, [bq("highpass", 2500), bq("lowpass", 9000)]);
+    amb.rainLo = loopNoise(pink, [bq("lowpass", 900)]);
+  }
+  const lv = (g, v, tc = 0.6) => g.gain.setTargetAtTime(muted ? 0 : v, ctx.currentTime, tc);
+  function chirp(t, f0, f1, len, vol, type = "sine") {
+    const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + len);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + Math.min(0.01, len * 0.2)); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    o.connect(g); g.connect(amb.out); o.start(t); o.stop(t + len + 0.02);
+  }
+  // a songbird: a phrase of quick, sliding notes
+  function bird(vol) {
+    const t = ctx.currentTime + 0.02, base = 2600 + Math.random() * 1800, n = 3 + ((Math.random() * 6) | 0), pat = Math.random();
+    for (let k = 0; k < n; k++) {
+      const tt = t + k * (0.07 + pat * 0.06), up = (k % 2 ? 1 : -1) * (pat < 0.5 ? 1 : -1);
+      chirp(tt, base * (1 + up * 0.12), base * (1 - up * 0.18 + k * 0.02), 0.06 + pat * 0.04, vol);
+    }
+  }
+  // a gull: a nasal, falling cry, two or three times
+  function gull(vol) {
+    const t = ctx.currentTime + 0.02, n = 2 + ((Math.random() * 3) | 0), f = 1100 + Math.random() * 300;
+    for (let k = 0; k < n; k++) {
+      const tt = t + k * 0.28, o = ctx.createOscillator(); o.type = "sawtooth";
+      o.frequency.setValueAtTime(f * (k ? 0.92 : 1.05), tt); o.frequency.exponentialRampToValueAtTime(f * 0.62, tt + 0.22);
+      const bp = bq("bandpass", 1600, 3), g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, tt); g.gain.exponentialRampToValueAtTime(vol, tt + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.24);
+      o.connect(bp); bp.connect(g); g.connect(amb.out); o.start(tt); o.stop(tt + 0.26);
+    }
+  }
+  // crickets: a train of tiny high pulses
+  function crickets(vol) {
+    const t = ctx.currentTime + 0.02, f = 4200 + Math.random() * 900;
+    for (let k = 0; k < 6; k++) chirp(t + k * 0.045, f, f * 0.98, 0.025, vol);
+  }
+  // wings: a burst of soft clatters (pigeons taking off)
+  function wings(vol = 1) {
+    if (!ready || muted || !ctx || !amb) return;
+    const t = ctx.currentTime;
+    for (let k = 0; k < 14; k++) {
+      const tt = t + k * 0.045 + Math.random() * 0.02, s = ctx.createBufferSource(); s.buffer = noiseBuf;
+      const f = bq("bandpass", 1300 + Math.random() * 900, 1.2), g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, tt); g.gain.exponentialRampToValueAtTime(0.22 * vol * (1 - k / 18), tt + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.05);
+      s.connect(f); f.connect(g); g.connect(amb.out); s.start(tt, Math.random() * 0.8); s.stop(tt + 0.06);
+    }
+  }
+  // a siren a few blocks away: a slow wail through a lowpass, fading in and out
+  function siren(vol) {
+    const t = ctx.currentTime + 0.05, o = ctx.createOscillator(); o.type = "triangle";
+    for (let k = 0; k < 6; k++) { o.frequency.setValueAtTime(650, t + k * 1.6); o.frequency.linearRampToValueAtTime(1250, t + k * 1.6 + 0.8); o.frequency.linearRampToValueAtTime(650, t + k * 1.6 + 1.6); }
+    const lp = bq("lowpass", 1400), g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 3); g.gain.linearRampToValueAtTime(vol * 0.8, t + 6.5); g.gain.linearRampToValueAtTime(0.0001, t + 9.6);
+    o.connect(lp); lp.connect(g); g.connect(amb.out); o.start(t); o.stop(t + 9.7);
+  }
+  // per frame: c = { dt, traffic 0-1, crowd 0-1, beach 0-1 (how close the surf is), green 0-1 (parks,
+  // gardens), downtown 0-1, night 0-1, rain 0-1, wind 0-1, indoor }
+  function ambience(c) {
+    if (!ready || !ctx) return;
+    ambInit(); if (!amb) return;
+    const dt = c.dt || 0.016; amb.t += dt;
+    const out = c.indoor ? 0.18 : 1;                                    // through the walls
+    amb.out.gain.setTargetAtTime(muted ? 0 : out * 0.9, ctx.currentTime, 0.4);
+    const day = 1 - c.night;
+    lv(amb.traffic, (0.05 + c.traffic * 0.32 + c.downtown * 0.08) * (1 - c.night * 0.35));
+    lv(amb.trafficHi, (c.traffic * 0.08) * (1 + c.rain * 2.5));          // wet tyres hiss
+    // wind: gusts (slow random swell) in the palms; the band sweeps a little with each gust
+    const gust = 0.5 + 0.5 * Math.sin(amb.t * 0.23) * Math.sin(amb.t * 0.071 + 1.3);
+    lv(amb.wind, (0.012 + c.wind * 0.05 + c.green * 0.015 + c.beach * 0.02) * (0.5 + gust), 0.8);
+    amb.windF.frequency.setTargetAtTime(900 + gust * 1400, ctx.currentTime, 1);
+    // waves: a swell building over ~5 s, then the break and the wash running up the sand
+    amb.waveT += dt; const P = 7.5, w = (amb.waveT % P) / P;
+    const swell = w < 0.62 ? (w / 0.62) ** 2 : Math.max(0, 1 - (w - 0.62) / 0.38);
+    const wash = w > 0.6 ? Math.exp(-(w - 0.6) * 6) : 0;
+    lv(amb.waveLo, c.beach * (0.08 + swell * 0.22), 0.15);
+    lv(amb.waveHi, c.beach * (0.015 + wash * 0.12), 0.08);
+    amb.waveF.frequency.setTargetAtTime(1200 + wash * 2400, ctx.currentTime, 0.1);
+    // a crowd: the murmur swells and falls as conversations come and go
+    const mur = 0.6 + 0.4 * Math.sin(amb.t * 0.9) * Math.sin(amb.t * 0.37 + 2);
+    lv(amb.crowd, c.crowd * 0.13 * mur * (1 - c.night * 0.5), 0.3);
+    lv(amb.rain, c.rain * 0.16, 1.2); lv(amb.rainLo, c.rain * 0.09, 1.2);
+    if (muted || c.indoor) return;
+    // birds by day in the green; crickets at night
+    amb.birdT -= dt;
+    if (amb.birdT < 0) { amb.birdT = 1.2 + Math.random() * (5 - c.green * 3.5); if (day > 0.4 && c.rain < 0.3 && Math.random() < 0.25 + c.green * 0.75) bird(0.012 + c.green * 0.03 * Math.random()); }
+    amb.cricketT -= dt;
+    if (amb.cricketT < 0) { amb.cricketT = 0.25 + Math.random() * 0.6; if (c.night > 0.6 && c.rain < 0.2 && Math.random() < 0.2 + c.green * 0.8) crickets(0.004 + c.green * 0.01 * Math.random()); }
+    amb.gullT -= dt;
+    if (amb.gullT < 0) { amb.gullT = 2 + Math.random() * 6; if (day > 0.3 && c.beach > 0.15) gull(0.02 + c.beach * 0.04 * Math.random()); }
+    amb.sirenT -= dt;
+    if (amb.sirenT < 0) { amb.sirenT = 60 + Math.random() * 120; if (c.downtown > 0.3 || c.traffic > 0.5) siren(0.025); }
+  }
+  return { init, play, gun, boom, horn, engine, intensity, skid, setMuted, indoor, beat, ambience, wings, get muted() { return muted; } };
 })();
