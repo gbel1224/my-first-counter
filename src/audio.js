@@ -124,7 +124,7 @@ export const AudioSys = (() => {
     if (!ready) return;
     intensityCur += ((x || 0) - intensityCur) * 0.04;
     const i = intensityCur;
-    if (musicGain && !muted) musicGain.gain.value = MUSIC_VOL * (1 + i * 0.55) * indoorMul;
+    if (musicGain && !muted) musicGain.gain.value = MUSIC_VOL * (1 + i * 0.55) * indoorMul * duckMul;
     if (musicFilter) musicFilter.frequency.value = indoorFreq || 9000 + i * 9000;
     if (musicSrc) musicSrc.playbackRate.value = 1 + i * 0.06;
   }
@@ -140,11 +140,12 @@ export const AudioSys = (() => {
     if (skidGain && m) skidGain.gain.value = 0;
   }
   // ---- indoors: the street music comes through the walls muffled; the club has its own beat ----
+  let duckMul = 1;   // the background music steps aside while the car radio plays
   let indoorMode = null, indoorMul = 1, indoorFreq = 0, nextStep = 0, step = 0, beatGain = null;
   function indoor(mode) {
     indoorMode = mode;
     indoorMul = mode === "club" ? 0.25 : mode ? 0.55 : 1; indoorFreq = mode === "club" ? 260 : mode ? 900 : 0;
-    if (musicGain && !muted) musicGain.gain.value = MUSIC_VOL * indoorMul;
+    if (musicGain && !muted) musicGain.gain.value = MUSIC_VOL * indoorMul * duckMul;
     if (musicFilter) musicFilter.frequency.value = indoorFreq || 11000;
     if (ctx && !beatGain) { beatGain = ctx.createGain(); beatGain.gain.value = 0; beatGain.connect(comp); }
     if (beatGain) beatGain.gain.setTargetAtTime(mode === "club" && !muted ? 0.55 : 0, ctx.currentTime, 0.3);
@@ -298,5 +299,7 @@ export const AudioSys = (() => {
     amb.sirenT -= dt;
     if (amb.sirenT < 0) { amb.sirenT = 60 + Math.random() * 120; if (c.downtown > 0.3 || c.traffic > 0.5) siren(0.025); }
   }
-  return { init, play, gun, boom, horn, engine, intensity, skid, setMuted, indoor, beat, ambience, wings, get muted() { return muted; } };
+  function duck(v) { duckMul += (v - duckMul) * 0.08; }
+  return { init, play, gun, boom, horn, engine, intensity, skid, setMuted, indoor, beat, ambience, wings, duck,
+    get ctx() { return ready ? ctx : null; }, get out() { return comp; }, get noise() { return noiseBuf; }, get muted() { return muted; } };
 })();

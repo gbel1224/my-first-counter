@@ -129,6 +129,7 @@ body.talking #bA, body.talking #bB, body.talking #bC, body.talking #bD, body.tal
 /* ---------- combat HUD ---------- */
 #bF { width: 70px; height: 70px; right: calc(112px + var(--safe-r)); bottom: calc(112px + var(--safe-b)); font-size: 26px; }
 #bW { width: 44px; height: 44px; right: calc(190px + var(--safe-r)); bottom: calc(40px + var(--safe-b)); font-size: 16px; }
+#bR { width: 44px; height: 44px; right: calc(190px + var(--safe-r)); bottom: calc(40px + var(--safe-b)); font-size: 18px; }
 #bD { right: calc(190px + var(--safe-r)); bottom: calc(96px + var(--safe-b)); }
 #vit { position: absolute; right: calc(14px + var(--safe-r)); top: calc(152px + var(--safe-t)); width: 132px; text-align: right; }
 #vit .hp { height: 6px; border-radius: 3px; background: rgba(0,0,0,.45); overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
@@ -152,7 +153,7 @@ body.talking #bA, body.talking #bB, body.talking #bC, body.talking #bD, body.tal
   background: linear-gradient(180deg, #ffe39a, var(--sun)); cursor: pointer; }
 #panel .prow button:disabled { opacity: .45; }
 #banner.bad .big { color: #ff3b3b; text-shadow: 0 3px 0 #3a0000, 0 6px 30px rgba(0,0,0,.8); font-size: min(14vw, 72px); letter-spacing: 3px; }
-body.talking #bF, body.talking #bW { opacity: 0 !important; pointer-events: none !important; }
+body.talking #bF, body.talking #bW, body.talking #bR { opacity: 0 !important; pointer-events: none !important; }
 #bossbar { position: absolute; left: 50%; top: calc(14px + var(--safe-t)); transform: translateX(-50%); width: min(46vw, 320px); text-align: center; display: none; }
 #bossbar.on { display: block; }
 #bossbar .bn { font-size: 12px; font-weight: 900; letter-spacing: 1px; color: #ffb0c8; text-shadow: 0 1px 4px #000; margin-bottom: 4px; }

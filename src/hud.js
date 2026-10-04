@@ -30,6 +30,7 @@ export function createHUD(plan) {
   const bD = el("button", "bD", "btn hide", hud, "📯");
   const bF = el("button", "bF", "btn", hud, "👊");
   const bW = el("button", "bW", "btn", hud, "⇄");
+  const bR = el("button", "bR", "btn hide", hud, "📻");
   // health, wanted stars, weapon
   const vit = el("div", "vit", "", hud, '<div class="hp"><i></i></div><div class="stars"></div><div class="wpn"></div>');
   const hpBar = vit.querySelector(".hp i"), starsEl = vit.querySelector(".stars"), wpnEl = vit.querySelector(".wpn");
@@ -96,7 +97,7 @@ export function createHUD(plan) {
       incEl.textContent = inc > 0 ? "+$" + inc.toLocaleString() + "/min" : "";
     },
     objDistance(d) { objDist.textContent = d == null ? "" : (d < 1000 ? Math.round(d) + " m" : (d / 1000).toFixed(1) + " km"); },
-    ui: { joy, knob: joy.querySelector("i"), bA, bB, bC, bD, bF, bW },
+    ui: { joy, knob: joy.querySelector("i"), bA, bB, bC, bD, bF, bW, bR },
     vitals(hp, stars, searching, wpn, ammo, onFoot) {
       hpBar.style.width = hp + "%"; hpBar.style.background = hp < 30 ? "#ff5d5d" : "linear-gradient(90deg,#5ff0b0,#9ef08a)";
       starsEl.innerHTML = stars > 0 ? (searching ? '<span class="srch">' + "☆".repeat(stars) + " 🔍</span>" : "★".repeat(stars)) : "";
@@ -136,6 +137,7 @@ export function createHUD(plan) {
       bB.textContent = driving ? (air ? "▼" : kind === "boat" || kind === "jetski" ? "BRAKE" : "DRIFT") : "JUMP";
       bC.textContent = driving ? (air ? "▲" : "BOOST") : "RUN";
       bD.classList.toggle("hide", !driving);
+      bR.classList.toggle("hide", !driving || kind === "jetski" || kind === "bike");
     },
     update(dt) {
       if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.classList.remove("on"); }
