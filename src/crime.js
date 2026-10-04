@@ -92,8 +92,12 @@ export function makeCrime(scene, g) {
     S.wanted = Math.min(5, S.wanted + n);
     if (S.wanted > before) { g.toast("Wanted " + "★".repeat(S.wanted)); g.sound("blip", 0.8); if (before === 0) { const f = g.focus(); belief.x = f.x; belief.z = f.z; } }
   }
-  function hurt(n) {
+  // n: how much; (sx, sz): where the shot came from (for the on-screen arc, and cover); air: from above
+  function hurt(n, sx, sz, air) {
     if (S.health <= 0) return;
+    if (sx !== undefined && g.cover) n *= g.cover(sx, sz, air);         // behind cover, most of it hits the wall
+    if (n <= 0.01) return;
+    if (sx !== undefined) S.from = { x: sx, z: sz, t: 1.2 };
     S.health = Math.max(0, S.health - n); S.hurtCD = 4; S.flash = Math.min(1, S.flash + n / 40);
     if (S.health <= 0) wasted();
   }
@@ -163,7 +167,7 @@ export function makeCrime(scene, g) {
         g.fxParticles.tracer(H.x, H.y + 1.2, H.z, px + (Math.random() - 0.5) * 3, 1.1, pz + (Math.random() - 0.5) * 3);
         g.sound("gun", 0.35);
         const f = g.focus();
-        if (Math.random() < (f.speed > 8 ? 0.15 : 0.32)) hurt(f.car ? 5 : 8);
+        if (Math.random() < (f.speed > 8 ? 0.15 : 0.32)) hurt(f.car ? 5 : 8, H.x, H.z, true);
       }
     }
     return H.sees;
@@ -195,6 +199,7 @@ export function makeCrime(scene, g) {
   function update(dt, time) {
     if (S.crimeCD > 0) S.crimeCD -= dt;
     S.flash = Math.max(0, S.flash - dt * 1.5);
+    if (S.from) { S.from.t -= dt; if (S.from.t <= 0) S.from = null; }
     if (S.hurtCD > 0) S.hurtCD -= dt; else if (S.health < 100) S.health = Math.min(100, S.health + dt * 4);   // patch up out of danger
     const F = g.focus(), px = F.x, pz = F.z;
     const heat = S.wanted;
@@ -283,7 +288,7 @@ export function makeCrime(scene, g) {
           g.fxParticles.tracer(u.x, 1.4, u.z, px + (Math.random() - 0.5) * 2, 1.2, pz + (Math.random() - 0.5) * 2);
           g.sound("gun", 0.5);
           const fast = F.speed > 6;
-          if (Math.random() < clamp(0.5 - d * 0.009 - (fast ? 0.2 : 0), 0.05, 0.5)) hurt(F.car ? 5 : 9);
+          if (Math.random() < clamp(0.5 - d * 0.009 - (fast ? 0.2 : 0), 0.05, 0.5)) hurt(F.car ? 5 : 9, u.x, u.z);
         }
       }
     }

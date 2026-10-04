@@ -136,7 +136,31 @@ body.talking #bA, body.talking #bB, body.talking #bC, body.talking #bD, body.tal
 #vit .hp i { display: block; height: 100%; width: 100%; transition: width .2s; }
 #vit .stars { margin-top: 6px; font-size: 20px; letter-spacing: 2px; color: #fff; text-shadow: 0 0 8px rgba(255,255,255,.6), 0 2px 4px #000; min-height: 22px; }
 #vit .stars .srch { opacity: .75; }
-#vit .wpn { font-size: 11.5px; font-weight: 800; color: #fff; text-shadow: 0 1px 4px #000; }
+#vit .wpn { font-size: 11.5px; font-weight: 800; color: #fff; text-shadow: 0 1px 4px #000; pointer-events: auto; padding: 4px 0; white-space: nowrap; display: flex; justify-content: flex-end; }
+#vit .wpn small { opacity: .7; font-weight: 700; }
+#vit .wpn .rl { color: #ffd166; animation: rlb .5s infinite alternate; }
+@keyframes rlb { to { opacity: .45; } }
+/* combat: the reticle (sits on the target), hit markers, the damage arc, the cover chip */
+#reticle { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; opacity: 0; transition: opacity .12s; z-index: 3; }
+#reticle.on { opacity: 1; }
+#reticle .r { position: absolute; left: -15px; top: -15px; width: 30px; height: 30px; border-radius: 50%; border: 2px solid rgba(255,255,255,.85); box-shadow: 0 0 0 1px rgba(0,0,0,.35), inset 0 0 0 1px rgba(0,0,0,.25); transition: transform .12s, border-color .12s; }
+#reticle .r::after { content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: currentColor; color: #fff; }
+#reticle.hostile .r { border-color: #ff4a3a; }
+#reticle.hostile .r::after { color: #ff4a3a; }
+#reticle.locked .r { transform: scale(.72); }
+#reticle .rh { position: absolute; left: -18px; top: -26px; width: 36px; height: 4px; border-radius: 2px; background: rgba(0,0,0,.55); overflow: hidden; }
+#reticle .rh u { display: block; height: 100%; background: #ff5d4d; }
+#reticle .hm { position: absolute; left: -12px; top: -12px; width: 24px; height: 24px; opacity: 0; }
+#reticle .hm::before, #reticle .hm::after { content: ""; position: absolute; left: 50%; top: -3px; width: 2.5px; height: 30px; margin-left: -1.25px; background: #fff; border-radius: 1px; box-shadow: 0 0 3px rgba(0,0,0,.6); }
+#reticle .hm::before { transform: rotate(45deg); } #reticle .hm::after { transform: rotate(-45deg); }
+#reticle .hm.on { animation: hm .28s ease-out; }
+#reticle .hm.kill::before, #reticle .hm.kill::after { background: #ff3b2f; }
+#reticle .hm.head { width: 32px; height: 32px; left: -16px; top: -16px; }
+@keyframes hm { 0% { opacity: 1; transform: scale(1.35); } 100% { opacity: 0; transform: scale(.9); } }
+#dmgarc { position: absolute; left: 50%; top: 50%; width: min(70vw, 70vh); height: min(70vw, 70vh); pointer-events: none; opacity: 0; transition: opacity .2s; }
+#dmgarc i { position: absolute; left: 50%; top: 0; width: 34%; height: 18px; transform: translateX(-50%); border-radius: 50% 50% 0 0 / 100% 100% 0 0; border-top: 6px solid rgba(255,40,30,.85); filter: drop-shadow(0 0 6px rgba(255,30,20,.8)); }
+#cover { position: absolute; left: 50%; bottom: calc(18px + var(--safe-b)); transform: translateX(-50%); padding: 5px 12px; font-size: 12px; font-weight: 800; letter-spacing: .08em; color: #e8f4ff; opacity: 0; transition: opacity .15s; pointer-events: none; }
+#cover.on { opacity: 1; }
 @media (max-width: 420px) { #vit { width: 108px; top: calc(128px + var(--safe-t)); } }
 #hurt { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .15s;
   background: radial-gradient(ellipse at center, rgba(160,0,0,0) 45%, rgba(170,0,0,.75) 100%); }

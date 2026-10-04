@@ -140,7 +140,7 @@ export function makeJobs(g) {
         p.shootCD = 0.9 + r() * 0.8; p.shotT = 0.12;
         g.fx.muzzle(p.x + dx / d * 0.6, 1.35, p.z + dz / d * 0.6, dx / d, dz / d);
         g.fx.tracer(p.x, 1.35, p.z, F.x + (r() - 0.5) * 2, 1.1, F.z + (r() - 0.5) * 2); g.sound("gun", 0.4);
-        if (r() < clamp(0.45 - d * 0.009 - (F.speed > 6 ? 0.15 : 0), 0.05, 0.5)) g.crime.hurt(F.car ? 5 : 8);
+        if (r() < clamp(0.45 - d * 0.009 - (F.speed > 6 ? 0.15 : 0), 0.05, 0.5)) g.crime.hurt(F.car ? 5 : 8, p.x, p.z);
       }
     } else {
       // at his shoulder

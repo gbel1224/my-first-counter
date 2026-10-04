@@ -55,7 +55,32 @@ export function createFX(scene) {
         life: life * (0.6 + Math.random() * 0.6), size: size * (0.7 + Math.random() * 0.6), r, g, b, a, grav, grow });
     }
   }
+  // blood left on the ground: dark, irregular, soaking into the paving, gone after a while
+  const SPL = 60, splatGeo = new THREE.CircleGeometry(1, 14);
+  { const pos = splatGeo.attributes.position; for (let i = 1; i < pos.count; i++) { const k = 0.7 + Math.random() * 0.45; pos.setXY(i, pos.getX(i) * k, pos.getY(i) * k); } }
+  splatGeo.rotateX(-Math.PI / 2);
+  const splatMat = new THREE.MeshStandardMaterial({ color: 0x5c0707, roughness: 0.22, metalness: 0, transparent: true, opacity: 0.85, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 });
+  const splats = new THREE.InstancedMesh(splatGeo, splatMat, SPL); splats.count = 0; splats.frustumCulled = false; splats.receiveShadow = true; scene.add(splats);
+  const splatList = []; let splatNext = 0;
+  const _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
   const api = {
+    // a hit on a person: a dark spray thrown along the shot, a fine red mist, drops on the ground
+    blood(x, y, z, dx = 0, dz = 0, n = 10) {
+      for (let i = 0; i < n; i++) {
+        const s = 1.5 + Math.random() * 3;
+        emit(smoke, { x, y, z, vx: dx * s + rnd(-1, 1), vy: rnd(0.2, 2.2), vz: dz * s + rnd(-1, 1), life: rnd(0.35, 0.7), size: rnd(0.04, 0.09), r: 0.32, g: 0.02, b: 0.02, a: 0.95, grav: 14, grow: 0 });
+      }
+      for (let i = 0; i < 3; i++) emit(smoke, { x, y, z, vx: dx * 0.8 + rnd(-0.3, 0.3), vy: rnd(0, 0.5), vz: dz * 0.8 + rnd(-0.3, 0.3), life: rnd(0.4, 0.7), size: rnd(0.25, 0.4), r: 0.4, g: 0.04, b: 0.04, a: 0.45, grav: 0, grow: 1.4 });
+    },
+    splat(x, y, z, size = 0.5) {
+      const put = (px, pz, sz) => { const k = splatNext; splatNext = (splatNext + 1) % SPL; splatList[k] = { x: px, y, z: pz, size: sz, rot: Math.random() * 6.28, t: 0 }; };
+      put(x, z, size * (0.7 + Math.random() * 0.6));
+      for (let i = 0; i < 4; i++) { const a = Math.random() * 6.28, d = size * (0.9 + Math.random() * 0.8); put(x + Math.cos(a) * d, z + Math.sin(a) * d, size * (0.08 + Math.random() * 0.12)); }   // flecks round it
+    },
+    // a spent case flicked out of the ejection port, tinkling onto the road
+    casing(x, y, z, dx, dz) {
+      emit(glow, { x, y, z, vx: -dz * rnd(1.5, 2.5) + rnd(-0.3, 0.3), vy: rnd(1.5, 2.6), vz: dx * rnd(1.5, 2.5) + rnd(-0.3, 0.3), life: rnd(0.5, 0.8), size: 0.035, r: 1.4, g: 1.0, b: 0.35, a: 1, grav: 14, grow: 0 });
+    },
     muzzle(x, y, z, dx, dz) {
       emit(glow, { x: x + dx * 0.2, y, z: z + dz * 0.2, vx: dx * 2, vy: 0, vz: dz * 2, life: 0.06, size: 0.9, r: 4, g: 3, b: 1.4, a: 1, grav: 0, grow: 2 });
       burst(glow, x, y, z, 3, 3, 0, 0.1, 0.18, 3, 2, 0.8);
@@ -93,6 +118,15 @@ export function createFX(scene) {
       }
     },
     update(dt) {
+      let ns = 0;
+      for (const sp of splatList) {
+        if (!sp) continue;
+        sp.t += dt; if (sp.t > 60) continue;
+        const grow = Math.min(1, 0.35 + sp.t * 1.6);               // it spreads out for a moment
+        _q.setFromAxisAngle(_up, sp.rot); _s.set(sp.size * grow, 1, sp.size * grow * 0.8);
+        m.compose(_p.set(sp.x, sp.y + 0.012, sp.z), _q, _s); splats.setMatrixAt(ns++, m);
+      }
+      splats.count = ns; splats.instanceMatrix.needsUpdate = true;
       for (const pl of [glow, smoke]) {
         let k = 0;
         for (const p of pl.P) {

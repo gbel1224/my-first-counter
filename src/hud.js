@@ -35,6 +35,10 @@ export function createHUD(plan) {
   const vit = el("div", "vit", "", hud, '<div class="hp"><i></i></div><div class="stars"></div><div class="wpn"></div>');
   const hpBar = vit.querySelector(".hp i"), starsEl = vit.querySelector(".stars"), wpnEl = vit.querySelector(".wpn");
   const hurtEl = el("div", "hurt", "", document.getElementById("ui"));
+  // combat: the reticle over your target (with its health), hit markers, where the shots are coming from
+  const reticle = el("div", "reticle", "", document.getElementById("ui"), '<i class="r"></i><i class="hm"></i><b class="rh"><u></u></b>');
+  const dmgArc = el("div", "dmgarc", "", document.getElementById("ui"), "<i></i>");
+  const covEl = el("div", "cover", "chip", hud, "🛡 COVER");
   const comboEl = el("div", "combo", "", hud, '<b></b><small>MAYHEM</small><i><u></u></i>');
   const bossEl = el("div", "bossbar", "", hud, '<div class="bn"></div><div class="bb"><i></i></div>');
   // modal panel (shops)
@@ -97,15 +101,27 @@ export function createHUD(plan) {
       incEl.textContent = inc > 0 ? "+$" + inc.toLocaleString() + "/min" : "";
     },
     objDistance(d) { objDist.textContent = d == null ? "" : (d < 1000 ? Math.round(d) + " m" : (d / 1000).toFixed(1) + " km"); },
-    ui: { joy, knob: joy.querySelector("i"), bA, bB, bC, bD, bF, bW, bR },
+    ui: { joy, knob: joy.querySelector("i"), bA, bB, bC, bD, bF, bW, bR, wpn: wpnEl },
     vitals(hp, stars, searching, wpn, ammo, onFoot) {
       hpBar.style.width = hp + "%"; hpBar.style.background = hp < 30 ? "#ff5d5d" : "linear-gradient(90deg,#5ff0b0,#9ef08a)";
       starsEl.innerHTML = stars > 0 ? (searching ? '<span class="srch">' + "☆".repeat(stars) + " 🔍</span>" : "★".repeat(stars)) : "";
-      wpnEl.textContent = wpn ? wpn + (ammo !== null ? " · " + ammo : "") : "";
+      const wh = wpn ? "<span>" + wpn + (ammo !== null ? " · " + ammo : "") + "</span>" : "";
+      if (wh !== wpnEl._h) { wpnEl._h = wh; wpnEl.innerHTML = wh; }
       bF.textContent = !onFoot ? "" : (wpn && wpn !== "Fists" ? "🔫" : "👊");
       bF.classList.toggle("hide", !onFoot); bW.classList.toggle("hide", !onFoot);
     },
     hurt(a) { hurtEl.style.opacity = Math.min(0.85, a); },
+    // sx, sy: the target on screen (null hides it); hostile: red; hp: 0..1 or null; locked: tighter
+    reticle(sx, sy, hostile, hp, locked) {
+      if (sx == null) { reticle.classList.remove("on"); return; }
+      reticle.classList.add("on"); reticle.classList.toggle("hostile", !!hostile); reticle.classList.toggle("locked", !!locked);
+      reticle.style.transform = `translate(${sx}px, ${sy}px)`;
+      const bar = reticle.querySelector(".rh"); bar.style.display = hp == null ? "none" : "block"; if (hp != null) bar.firstChild.style.width = Math.max(0, hp * 100) + "%";
+    },
+    hitMark(kill, head) { const h = reticle.querySelector(".hm"); h.className = "hm"; void h.offsetWidth; h.className = "hm on" + (kill ? " kill" : "") + (head ? " head" : ""); },
+    // where the hurt is coming from, relative to the way the camera faces (rad, 0 = ahead)
+    dmgDir(a, alpha) { dmgArc.style.opacity = alpha; if (alpha > 0) dmgArc.style.transform = `translate(-50%, -50%) rotate(${a}rad)`; },
+    cover(on, peek) { covEl.classList.toggle("on", !!on); covEl.textContent = peek ? "🛡 PEEKING" : "🛡 COVER"; },
     combo(x, pts) { comboEl.classList.add("on"); comboEl.querySelector("b").textContent = "x" + x; comboEl.querySelector("small").textContent = "MAYHEM · " + pts; },
     comboTick(t) { if (t <= 0) comboEl.classList.remove("on"); else comboEl.querySelector("u").style.width = (t / 5 * 100) + "%"; },
     boss(on, name, frac) { bossEl.classList.toggle("on", !!on); if (on) { bossEl.querySelector(".bn").textContent = name; bossEl.querySelector("i").style.width = (frac * 100) + "%"; } },

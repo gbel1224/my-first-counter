@@ -67,7 +67,7 @@ export function makeRoadblocks(scene, g) {
       g.fx.muzzle(p.x + dx / d * 0.6, 1.3, p.z + dz / d * 0.6, dx / d, dz / d);
       g.fx.tracer(p.x, 1.3, p.z, F.x + (r() - 0.5) * 2, 1.1, F.z + (r() - 0.5) * 2);
       g.sound("gun", 0.4);
-      if (r() < clamp(0.42 - d * 0.008 - (F.speed > 8 ? 0.18 : 0), 0.05, 0.45)) g.crime.hurt(F.car ? 4 : 8);
+      if (r() < clamp(0.42 - d * 0.008 - (F.speed > 8 ? 0.18 : 0), 0.05, 0.45)) g.crime.hurt(F.car ? 4 : 8, p.x, p.z);
     }
   }
 

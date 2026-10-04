@@ -491,6 +491,7 @@ export class Crowd {
         }
         continue;
       }
+      if (p.stagT > 0) { p.stagT -= dt; p.amt = 0; p.aimT = 0; continue; }   // hit and staggering: a beat before they can do anything
       if (p.ai) { p.ai(p, dt); continue; }
       // on a park bench: stay put, unless something gives them a fright — then up and off round the path
       if (p.sit) { if (!(p.fear > 0)) { p.amt = 0; p.x = p.sit.x; p.z = p.sit.z; p.yaw = p.sit.yaw; continue; } p.sit = null; if (p.park) p.t = r() * 4; else this.release(p); }
