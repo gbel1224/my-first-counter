@@ -42,6 +42,7 @@ import { makeJobs } from "./jobs.js";
 import { makeRoadblocks } from "./roadblock.js";
 import { makeCustoms, applyCarMods } from "./customs.js";
 import { makeAct2 } from "./act2.js";
+import { makeServices } from "./services.js";
 import { makeExtras, CIRCUITS } from "./extras.js";
 import { createWeather } from "./weather.js";
 import { createMenu } from "./menu.js";
@@ -53,7 +54,7 @@ import { SEA_Y } from "./ocean.js";
 import { AudioSys } from "./audio.js";
 import { makeInterior } from "./interior.js";
 import { loadHumans, humansReady } from "./human.js";
-import { setView, setCullScale } from "./cull.js";
+import { setView, setCullScale, inView } from "./cull.js";
 import { makeProbe } from "./reflect.js";
 
 const bootBar = document.getElementById("bootbar");
@@ -276,7 +277,7 @@ const combat = makeCombat(scene, {
   earn: n => eco.earn(n),
   onCombo: (x, pts) => { if (x > 1) hud.combo(x, pts); },
   onComboEnd: (pts, x) => { st.stats.bestRampage = Math.max(st.stats.bestRampage || 0, pts); PH.pushRampage(pts, P.x, P.z); hud.toast("💥 Rampage banked · " + pts + " pts · best " + st.stats.bestRampage); },
-  onExplode: (x, z) => { PH.chaosShock(st); if (Math.random() < 0.3) PH.pushRampage(0, x, z); },
+  onExplode: (x, z) => { PH.chaosShock(st); if (Math.random() < 0.3) PH.pushRampage(0, x, z); services.report("fire", x, z); },
   crowd, traffic, parked, crime, fx, collider, st, propsBlast: (x, z, r) => props.blast(x, z, r),
   sound: (k, v, r) => AudioSys.play(k, v, r), shake: a => { rig.shake = Math.max(rig.shake, a); }, toast: m => hud.toast(m),
   player: () => P.car ? { x: P.car.x, z: P.car.z, y: P.car.y, car: P.car, yaw: P.car.h } : P,
@@ -381,6 +382,22 @@ const act2 = makeAct2(scene, {
   crashFx: (v, c, x, z, nx, nz, k) => { damage.crash(v, x, z, nx, nz, k); damage.crash(c, x, z, -nx, -nz, k); },
   setNight: () => { if (sky.state.night < 0.5 && !sky.state.cycle) sky.set(0.93); },
 });
+// ambulances and fire engines, and the people who stop to look
+const services = makeServices(scene, {
+  crowd, combat, traffic, fx, collider, focus: () => P.car || P, night: () => sky.state.night, inView: (x, z) => inView(x, z, 0),
+  gapAhead: c => {
+    const fx = Math.sin(c.h), fz = Math.cos(c.h); let gap = 99;
+    for (const t of traffic.cars) {
+      if (!t.alive) continue;
+      const dx = t.x - c.x, dz = t.z - c.z; if (dx * dx + dz * dz > 900) continue;
+      const ahead = dx * fx + dz * fz, side = Math.abs(dx * fz - dz * fx);
+      if (ahead > 0 && side < 2.2) gap = Math.min(gap, ahead - (t.len || 4.6) / 2);
+    }
+    return gap;
+  },
+});
+crowd.onKilled = p => { if (!p.svc && !p.hidden && p.x < 9e4) services.report("medical", p.x, p.z, { body: p }); };
+traffic.sirens = () => services.sirens();
 const jobs = makeJobs({
   hospital: () => PLACES.hospital,
   focus: focusInfo, traffic, crowd, gangs, crime, combat, fx, collider, st,
@@ -905,7 +922,10 @@ function update(dt) {
     // whatever shoved you this frame (a cruiser, a blast, a door), you never end up inside a wall
     if (!P.car && !P.swim) { const q = collider.resolve(P.x, P.z, 0.38); if (q.hit) { P.x = q.x; P.z = q.z; } }
     crime.update(dt, time); roadblocks.update(dt, time); combat.update(dt, time); gangs.update(dt);
-    updateHeists(dt, time); events.update(dt); jobs.update(dt); act2.update(dt); extras.update(dt); life.update(dt);
+    updateHeists(dt, time); events.update(dt); jobs.update(dt); act2.update(dt); services.update(dt);
+    // sirens you can hear: the nearest ambulance / fire engine on a call, or the police on your tail
+    { let cop = 0; if (crime.S.wanted > 0) for (const u of crime.units) if (u.active) cop = Math.max(cop, 1 - Math.hypot(u.x - focus0().x, u.z - focus0().z) / 200);
+      const sv = services.sirenLevel(); AudioSys.siren(Math.max(cop, sv), cop > sv ? 1 : 0); } extras.update(dt); life.update(dt);
     if (P.car && P.car.boom && !P.car.charred) {           // your ride went up: you're thrown clear, it's a burnt shell
       const c = P.car; c.charred = true;
       c.group.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.color && o.material.color.set(0x1a1816); o.material.metalness = 0.1; o.material.roughness = 1; } });
@@ -923,7 +943,13 @@ function update(dt) {
   ambienceTick(dt, focus);
   radioToast(dt);
   radio.update(dt, { inCar: !!P.car && hasRadio(P.car), car: P.car, px: P.x, pz: P.z, indoor: !!interior.inside });
-  traffic.update(dt, time, [P.car ? { x: P.car.x, z: P.car.z, car: true } : { x: focus.x, z: focus.z, car: false }]);
+  // rush hour: the roads fill up in the morning and the evening, thin out in the small hours
+  { const t = sky.state.t, bump = (c, w) => Math.max(0, 1 - Math.abs(t - c) / w);
+    traffic.density = clamp(0.42 + 0.38 * Math.max(bump(0.5, 0.22), 0) + 0.25 * Math.max(bump(0.33, 0.06), bump(0.72, 0.06)), 0.4, 1); }
+  const others = [];                                     // the story cars and the ambulances are in the road too
+  for (const c of services.vehicles()) others.push({ x: c.x, z: c.z, car: true });
+  for (const c of act2.cars()) if (c.alive) others.push({ x: c.x, z: c.z, car: true });
+  traffic.update(dt, time, [P.car ? { x: P.car.x, z: P.car.z, car: true } : { x: focus.x, z: focus.z, car: false }, ...others]);
   if (state.phase === "play" && P.car && !interior.inside) redLight(P.car);
   if (state.phase === "title") {
     // slow cinematic orbit over the plaza, high enough to clear the rooftops
@@ -1148,6 +1174,11 @@ function render() {
           const cw = R.renderer.domElement.clientWidth, ch = R.renderer.domElement.clientHeight;
           if (o.hp !== undefined) o.hpMax = Math.max(o.hpMax || (T.kind === "ped" ? 0 : 100), o.hp);
           const hostile = T.kind === "cop" || T.kind === "heli" || (o.gang && !o.ally && (o.goon || o.crew || o.cop || o.hitman || o.boss || (o.G && !st.turf[o.G.id])));
+          // an ordinary person with your gun on them: hands up (hold it on them and somebody calls it in)
+          if (T.kind === "ped" && !hostile && !o.ai && !o.gang && !o.beach && T.d < 22) {
+            o.handsUp = Math.max(o.handsUp || 0, 0.5); o._aimedT = (o._aimedT || 0) + 1 / 60;
+            if (o._aimedT > 2.5 && !o._reported) { o._reported = true; crime.addCrime(1); }
+          }
           hud.reticle((_rv.x + 1) / 2 * cw, (1 - _rv.y) / 2 * ch, hostile, o.hp !== undefined && o.hpMax ? o.hp / o.hpMax : null, combat.S.lock && combat.S.lock.o === o);
         } else hud.reticle(null);
       } else hud.reticle(null);
@@ -1195,7 +1226,7 @@ requestAnimationFrame(frame);
 
 // debug / test hooks
 globalThis.__pc2 = {
-  THREE, scene, camera, customs, applyCarMods, act2, coverState: () => cov, coverMult, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, hijack, P, cars, state, rig, I,
+  THREE, scene, camera, customs, applyCarMods, act2, services, coverState: () => cov, coverMult, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, hijack, P, cars, state, rig, I,
   interior, props, skids, animals, damage, radio, roadblocks, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },

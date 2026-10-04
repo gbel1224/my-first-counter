@@ -77,6 +77,11 @@ export function createFX(scene) {
       put(x, z, size * (0.7 + Math.random() * 0.6));
       for (let i = 0; i < 4; i++) { const a = Math.random() * 6.28, d = size * (0.9 + Math.random() * 0.8); put(x + Math.cos(a) * d, z + Math.sin(a) * d, size * (0.08 + Math.random() * 0.12)); }   // flecks round it
     },
+    // a fire hose: a jet of water arcing out toward (dx, dz), d metres away, breaking into spray
+    hose(x, y, z, dx, dz, d) {
+      const v = Math.min(14, 5 + d * 0.9);
+      emit(smoke, { x, y, z, vx: dx * v + rnd(-0.4, 0.4), vy: rnd(1.6, 2.6), vz: dz * v + rnd(-0.4, 0.4), life: rnd(0.6, 0.9), size: rnd(0.12, 0.22), r: 0.82, g: 0.88, b: 0.95, a: 0.6, grav: 6, grow: 2.4 });
+    },
     // a spent case flicked out of the ejection port, tinkling onto the road
     casing(x, y, z, dx, dz) {
       emit(glow, { x, y, z, vx: -dz * rnd(1.5, 2.5) + rnd(-0.3, 0.3), vy: rnd(1.5, 2.6), vz: dx * rnd(1.5, 2.5) + rnd(-0.3, 0.3), life: rnd(0.5, 0.8), size: 0.035, r: 1.4, g: 1.0, b: 0.35, a: 1, grav: 14, grow: 0 });

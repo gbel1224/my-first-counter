@@ -5,8 +5,7 @@
 import * as THREE from "../vendor/three.module.js";
 import { PLACES } from "./places.js";
 import { clamp, HALF, N, roadC, nearestRoad, lerpAngle } from "./world.js";
-import { driveStep, syncCar, spawnCar } from "./play.js";
-import { driveLamps } from "./cars.js";
+import { makeRoadDriver } from "./roaddriver.js";
 import { buildCraft } from "./craft.js";
 import { randomLook, finishLook } from "./people.js";
 
@@ -58,51 +57,14 @@ export function makeAct2(scene, g) {
 
   // ---------------------------------------------------------------- road driving for NPC cars
   const nodeX = i => roadC(i);
+  const RD = makeRoadDriver(scene, g.collider, focus);
   function makeDriver(type, color, x, z, h, mode, goal, want) {
-    const c = spawnCar(scene, type, color, x, z, h);
-    c.npc = true; c.hp = 180; c.alive = true; c.kind = undefined; c.mkind = "mission";
+    const D = RD.create(type, color, x, z, h, mode, goal, want), c = D.c;
+    c.kind = undefined; c.mkind = "mission";
     c.shot = n => hurtCar(c, n * 0.9);          // (not .hit: the driving physics uses that for collisions)
-    const D = { c, mode, goal, want, ni: nearestRoad(x), nj: nearestRoad(z), pi: -1, pj: -1, stuckT: 0, revT: 0, inp: { mx: 0, mz: 0, handbrakeHeld: false, sprintHeld: false } };
-    pickNext(D);
     return D;
   }
-  function pickNext(D) {
-    const opts = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([a, b]) => [D.ni + a, D.nj + b]).filter(([i, j]) => i >= 0 && j >= 0 && i <= N && j <= N);
-    let pool = opts.filter(([i, j]) => !(i === D.pi && j === D.pj));
-    if (!pool.length) pool = opts;
-    const F = focus();
-    let best = null, bs = -Infinity;
-    for (const [i, j] of pool) {
-      let s = r() * 0.5;
-      if (D.mode === "goto" && D.goal) s -= Math.abs(i - D.goal[0]) + Math.abs(j - D.goal[1]);
-      else if (D.mode === "flee") s += Math.hypot(nodeX(i) - F.x, nodeX(j) - F.z) / 40 + r() * 1.2 - ((i === 0 || i === N || j === 0) ? 1 : 0);
-      else s += r() * 3;
-      if (s > bs) { bs = s; best = [i, j]; }
-    }
-    D.pi = D.ni; D.pj = D.nj; D.ni = best[0]; D.nj = best[1];
-  }
-  function drive(D, dt) {
-    const c = D.c; if (!c.alive) return;
-    let tx = nodeX(D.ni), tz = nodeX(D.nj);
-    const ux = Math.sign(tx - nodeX(D.pi < 0 ? D.ni : D.pi)), uz = Math.sign(tz - nodeX(D.pj < 0 ? D.nj : D.pj));
-    tx += uz * 2.2; tz += -ux * 2.2;                     // keep right: the inside lane of our side
-    const d = Math.hypot(tx - c.x, tz - c.z);
-    if (d < 8) {
-      if (D.mode === "goto" && D.ni === D.goal[0] && D.nj === D.goal[1]) D.arrived = true;
-      else pickNext(D);
-    }
-    let dh = Math.atan2(tx - c.x, tz - c.z) - c.h; while (dh > Math.PI) dh -= Math.PI * 2; while (dh < -Math.PI) dh += Math.PI * 2;
-    const want = D.arrived || D.hold ? 0 : (d < 22 ? Math.min(D.want, 12) : D.want);
-    D.inp.mx = clamp(-dh * 2.4, -1, 1);
-    const lon = c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h);
-    D.inp.mz = Math.abs(dh) > 1.9 ? -0.5 : lon < want - 1 ? 1 : lon > want + 2 ? -0.7 : 0.15;
-    if (want === 0) D.inp.mz = lon > 0.5 ? -1 : 0;
-    D.inp.handbrakeHeld = Math.abs(dh) > 1.0 && lon > 14;
-    if (D.revT > 0) { D.revT -= dt; D.inp.mz = -1; D.inp.mx = -D.inp.mx; }
-    else if (want > 0 && D.inp.mz > 0.3 && Math.abs(c.speed) < 1.2) { D.stuckT += dt; if (D.stuckT > 1.1) { D.stuckT = 0; D.revT = 1.0; } }
-    else D.stuckT = 0;
-    driveStep(c, D.inp, dt, g.collider); driveLamps(c, D.inp, dt); syncCar(c);
-  }
+  const drive = (D, dt) => RD.drive(D, dt);
   function removeCar(c) { if (!c) return; c.alive = false; scene.remove(c.group); }
   // you ramming a mission car: both bounce, it takes damage
   function collide(v) {

@@ -121,6 +121,22 @@ export const AudioSys = (() => {
     lastHorn = t;
     play("horn", 1);
   }
+  // a siren somewhere in the city: a two-tone wail (lazily built; level 0..1 by distance)
+  let sirenG = null, sirenO = null, sirenL = null;
+  function sirenLive(level, kind = 0) {
+    if (!ctx || !ready) return;
+    if (!sirenG) {
+      sirenG = ctx.createGain(); sirenG.gain.value = 0;
+      const f = ctx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 1100; f.Q.value = 0.8;
+      sirenO = ctx.createOscillator(); sirenO.type = "sawtooth"; sirenO.frequency.value = 900;
+      sirenL = ctx.createOscillator(); sirenL.frequency.value = 0.32;            // the wail: up and down, a few times a second-ish
+      const depth = ctx.createGain(); depth.gain.value = 360; sirenL.connect(depth); depth.connect(sirenO.frequency);
+      sirenO.connect(f); f.connect(sirenG); sirenG.connect(comp); sirenO.start(); sirenL.start();
+    }
+    const target = muted ? 0 : Math.min(1, level) * 0.07;
+    sirenG.gain.value += (target - sirenG.gain.value) * 0.08;
+    sirenL.frequency.value = kind ? 2.2 : 0.32;                          // police: the fast yelp; ambulance/fire: the long wail
+  }
   function engine(speed) {
     if (!engineGain) return;
     const sp = Math.abs(speed);
@@ -310,6 +326,6 @@ export const AudioSys = (() => {
     if (amb.sirenT < 0) { amb.sirenT = 60 + Math.random() * 120; if (c.downtown > 0.3 || c.traffic > 0.5) siren(0.025); }
   }
   function duck(v) { duckMul += (v - duckMul) * 0.08; }
-  return { init, play, gun, boom, horn, engine, intensity, skid, setMuted, indoor, beat, ambience, wings, duck,
+  return { init, play, gun, boom, horn, engine, siren: sirenLive, intensity, skid, setMuted, indoor, beat, ambience, wings, duck,
     get ctx() { return ready ? ctx : null; }, get out() { return comp; }, get noise() { return noiseBuf; }, get muted() { return muted; } };
 })();
