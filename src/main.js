@@ -15,6 +15,7 @@ import { createOcean } from "./ocean.js";
 import { Crowd, randomLook } from "./people.js";
 import { Traffic, SIGNAL, Parked, signalState, walkState, RED } from "./traffic.js";
 import { buildFacadeDetail, buildStreetDetail, updateSignals } from "./detail.js";
+import { loadRealProps } from "./realprops.js";
 import { buildBladeSigns } from "./signs.js";
 import { PAINTS, REAL_PAINTS, LAMP_U, driveLamps, carSpec } from "./cars.js";
 import { initInput, pollInput, I } from "./input.js";
@@ -95,6 +96,9 @@ const city = createCity(scene, plan, groundY);
 }
 const facade = buildFacadeDetail(scene, plan);
 const street = buildStreetDetail(scene, plan);
+for (const s of street.solids) collider.add(s);              // concrete barriers stop cars
+// the scanned props (hydrants, bins, trash, crates, barriers) swap in once the people have loaded
+humansLoad.then(() => loadRealProps(scene, [["hydrant", street.props[0][1]], ["bin", street.props[1][1]]], street.clutter)).then(() => { window.__propsReady = true; });
 buildBladeSigns(scene, facade.blades, city.U);                 // projecting neon signs over the shops
 await step(55);
 const ocean = createOcean(scene, sky);
@@ -1229,7 +1233,7 @@ requestAnimationFrame(frame);
 // debug / test hooks
 globalThis.__pc2 = {
   THREE, scene, camera, customs, applyCarMods, act2, services, coverState: () => cov, coverMult, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, hijack, P, cars, state, rig, I,
-  interior, props, skids, animals, damage, radio, roadblocks, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
+  interior, props, street, skids, animals, damage, radio, roadblocks, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },
 };
