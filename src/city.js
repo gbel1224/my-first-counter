@@ -9,6 +9,7 @@ import { paint, place, merge, vcMaterial, tileInstances } from "./geo.js";
 import { buildPalms } from "./palms.js";
 import { buildShrubs, buildGrass } from "./plants.js";
 import { buildHouses } from "./houses.js";
+import { signAtlas } from "./signs.js";
 import { addTile } from "./cull.js";
 
 // shared GLSL: hashing, value noise, and an anti-aliased "is this pixel inside a repeating cell
@@ -41,6 +42,7 @@ function facadeMaterial(U) {
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, metalness: 0.0 });
   m.onBeforeCompile = sh => {
     sh.uniforms.uNight = U.uNight;
+    const SA = signAtlas(); sh.uniforms.uSigns = { value: SA.color }; sh.uniforms.uSignGlow = { value: SA.glow };
     sh.vertexShader = sh.vertexShader
       .replace("#include <common>", `#include <common>
         attribute vec4 aStyle; attribute vec3 aColor;
@@ -52,12 +54,90 @@ function facadeMaterial(U) {
         vBoxS = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));`);
     sh.fragmentShader = sh.fragmentShader
       .replace("#include <common>", `#include <common>
-        uniform float uNight;
+        uniform float uNight; uniform sampler2D uSigns, uSignGlow;
         varying vec3 vWP; varying vec3 vON; varying vec4 vStyle; varying vec3 vBase; varying vec3 vBoxC; varying vec3 vBoxS;
+        // one cell (0..31) of the sign atlas (4 x 8 cells), at q (0..1 across, 0..1 up)
+        vec2 signUV(float id, vec2 q) { return vec2((mod(id, 4.0) + q.x) / 4.0, 1.0 - (floor(id / 4.0) + 1.0 - q.y) / 8.0); }
         ${GLSL_COMMON}
         // what's behind a window: a room, ray-traced as a box (interior mapping). cf: where in the
         // cell this pixel is (0..1), sz: the cell in metres, d: the view ray in the wall's frame
         // (x along the wall, y up, z into the building). Returns the light leaving the room.
+        // a shop seen through its window: cat 0 food (tables, menu boards, a checkerboard floor),
+        // 1 clothes (mannequins in the window, rails along the back), 2 market (gondola shelves full
+        // of stock), 3 services (a counter, framed posters). Always lit; brighter than the street by day.
+        vec3 shopRoom(vec2 cf, vec2 sz, vec3 d, vec2 cid, float cat, float night) {
+          float D = 7.0;
+          vec3 p = vec3(cf.x * sz.x, cf.y * sz.y, 0.0);
+          vec3 ad = vec3(abs(d.x) < 1e-4 ? 1e-4 : d.x, abs(d.y) < 1e-4 ? 1e-4 : d.y, max(d.z, 1e-3));
+          float r1 = h12(cid + 1.3), r2 = h12(cid * 1.7 + 5.1);
+          vec3 light = mix(vec3(1.0, 0.93, 0.82), vec3(0.92, 0.97, 1.0), step(0.5, r2)) * mix(0.55, 1.25, night);
+          // the display just inside the glass (or the counter / tables further in)
+          float tD = (cat > 0.5 && cat < 1.5 ? 1.0 : cat < 0.5 ? 2.2 : cat < 2.5 ? 1.4 : 3.2) / ad.z;
+          vec3 h = p + ad * tD;
+          if (h.x > 0.0 && h.x < sz.x && h.y > 0.0 && h.y < sz.y) {
+            if (cat > 0.5 && cat < 1.5) {
+              // two mannequins in this season's colours
+              for (int k = 0; k < 2; k++) {
+                float mx = sz.x * (0.28 + float(k) * 0.44), dx = h.x - mx;
+                vec3 cloth = mix(vec3(0.75, 0.2, 0.25), vec3(0.15, 0.3, 0.6), h12(cid + float(k) * 3.1));
+                cloth = mix(cloth, vec3(0.9, 0.86, 0.78), step(0.7, h12(cid + float(k))));
+                float head = step(length(vec2(dx, h.y - 1.68)), 0.11);
+                float torso = step(abs(dx), 0.2 - (h.y - 1.15) * 0.08) * step(0.85, h.y) * step(h.y, 1.5);
+                float legs = step(abs(abs(dx) - 0.08), 0.06) * step(0.12, h.y) * step(h.y, 0.9);
+                float stand = step(abs(dx), 0.02) * step(h.y, 0.12) + step(abs(dx), 0.18) * step(h.y, 0.03);
+                if (head + torso + legs + stand > 0.5) return (head > 0.5 ? vec3(0.85, 0.82, 0.78) : torso > 0.5 ? cloth : legs > 0.5 ? cloth * 0.6 : vec3(0.2)) * light;
+              }
+            } else if (cat < 0.5) {
+              // little cafe tables with chairs
+              float tx = fract(h.x / 1.8) - 0.5;
+              if (step(abs(tx), 0.32) * step(abs(h.y - 0.74), 0.03) > 0.5) return vec3(0.85, 0.83, 0.8) * light;
+              if (step(abs(tx), 0.03) * step(h.y, 0.74) > 0.5) return vec3(0.15) * light;
+              if (step(abs(abs(tx) - 0.42), 0.12) * step(h.y, 0.9) * step(0.42, h.y) * step(0.5, fract(h.y * 12.0)) > 0.5) return vec3(0.25, 0.18, 0.12) * light;
+            } else if (cat < 2.5) {
+              // the end of a gondola: shelves of boxes, bottles and cans
+              if (h.y < 1.6 && abs(h.x - sz.x * 0.5) < sz.x * 0.3) {
+                float sh = fract(h.y / 0.38);
+                vec2 it = floor(vec2(h.x / 0.14, h.y / 0.38));
+                vec3 pc = 0.35 + 0.6 * vec3(h12(it), h12(it + 3.0), h12(it + 7.0));
+                return (sh < 0.08 ? vec3(0.8) : pc * step(0.12, fract(h.x / 0.14)) + vec3(0.1)) * light;
+              }
+            } else {
+              // a service counter across the shop
+              if (h.y < 1.05) return mix(vec3(0.35, 0.25, 0.18), vec3(0.85, 0.85, 0.82), step(0.5, r1)) * (0.8 + 0.2 * step(1.0, h.y)) * light;
+            }
+          }
+          float tx = ((ad.x > 0.0 ? sz.x : 0.0) - p.x) / ad.x, ty = ((ad.y > 0.0 ? sz.y : 0.0) - p.y) / ad.y, tz = D / ad.z;
+          float t = min(min(tx, ty), tz);
+          vec3 q = p + ad * t;
+          vec3 c;
+          if (t == tz) {
+            // the back wall: what this shop sells
+            if (cat < 0.5) {
+              c = vec3(0.55, 0.4, 0.3);
+              float board = step(1.6, q.y) * step(q.y, 2.4) * step(0.15, fract(q.x / 1.2));
+              c = mix(c, vec3(0.08), board);                                                                   // menu boards
+              c = mix(c, vec3(0.9, 0.85, 0.7), board * step(0.85, fract(q.y * 18.0)) * step(fract(q.x / 1.2), 0.9));
+            } else if (cat < 1.5) {
+              c = vec3(0.86, 0.84, 0.8);
+              float rail = step(0.5, q.y) * step(q.y, 1.6), sk = floor(q.x / 0.12);
+              c = mix(c, 0.3 + 0.6 * vec3(h12(vec2(sk, 1.0)), h12(vec2(sk, 4.0)), h12(vec2(sk, 9.0))), rail * step(0.2, fract(q.x / 0.12)));   // clothes on rails
+            } else if (cat < 2.5) {
+              vec2 it = floor(vec2(q.x / 0.12, q.y / 0.36));
+              c = (0.3 + 0.6 * vec3(h12(it), h12(it + 2.0), h12(it + 5.0))) * step(0.15, fract(q.x / 0.12));
+              c = mix(c, vec3(0.8), step(fract(q.y / 0.36), 0.07));
+              c = mix(c, vec3(0.9), step(2.2, q.y));
+            } else {
+              c = mix(vec3(0.78, 0.8, 0.82), vec3(0.85, 0.8, 0.7), r1);
+              c = mix(c, 0.3 + 0.5 * vec3(h12(cid), h12(cid + 1.0), h12(cid + 2.0)), step(abs(fract(q.x / 2.0) - 0.5), 0.22) * step(abs(q.y - 1.7), 0.35));   // posters
+            }
+          } else if (t == ty) {
+            if (ad.y > 0.0) c = mix(vec3(0.9), vec3(1.6), step(0.6, fract(q.x / 1.5)) * step(0.6, fract(q.z / 1.5)));     // ceiling lights
+            else if (cat < 0.5) c = mix(vec3(0.85), vec3(0.15), mod(floor(q.x / 0.4) + floor(q.z / 0.4), 2.0));          // checkerboard
+            else if (cat < 1.5) c = vec3(0.55, 0.38, 0.22) * (0.9 + 0.1 * step(0.5, fract(q.x / 0.18)));                  // wood
+            else c = vec3(0.82, 0.82, 0.8) * (0.95 + 0.05 * step(0.96, fract(q.x / 0.6)));                                // vinyl tiles
+          } else c = mix(vec3(0.8, 0.79, 0.76), vec3(0.6, 0.66, 0.6), r2) * 0.9;
+          return c * light * mix(1.0, 0.75, q.z / D);
+        }
         vec3 room(vec2 cf, vec2 sz, vec3 d, vec2 cid, float seed, float lit, float office, float night) {
           float D = office > 0.5 ? 7.0 : sz.x * 0.9 + 1.6;
           vec3 p = vec3(cf.x * sz.x, cf.y * sz.y, 0.0);
@@ -115,7 +195,7 @@ function facadeMaterial(U) {
           float v = vWP.y - baseY;                         // height up this building
           float top = vBoxS.y - v;                         // distance below the roof line
           vec3 concrete = vec3(0.46, 0.44, 0.41);
-          vec2 cellF = vec2(0.5), cellSz = vec2(3.0); float office = 0.0;
+          vec2 cellF = vec2(0.5), cellSz = vec2(3.0); float office = 0.0, shopCat = -1.0, openSign = 0.0;
           if (an.y > 0.5) {
             // ---- roof: tar and gravel, stained, patched, with a concrete parapet cap ----
             float edge = min(vBoxS.x * 0.5 - abs(vWP.x - vBoxC.x), vBoxS.z * 0.5 - abs(vWP.z - vBoxC.z));
@@ -259,27 +339,45 @@ function facadeMaterial(U) {
               if (style != 3 && v < 4.4 && baseY < 0.5) {
                 float sb = floor(u / 5.5);
                 float k = h12(vec2(sb, seed * 7.0));
+                float sid = floor(h12(vec2(sb, seed * 7.0 + 2.0)) * 30.999);
+                // seen from the street, u runs right-to-left on two of the four walls: read signs the right way round
+                float mir = an.x > 0.5 ? step(0.0, vON.x) : step(vON.z, 0.0);
                 float fu = fract(u / 5.5);
                 float open = band(u / 5.5, 0.07, 0.93) * line1(v, 0.3, 3.1);
                 col = mix(concrete * 0.9, col, step(3.1, v));
-                if (k < 0.3) {
+                if (k < mix(0.1, 0.42, uNight)) {
                   // roll-down shutter: corrugated steel, a spray-painted tag
                   vec3 steel = vec3(0.5, 0.51, 0.5) * (0.85 + band(v * 7.0, 0.0, 0.5) * 0.18);
-                  float tag = step(0.6, vnoise(vec2(u * 1.3, v * 2.0) + seed * 3.0)) * line1(v, 0.6, 2.2);
+                  float tn = vnoise(vec2(u * 2.6, v * 3.4) + seed * 3.0) + vnoise(vec2(u * 7.0, v * 6.0)) * 0.3;
+                  float tag = (1.0 - smoothstep(0.0, 0.035, abs(tn - 0.62))) * line1(v, 0.6, 2.2) * step(0.45, vnoise(vec2(u * 0.4, 2.0) + seed));
                   steel = mix(steel, mix(vec3(0.7, 0.15, 0.25), vec3(0.15, 0.3, 0.7), step(0.5, h12(vec2(sb, 1.0)))), tag * 0.8);
                   col = mix(col, steel, open); fRough = 0.55; fMetal = 0.4 * open;
                   gH += open * 0.012 * band(v * 7.0, 0.0, 0.5);
                 } else {
                   glass = open;
                   cellF = vec2(fu, clamp((v - 0.3) / 2.8, 0.0, 1.0)); cellSz = vec2(5.5, 3.2); office = 0.0;
+                  shopCat = sid < 8.0 ? 0.0 : sid < 14.0 ? 1.0 : sid < 20.0 ? 2.0 : 3.0;
+                  // a neon OPEN sign hung in the corner of the window
+                  if (h12(vec2(sb, 9.0) + seed) < 0.6) {
+                    vec2 oq = vec2((mix(fu, 1.0 - fu, mir) - 0.64) / 0.26, (v - 1.6) / 0.42);
+                    if (oq.x > 0.0 && oq.x < 1.0 && oq.y > 0.0 && oq.y < 1.0) {
+                      vec3 oc = texture2D(uSigns, signUV(31.0, oq)).rgb, og = texture2D(uSignGlow, signUV(31.0, oq)).rgb;
+                      fEmit += oc * og.r * (0.35 + uNight * 2.2);
+                      openSign = og.r;
+                    }
+                  }
                   col = mix(col, vec3(0.12, 0.12, 0.13), band(u / 5.5, 0.05, 0.95) * line1(v, 0.2, 3.2) - open);   // dark aluminium frames
                 }
-                // signage band above the shop
-                float sign = band(u / 5.5, 0.12, 0.88) * line1(v, 3.3, 4.1);
-                vec3 sc = mix(vec3(0.75, 0.12, 0.1), vec3(0.08, 0.22, 0.45), step(0.5, h12(vec2(sb, 2.0))));
-                sc = mix(sc, vec3(0.92, 0.9, 0.84), step(0.7, h12(vec2(sb, 4.0))));
-                col = mix(col, sc, sign * step(0.25, k));
-                fEmit += sc * sign * step(0.25, k) * uNight * 1.6;
+                // the shop's sign over its front: its own name, in its own lettering
+                float sign = band(u / 5.5, 0.08, 0.92) * line1(v, 3.25, 4.15) * step(0.25, k);
+                if (sign > 0.001) {
+                  vec2 sq = vec2((fu - 0.08) / 0.84, (v - 3.25) / 0.9); sq.x = mix(sq.x, 1.0 - sq.x, mir);
+                  vec3 sc = texture2D(uSigns, signUV(sid, sq)).rgb, sg = texture2D(uSignGlow, signUV(sid, sq)).rgb;
+                  col = mix(col, sc, sign);
+                  fEmit += sc * sg.r * sign * (0.08 + uNight * 2.0);
+                  fRough = mix(fRough, 0.35, sign);
+                  gH += sign * 0.03;
+                }
                 cellId = vec2(sb, -1.0);
                 below = 0.0; blind = 0.0;
               }
@@ -294,7 +392,9 @@ function facadeMaterial(U) {
             vec3 dl = vec3(dot(vd, Tw), vd.y, dot(vd, -Nw));
             gGl = glass * (1.0 - blind);
             if (gGl > 0.001) {
-              vec3 inside = room(clamp(cellF, 0.0, 1.0), cellSz, dl, cellId + vec2(seed * 7.0, 0.0), seed, lit, office, uNight);
+              vec3 inside = shopCat > -0.5 ? shopRoom(clamp(cellF, 0.0, 1.0), cellSz, dl, cellId + vec2(seed * 7.0, 0.0), shopCat, uNight)
+                                           : room(clamp(cellF, 0.0, 1.0), cellSz, dl, cellId + vec2(seed * 7.0, 0.0), seed, lit, office, uNight);
+              inside *= 1.0 - openSign;
               float ndv = clamp(dot(Nw, -vd), 0.0, 1.0);
               gF = (style == 0 ? 0.16 : 0.05) + (1.0 - (style == 0 ? 0.16 : 0.05)) * pow(1.0 - ndv, 5.0);
               // tinted glass on the towers: the building's own colour, brightened to a tint
