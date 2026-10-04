@@ -41,6 +41,7 @@ import { makeEvents } from "./events.js";
 import { makeJobs } from "./jobs.js";
 import { makeRoadblocks } from "./roadblock.js";
 import { makeCustoms, applyCarMods } from "./customs.js";
+import { makeAct2 } from "./act2.js";
 import { makeExtras, CIRCUITS } from "./extras.js";
 import { createWeather } from "./weather.js";
 import { createMenu } from "./menu.js";
@@ -280,6 +281,7 @@ const combat = makeCombat(scene, {
   sound: (k, v, r) => AudioSys.play(k, v, r), shake: a => { rig.shake = Math.max(rig.shake, a); }, toast: m => hud.toast(m),
   player: () => P.car ? { x: P.car.x, z: P.car.z, y: P.car.y, car: P.car, yaw: P.car.h } : P,
   recoil: k => { rig.shake = Math.max(rig.shake, k * 7); },
+  extraTargets: () => act2.targets(),
   onHit: (kill, head) => { hud.hitMark(kill, head); AudioSys.play("blip", kill ? 0.3 : 0.16, kill ? 0.75 : 1.9); },
 });
 // ---- cars are solid on foot, and they're cover ----
@@ -369,6 +371,16 @@ const roadblocks = makeRoadblocks(scene, {
   sound: (k, v, r) => AudioSys.play(k, v, r), toast: (m, t) => hud.toast(m, t), shake: a => { rig.shake = Math.max(rig.shake, a); },
   paused: () => hud.talking() || state.phase !== "play" || !!interior.inside,
 });
+// Act Two: the Shark's chapters, once the first story's done
+const act2 = makeAct2(scene, {
+  st, P, crime, combat, gangs, crowd, collider, fx,
+  ui: { toast: (m, t) => hud.toast(m, t), banner: (a, b, k, t, c) => hud.banner(a, b, k, t, c), sound: (k, v, r) => AudioSys.play(k, v, r), save: () => writeSave(),
+    earn: n => eco.earn(n), dialogue: (lines, cb) => hud.dialogue(lines, cb), talking: () => hud.talking(), chapter: (n, t) => hud.banner(t, "", "CHAPTER " + n, 3.2, "chapter") },
+  busy: () => crime.S.wanted > 0 || jobs.active() || interior.inside || (gangs.war && gangs.war()) || gangs.showdown(),
+  onStart: () => { if (events.active()) events.cancel(); },
+  crashFx: (v, c, x, z, nx, nz, k) => { damage.crash(v, x, z, nx, nz, k); damage.crash(c, x, z, -nx, -nz, k); },
+  setNight: () => { if (sky.state.night < 0.5 && !sky.state.cycle) sky.set(0.93); },
+});
 const jobs = makeJobs({
   hospital: () => PLACES.hospital,
   focus: focusInfo, traffic, crowd, gangs, crime, combat, fx, collider, st,
@@ -394,7 +406,7 @@ const makePhone = () => createPhone({
 function currentObjective() {
   const o = story.objective();
   if (o && o.main) return o;
-  return (extras && extras.objective()) || heistObjectiveNew() || jobs.objective() || gangs.objective() || events.objective() || o;
+  return (extras && extras.objective()) || heistObjectiveNew() || jobs.objective() || gangs.objective() || act2.objective() || events.objective() || o;
 }
 function heistObjectiveNew() { const h = heistObjective(); return h ? { ...h, r: 5, event: true } : null; }
 const extras = makeExtras(scene, {
@@ -701,8 +713,9 @@ function update(dt) {
       else {
         const wallHit = driveStep(c, inp, dt, collider), wh = c.hit;
         const parkHit = parked.collide(c), ph = parked.lastHit;
-        const blockHit = roadblocks.collide(c), bh = roadblocks.lastHit;
-        impact = Math.max(wallHit, parkHit, blockHit);
+        const blockHit = roadblocks.collide(c), bh = roadblocks.lastHit, missionHit = act2.collide(c);
+        impact = Math.max(wallHit, parkHit, blockHit, missionHit);
+        act2.impact(Math.max(wallHit, parkHit, blockHit, missionHit, c._trafficHit || 0)); c._trafficHit = 0;
         if (blockHit > 4 && bh) { damage.crash(c, bh.x, bh.z, bh.nx, bh.nz, blockHit); damage.crash(bh.car, bh.x, bh.z, -bh.nx, -bh.nz, blockHit * 0.9); if (blockHit > 6) crime.addCrime(1); }
         // on the rims: sparks off the road at speed
         if (c.flat && c.speed > 7 && Math.random() < dt * c.speed * 0.5) { const s = Math.random() < 0.5 ? -1 : 1, o = (c.flatSet.fr && (!c.flatSet.rr || Math.random() < 0.5) ? 1 : -1) * c.spec.len * 0.32; fx.sparks(c.x + Math.sin(c.h) * o + Math.cos(c.h) * s * 0.85, 0.1, c.z + Math.cos(c.h) * o - Math.sin(c.h) * s * 0.85, 2); }
@@ -748,7 +761,7 @@ function update(dt) {
           const d = Math.sqrt(d2) || 1, nx = dx / d, nz = dz / d, rel = c.vx * nx + c.vz * nz;
           // who gives way depends on weight: a bus barely notices a compact, a compact bounces off a bus
           const mt = (carSpec(t.type) && carSpec(t.type).mass) || 1, mp = (c.spec && c.spec.mass) || 1, kb = clamp(2.4 * mt / (mp + mt), 0.35, 1.9);
-          if (rel > 0) { c.vx -= nx * rel * kb; c.vz -= nz * rel * kb; t.stun = 2.5; t.speed = 0;
+          if (rel > 0) { c._trafficHit = Math.max(c._trafficHit || 0, rel); c.vx -= nx * rel * kb; c.vz -= nz * rel * kb; t.stun = 2.5; t.speed = 0;
             if (rel > 4) { const hx = c.x + nx * Math.min(d, 2.2), hz = c.z + nz * Math.min(d, 2.2); damage.crash(c, hx, hz, -nx, -nz, rel); damage.crash(t, hx, hz, nx, nz, rel * 0.9); }
             if (rel > 5) { rig.shake = Math.min(1, rel / 20); AudioSys.play("door", 0.8, 0.5); combat.damageCar(t, rel * 2, "traffic"); combat.damageCar(c, rel * 0.8, "player"); } }
           c.x -= nx * (3 - d) * 0.5; c.z -= nz * (3 - d) * 0.5;
@@ -892,7 +905,7 @@ function update(dt) {
     // whatever shoved you this frame (a cruiser, a blast, a door), you never end up inside a wall
     if (!P.car && !P.swim) { const q = collider.resolve(P.x, P.z, 0.38); if (q.hit) { P.x = q.x; P.z = q.z; } }
     crime.update(dt, time); roadblocks.update(dt, time); combat.update(dt, time); gangs.update(dt);
-    updateHeists(dt, time); events.update(dt); jobs.update(dt); extras.update(dt); life.update(dt);
+    updateHeists(dt, time); events.update(dt); jobs.update(dt); act2.update(dt); extras.update(dt); life.update(dt);
     if (P.car && P.car.boom && !P.car.charred) {           // your ride went up: you're thrown clear, it's a burnt shell
       const c = P.car; c.charred = true;
       c.group.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.color && o.material.color.set(0x1a1816); o.material.metalness = 0.1; o.material.roughness = 1; } });
@@ -1182,7 +1195,7 @@ requestAnimationFrame(frame);
 
 // debug / test hooks
 globalThis.__pc2 = {
-  THREE, scene, camera, customs, applyCarMods, coverState: () => cov, coverMult, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, hijack, P, cars, state, rig, I,
+  THREE, scene, camera, customs, applyCarMods, act2, coverState: () => cov, coverMult, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, hijack, P, cars, state, rig, I,
   interior, props, skids, animals, damage, radio, roadblocks, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },

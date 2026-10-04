@@ -1,6 +1,6 @@
 // Palm City — story text. Ported word-for-word from the original game.
 export const STORY = {
-  who: { marco: "Marco", rosa: "Rosa", vince: "Vince Sterling", narrator: "Palm City", you: "You" },
+  who: { marco: "Marco", rosa: "Rosa", vince: "Vince Sterling", vic: "Vic Moreno", ruiz: "Det. Ruiz", narrator: "Palm City", you: "You" },
   biz: {
     dogs:   { name: "Sunny Dogs cart" },
     wash:   { name: "Marina Car Wash" },
