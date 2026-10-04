@@ -9,6 +9,10 @@ import { driveStep, syncCar } from "./play.js";
 import { buildCraft } from "./craft.js";
 
 export const COP_SIGHT = 90;
+// a searching cruiser's view: a cone ahead of it, plus a small ring all round (it hears you)
+export const CONE_R = 48, CONE_HALF = 0.62, CONE_NEAR = 11;
+// how long a search lasts before they give up: longer the hotter you are
+export const searchTime = w => 9 + w * 4;
 const MAX_UNITS = 6;
 
 export function makeCruiser(scene) {
@@ -86,6 +90,7 @@ export function makeCrime(scene, g) {
   function addCrime(n = 1) {
     if (g.noHeat && g.noHeat()) return;
     S.wantedCD = 14;
+    S.fixT = 7;                                         // dispatch has your location for a few seconds after a crime
     if (S.crimeCD > 0 && n <= 1) return;
     S.crimeCD = 1.5;
     const before = S.wanted;
@@ -102,7 +107,7 @@ export function makeCrime(scene, g) {
     if (S.health <= 0) wasted();
   }
   function reset() {
-    S.wanted = 0; S.wantedCD = 0; S.crimeCD = 0; S.searching = false; S.searchT = 0; S.onYou = false; S.bustT = 0;
+    S.wanted = 0; S.wantedCD = 0; S.crimeCD = 0; S.fixT = 0; S.searching = false; S.searchT = 0; S.onYou = false; S.bustT = 0;
     for (const u of units) { u.active = false; u.group.visible = false; }
     heliOff();
   }
@@ -183,18 +188,124 @@ export function makeCrime(scene, g) {
   // route along the road grid: head down your road to the cross street nearest the target, then turn
   function routeTarget(u, tx, tz) {
     const d = Math.hypot(tx - u.x, tz - u.z);
-    if (d < 34) return [tx, tz];
+    if (d < 34) return [tx, tz, false];
     const ri = nearestRoad(u.x), rj = nearestRoad(u.z);
     const onNS = Math.abs(u.x - roadC(ri)) < ROAD * 0.6, onEW = Math.abs(u.z - roadC(rj)) < ROAD * 0.6;
     const ti = nearestRoad(tx), tj = nearestRoad(tz);
     if (onNS && onEW) {                                // in a junction: pick the axis with more to go
-      return Math.abs(tx - u.x) > Math.abs(tz - u.z) ? [roadC(ti), roadC(rj)] : [roadC(ri), roadC(tj)];
+      return Math.abs(tx - u.x) > Math.abs(tz - u.z) ? [roadC(ti), roadC(rj), true] : [roadC(ri), roadC(tj), true];
     }
-    if (onNS) return [roadC(ri), ri === ti ? tz : roadC(tj)];
-    if (onEW) return [rj === tj ? tx : roadC(ti), roadC(rj)];
-    return [roadC(ri), roadC(rj)];                     // off the grid: get back onto the nearest junction
+    if (onNS) return ri === ti ? [roadC(ri), tz, false] : [roadC(ri), roadC(tj), true];
+    if (onEW) return rj === tj ? [tx, roadC(rj), false] : [roadC(ti), roadC(rj), true];
+    return [roadC(ri), roadC(rj), true];               // off the grid: get back onto the nearest junction
   }
   const aiInp = { mx: 0, mz: 0, sprintHeld: false, handbrakeHeld: false };
+  const wrap = a => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
+  // what's in the lane ahead of a cruiser: the gap to it, which side it's on, and how fast it's going
+  function ahead(u, others) {
+    const fx = Math.sin(u.h), fz = Math.cos(u.h);
+    let gap = 99, side = 0, sp = 0;
+    for (const o of others) {
+      if (o === u) continue;
+      const dx = o.x - u.x, dz = o.z - u.z; if (dx * dx + dz * dz > 30 * 30) continue;
+      const al = dx * fx + dz * fz, lat = dx * fz - dz * fx;
+      if (al > 0 && al < gap && Math.abs(lat) < 2.6) { gap = al; side = lat; sp = o.speed || 0; }
+    }
+    return { gap, side, sp };
+  }
+  // throttle/brake toward a wanted forward speed (never reverses unless told to)
+  function speedTo(lon, want) {
+    const e = want - lon;
+    if (e > 0.6) return clamp(e * 0.35, 0.25, 1);
+    if (e < -1.2) return lon > 0.6 ? clamp(e * 0.22, -1, -0.3) : 0;
+    return want > 0.5 ? 0.12 : 0;
+  }
+
+  // ---- one cruiser at the wheel ----
+  // role: "lead" tails right behind you (and rams), "flank" sits off a rear quarter (and PITs),
+  // "trail" hangs back; with no eyes on you they drive like cops on a call: right lane, corners
+  // taken sensibly, around traffic rather than through it.
+  function driveUnit(u, dt, ctx) {
+    const { F, P, seen, heat, side, obstacles } = ctx; let role = ctx.role;
+    const fxU = Math.sin(u.h), fzU = Math.cos(u.h);
+    const lon = u.vx * fxU + u.vz * fzU;
+    const d = Math.hypot(P.x - u.x, P.z - u.z);
+    let aimX, aimZ, want, close = false;
+    // straight at you only with a clear run (your street, open ground); otherwise round by the roads
+    u.lineCD = (u.lineCD || 0) - dt;
+    if (u.lineCD <= 0) { u.lineCD = 0.25; u.line = d < 140 && los(u.x, u.z, P.x, P.z, 140); }
+    if (role && seen && !u.line && !u.tank) role = null;
+    if (role && seen && F.car) {
+      // ---- the chase: line up BEHIND the car, on its path, and match its speed ----
+      close = true;
+      const spP = Math.hypot(F.vx || 0, F.vz || 0);
+      const fx = spP > 2 ? F.vx / spP : Math.sin(F.h || 0), fz = spP > 2 ? F.vz / spP : Math.cos(F.h || 0);
+      const rx = fz, rz = -fx;
+      u.ramT = (u.ramT || 0) + dt;
+      let gap = clamp(6.5 + spP * 0.22, 7, 13), off = 0;
+      if (role === "lead" && heat >= 2 && u.ramT % 9 > 6.5) gap = -0.5;                    // every so often: a shove in the bumper
+      if (role === "flank") { gap += 3; off = side * 2.9; if (heat >= 3 && u.ramT % 8 > 5.5) { gap = 1.2; off = side * 1.6; } }   // ...and a PIT on the rear quarter
+      if (role === "trail") gap = 20 + (u.slot || 0) * 6;
+      const tx = P.x - fx * gap + rx * off, tz = P.z - fz * gap + rz * off;                   // its slot, in your wake
+      const along = (u.x - P.x) * fx + (u.z - P.z) * fz;                                     // + : the cruiser is out in front of you
+      const facing = fxU * fx + fzU * fz;
+      if (along > 3 && facing > 0.3) {
+        // got ahead of you going the same way: ease off and let you come past (a brake check, GTA-style)
+        aimX = u.x + fxU * 20; aimZ = u.z + fzU * 20; want = Math.max(0, spP - 7);
+      } else {
+        const look = 5 + spP * 0.45;                                                         // aim down your path, not at your bumper
+        aimX = tx + fx * look; aimZ = tz + fz * look;
+        const e = (tx - u.x) * fx + (tz - u.z) * fz;                                         // how far short of its slot it is
+        want = spP < 2 ? clamp(Math.hypot(tx - u.x, tz - u.z) * 0.7, 0, 16) : clamp(spP + clamp(e * 0.8, -9, 16), 0, u.spec.top);
+      }
+    } else if (role && seen && !F.car) {
+      // ---- on foot: come at you and stop alongside (officers don't do donuts round you) ----
+      close = true;
+      aimX = P.x; aimZ = P.z;
+      want = d < 5 ? 0 : clamp((d - 4.5) * 0.9, 3, 22);
+    } else {
+      // ---- responding / searching: on the roads, right lane, sensible corners ----
+      const [rx, rz, junction] = routeTarget(u, ctx.tx, ctx.tz);
+      const ux = rx - u.x, uz = rz - u.z, ul = Math.hypot(ux, uz) || 1;
+      const lane = ctx.searching ? 4.6 : 2.0;
+      aimX = rx - uz / ul * lane; aimZ = rz + ux / ul * lane;
+      const turn = Math.abs(wrap(Math.atan2(aimX - u.x, aimZ - u.z) - u.h));
+      const cruise = ctx.searching ? 12 : u.tank ? 18 : d > 70 ? 40 : 27;                   // code 3 to get there, steadier once close
+      want = cruise * (1 - clamp(turn / 1.1, 0, 0.62));
+      if (junction && ul < 32) want = Math.min(want, 9 + ul * 0.55);                          // brake for the corner
+      if (!junction && ul < 20 && d < 30) want = Math.min(want, 6 + ul * 0.6);                 // pulling up near you
+    }
+    // traffic and other cruisers in the way: hang back, or swing out and go round
+    const A = ahead(u, obstacles);
+    if (A.gap < 24 && lon > A.sp - 1) {
+      const pass = A.gap < 16 && A.sp < 6 && !u.tank;
+      if (pass) { const k = (A.side >= 0 ? -1 : 1) * 3.4; aimX += fzU * k; aimZ += -fxU * k; }   // swing out round it
+      if (!pass || A.gap < 7) want = Math.min(want, Math.max(A.sp, (A.gap - 5) * (close ? 1.6 : 1.2)));
+    }
+    if (g.paused()) want = 0;
+    let dh = wrap(Math.atan2(aimX - u.x, aimZ - u.z) - u.h);
+    // facing the wrong way: brake, then a proper three-point turn (reverse with the wheel the OTHER
+    // way — that's what turns a car round in reverse — then pull forward on full lock)
+    if (!u.turning && Math.abs(dh) > 1.95 && (close || d > 12)) { u.turning = true; u.turnT = 0; }
+    if (u.turning) {
+      u.turnT += dt;
+      if (lon > 2.5 && u.turnT < 2) { aiInp.mz = -1; aiInp.mx = 0; }
+      else if (Math.abs(dh) > 1.0 && u.turnT < 3.2) { aiInp.mz = -0.8; aiInp.mx = Math.sign(dh); }
+      else { aiInp.mz = 0.7; aiInp.mx = clamp(-dh * 2.5, -1, 1); if (Math.abs(dh) < 0.6 || u.turnT > 4.5) u.turning = false; }
+      aiInp.handbrakeHeld = false;
+    } else {
+      aiInp.mx = clamp(-dh * 2.2, -1, 1);
+      aiInp.mz = speedTo(lon, want);
+      aiInp.handbrakeHeld = close && Math.abs(dh) > 1.1 && lon > 14;
+    }
+    // wedged against a wall or a car: back out, swinging the nose the other way, then try again
+    if (u.reverseT > 0) { u.reverseT -= dt; aiInp.mz = u.unstick; aiInp.mx = u.unstick < 0 ? Math.sign(dh) : clamp(-dh * 2, -1, 1); aiInp.handbrakeHeld = false; }
+    else if (aiInp.mz > 0.3 && Math.abs(u.speed) < 1.2 && want > 2 && !u.turning) { u.stuckT = (u.stuckT || 0) + dt; if (u.stuckT > 1.3) { u.stuckT = 0; u.reverseT = 1.1; u.unstick = -1; } }
+    else u.stuckT = 0;
+    driveStep(u, aiInp, dt, g.collider); driveLamps(u, aiInp, dt);
+    syncCar(u);
+    return d;
+  }
 
   function update(dt, time) {
     if (S.crimeCD > 0) S.crimeCD -= dt;
@@ -204,19 +315,43 @@ export function makeCrime(scene, g) {
     const F = g.focus(), px = F.x, pz = F.z;
     const heat = S.wanted;
     // ---- sight: resolved before anyone moves ----
+    // in a chase they've got eyes on you all round; once they've lost you, each cruiser only sees
+    // down its own cone (the cones on your minimap) — or you, right next to it
     let seen = false;
     if (heat > 0 && !(g.inside && g.inside())) {
       for (const u of units) {
         if (!u.active) continue;
-        if ((u.x - px) ** 2 + (u.z - pz) ** 2 > COP_SIGHT * COP_SIGHT) { u.sees = false; u.losCD = 0; continue; }
+        const dx = px - u.x, dz = pz - u.z, d2 = dx * dx + dz * dz;
+        if (d2 > COP_SIGHT * COP_SIGHT) { u.sees = false; u.losCD = 0; continue; }
         u.losCD -= dt;
-        if (u.losCD <= 0) { u.losCD = 0.13 + Math.random() * 0.12; u.sees = los(u.x, u.z, px, pz, COP_SIGHT); }
+        if (u.losCD <= 0) {
+          u.losCD = 0.13 + Math.random() * 0.12;
+          let can = true;
+          if (S.searching) {
+            const d = Math.sqrt(d2), off = Math.abs(wrap(Math.atan2(dx, dz) - u.h));
+            can = d < CONE_NEAR || (d < CONE_R && off < CONE_HALF) || (F.car && F.speed > 18 && d < 30);   // a car flying past gets noticed
+          }
+          u.sees = can && los(u.x, u.z, px, pz, COP_SIGHT);
+          if (u.sees && S.searching) { u.spotted = 1.5; }
+        }
         if (u.sees) seen = true;
       }
     }
     if (updateHeli(dt, time, px, pz, heat, seen)) seen = true;
-    if (seen) { belief.x = px; belief.z = pz; S.searchT = 0; } else S.searchT += dt;
-    S.searching = heat > 0 && !seen && S.searchT > 1.3;
+    if (seen && S.searching) { g.toast("🚨 Spotted! They're back on you"); g.sound("blip", 0.9); S.wantedCD = searchTime(heat); }
+    if (S.fixT > 0) S.fixT -= dt;
+    const known = seen || S.fixT > 0;                   // eyes on you, or the call just came in
+    if (known) { belief.x = px; belief.z = pz; S.searchT = 0; } else S.searchT += dt;
+    S.searching = heat > 0 && !known && S.searchT > 1.3;
+    // ---- who does what: the nearest cruisers with eyes on you get the chase jobs ----
+    const chasing = units.filter(u => u.active && !u.tank && !S.searching && (u.x - px) ** 2 + (u.z - pz) ** 2 < 160 * 160)
+      .sort((a, b) => ((a.x - px) ** 2 + (a.z - pz) ** 2) - ((b.x - px) ** 2 + (b.z - pz) ** 2));
+    const fxP = F.car ? Math.sin(F.h || 0) : 0, fzP = F.car ? Math.cos(F.h || 0) : 0;
+    chasing.forEach((u, k) => {
+      u.role = k === 0 ? "lead" : k === 1 ? "flank" : "trail"; u.slot = k - 2;
+      if (u.role === "flank" && !u.side) u.side = ((u.x - px) * fzP - (u.z - pz) * fxP) >= 0 ? 1 : -1;
+    });
+    const obstacles = (g.obstacles ? g.obstacles(px, pz) : []).concat(units.filter(u => u.active));
     let grabbing = false;
     for (let i = 0; i < units.length; i++) {
       const u = units[i];
@@ -224,49 +359,45 @@ export function makeCrime(scene, g) {
       if (want && !u.active) {
         // new units roll in toward where dispatch THINKS you are, from out of sight, on a road
         const a = Math.random() * Math.PI * 2;
-        const bx = seen ? px : belief.x, bz = seen ? pz : belief.z;
-        const sx = clamp(bx + Math.cos(a) * 110, -HALF + 10, HALF - 10), sz = clamp(bz + Math.sin(a) * 110, -HALF + 10, HALF - 10);
+        const bx = known ? px : belief.x, bz = known ? pz : belief.z;
+        const sx = clamp(bx + Math.cos(a) * 130, -HALF + 10, HALF - 10), sz = clamp(bz + Math.sin(a) * 130, -HALF + 10, HALF - 10);
         if (Math.random() < 0.5) { u.x = roadC(nearestRoad(sx)); u.z = sz; } else { u.x = sx; u.z = roadC(nearestRoad(sz)); }
         u.h = Math.atan2(bx - u.x, bz - u.z); u.vx = u.vz = 0; u.speed = 0; u.active = true; u.reverseT = 0; u.stuckT = 0; u.boom = false; u.charred = false; u.sees = false; u.sx = undefined; u.hp = u.tank ? 700 : 100;
+        u.turning = false; u.role = null; u.side = 0; u.ramT = Math.random() * 6; u.spotted = 0;
         if (u.tank) g.toast("⚠️ SWAT tank deployed!");
         u.group.visible = true;
       } else if (!want && u.active) { u.active = false; u.group.visible = false; }
       if (!u.active) continue;
+      if (!chasing.includes(u) && !u.tank) { u.role = null; u.side = 0; }
+      if (u.spotted > 0) u.spotted -= dt;
       // where to go: you (if seen), your last known position, or a sweep point around it
       let tx = belief.x, tz = belief.z;
       if (S.searching) {
-        const ring = Math.min(80, 12 + S.searchT * 5.5);
-        if (u.sx === undefined || (u.x - u.sx) ** 2 + (u.z - u.sz) ** 2 < 100) {
+        const ring = Math.min(90, 15 + S.searchT * 4);
+        if (u.sx === undefined || (u.x - u.sx) ** 2 + (u.z - u.sz) ** 2 < 144) {
           const a = Math.random() * Math.PI * 2, r = ring * (0.3 + Math.random() * 0.7);
           u.sx = clamp(belief.x + Math.cos(a) * r, -HALF + 8, HALF - 8); u.sz = clamp(belief.z + Math.sin(a) * r, -HALF + 8, HALF - 8);
         }
         tx = u.sx; tz = u.sz;
       } else u.sx = undefined;
-      const [rx, rz] = routeTarget(u, tx, tz);
-      const want_h = Math.atan2(rx - u.x, rz - u.z);
-      let dh = want_h - u.h; while (dh > Math.PI) dh -= Math.PI * 2; while (dh < -Math.PI) dh += Math.PI * 2;
-      const d = Math.hypot(px - u.x, pz - u.z);
-      aiInp.mx = clamp(-dh * 2.2, -1, 1);
-      const cruise = g.paused() ? 0 : S.searching ? 0.55 : 1;
-      aiInp.mz = Math.abs(dh) > 1.8 ? -0.4 : cruise * (d < 8 && !F.car ? 0.2 : 1);
-      // you're on foot and they've got you in sight: pull up beside you rather than through you
-      // (brake on the forward speed only: holding "brake" once stopped would mean reversing)
-      const lon = u.vx * Math.sin(u.h) + u.vz * Math.cos(u.h);
-      if (!F.car && !S.searching && d < 16 && Math.abs(dh) < 1.8) aiInp.mz = d < 4.5 ? (lon > 1 ? -1 : 0) : (lon > 3 + d * 0.55 ? -0.6 : 0.35);
-      aiInp.handbrakeHeld = Math.abs(dh) > 0.9 && u.speed > 12;
-      // wedged against a wall or a car: back out, swinging the nose the other way, then try again
-      // (either way: one trying to back out of a tight spot can wedge too — then it pulls forward)
-      if (u.reverseT > 0) { u.reverseT -= dt; aiInp.mz = u.unstick; aiInp.mx = -aiInp.mx; aiInp.handbrakeHeld = false; }
-      else if (Math.abs(aiInp.mz) > 0.3 && u.speed < 1.5 && d > 6) { u.stuckT = (u.stuckT || 0) + dt; if (u.stuckT > 1.2) { u.stuckT = 0; u.reverseT = 1.1; u.unstick = aiInp.mz > 0 ? -1 : 1; } }
-      else u.stuckT = 0;
-      driveStep(u, aiInp, dt, g.collider); driveLamps(u, aiInp, dt);
-      syncCar(u);
+      const role = u.tank ? (known ? "lead" : null) : u.role;
+      const d = driveUnit(u, dt, { F, P: { x: px, z: pz }, seen: known && !S.searching, heat, role, side: u.side || 1, obstacles, tx, tz, searching: S.searching });
       const blink = Math.floor(time * 7) % 2;
       u.barMatR.color.setRGB(blink ? 6 : 0.4, 0.1, 0.1); u.barMatB.color.setRGB(0.1, 0.2, blink ? 0.4 : 7);
-      // PIT: a cruiser hitting your car hurts
-      if (F.car && d < 3.4 && u.speed > 5 && !u.pitCD) { u.pitCD = 1; hurt(18); g.shake(0.6); g.sound("door", 0.9, 0.5); }
+      // contact: a cruiser hitting your car hurts — and from the side, it spins you (the PIT)
+      if (F.car && d < 3.6 && u.speed > 4 && !u.pitCD) {
+        u.pitCD = 1.2; hurt(u.role === "flank" ? 12 : 9); g.shake(0.6); g.sound("door", 0.9, 0.5);
+        const C = F.ref;
+        if (C && u.role === "flank" && heat >= 3) {
+          const lat = (u.x - C.x) * Math.cos(C.h) - (u.z - C.z) * Math.sin(C.h);
+          C.yawRate = (C.yawRate || 0) + (lat > 0 ? 1 : -1) * 3.2; C.vx *= 0.85; C.vz *= 0.85;
+        }
+      }
       if (u.pitCD) u.pitCD = Math.max(0, u.pitCD - dt);
-      if (!F.car && d < 6 && !S.searching && u.speed < 4) grabbing = true;
+      if (!S.searching && u.speed < 4 && u.sees) {
+        if (!F.car && d < 6) grabbing = true;
+        if (F.car && d < 7.5 && Math.abs(F.speed) < 1.2) grabbing = true;            // stopped with a cruiser on you: out of the car
+      }
       if (u.tank) {                                     // the turret tracks you; the cannon fires shells
         u.turret.rotation.y = lerpAngle(u.turret.rotation.y, Math.atan2(px - u.x, pz - u.z) - u.h, Math.min(1, dt * 2));
         u.shootCD -= dt;
@@ -292,17 +423,20 @@ export function makeCrime(scene, g) {
         }
       }
     }
-    // on foot, cornered by a stopped cruiser for a moment: BUSTED
-    if (grabbing) { S.bustT += dt; if (S.bustT > 1.4) { busted(); return; } } else S.bustT = Math.max(0, S.bustT - dt * 2);
-    // heat only cools while they've genuinely lost you
+    // cornered by a stopped cruiser for a moment (on foot, or sat still in a car): BUSTED
+    if (grabbing) { S.bustT += dt; if (S.bustT > (F.car ? 2.2 : 1.4)) { busted(); return; } } else S.bustT = Math.max(0, S.bustT - dt * 2);
+    // heat only cools while they've genuinely lost you: the stars flash while they search, and if
+    // the search runs out without anyone spotting you, every star goes at once (GTA rules)
     if (S.wanted > 0) {
-      if (!S.searching) { S.wantedCD = Math.max(S.wantedCD, 6); S.onYou = true; }
+      if (!S.searching) { S.wantedCD = searchTime(S.wanted); S.onYou = true; }
       else {
-        if (S.onYou) { S.onYou = false; g.toast("🔍 Out of sight — they're sweeping the area. Stay hidden!"); }
+        if (S.onYou) { S.onYou = false; g.toast("🔍 Out of sight — stay out of their cones!"); }
         S.wantedCD -= dt * (g.heatMult ? g.heatMult() : 1);
-        if (S.wantedCD <= 0) { S.wanted = Math.max(0, S.wanted - 1); S.wantedCD = 8; if (S.wanted === 0) { g.toast("You lost the cops"); g.sound("jingle", 0.5); } }
+        if (S.wantedCD <= 0) { S.wanted = 0; S.searching = false; g.toast("You lost the cops"); g.sound("jingle", 0.5); }
       }
     } else S.searching = false;
   }
-  return { S, units, heli, hitHeli, belief, addCrime, hurt, reset, update, los: (x, z, tx, tz) => los(x, z, tx, tz, COP_SIGHT), busted, wasted };
+  // for the minimap: every cruiser out there, where it's pointing, and whether it's searching with a cone
+  function radar() { return units.filter(u => u.active).map(u => ({ x: u.x, z: u.z, h: u.h, tank: !!u.tank, cone: S.searching, seen: u.sees })); }
+  return { S, units, heli, hitHeli, belief, addCrime, hurt, reset, update, radar, los: (x, z, tx, tz) => los(x, z, tx, tz, COP_SIGHT), busted, wasted };
 }
