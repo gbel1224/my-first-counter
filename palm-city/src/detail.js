@@ -100,7 +100,7 @@ export function buildFacadeDetail(scene, plan) {
         if (shopFloor && fy + G.wy0 * G.fh < b.y + 4.4) continue;     // ground floor is shops
         for (let k = 0; k < bays; k++) {
           const [x, z] = along((k + 0.5) * G.bay);
-          if (b.style !== STYLE.CONCRETE && r() < (b.style === STYLE.BRICK ? 0.22 : 0.14)) ac.push([x, fy + G.wy0 * G.fh - 0.42, z, rot]);
+          if (b.style !== STYLE.CONCRETE && r() < (b.style === STYLE.BRICK ? 0.22 : b.style === STYLE.HOUSE ? 0 : 0.14)) ac.push([x, fy + G.wy0 * G.fh - 0.42, z, rot]);
           if (hasBalc && fl >= 1 && k % 2 === 0 && r() < 0.8) bal.push([x, fy + 0.05, z, rot]);
         }
         if (f === feFace && fl >= 1 && width > 12) {

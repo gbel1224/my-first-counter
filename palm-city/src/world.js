@@ -60,7 +60,7 @@ export function district(i, j) {
 // ---------------------------------------------------------------------------------------------
 // Lots & buildings. Each block is split into lots; each lot gets a building (or a pair: a podium
 // with a tower set back on top). Everything is an axis-aligned box so collision stays exact.
-export const STYLE = { GLASS: 0, PASTEL: 1, BRICK: 2, HOUSE: 3, CONCRETE: 4 };
+export const STYLE = { GLASS: 0, PASTEL: 1, BRICK: 2, HOUSE: 3, CONCRETE: 4, GARAGE: 5 };
 
 // sun-bleached stucco: off-whites, sand, faded salmon / mint / butter / sky — nothing candy-bright
 const PASTELS = [0xe4ddcf, 0xd8cbb4, 0xcfb9a4, 0xd9b3a0, 0xb9c9bb, 0xd8cb9c, 0xa9b8c2, 0xe6e0d6, 0xc7b8a6, 0xbfa58c, 0xd3c4b0];
@@ -79,6 +79,8 @@ export function buildCity(seed = 0x9A1C17) {
   const lamps = [];       // [x, z, rotY]
   const benches = [];     // [x, z, rotY]
 
+  const homeLots = [];    // suburban lots (see the suburb blocks)
+  const lr = mulberry32(seed ^ 0x10755);   // own stream: the lots don't reshuffle the rest of the city
   const add = (x, z, w, d, h, style, color, y = 0) => {
     buildings.push({ x, z, w, d, h, y, style, color, seed: r(), roof: r() });
   };
@@ -124,12 +126,43 @@ export function buildCity(seed = 0x9A1C17) {
       continue;
     }
     if (kind === "suburb") {
-      // a 2x2 of detached houses on lawns with a tree each
+      // four lots, each a detached house facing its street (north or south) with an attached
+      // garage on the inside, a driveway out to the kerb, a path to the front door, a palm in the
+      // front yard and a fenced back yard (often with a pool)
       for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) {
-        const cx = ix0 + iw * (0.25 + a * 0.5), cz = iz0 + iw * (0.25 + b * 0.5);
-        const w = 11 + r() * 4, d = 9 + r() * 4;
-        add(cx, cz, w, d, 5.5 + r() * 3.5, STYLE.HOUSE, pick(HOUSE));
-        trees.push([cx + (a ? 8 : -8), cz + (b ? 7 : -7), 0.8 + r() * 0.4]);
+        const qx = ix0 + iw * (0.25 + a * 0.5);
+        const w = 9.5 + r() * 2.5, d = 8.5 + r() * 3, two = r() < 0.5, h = two ? 6.6 : 3.6;
+        const fz = b ? 1 : -1, sx = a ? -1 : 1;                  // facing, and which side the garage is on
+        const zE = b ? iz0 + iw : iz0, zB = iz0 + iw / 2;       // the lot's front and back lines
+        const gw = 6.2, gd = 6.8, W = w + gw;
+        const zf = zE - fz * 6.5, hz = zf - fz * d / 2, hx = qx - sx * gw / 2, gx = qx + sx * w / 2, gz = zf - fz * gd / 2;
+        const color = pick(HOUSE);
+        add(hx, hz, w, d, h, STYLE.HOUSE, color);
+        const house = buildings[buildings.length - 1];
+        buildings.push({ x: gx, z: gz, w: gw, d: gd, h: 3.1, y: 0, style: STYLE.GARAGE, color, seed: lr(), roof: 10 + (fz > 0 ? 0 : 1) });
+        const garage = buildings[buildings.length - 1];
+        // the front door sits between two window bays, as near the middle as the bays allow
+        const bays = Math.max(1, Math.round(w / 2 / 4.2));
+        const doorX = hx - w / 2 + Math.min(bays, Math.floor((w - 1.2) / 4.2)) * 4.2;
+        const roofKind = lr() < 0.45 ? 0 : lr() < 0.75 ? 1 : 2;   // barrel tile, shingle, standing-seam metal
+        const lot = {
+          qx, zE, zB, fz, sx, house, garage, doorX, two, roofKind, hip: lr() < 0.7,
+          trim: lr() < 0.75 ? 0xf2f0ea : [0x3a4a5a, 0x5a3a2a, 0x2a4a3a][(lr() * 3) | 0],
+          drive: [gx - 2.9, Math.min(zf, zE), gx + 2.9, Math.max(zf, zE)],
+          path: [doorX - 0.65, Math.min(zf + fz * 1.6, zE), doorX + 0.65, Math.max(zf + fz * 1.6, zE)],
+          porch: [doorX - 1.3, Math.min(zf, zf + fz * 1.6), doorX + 1.3, Math.max(zf, zf + fz * 1.6)],
+          front: lr(),                                            // picket fence / hedge / open lawn
+          chimney: two && lr() < 0.3, solar: lr() < 0.25, car: lr() < 0.6,
+        };
+        // a pool in the back yard when there's room for one
+        const backD = Math.abs(zB - (hz - fz * d / 2));
+        if (backD > 6.3 && lr() < 0.65) {
+          const pz = (hz - fz * d / 2) - fz * (backD / 2 + 0.2), px = qx + (lr() - 0.5) * 3;
+          lot.pool = [px - 3.3, pz - 1.6, px + 3.3, pz + 1.6];
+          lot.deck = [px - 4.6, pz - 2.7, px + 4.6, pz + 2.7];
+        }
+        homeLots.push(lot);
+        trees.push([qx - sx * (W / 2 - 1.2), zE - fz * 3.0, 0.8 + r() * 0.4]);
       }
       continue;
     }
@@ -198,10 +231,20 @@ export function buildCity(seed = 0x9A1C17) {
       }
     }
   }
+  // nothing grows on the driveway, the path, the porch or the pool deck
+  const hard = [];
+  for (const L of homeLots) { hard.push(L.drive, L.path, L.porch); if (L.deck) hard.push(L.deck); }
+  const clear = ([x, z]) => !hard.some(([a0, b0, a1, b1]) => x > a0 - 0.8 && x < a1 + 0.8 && z > b0 - 0.8 && z < b1 + 0.8);
+  for (let k = shrubs.length - 1; k >= 0; k--) if (!clear(shrubs[k])) shrubs.splice(k, 1);
+  // a clipped hedge along the front of some lots
+  for (const L of homeLots) if (L.front > 0.38 && L.front < 0.72) {
+    const x0 = L.qx - BLOCK / 4 + WALK / 2 + 0.6, x1 = L.qx + BLOCK / 4 - WALK / 2 - 0.6, z = L.zE - L.fz * 0.7;
+    for (let x = x0; x < x1; x += 1.5) if (clear([x, z])) shrubs.push([x, z, 0.75 + sr() * 0.15, "small"]);
+  }
   for (const bl of blocks) if (bl.kind === "park") {
     for (let k = 0; k < 30; k++) shrubs.push([bl.x0 + WALK + 2 + sr() * (BLOCK - WALK * 2 - 4), bl.z0 + WALK + 2 + sr() * (BLOCK - WALK * 2 - 4), 0.8 + sr() * 0.8]);
   }
-  return { buildings, blocks, palms, trees, lamps, benches, shrubs };
+  return { buildings, blocks, palms, trees, lamps, benches, shrubs, lots: homeLots };
 }
 
 // ---------------------------------------------------------------------------------------------
