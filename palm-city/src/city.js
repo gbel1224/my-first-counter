@@ -591,12 +591,45 @@ function groundMaterial(U) {
           vec3 col;
           float n1 = vnoise(p * 3.1), n2 = vnoise(p * 0.35), n3 = vnoise(p * 0.07);
           if (p.y > HALF + 2.0) {
-            // beach: warm sand, dune ripples, darker wet sand toward the waterline
-            float rip = sin(p.x * 0.9 + vnoise(p * 0.3) * 6.0) * 0.5 + 0.5;
-            col = mix(vec3(0.86, 0.74, 0.55), vec3(0.93, 0.83, 0.64), n2) * (0.94 + rip * 0.05 + n1 * 0.05);
-            float wet = smoothstep(${(HALF + 36).toFixed(1)}, ${(HALF + 46).toFixed(1)}, p.y);
-            col = mix(col, vec3(0.55, 0.45, 0.33), wet);
-            gRough = mix(0.95, 0.35, wet);
+            // the beach. Dry sand: pale, fine grain, wind ripples, the odd shell; a tide line of dried
+            // seaweed; then the wet sand the waves keep soaking, dark and glossy; and the swash itself, a
+            // sheet of water with a lacy foam edge running up the sand and sliding back, wave after wave
+            // (the same cycle as the sea's breakers)
+            float shoreZ = ${(HALF + 44).toFixed(1)};
+            float sx = p.x;
+            float far = clamp(length(vWP - cameraPosition) / 50.0, 0.0, 1.0);
+            float grain = mix(h12(floor(p * 55.0)) * 0.5 + vnoise(p * 18.0) * 0.5, 0.5, far);
+            float rip = sin(p.x * 1.7 + p.y * 0.35 + vnoise(p * 0.4) * 5.0) * 0.5 + 0.5;
+            float dune = vnoise(p * 0.05);
+            col = mix(vec3(0.44, 0.37, 0.27), vec3(0.53, 0.46, 0.34), n2 * 0.6 + dune * 0.4);   // (linear albedo: real dry sand)
+            col *= 0.9 + grain * 0.14 + rip * 0.05 * smoothstep(${(HALF + 36).toFixed(1)}, ${(HALF + 10).toFixed(1)}, p.y);
+            // footprints and scuffs where people walk, nearer the promenade
+            col *= 1.0 - smoothstep(0.6, 0.8, vnoise(p * vec2(7.0, 4.0))) * 0.07 * (1.0 - far) * smoothstep(${(HALF + 38).toFixed(1)}, ${(HALF + 14).toFixed(1)}, p.y);
+            // shells and pebbles
+            vec2 sq = p * 2.2, si = floor(sq); float sh = step(0.985, h12(si + 3.0)) * (1.0 - smoothstep(0.05, 0.14, length(fract(sq) - 0.5)));
+            col = mix(col, mix(vec3(0.95, 0.9, 0.84), vec3(0.6, 0.5, 0.42), h12(si)), sh * (1.0 - far));
+            gRough = 0.95;
+            // the swash: a wave runs up (fast), stops, slides back (slower); each stretch of beach a little different
+            float P = 7.854, ph = fract(uTime / P + vnoise(vec2(sx * 0.02, 0.0)) * 0.25);
+            float run = ph < 0.35 ? smoothstep(0.0, 0.35, ph) : 1.0 - smoothstep(0.35, 1.0, ph);
+            float reach = 4.5 + 3.5 * vnoise(vec2(sx * 0.05, floor(uTime / P)));
+            float edge = shoreZ - reach * run + (vnoise(vec2(sx * 0.6, uTime * 0.2)) - 0.5) * 1.2;
+            float maxEdge = shoreZ - 8.5;
+            // wet sand: soaked below the highest reach, drying toward land; the tide line just above it
+            float wet = smoothstep(maxEdge - 2.5, maxEdge + 1.5, p.y);
+            float tide = (1.0 - smoothstep(0.0, 0.9, abs(p.y - (maxEdge - 3.0) - vnoise(vec2(sx * 0.15, 1.0)) * 1.5))) * smoothstep(0.45, 0.7, vnoise(p * vec2(1.4, 3.0)));
+            col = mix(col, vec3(0.3, 0.25, 0.16) * (0.8 + grain * 0.4), tide * 0.7 * (1.0 - far));
+            col = mix(col, vec3(0.2, 0.165, 0.11) * (0.9 + grain * 0.15), wet * 0.9);
+            gRough = mix(gRough, 0.45, wet);
+            // under the swash: a thin sheet of water (dark, mirror-smooth) with foam lace at its front
+            float film = smoothstep(edge - 0.15, edge + 0.35, p.y);
+            float lace = (1.0 - smoothstep(0.0, 0.55 + 0.4 * vnoise(vec2(sx * 2.0, uTime)), abs(p.y - edge))) * (0.4 + 0.6 * vnoise(p * vec2(3.0, 6.0) + uTime * 0.5));
+            lace *= 0.6 + 0.4 * run;
+            float bubbles = film * smoothstep(0.55, 0.75, vnoise(p * 5.0 + vec2(0.0, uTime * 0.8))) * smoothstep(edge + 3.0, edge, p.y);
+            col = mix(col, vec3(0.09, 0.1, 0.09), film * 0.65);
+            col = mix(col, vec3(0.8, 0.82, 0.82), clamp(lace + bubbles * 0.6, 0.0, 1.0));
+            gRough = mix(gRough, 0.06, film * (1.0 - lace));
+            gPud = max(gPud, film * 0.35 * (1.0 - lace));                                 // the sheet reflects the sky
           } else if (abs(p.x) > HALF + 2.0 || p.y < -HALF - 2.0) {
             // outskirts: dry scrub and grass
             col = mix(vec3(0.42, 0.5, 0.26), vec3(0.62, 0.58, 0.36), n3) * (0.85 + n1 * 0.2);
@@ -716,6 +749,7 @@ function groundMaterial(U) {
           float colI = floor(az * 9.0);
           float hgt = 0.08 + 0.5 * h12(vec2(colI, 3.0)) * h12(vec2(colI, 9.0) + 1.0);
           float bld = 1.0 - smoothstep(hgt - 0.01, hgt + 0.01, R.y);
+          bld *= step(vWP.z, ${HALF.toFixed(1)});                                  // (no skyline over the sea)
           vec2 wg = vec2(az * 28.0, R.y * 34.0);
           float wins = smoothstep(0.2, 0.35, fract(wg.x)) * smoothstep(0.8, 0.65, fract(wg.x)) * smoothstep(0.25, 0.4, fract(wg.y)) * smoothstep(0.75, 0.6, fract(wg.y)) * step(0.66, h12(floor(wg) + colI));
           vec3 sky = vec3(0.03, 0.04, 0.07) * (1.0 - uNight) * 8.0 + vec3(0.01, 0.015, 0.03);

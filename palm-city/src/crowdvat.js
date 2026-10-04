@@ -48,6 +48,12 @@ function buildPoses(gait) {
   clip("work", [-1, 1].map(s => ({ g: Object.assign(base(0), { armL: -0.9 + s * 0.15, armR: -1.0, elbowL: -0.8, elbowR: -0.7, lean: 0.25 }) })), true);
   clip("fight", [0, 0.5, 1, 0.5].map(e => ({ g: Object.assign(base(0), { armL: -0.9, elbowL: -1.9, armR: -0.85 - 0.7 * e, elbowR: -2.0 + 1.8 * e, twist: -0.25 * e, gripL: 1, gripR: 1 }) })), true);
   clip("aim", [{ g: Object.assign(base(0), { armR: -1.45, elbowR: -0.1, armL: -1.2, elbowL: -0.5, gripR: 0.95, indexR: 0.3, gripL: 0.6 }) }]);
+  clip("sunback", [{ g: Object.assign(base(0), { thighL: 0.05, thighR: -0.05, kneeL: 0.25, kneeR: 0.05, armL: -2.9, armR: -2.7, elbowL: -1.5, elbowR: -0.2, bob: 0 }), extra: { tilt: -1.5 } }]);
+  clip("sunfront", [{ g: Object.assign(base(0), { thighL: 0.05, thighR: -0.05, kneeL: 0.05, kneeR: 0.05, armL: -0.2, armR: -0.25, elbowL: -0.2, elbowR: -0.2, bob: 0 }), extra: { tilt: 1.5 } }]);
+  clip("sitsand", [{ g: Object.assign(base(0), { thighL: -1.35, thighR: -1.2, kneeL: 1.8, kneeR: 1.5, armL: 0.6, armR: 0.6, elbowL: -0.1, elbowR: -0.1, lean: -0.35, bob: 0 }) }]);
+  clip("swim", Array.from({ length: 8 }, (_, k) => { const s = k / 8 * Math.PI * 2; return { g: Object.assign(base(0), { armL: -3.1 * (0.5 + 0.5 * Math.sin(s)), armR: -3.1 * (0.5 + 0.5 * Math.sin(s + Math.PI)), elbowL: -0.3, elbowR: -0.3, thighL: Math.sin(s * 3) * 0.25, thighR: -Math.sin(s * 3) * 0.25, kneeL: 0.2, kneeR: 0.2, twist: Math.sin(s) * 0.25, bob: 0 }), extra: { tilt: 1.35, headPitch: -0.9 } }; }), true);
+  clip("ready", [{ g: Object.assign(base(0), { armL: -0.6, armR: -0.6, elbowL: -0.6, elbowR: -0.6, lean: 0.3, kneeL: 0.6, kneeR: 0.6, thighL: -0.4, thighR: -0.4 }) }]);
+  clip("fish", [{ g: Object.assign(base(0), { armR: -1.3, armL: -1.0, elbowR: -0.6, elbowL: -0.9, gripL: 1, gripR: 1, lean: 0.05 }) }]);
   clip("lying", [{ g: Object.assign(base(0), { thighL: 0.3, thighR: -0.2, kneeL: 0.4, kneeR: 0.2, armL: -2.4, armR: 2.2, elbowL: -0.3, elbowR: -0.3, lean: 0, bob: -0.72 }), extra: { tilt: -1.45 } }]);
   return P;
 }

@@ -61,13 +61,27 @@ export function createOcean(scene, sky) {
         vec3 H = normalize(uSunDir + V);
         float spec = pow(max(dot(N, H), 0.0), 420.0) * 60.0 + pow(max(dot(N, H), 0.0), 60.0) * 0.6;
         col += uSunCol * spec * (1.0 - uNight) * step(0.0, uSunDir.y);
-        // foam: the break line at the beach + sparse whitecaps on crests
+        // breakers: lines of swell rolling in toward the beach (one reaching the sand every 7.85 s, in
+        // step with the swash on the sand), rising as the water shallows, pitching over in foam and
+        // leaving a churned white wash behind them
         float sh = vWP.z - uShore;
-        float surge = sin(uTime * 0.8) * 1.5;
-        float foamLine = smoothstep(6.0 + surge, 0.0 + surge, sh) * smoothstep(-3.0, 1.0 + surge, sh);
+        float ph = sh / 12.0 + uTime / 7.854 + vn(vec2(vWP.x * 0.02, 0.0)) * 0.25;
+        float w = fract(ph);
+        float grow = smoothstep(45.0, 14.0, sh) * smoothstep(-2.0, 4.0, sh);
+        float crest = exp(-w * 7.0) * (1.0 - exp(-(1.0 - w) * 28.0));
+        float breaking = smoothstep(16.0, 8.0, sh) * grow;
+        // the face: the wave stands up and goes translucent green before it breaks
+        col = mix(col, vec3(0.12, 0.55, 0.52) * (0.4 + 0.6 * max(uSunDir.y, 0.15)) * (1.0 - uNight * 0.8), smoothstep(0.9, 0.98, 1.0 - w) * grow * 0.5);
+        col *= 1.0 - smoothstep(0.55, 0.95, w) * grow * 0.12;                                      // the trough before it
         float foamN = vn(p * 1.4 + uTime * 0.3) * vn(p * 3.1 - uTime * 0.2);
-        float foam = clamp(foamLine * (0.5 + foamN * 1.4), 0.0, 1.0) + smoothstep(0.62, 0.9, vH + foamN * 0.5) * 0.35 * depth;
-        col = mix(col, vec3(0.95, 0.97, 0.98) * (0.4 + 0.6 * max(uSunDir.y, 0.15)), clamp(foam, 0.0, 1.0));
+        float lace = vn(p * vec2(0.9, 2.2) + vec2(uTime * 0.2, -uTime * 0.6));
+        float crestFoam = smoothstep(0.55, 0.9, crest) * breaking * (0.5 + lace);
+        float wash = smoothstep(0.45, 0.0, w) * breaking * smoothstep(0.35, 0.75, lace + foamN * 0.6) * 0.9;
+        float edge = smoothstep(4.0, -1.0, sh) * (0.5 + foamN);                                   // where it meets the sand
+        // out at sea: thin streaks of foam on the bigger crests, not blobs
+        float caps = smoothstep(0.72, 0.95, vH * 0.9 + foamN * 0.6) * smoothstep(0.55, 0.62, vn(p * vec2(0.6, 2.4) + uTime * 0.1)) * 0.25 * depth;
+        float foam = clamp(crestFoam + wash + edge + caps, 0.0, 1.0);
+        col = mix(col, vec3(0.95, 0.97, 0.98) * (0.4 + 0.6 * max(uSunDir.y, 0.15)) * (1.0 - uNight * 0.75), foam);
         // fog to the horizon
         float d = length(cameraPosition - vWP);
         col = mix(col, uFogCol, 1.0 - exp(-uFogD * uFogD * d * d));

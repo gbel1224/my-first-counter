@@ -334,6 +334,19 @@ export class Crowd {
       this.people.push({ beach: true, x: -HALF + r() * HALF * 2, z: HALF + 8 + r() * 26, yaw: r() * 6.28, speed: 0.8 + r() * 0.5, look,
         phase: r() * 6, style: { stride: 0.8 + r() * 0.3, arm: 0.6 + r() * 0.6 }, pause: 0, knocked: 0, vx: 0, vy: 0, vz: 0, y: 0, spin: 0, dir: 1, t: 0 });
     }
+    // the beach: sunbathers on towels (lying on their backs or fronts, some sitting up), swimmers out
+    // past the break, people wading in the shallows, a volleyball game, people fishing off the pier
+    {
+      const rb = mulberry32(0xBEAC);
+      const add = (o) => { const look = randomLook(rb); look.shorts = true; if (rb() < 0.6) look.sleeveless = true;
+        const p = Object.assign({ beach: true, fixed: true, look, phase: rb() * 6.28, style: { stride: 0.9, arm: 0.8 }, pause: 0, knocked: 0, vx: 0, vy: 0, vz: 0, y: 0, spin: 0, dir: 1, t: 0, speed: 1, yaw: rb() * 6.28 }, o);
+        this.people.push(p); return p; };
+      for (let k = 0; k < 46; k++) { const x = -HALF + 30 + rb() * (HALF * 2 - 60), z = HALF + 21 + rb() * 15; add({ x, z, lie: rb() < 0.7 ? (rb() < 0.6 ? "back" : "front") : "situp", yaw: Math.PI + (rb() - 0.5) * 0.6, towel: [0xd83a3a, 0x2a8ac8, 0xf2c230, 0x3ac87a, 0xf27aa8, 0xf2f0ea][(rb() * 6) | 0] }); }
+      for (let k = 0; k < 18; k++) add({ swim: { x0: -380 + rb() * 760, z0: HALF + 66 + rb() * 18, r: 4 + rb() * 6, w: (0.1 + rb() * 0.15) * (rb() < 0.5 ? 1 : -1), a: rb() * 6.28 } });
+      for (let k = 0; k < 14; k++) add({ wade: { x0: -400 + rb() * 800, z0: HALF + 46 + rb() * 6 } });
+      for (const cx of [-80, 300]) for (let k = 0; k < 4; k++) add({ volley: { x: cx + (k % 2 ? 1.8 : -1.8), z: HALF + 26 + (k < 2 ? -3.2 : 3.2), side: k < 2 ? -1 : 1, k } });
+      for (let k = 0; k < 6; k++) { const s = k % 2 ? 1 : -1; add({ fish: { x: -150 + s * 2.9, z: HALF + 50 + k * 14, s }, yaw: s * Math.PI / 2 }); }
+    }
     // street life (its own random stream, so the walkers above stay where they were): vendors at
     // their carts, people stopped to chat in twos and threes, people on the city's benches, joggers
     const r2 = mulberry32(0x57EE7);
@@ -490,6 +503,17 @@ export class Crowd {
       if (p.knocked > 0) continue;
       const sp = p.speed * (fleeing ? (p.jog ? 1.2 : 2.4) : 1);
       p.amt = fleeing ? 2 : p.jog ? 1.75 : 1;
+      if (p.beach && p.fixed) {
+        // beach people stay at what they're doing unless something sends them running up the sand
+        if (p.fear > 0) { p.fixed = false; p.lie = p.swim = p.wade = p.volley = p.fish = null; p.yaw = 0; p.y = 0; p.z = Math.min(p.z, HALF + 36); continue; }
+        p.amt = 0;
+        const now = time;
+        if (p.swim) { const S = p.swim; S.a += S.w * dt; p.x = S.x0 + Math.cos(S.a) * S.r; p.z = S.z0 + Math.sin(S.a) * S.r; p.yaw = Math.atan2(-Math.sin(S.a) * Math.sign(S.w), Math.cos(S.a) * Math.sign(S.w)); p.phase += dt * 3.5; }
+        else if (p.wade) { const W = p.wade; W.t = (W.t || r() * 20) + dt; p.x = W.x0 + Math.sin(W.t * 0.07) * 6; p.z = W.z0 + Math.sin(W.t * 0.11) * 2; p.yaw = Math.atan2(Math.cos(W.t * 0.07) * 0.42, Math.cos(W.t * 0.11) * 0.22); p.amt = 0.55; p.phase += dt * 2.2; }
+        else if (p.volley) { const V = p.volley, ph = now * 1.1 + V.k * 1.6; p.x = V.x + Math.sin(ph * 0.7) * 1.2; p.z = V.z + Math.sin(ph * 0.5) * 1.0 * V.side * 0.5; p.yaw = V.side > 0 ? Math.PI : 0; p.amt = Math.abs(Math.cos(ph * 0.7)) > 0.6 ? 1.2 : 0.2; p.phase += dt * 3; }
+        else if (p.fish) { p.x = p.fish.x; p.z = p.fish.z; }
+        continue;
+      }
       if (p.beach) {
         p.yaw += (r() - 0.5) * dt * 0.8;
         p.x += Math.sin(p.yaw) * sp * dt; p.z += Math.cos(p.yaw) * sp * dt;
@@ -597,6 +621,23 @@ export class Crowd {
       else if (p.phoneT > 0) Object.assign(g, { armR: -2.6, elbowR: -2.3, armL: -0.2 });                  // on the phone
       else if (p.workT > 0) Object.assign(g, { armL: -0.9 + Math.sin(p.workT * 2) * 0.15, armR: -1.0, elbowL: -0.8, elbowR: -0.7, lean: 0.25 });   // busy at the back of the van
     }
+    if (p.beach && p.fixed && p.knocked <= 0) {
+      const t = performance.now() / 1000, gy = groundY(p.x, p.z);
+      if (p.lie) {
+        if (p.lie === "situp") { Object.assign(g, { thighL: -1.35, thighR: -1.2, kneeL: 1.8, kneeR: 1.5, armL: 0.6, armR: 0.6, elbowL: -0.1, elbowR: -0.1, lean: -0.35, bob: 0, twist: 0, roll: 0 }); return { g, extra: null, y: gy + 0.03 - (RIG.hipY - 0.12) * p.look.h }; }
+        Object.assign(g, { thighL: 0.05, thighR: -0.05, kneeL: p.lie === "back" ? 0.25 : 0.05, kneeR: 0.05, armL: p.lie === "back" ? -2.9 : -0.2, armR: p.lie === "back" ? -2.7 : -0.25, elbowL: p.lie === "back" ? -1.5 : -0.2, elbowR: -0.2, lean: 0, bob: 0, twist: 0, roll: 0 });
+        return { g, extra: { tilt: p.lie === "back" ? -1.5 : 1.5 }, y: gy + 0.11 - RIG.hipY * p.look.h };
+      }
+      if (p.swim) {
+        // freestyle: flat in the water, arms windmilling, a flutter kick; only head and shoulders show
+        const s = p.phase;
+        Object.assign(g, { armL: -3.1 * (0.5 + 0.5 * Math.sin(s)), armR: -3.1 * (0.5 + 0.5 * Math.sin(s + Math.PI)), elbowL: -0.3, elbowR: -0.3, thighL: Math.sin(s * 3) * 0.25, thighR: -Math.sin(s * 3) * 0.25, kneeL: 0.2, kneeR: 0.2, lean: 0, bob: 0, twist: Math.sin(s) * 0.25, roll: 0 });
+        return { g, extra: { tilt: 1.35, headPitch: -0.9 }, y: -0.46 + 0.04 * Math.sin(t * 1.3 + p.phase) - RIG.hipY * p.look.h };
+      }
+      if (p.wade) return { g, extra: null, y: Math.max(gy, -0.45) };
+      if (p.volley) { if (p.amt > 1 && Math.sin(t * 1.1 + p.volley.k * 1.6) > 0.8) Object.assign(g, { armL: -2.6, armR: -2.8, elbowL: -0.2, elbowR: -0.1 }); else Object.assign(g, { armL: -0.6, armR: -0.6, elbowL: -0.6, elbowR: -0.6, lean: 0.3, kneeL: 0.6, kneeR: 0.6, thighL: -0.4, thighR: -0.4 }); return { g, extra: null, y: gy }; }
+      if (p.fish) { Object.assign(g, { armR: -1.3, armL: -1.0, elbowR: -0.6, elbowL: -0.9, gripL: 1, gripR: 1, lean: 0.05 }); return { g, extra: null, y: 2.44 }; }
+    }
     if ((p.vendor || p.chat) && p.knocked <= 0) {
       const t = performance.now() / 1000;
       if (p.vendor) Object.assign(g, { armL: -0.75, armR: -0.7 + Math.sin(t * 1.3 + p.phase) * 0.1, elbowL: -0.9, elbowR: -1.0, lean: 0.12 });
@@ -661,6 +702,13 @@ export class Crowd {
   // which baked movement someone is doing, and how far through it
   clipOf(p, now) {
     if (p.knocked > 0) return ["lying", 0];
+    if (p.beach && p.fixed) {
+      if (p.lie) return p.lie === "situp" ? ["sitsand", 0] : [p.lie === "back" ? "sunback" : "sunfront", 0];
+      if (p.swim) return ["swim", p.phase / 6.2832 * 8];
+      if (p.fish) return ["fish", 0];
+      if (p.volley) return [p.amt > 1 ? "run" : "ready", now * 3];
+      if (p.wade) return ["walk", ((p.phase % 6.2832) / 6.2832) * 16];
+    }
     if (p.vendor) return ["vendor", 0];
     if (p.chat) { const speaking = Math.floor(now / 2.6 + p.chat.g * 1.3) % p.chat.n === p.chat.k; return speaking ? ["talk", now * 3 + p.phase] : [p.look.hs > 0.5 ? "folded" : "pockets", 0]; }
     if (p.sit) return ["sit", 0];
@@ -701,7 +749,13 @@ export class Crowd {
       }
       const [clip, t] = this.clipOf(p, now);
       const gy = groundY(p.x, p.z);
-      const y = p.sit ? gy : gy + (p.y || 0);
+      let y = p.sit ? gy : gy + (p.y || 0);
+      if (p.beach && p.fixed) {                  // the baked poses stand on y = 0: put them on the sand, in the water, on the pier
+        if (p.lie) y = gy + (p.lie === "situp" ? 0.03 - (0.97 - 0.12) : 0.11 - 0.97) * (p.look.h || 1) + (p.lie === "situp" ? 0 : 0);
+        else if (p.swim) y = -0.46 - 0.97 * (p.look.h || 1);
+        else if (p.wade) y = Math.max(gy, -0.45);
+        else if (p.fish) y = 2.44;
+      }
       const tilt = p.knocked > 0 && p.y > 0.01 ? (p.spin || 0) + 1.45 : 0;
       const cm = this._cam, dc2 = cm ? (p.x - cm.x) ** 2 + (p.z - cm.z) ** 2 : p._d2;     // detail follows the camera
       V.add(p, modelFor(p.look), dc2, p.x, y, p.z, p.yaw, clip, t, tilt);

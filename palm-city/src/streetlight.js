@@ -5,7 +5,7 @@
 // the people all stand in warm pools of lamplight, with highlights on anything shiny.
 import * as THREE from "../vendor/three.module.js";
 
-const RES = 1024;
+const RES = 1280;
 const H = 6.3;          // lamp head above the ground
 const REACH = 28;       // how far a lamp's pool spreads (m)
 const DIR = 20;         // range of the stored lamp offset (m)
@@ -97,7 +97,7 @@ for (const k of ["lambert", "phong", "standard", "physical", "toon"]) {
 
 // bake the lamps (heads as [x, y, z]) into the map; must run before the first frame is drawn
 export function bakeStreetLights(heads, half) {
-  const ext = half + 40, mpp = (ext * 2) / RES;
+  const ext = half + 160, mpp = (ext * 2) / RES;          // (out over the pier too)
   P.ox = -ext; P.oz = -ext; P.inv = 1 / (ext * 2);
   const E = new Float32Array(RES * RES), F = new Float32Array(RES * RES), VX = new Float32Array(RES * RES), VZ = new Float32Array(RES * RES);
   for (const [lx, ly, lz, I = 1, reach = REACH] of heads) {

@@ -8,6 +8,8 @@ import { bakeStreetLights, setStreetLights, setHeadlights } from "./streetlight.
 import { makeAnimals } from "./animals.js";
 import { makeDamage } from "./damage.js";
 import { makeRadio } from "./radio.js";
+import { buildBeach } from "./beach.js";
+import { paint, place, merge, vcMaterial } from "./geo.js";
 import { buildCarts } from "./streetlife.js";
 import { createOcean } from "./ocean.js";
 import { Crowd, randomLook } from "./people.js";
@@ -82,7 +84,8 @@ const city = createCity(scene, plan, groundY);
       }
     }
   }
-  for (const l of city.houses.lights) heads.push(l);                 // porch, garage and pool lights
+  for (const l of city.houses.lights) heads.push(l);
+  heads.push([-150, 6.3, HALF + 36, 0.5, 14], [-150, 6.3, HALF + 72, 0.5, 14], [-150, 6.3, HALF + 108, 0.5, 14], [-150, 6.3, HALF + 144, 0.5, 14]);   // the pier lamps                 // porch, garage and pool lights
   bakeStreetLights(heads, HALF);
 }
 const facade = buildFacadeDetail(scene, plan);
@@ -106,6 +109,19 @@ const dmgCtx = { fx: null, groundY }, damage = makeDamage(scene, dmgCtx);   // (
 }
 animals.onTakeOff = f => { const o = P.car || P, d = Math.hypot(f.x - o.x, f.z - o.z); if (d < 45) AudioSys.wings(Math.max(0.2, 1 - d / 45) * (f.kind === "gull" ? 0.7 : 1)); };
 buildCarts(scene, plan);
+// the beach: pier, lifeguard towers, volleyball, boats, swim buoys; a towel under every sunbather
+const beach = buildBeach(scene);
+{
+  const T = [];
+  for (const p of crowd.people) if (p.lie) {
+    const g = paint(new THREE.BoxGeometry(0.95, 0.015, 1.9), p.towel || 0xf2f0ea);
+    // a stripe across each end
+    const s1 = paint(new THREE.BoxGeometry(0.96, 0.017, 0.12), 0xf2f0ea); s1.translate(0, 0, 0.75); const s2 = s1.clone(); s2.translate(0, 0, -1.5);
+    const t = merge([g, s1, s2]); t.rotateY(p.yaw); t.translate(p.x - Math.sin(p.yaw) * 0.15, groundY(p.x, p.z) + 0.01, p.z - Math.cos(p.yaw) * 0.15);
+    T.push(t);
+  }
+  if (T.length) { const m = new THREE.Mesh(merge(T), vcMaterial({ roughness: 0.95 })); m.receiveShadow = true; scene.add(m); }
+}
 await step(78);
 const traffic = new Traffic(scene, isMobile ? 110 : 150);
 const parked = new Parked(scene, district);
@@ -703,6 +719,7 @@ function update(dt) {
     }
   }
   fx.update(dt);
+  beach.update(time, sky.state.night);
   damage.update(dt, [P.car, ...crime.units.filter(u => u.active)]);
   props.update(dt, time); haptics(dt); doors.update(dt); hijack.update(dt);
   if (greyT > 0) { greyT -= dt; R.grade.uSat.value = 1.1 - Math.min(1, greyT) * 0.95; } else R.grade.uSat.value = 1.1;
