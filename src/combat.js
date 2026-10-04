@@ -121,6 +121,7 @@ export function makeCombat(scene, g) {
 
   // ---- damage to vehicles ----
   function damageCar(c, n, kind) {
+    if (c.armor) n *= 1 - 0.2 * c.armor;                 // Palm Customs armour plating
     c.hp = (c.hp === undefined ? 100 : c.hp) - n;
     if (c.hp <= 0 && !c.boom) explodeCar(c, kind);
   }

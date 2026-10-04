@@ -14,6 +14,18 @@ import { buildCraft, CRAFT_SPEC } from "./craft.js";
 // extra drivable surfaces on top of the ground (stunt ramps): fn(x, z) -> height
 let surfaceFn = null;
 export function setSurface(fn) { surfaceFn = fn; }
+// how wet the roads are (0..1, set from the weather): less grip, longer stops
+let roadWet = 0;
+export function setRoadWet(k) { roadWet = k; }
+// each type's character: what drives the wheels, how it leans, how hard it stops
+const CHAR = {
+  compact: { drive: "fwd", roll: 1.0, brake: 1.0 }, sedan: { drive: "fwd", roll: 1.0, brake: 1.0 },
+  sports: { drive: "rwd", roll: 0.55, brake: 1.25 }, coupe: { drive: "rwd", roll: 0.7, brake: 1.15 },
+  suv: { drive: "awd", roll: 1.6, brake: 0.95 }, pickup: { drive: "rwd", roll: 1.5, brake: 0.9 },
+  van: { drive: "rwd", roll: 1.7, brake: 0.85 }, bus: { drive: "rwd", roll: 1.3, brake: 0.7 },
+  truck: { drive: "rwd", roll: 1.5, brake: 0.7 }, firetruck: { drive: "rwd", roll: 1.4, brake: 0.75 },
+  taxi: { drive: "fwd", roll: 1.0, brake: 1.0 }, ambulance: { drive: "rwd", roll: 1.6, brake: 0.9 },
+};
 export function driveStep(v, inp, dt, collider) {
   const S = v.spec;
   const fx = Math.sin(v.h), fz = Math.cos(v.h);
@@ -22,16 +34,23 @@ export function driveStep(v, inp, dt, collider) {
   const thr = clamp(inp.mz, -1, 1);
   const boost = inp.sprintHeld && thr > 0;
   const fl = v.flat || 0;                                           // shredded tyres (spike strip): slow, slithery, wandering
-  const top = S.top * (boost ? 1.22 : 1) * (v.limp || 1) * (1 - fl * 0.12);          // a bent car won't do its top speed
+  const K = CHAR[v.type] || CHAR.sedan, mass = S.mass || 1;
+  // the surface: wet tarmac, the kerb and paving, the beach
+  const gy0 = groundY(v.x, v.z), sand = v.z > HALF + 2, off = !sand && gy0 > 0.1;
+  const surf = (sand ? 0.62 : off ? 0.88 : 1) * (1 - roadWet * 0.2);
+  const top = S.top * (boost ? 1.22 : 1) * (v.limp || 1) * (1 - fl * 0.12) * (sand ? 0.7 : 1);          // a bent car won't do its top speed
   if (thr > 0.02) {
     if (lon < -0.5) lon += 30 * thr * dt;                            // braking out of reverse
     else lon += S.accel * (boost ? 1.5 : 1) * thr * Math.max(0, 1 - (lon / top) ** 2) * dt;
   } else if (thr < -0.02) {
-    if (lon > 0.5) lon -= 32 * -thr * dt;                            // brakes
+    if (lon > 0.5) lon -= 32 * -thr * dt * K.brake * (S.brakeMod || 1) * (1 - roadWet * 0.25) / Math.sqrt(mass);   // brakes: heavy things stop late
     else lon = Math.max(-11, lon - 9 * -thr * dt);                   // reverse
   } else lon -= Math.sign(lon) * Math.min(Math.abs(lon), (1.2 + Math.abs(lon) * 0.05) * dt);   // coasting
   if (inp.handbrakeHeld) lon -= Math.sign(lon) * Math.min(Math.abs(lon), 6 * dt);
-  const grip = (inp.handbrakeHeld ? 1.3 : S.grip * (1 - clamp(Math.abs(lat) / 22, 0, 0.5))) * (1 - fl * 0.09);
+  let grip = (inp.handbrakeHeld ? 1.3 : S.grip * (1 - clamp(Math.abs(lat) / 22, 0, 0.5))) * (1 - fl * 0.09) * surf;
+  // rear-wheel drive: floor it mid-corner and the tail steps out (all-wheel drive barely does)
+  const powerSlide = K.drive === "rwd" && thr > 0.5 && Math.abs(lon) > 8 && Math.abs(inp.mx) > 0.3;
+  if (powerSlide && !inp.handbrakeHeld) grip *= 1 - 0.38 * thr * Math.abs(inp.mx) * (mass > 1.5 ? 0.4 : 1);
   lat *= Math.exp(-grip * dt);
   // steering
   const wob = fl ? Math.sin(v.wobT = (v.wobT || 0) + dt * (2.3 + Math.abs(lon) * 0.25)) * 0.05 * fl * clamp(Math.abs(lon) / 6, 0, 1) : 0;
@@ -39,10 +58,11 @@ export function driveStep(v, inp, dt, collider) {
   const sp = Math.abs(lon);
   const auth = clamp(sp / 7, 0, 1) * (1 - 0.5 * clamp(sp / S.top, 0, 1));
   const yawT = -v.steer * S.turn * auth * Math.sign(lon || 1) * (inp.handbrakeHeld ? 1.45 : 1);
-  v.yawRate = lerp(v.yawRate || 0, yawT, 1 - Math.exp(-8 * dt));
+  v.yawRate = lerp(v.yawRate || 0, yawT, 1 - Math.exp(-8 / Math.sqrt(mass) * dt));   // heavy things are slow to turn in
   v.h += v.yawRate * dt;
   // oversteer: when sliding, some of the yaw feeds lateral velocity (keeps drifts alive)
   if (inp.handbrakeHeld) lat += v.yawRate * lon * 0.05 * dt * 10;
+  else if (powerSlide) lat += v.yawRate * lon * 0.022 * dt * 10;
   const nfx = Math.sin(v.h), nfz = Math.cos(v.h), nrx = Math.cos(v.h), nrz = -Math.sin(v.h);
   v.vx = nfx * lon + nrx * lat; v.vz = nfz * lon + nrz * lat;
   v.x += v.vx * dt; v.z += v.vz * dt;
@@ -67,9 +87,9 @@ export function driveStep(v, inp, dt, collider) {
   v.speed = Math.hypot(v.vx, v.vz);
   v.lon = lon; v.lat = lat; v.drift = Math.abs(lat);
   // body motion for visuals: dive under braking, squat under power, lean in corners
-  const accelVis = thr > 0 ? -0.025 : (thr < 0 && lon > 1 ? 0.05 : 0);
+  const accelVis = (thr > 0 ? -0.025 : (thr < 0 && lon > 1 ? 0.05 : 0)) * Math.sqrt(K.roll);
   v.pitch = lerp(v.pitch || 0, accelVis, 1 - Math.exp(-6 * dt));
-  v.roll = lerp(v.roll || 0, clamp(-v.yawRate * lon * 0.006, -0.09, 0.09), 1 - Math.exp(-6 * dt));
+  v.roll = lerp(v.roll || 0, clamp(-v.yawRate * lon * 0.006 * K.roll * (S.rollMod || 1), -0.13, 0.13), 1 - Math.exp(-6 * dt));
   // vertical: follow the ground (kerbs, ramps); leave a ramp lip fast enough and you fly
   const gy = groundY(v.x, v.z) + (surfaceFn ? surfaceFn(v.x, v.z) : 0);
   const prevY = v.y || 0;
@@ -169,7 +189,7 @@ export function syncCar(v) {
   v.group.position.set(v.x, v.y || 0, v.z);
   v.group.rotation.set(0, v.h, 0);
   v.chassis.rotation.set(v.pitch || 0, 0, v.roll || 0);
-  if (v.flat) v.chassis.position.y = -0.028 * v.flat;                 // sitting on its rims
+  if (v.flat || v.lowered) v.chassis.position.y = -0.028 * (v.flat || 0) - 0.035 * (v.lowered || 0);   // on its rims / slammed
 }
 
 // ============================================================================================
