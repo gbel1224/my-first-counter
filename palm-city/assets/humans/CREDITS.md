@@ -12,3 +12,6 @@ printed logos on the stock clothes.
 | `man.glb` | Ready Player Me avatar, from the [three.js](https://github.com/mrdoob/three.js) examples | Ready Player Me terms |
 
 Palm City is a free, non-commercial project. Any commercial use would need these models replaced or licensed.
+
+The crowd is built from these same models at load time (src/crowdvat.js), simplified with
+[meshoptimizer](https://github.com/zeux/meshoptimizer) (MIT, vendored as `vendor/meshopt_simplifier.module.js`).

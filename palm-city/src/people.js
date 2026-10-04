@@ -6,6 +6,7 @@ import { inView } from "./cull.js";
 import { limb, paint, merge, place } from "./geo.js";
 import { FACE, BEARD_KIND, IRIS, FACE_COLOR, FACE_MAT, HAIRSTYLES, faceMaterials, newFace, tickFace, faceMatrices, pickStyle, faceVariation, patch as patchFace, cardMaterial, BEARD_CARDS } from "./face.js";
 import { humansReady, makeHuman, modelFor, tint as tintHuman, HumanPool } from "./human.js";
+import { makeVatCrowd, vatReady } from "./crowdvat.js";
 import { BODY, BODY_SLOTS, BODY_COLOR, BODY_MAT, bodyPieces, clothMaterial, SHOES } from "./body.js";
 const BODY_PARTS = ["torso", "hips", "upperL", "upperR", "foreL", "foreR", "thighL", "thighR", "shinL", "shinR"];
 // every detailed piece a rig part might wear, whatever the look
@@ -309,6 +310,8 @@ export function makeCharacter(look) {
 const MAX = 420, FMAX = 40;
 export class Crowd {
   constructor(scene, plan, count = 700) {
+    this._scene = scene;
+    vatReady().then(() => { this._simpOK = true; });
     const r = this.r = mulberry32(0xC20D);
     this.people = [];
     const blocks = plan.blocks.filter(b => b.kind !== "park" || r() < 0.5);
@@ -628,6 +631,12 @@ export class Crowd {
       if (d2 < 120 * 120 && (d2 < 100 || inView(p.x, p.z, 8))) { p._d2 = d2; near.push(p); }
     }
     if (near.length > MAX) { near.sort((a, b) => a._d2 - b._d2); near.length = MAX; }
+    // the crowd as real people (crowdvat.js), once the models are in and baked
+    if (!this.vat && !this._vatFail && this._simpOK && humansReady()) {
+      try { const mobile = typeof navigator !== "undefined" && /Mobi|Android|iPhone|iPad/.test(navigator.userAgent); this.vat = makeVatCrowd(this._scene, gait, mobile ? { mid: 70, far: 260 } : { mid: 140, far: 420 }); }
+      catch (e) { console.warn("crowd bake failed", e); this._vatFail = true; }
+    }
+    if (this.vat) { this._cam = camera && camera.position; this.renderVat(near); return; }
     let i = 0;
     const c = this._c, M = this.meshes, g = this._g;
     const heads = this._heads;
@@ -648,6 +657,56 @@ export class Crowd {
     for (const k in M) { M[k].count = i; M[k].instanceMatrix.needsUpdate = true; if (M[k].instanceColor) M[k].instanceColor.needsUpdate = true; }
     this._cam = camera && camera.position;
     this.renderFaces(near, i);
+  }
+  // which baked movement someone is doing, and how far through it
+  clipOf(p, now) {
+    if (p.knocked > 0) return ["lying", 0];
+    if (p.vendor) return ["vendor", 0];
+    if (p.chat) { const speaking = Math.floor(now / 2.6 + p.chat.g * 1.3) % p.chat.n === p.chat.k; return speaking ? ["talk", now * 3 + p.phase] : [p.look.hs > 0.5 ? "folded" : "pockets", 0]; }
+    if (p.sit) return ["sit", 0];
+    if (p.fightT > 0) return ["fight", Math.sin(Math.min(1, Math.max(0, p.punchT || 0) / 0.26) * Math.PI) * 2];
+    if (p.aimT > 0) return ["aim", 0];
+    const moving = !(p.pause > 0 || (p.cross && p.cross.wait)) && (p.amt ?? 1) > 0.05;
+    if (p.phoneT > 0 && !moving) return ["phone", 0];
+    if (p.workT > 0) return ["work", p.workT * 0.6];
+    if (!moving) return ["idle", now * 0.3 + p.phase];
+    const ph = (((p.phase % 6.2832) + 6.2832) % 6.2832) / 6.2832;
+    return (p.amt ?? 1) > 1.5 ? ["run", ph * 12] : ["walk", ph * 16];
+  }
+  renderVat(near) {
+    const now = performance.now() / 1000, dt = Math.min(0.1, now - this._ft); this._ft = now;
+    // the old stand-ins step aside for good
+    if (!this._vatOn) { this._vatOn = true; for (const m of [...Object.values(this.meshes), ...Object.values(this.fm), ...Object.values(this.bm)]) { m.count = 0; m.visible = false; } }
+    // the very nearest are the full models, with faces and hands
+    near.sort((a, b) => a._d2 - b._d2);
+    const order = [];
+    for (const p of near) { if (p._d2 > 30 * 30) break; order.push(p); }
+    const real = this.pool.assign(order);
+    const V = this.vat; V.begin();
+    for (const p of near) {
+      const hu = real.get(p);
+      if (hu) {
+        const f = this.faceOf(p), L = p.look;
+        f.base = L.mood || "neutral";
+        const auto = this.exprFor(p);
+        if (auto) { f.expr = auto; f.hold = 0.35; }
+        if (p.chat && Math.floor(now / 2.6 + p.chat.g * 1.3) % p.chat.n === p.chat.k) f.talk = Math.max(f.talk, 0.3);
+        tickFace(f, dt, now);
+        const cam = this._cam;
+        if (cam && p._d2 < 64) { let a = Math.atan2(cam.x - p.x, cam.z - p.z) - p.yaw; a = Math.atan2(Math.sin(a), Math.cos(a)); f.look = Math.abs(a) < 1.2 ? (f._lk || (f._lk = { x: 0, y: 0 }), f._lk.x = Math.max(-0.4, Math.min(0.4, a * 0.7)), f._lk.y = Math.max(-0.2, Math.min(0.2, (cam.y - 1.6) * 0.08)), f._lk) : null; }
+        else f.look = null;
+        const { g, extra, y } = this.poseOf(p, this._hg);
+        hu.drive(p.x, y, p.z, p.yaw, g, extra, f);
+        continue;
+      }
+      const [clip, t] = this.clipOf(p, now);
+      const gy = groundY(p.x, p.z);
+      const y = p.sit ? gy : gy + (p.y || 0);
+      const tilt = p.knocked > 0 && p.y > 0.01 ? (p.spin || 0) + 1.45 : 0;
+      const cm = this._cam, dc2 = cm ? (p.x - cm.x) ** 2 + (p.z - cm.z) ** 2 : p._d2;     // detail follows the camera
+      V.add(p, modelFor(p.look), dc2, p.x, y, p.z, p.yaw, clip, t, tilt);
+    }
+    V.end();
   }
   renderFaces(near, n) {
     const now = performance.now() / 1000, dt = Math.min(0.1, now - this._ft); this._ft = now;
