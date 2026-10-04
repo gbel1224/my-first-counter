@@ -244,7 +244,7 @@ function fingerBend(F, h, sd, finger, j) {
 }
 const rq = (x, y, z) => new THREE.Quaternion().setFromEuler(_e.set(x, y, z, "YXZ"));
 // each model's own skin tone in its texture, so a look's skin colour can be reached by multiplying
-const SKIN_REF = { man: new THREE.Color(0xd2a084), avatarsdk: new THREE.Color(0xc8946e), avaturn: new THREE.Color(0xf0c8b0), mpfb: new THREE.Color(0xf0c8b4) };
+export const SKIN_REF = { man: new THREE.Color(0xd2a084), avatarsdk: new THREE.Color(0xc8946e), avaturn: new THREE.Color(0xf0c8b0), mpfb: new THREE.Color(0xf0c8b4) };
 
 // one person: a skinned clone with its own materials (clothes and skin tinted to their look)
 export function makeHuman(look, kind = modelFor(look)) {
@@ -447,12 +447,20 @@ export function tint(h) {
     if (/(skin|body|head)$/.test(n) && !/eye|teeth/.test(n)) mat.color.copy(sk);
     else if (/casualsuit/.test(n)) dye(mat, L.shirt, 1, L.pants, 0.43);   // top and jeans share one texture: split by its layout
     else if (/outfit_top/.test(n)) dye(mat, L.shirt, 1);
+    else if (/avaturn_look/.test(n)) dye(mat, L.shirt, 1, suitOf(L), -1);   // a suit over a light shirt: dyed by brightness
     else if (/outfit_bottom/.test(n)) dye(mat, L.pants, 1);
     else if (/hair|ponytail|brow/.test(n)) dye(mat, L.hair, 0.85);
     else if (/beard/.test(n)) { m.visible = L.beard === "full" || L.beard === "goatee"; mat.color.set(L.hair || 0x222222).multiplyScalar(2.2); }
     else if (/headwear/.test(n)) m.visible = !!L.hat;
     else if (/glasses/.test(n)) m.visible = false;
   }
+}
+// what suit someone wears (the women's suit model): its own palette, picked from their clothes
+const SUIT = [0x2a3550, 0x7a7a7e, 0xc0ae8a, 0x6a2a30, 0x55603e, 0xe2dccf, 0x1e1e22, 0x9a724a, 0x3a5a6a, 0xb86a5a];
+export function suitOf(L) {
+  let h = Math.imul((L.shirt || 0) ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul((L.pants || 0) + 0x632be5ab, 0xc2b2ae35) ^ Math.imul((L.hair || 0) + 7, 0x27d4eb2f);
+  h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 13;
+  return SUIT[(h >>> 0) % SUIT.length];
 }
 // re-dye a texture: keep its light and shade, swap its colour for `col`
 function dye(mat, col, amt, col2, split = 0) {
@@ -470,6 +478,11 @@ function dye(mat, col, amt, col2, split = 0) {
           if (uSplit > 0.0 && vMapUv.y > uSplit) dc = uDye2;
         #endif
         vec3 dyed = dc * smoothstep(0.0, 0.55, lum) * 1.7;
+        if (uSplit < 0.0) {
+          // suit (dark) in the second colour keeping its shading, shirt (light) washed with the first
+          float lightPart = smoothstep(0.12, 0.3, lum);                 // (linear light: the suit is ~0.045, the shirt ~0.6)
+          dyed = mix(uDye2 * clamp(lum / 0.045, 0.0, 1.6) * 0.9, mix(vec3(lum), uDye * lum * 1.25, 0.35), lightPart);
+        }
         diffuseColor.rgb = mix(diffuseColor.rgb, dyed, uDyeAmt); }`);
   };
   mat.customProgramCacheKey = () => "dye";

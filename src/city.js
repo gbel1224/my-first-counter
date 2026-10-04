@@ -360,6 +360,7 @@ function facadeMaterial(U) {
                   float tag = (1.0 - smoothstep(0.0, 0.035, abs(tn - 0.62))) * line1(v, 0.6, 2.2) * step(0.45, vnoise(vec2(u * 0.4, 2.0) + seed));
                   steel = mix(steel, mix(vec3(0.7, 0.15, 0.25), vec3(0.15, 0.3, 0.7), step(0.5, h12(vec2(sb, 1.0)))), tag * 0.8);
                   col = mix(col, steel, open); fRough = 0.55; fMetal = 0.4 * open;
+                  glass *= 1.0 - open; blind *= 1.0 - open;                    // the shutter covers the window behind it
                   gH += open * 0.012 * band(v * 7.0, 0.0, 0.5);
                 } else {
                   glass = open;
