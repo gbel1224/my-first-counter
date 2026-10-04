@@ -45,6 +45,7 @@ export const PLACES = {
   barber:     { ...walk(10, 11, "N", -8), label: "FADE CITY", bg: "#2050a0", fg: "#ffffff" },
   arcade:     { ...walk(4, 7, "E", 6), label: "PALM BOWL", bg: "#3a1060", fg: "#ffd166" },
   customs:    { ...walk(10, 8, "E", -8), label: "PALM CUSTOMS", bg: "#101014", fg: "#ff7a1a" },
+  tattoo:     { ...walk(5, 9, "N", -8), label: "INK & PALMS", bg: "#141014", fg: "#e8c0e8" },
   // properties
   apartment:  { ...walk(11, 3, "S", 8), label: "APARTMENTS", bg: "#4a4238", fg: "#f0e8d8" },
   condo:      { ...walk(8, 8, "W", 6), label: "PALM CONDOS", bg: "#2a3a4a", fg: "#f4f0e8" },

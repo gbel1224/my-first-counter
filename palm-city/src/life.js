@@ -7,6 +7,7 @@ import { PLACES } from "./places.js";
 import { openArcade, closeArcade, updateArcade, arcadeOpen, initArcade } from "./arcade.js";
 import { PERSONAS, CHOICES, YOU, OPEN, REPLY, GOSSIP, AMBIENT, SHOUT, WANTED, TOO_LONG } from "./talk.js";
 import { setExpr } from "./face.js";
+import { inkPlayer, DESIGNS, SPOTS } from "./tattoo.js";
 
 export const OUTFITS = [
   ["White Tee", 0xe8e6e0, 0x2a3a52], ["Street Black", 0x23262b, 0x3a3f47], ["Navy Polo", 0x1f2d4a, 0xa89a7a], ["Olive Field", 0x4a5236, 0x2a2a2c],
@@ -22,38 +23,73 @@ export const GLASSES = [["No glasses"], ["Sunglasses", "dark", 0x111114], ["Avia
 export const BEARDS = [["Clean shaven"], ["Full black", "full", 0x1f1812], ["Full brown", "full", 0x4a3220], ["Goatee", "goatee", 0x241c14], ["Mustache", "mustache", 0x2a2018], ["Grey beard", "full", 0x8a847a]]
   .map(([name, type, color]) => ({ name, type, color, none: !type, cost: 60 }));
 
+// mix and match: a top (colour + print), bottoms, and dyed hair
+export const TOPS = [["White", 0xe8e6e0], ["Black", 0x1c1e22], ["Heather Grey", 0x8a8e92], ["Navy", 0x1f2d4a], ["Royal Blue", 0x2a50b0], ["Sky", 0x7ab0d8], ["Red", 0xa82024], ["Burgundy", 0x5a1e24],
+  ["Orange", 0xd8641e], ["Mustard", 0xc89a2a], ["Olive", 0x4a5236], ["Forest", 0x1e4a2e], ["Teal", 0x1a7a7a], ["Pink", 0xd88aa0], ["Lilac", 0x9a88c8], ["Tan", 0xb89a72]].map(([name, c]) => ({ name, c, cost: 60 }));
+export const PRINTS = [["Plain", 0], ["Stripes", 1], ["Camo", 2], ["Check", 3], ["Hawaiian", 4]].map(([name, v]) => ({ name, v, cost: v ? 90 : 0 }));
+export const BOTTOMS = [["Dark Denim", 0x2a3a52], ["Light Denim", 0x6a88aa], ["Black", 0x16181c], ["Khaki", 0xa8946a], ["Grey", 0x5a5e64], ["Olive Cargo", 0x4a4e36], ["White", 0xdedad0], ["Navy", 0x1a2238], ["Brown", 0x5a3e28], ["Red", 0x8a2024]].map(([name, c]) => ({ name, c, cost: 70 }));
+export const HAIR_DYE = [["Natural", null], ["Jet Black", 0x0e0b09], ["Platinum", 0xe6dcc0], ["Honey Blonde", 0xc8a060], ["Copper", 0xa4481e], ["Cherry Red", 0xa0141e], ["Bubblegum Pink", 0xe070a8], ["Electric Blue", 0x2a5ad8], ["Mint", 0x5ac8a0], ["Violet", 0x6a3ab0], ["Silver Fox", 0xb0aca4]].map(([name, c]) => ({ name, c, none: c === null, cost: 110 }));
+const TAT_COST = 250, TAT_OFF = 150;
 const pick = a => a[(Math.random() * a.length) | 0];
 
 export function makeLife(scene, g) {
   // g: { st, P, crowd, crime, combat, cars, focus(), camera, hud, earn, toast, banner, sound, save, time(), isMobile }
   const st = g.st, r = mulberry32(0x11FE);
   st.look = st.look || {};
+  if (!st.look.tats) st.look.tats = {};
+  // tattoos (and dye on a painted-on cut) go onto the real body once it exists — and again whenever it changes
+  let inked = null;
+  const reink = () => { if (g.P.ch.human) { const d = HAIR_DYE[st.look.dye || 0]; inkPlayer(g.P.ch.human, st.look.tats, d && !d.none ? d.c : null); inked = g.P.ch.human; } };
   initArcade({ earn: n => g.earn(n), save: g.save, state: st, buzz: () => {} });
 
   // ---- wardrobe ----
   function applyLook() {
     const L = g.P.ch.look;
     const o = OUTFITS[st.look.outfit ?? -1]; if (o) { L.shirt = o.shirt; L.pants = o.pants; }
+    if (st.look.top !== undefined) L.shirt = TOPS[st.look.top].c;
+    if (st.look.bottom !== undefined) L.pants = BOTTOMS[st.look.bottom].c;
+    L.pat = st.look.print || 0;
     const h = HAIR[st.look.hair ?? -1]; if (h) { L.hair = h.color; L.bald = h.style === "bald"; L.long = h.style === "long"; L.hairStyle = L.bald ? null : L.long ? "long" : h.style || "side"; L.fv = null; }
+    const dye = HAIR_DYE[st.look.dye || 0]; if (dye && !dye.none) L.hair = dye.c;
     L.armCol = L.sleeveless ? L.skin : L.shirt; L.shinCol = L.shorts ? L.skin : L.pants;
     g.P.ch.recolor();
     g.P.ch.setAcc("hat", HATS[st.look.hat || 0]); g.P.ch.setAcc("glasses", GLASSES[st.look.glasses || 0]); g.P.ch.setAcc("beard", BEARDS[st.look.beard || 0]);
+    reink();
   }
   applyLook();
   function shopPanel(kind) {
-    const lists = kind === "barber" ? [["Haircuts", HAIR, "hair"], ["Beards", BEARDS, "beard"]] : [["Outfits", OUTFITS, "outfit"], ["Hats", HATS, "hat"], ["Glasses", GLASSES, "glasses"]];
-    const rows = [];
+    if (kind === "tattoo") return tattooPanel();
+    const tab = shopTab[kind] || 0;
+    const TABS = kind === "barber" ? [["Haircuts", HAIR, "hair"], ["Hair dye", HAIR_DYE, "dye"], ["Beards", BEARDS, "beard"]]
+      : [["Tops", TOPS, "top"], ["Prints", PRINTS, "print"], ["Bottoms", BOTTOMS, "bottom"], ["Outfits", OUTFITS, "outfit"], ["Hats", HATS, "hat"], ["Glasses", GLASSES, "glasses"]];
+    const lists = [TABS[tab]];
+    const rows = [{ label: TABS.map((t, i) => (i === tab ? "▸ " : "") + t[0]).join(" · "), sub: "", btn: "NEXT ▸", onClick: () => { shopTab[kind] = (tab + 1) % TABS.length; shopPanel(kind); } }];
     for (const [head, list, key] of lists) list.forEach((it, i) => {
-      const on = (st.look[key] ?? (key === "outfit" || key === "hair" ? -1 : 0)) === i;
+      const on = (st.look[key] ?? (key === "outfit" || key === "hair" ? -1 : key === "top" || key === "bottom" ? -1 : 0)) === i;
       rows.push({ label: (i === 0 ? head.toUpperCase() + " · " : "") + it.name + (on ? "  ✓" : ""), sub: it.none ? "" : "$" + it.cost, btn: on ? "WEARING" : it.none ? "REMOVE" : "BUY",
         disabled: on, onClick: () => {
           if (!it.none && st.money < it.cost) { g.toast("You need $" + Math.ceil(it.cost - st.money) + " more"); return; }
           if (!it.none) st.money -= it.cost;
-          st.look[key] = i; applyLook(); g.sound("cash", 0.6); g.save(); shopPanel(kind);
+          st.look[key] = i;
+          if (key === "outfit") { delete st.look.top; delete st.look.bottom; st.look.print = 0; }   // a whole outfit replaces the mix
+          applyLook(); g.sound("cash", 0.6); g.save(); shopPanel(kind);
         } });
     });
     g.hud.panel(kind === "barber" ? "FADE CITY BARBER" : "THREADS", rows);
   }
+  const shopTab = {};
+  // ---- the tattoo parlour: a design for each spot, $250 a piece; the laser takes one off ----
+  let tatSpot = 0;
+  function tattooPanel() {
+    const [key, label] = SPOTS[tatSpot], cur = st.look.tats[key];
+    const rows = [{ label: SPOTS.map(([k, l], i) => (i === tatSpot ? "▸ " : "") + l + (st.look.tats[k] !== undefined ? " ●" : "")).join(" · "), sub: "", btn: "NEXT ▸", onClick: () => { tatSpot = (tatSpot + 1) % SPOTS.length; tattooPanel(); } }];
+    const kind = g.P.ch.human && g.P.ch.human.kind, covered = /fore|upper/.test(key) && kind !== "mpfb";
+    DESIGNS.forEach((n, i) => rows.push({ label: label.toUpperCase() + " · " + n + (cur === i ? "  ✓" : ""), sub: "$" + TAT_COST + (covered && i === 0 ? " · (under your sleeves right now)" : " · it's for life (or for $" + TAT_OFF + ")"), btn: cur === i ? "INKED" : "INK IT", disabled: cur === i,
+      onClick: () => { if (st.money < TAT_COST) { g.toast("You need $" + Math.ceil(TAT_COST - st.money) + " more"); return; } st.money -= TAT_COST; st.look.tats[key] = i; reink(); g.sound("cash", 0.6); g.toast("🖋 Fresh ink — " + n, 2); g.save(); tattooPanel(); } }));
+    if (cur !== undefined) rows.push({ label: "Laser it off", sub: "$" + TAT_OFF + " · a little sore for a day", btn: "REMOVE", onClick: () => { if (st.money < TAT_OFF) { g.toast("You need $" + Math.ceil(TAT_OFF - st.money) + " more"); return; } st.money -= TAT_OFF; delete st.look.tats[key]; reink(); g.sound("door", 0.4); g.save(); tattooPanel(); } });
+    g.hud.panel("INK & PALMS TATTOO", rows);
+  }
+
 
   // ---- fuel ----
   const GAS = [PLACES.gas1, PLACES.gas2];
@@ -262,7 +298,8 @@ export function makeLife(scene, g) {
   // what E / the action button does on foot here (label + handler), or null
   function action() {
     if (g.P.car) return null;
-    if (near(PLACES.clothes)) return ["CLOTHES", "<b>THREADS</b> · outfits, hats & glasses", () => shopPanel("clothes")];
+    if (near(PLACES.clothes)) return ["CLOTHES", "<b>THREADS</b> · tops, prints, bottoms, hats & glasses", () => shopPanel("clothes")];
+    if (near(PLACES.tattoo)) return ["INK", "<b>INK & PALMS</b> · tattoos", () => shopPanel("tattoo")];
     if (near(PLACES.barber)) return ["BARBER", "<b>FADE CITY</b> · haircuts & beards", () => shopPanel("barber")];
     if (near(PLACES.arcade)) return ["PLAY", "<b>PALM BOWL</b> · bowling & arcade", () => g.hud.panel("PALM BOWL", [
       { label: "🎳 Bowling", sub: "5 frames · pays per pin", btn: "PLAY", onClick: () => { g.hud.closePanel(); openArcade("bowl"); } },
@@ -292,6 +329,7 @@ export function makeLife(scene, g) {
   }
   function update(dt) {
     fuelTick(dt);
+    if (g.P.ch.human && g.P.ch.human !== inked) reink();      // a new body (a haircut can change the model): ink it again
     for (const a of ATMS) if (a.cd > 0) a.cd -= dt;
     for (const s of STORES) if (s.cd > 0) s.cd -= dt;
     if (arcadeOpen) updateArcade(dt);
