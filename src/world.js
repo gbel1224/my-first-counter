@@ -60,7 +60,7 @@ export function district(i, j) {
 // ---------------------------------------------------------------------------------------------
 // Lots & buildings. Each block is split into lots; each lot gets a building (or a pair: a podium
 // with a tower set back on top). Everything is an axis-aligned box so collision stays exact.
-export const STYLE = { GLASS: 0, PASTEL: 1, BRICK: 2, HOUSE: 3, CONCRETE: 4, GARAGE: 5 };
+export const STYLE = { GLASS: 0, PASTEL: 1, BRICK: 2, HOUSE: 3, CONCRETE: 4, GARAGE: 5, LANDMARK: 6 };
 
 // sun-bleached stucco: off-whites, sand, faded salmon / mint / butter / sky — nothing candy-bright
 const PASTELS = [0xe4ddcf, 0xd8cbb4, 0xcfb9a4, 0xd9b3a0, 0xb9c9bb, 0xd8cb9c, 0xa9b8c2, 0xe6e0d6, 0xc7b8a6, 0xbfa58c, 0xd3c4b0];
@@ -80,6 +80,7 @@ export function buildCity(seed = 0x9A1C17) {
   const benches = [];     // [x, z, rotY]
 
   const homeLots = [];    // suburban lots (see the suburb blocks)
+  const sk = mulberry32(seed ^ 0x5C71);   // the skyline's own stream (tiers, crowns)
   const parks = [];       // the parks' layout (paths, features, who's sitting on the benches)
   const lr = mulberry32(seed ^ 0x10755);   // own stream: the lots don't reshuffle the rest of the city
   const add = (x, z, w, d, h, style, color, y = 0) => {
@@ -218,6 +219,20 @@ export function buildCity(seed = 0x9A1C17) {
         const tw = w * (0.55 + r() * 0.25), td = d * (0.55 + r() * 0.25);
         const th = 45 + r() * 110 * (split === 1 ? 1 : 0.7);
         add(cx + (r() - 0.5) * (w - tw) * 0.6, cz + (r() - 0.5) * (d - td) * 0.6, tw, td, th, STYLE.GLASS, pick(GLASS), ph);
+        // what the skyline sees: setback tiers on some towers, and a crown on top of each one
+        const tower = buildings[buildings.length - 1], v = sk();
+        tower.crown = v < 0.16 ? "spire" : v < 0.32 ? "pyramid" : v < 0.46 ? "helipad" : v < 0.6 ? "fins" : "flat";
+        if (th > 60 && sk() < 0.45) {
+          let bw = tw, bd = td, by = ph + th;
+          const n = sk() < 0.5 ? 1 : 2;
+          for (let k = 0; k < n; k++) {
+            bw *= 0.7 + sk() * 0.08; bd *= 0.7 + sk() * 0.08;
+            const h2 = th * (0.1 + sk() * 0.12);
+            buildings.push({ x: tower.x, z: tower.z, w: bw, d: bd, h: h2, y: by, style: STYLE.GLASS, color: tower.color, seed: sk(), roof: sk(), crown: k === n - 1 ? tower.crown : "flat" });
+            by += h2;
+          }
+          tower.crown = "flat";
+        }
       } else if (kind === "rough") {
         add(cx, cz, w, d, 9 + r() * 14, STYLE.BRICK, pick(BRICK));
       } else {
@@ -225,6 +240,29 @@ export function buildCity(seed = 0x9A1C17) {
         add(cx, cz, w, d, h, r() < 0.2 ? STYLE.CONCRETE : STYLE.PASTEL, r() < 0.2 ? pick(CONC) : pick(PASTELS));
       }
     }
+  }
+
+  // two landmarks downtown: Palm Tower, a round glass tower with a spire just north of the plaza,
+  // and the Coral Building, an art-deco stepped tower in stone with a lit crown
+  const landmarks = [];
+  const clearBlock = (i, j) => { const x0 = blockMin(i), z0 = blockMin(j); for (let k = buildings.length - 1; k >= 0; k--) { const b = buildings[k]; if (b.x > x0 && b.x < x0 + BLOCK && b.z > z0 && b.z < z0 + BLOCK) buildings.splice(k, 1); } };
+  {
+    const i = 6, j = 8, cx = blockC(i), cz = blockC(j);
+    clearBlock(i, j);
+    buildings.push({ x: cx, z: cz, w: BLOCK - WALK * 2 - 2.4, d: BLOCK - WALK * 2 - 2.4, h: 12, y: 0, style: STYLE.CONCRETE, color: 0xc8c2b6, seed: 0.37, roof: 0.5 });
+    buildings.push({ x: cx, z: cz, w: 30, d: 30, h: 232, y: 12, style: STYLE.LANDMARK, color: 0x4a6878, seed: 0.71, roof: 0.2 });
+    landmarks.push({ kind: "palm", x: cx, z: cz, r: 15, y: 12, h: 232 });
+  }
+  {
+    const i = 8, j = 4, cx = blockC(i), cz = blockC(j);
+    clearBlock(i, j);
+    buildings.push({ x: cx, z: cz, w: BLOCK - WALK * 2 - 2.4, d: BLOCK - WALK * 2 - 2.4, h: 14, y: 0, style: STYLE.CONCRETE, color: 0xd8ccb4, seed: 0.13, roof: 0.4 });
+    let w = 32, y = 14;
+    for (const [hh, s] of [[96, 1], [26, 0.8], [18, 0.64], [12, 0.5]]) {
+      buildings.push({ x: cx, z: cz, w: w * s, d: w * s, h: hh, y, style: STYLE.CONCRETE, color: 0xe2d6bc, seed: 0.2 + s * 0.3, roof: 0.3, crown: "flat" });
+      y += hh;
+    }
+    landmarks.push({ kind: "deco", x: cx, z: cz, w: w * 0.5, y });
   }
 
   // the promenade: a row of palms along the sand, benches looking at the sea
@@ -274,7 +312,7 @@ export function buildCity(seed = 0x9A1C17) {
       if (parkPathD(lx, lz) > 1.6 && !pk.quads.some(([a, b]) => Math.abs(lx - a * 9) < 5.4 && Math.abs(lz - b * 9) < 5.4)) shrubs.push([x, z, sc]);
     }
   }
-  return { buildings, blocks, palms, trees, lamps, benches, shrubs, lots: homeLots, parks };
+  return { buildings, blocks, palms, trees, lamps, benches, shrubs, lots: homeLots, parks, landmarks };
 }
 
 // the park paths: signed distance (m, negative on the path) from a point given relative to the park's
