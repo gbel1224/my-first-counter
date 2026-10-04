@@ -9,7 +9,7 @@ export const I = {
   touch: false,
 };
 const keys = new Set();
-let actionQ = false, jumpQ = false, cycleQ = false, fireQ = false;
+let actionQ = false, jumpQ = false, cycleQ = false, fireQ = false, radioQ = false;
 
 export function initInput(ui) {
   addEventListener("keydown", e => {
@@ -20,6 +20,7 @@ export function initInput(ui) {
     if (e.code === "Space") { jumpQ = true; e.preventDefault(); }
     if (e.code === "KeyQ" || e.code === "Tab") { cycleQ = true; e.preventDefault(); }
     if (e.code === "KeyF" || e.code === "KeyJ") fireQ = true;
+    if (e.code === "KeyR") radioQ = true;
     if (e.code.startsWith("Arrow")) e.preventDefault();
     document.body.classList.add("kb");
   });
@@ -81,6 +82,7 @@ export function initInput(ui) {
   ui.bF.addEventListener("pointerdown", () => { fireQ = true; });
   ui.bW.addEventListener("pointerdown", e => { e.preventDefault(); cycleQ = true; });
   hold(ui.bD, "hornBtn");
+  ui.bR.addEventListener("pointerdown", e => { e.preventDefault(); radioQ = true; });
 }
 
 let padPrevA = false, padPrevB = false;
@@ -118,6 +120,7 @@ export function pollInput() {
   I.action = actionQ; actionQ = false;
   I.jump = jumpQ; jumpQ = false;
   I.cycle = cycleQ; cycleQ = false;
+  I.radio = radioQ; radioQ = false;
   I.fire = fireQ; fireQ = false;
   I.fireHeld = keys.has("KeyF") || keys.has("KeyJ") || !!I.fireBtn || !!I.padFire;
   return I;

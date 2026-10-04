@@ -7,6 +7,7 @@ import { createCity } from "./city.js";
 import { bakeStreetLights, setStreetLights, setHeadlights } from "./streetlight.js";
 import { makeAnimals } from "./animals.js";
 import { makeDamage } from "./damage.js";
+import { makeRadio } from "./radio.js";
 import { buildCarts } from "./streetlife.js";
 import { createOcean } from "./ocean.js";
 import { Crowd, randomLook } from "./people.js";
@@ -337,7 +338,7 @@ const doors = makeDoors();
 // hijacking: drivers at the wheel, dragged out; owners by their vans
 const hijack = makeHijack(scene, {
   player: () => P, crowd, traffic, parked, crime, life, doors, toast: (m, t) => hud.toast(m, t),
-  finishEnter: (c, t0) => { P.car = c; P.ch.group.visible = true; AudioSys.play("door", 0.7); doors.play(c, "in", t0); },
+  finishEnter: (c, t0) => { P.car = c; P.ch.group.visible = true; AudioSys.play("door", 0.7); doors.play(c, "in", t0); radioOn(c); },
 });
 // haptics: a short buzz on phones when something big hits (explosions, crashes, getting shot)
 let lastShake = 0, buzzCD = 0;
@@ -532,7 +533,7 @@ function enterCar(n) {
     hijack.driverOf(t);
     traffic.take(t);
     c = spawnCar(scene, t.type, t.color, t.x, t.z, t.h);
-    cars.push(c);
+    cars.push(c); carryDent(t, c);
     hud.toast(t.type === "motorbike" ? "🏍️ Bike jacked" : "🚗 Hijacked", 1.6);
     crowd.scare(t.x, t.z, 12, 4);
     if (crime.units.some(u => u.active && crime.los(u.x, u.z, t.x, t.z))) crime.addCrime(1);
@@ -541,11 +542,12 @@ function enterCar(n) {
   if (n.park) {                                     // break into a parked one
     const t = n.park; parked.take(t);
     c = spawnCar(scene, t.type, t.color, t.x, t.z, t.h);
-    cars.push(c);
+    cars.push(c); carryDent(t, c);
     hud.toast("🔓 Hot-wired a parked " + t.type, 2.0);
   }
   P.car = c; P.ch.group.visible = true;
   AudioSys.play("door", 0.7); doors.play(c, "in");
+  radioOn(c, 1.8);
   if (c.kind === "heli") hud.toast("🚁 ▲ (Shift) to lift off, ▼ (Space) to descend · stick flies", 3.5);
   if (c.kind === "plane") hud.toast("✈️ Push forward to build speed, hold ▲ (Shift) to take off", 3.5);
 }
@@ -623,6 +625,7 @@ function update(dt) {
       AudioSys.engine(isFinite(c.speed) ? c.speed / c.spec.top : 0);
       AudioSys.skid(clamp((c.drift - 3) / 8, 0, 1));
       if (inp.hornHeld) AudioSys.horn();
+      if (inp.radio && hasRadio(c)) { const s = radio.tune(1); hud.toast("📻 " + s.name + (s.tag ? " · " + s.tag : ""), 2.2); }
       if (inp.action && !hud.talking()) {
         const wact = water.action(P);
         if (wact) water.doAction(P);
@@ -706,6 +709,8 @@ function update(dt) {
   crowd.update(dt, time, focus.x, focus.z, hz);
   animals.update(dt, time, { px: (P.car || P).x, pz: (P.car || P).z, pspeed: P.car ? Math.abs(P.car.speed || 0) : (P.speed || 0), cars: traffic.cars, people: crowd.people });
   ambienceTick(dt, focus);
+  radioToast(dt);
+  radio.update(dt, { inCar: !!P.car && hasRadio(P.car), car: P.car, px: P.x, pz: P.z, indoor: !!interior.inside });
   traffic.update(dt, time, [P.car ? { x: P.car.x, z: P.car.z, car: true } : { x: focus.x, z: focus.z, car: false }]);
   if (state.phase === "play" && P.car && !interior.inside) redLight(P.car);
   if (state.phase === "title") {
@@ -736,6 +741,19 @@ function frame(now) {
 }
 // the street the cars reflect, filmed around you a face at a time
 const probe = makeProbe(R.renderer, scene, sky, { mobile: isMobile });
+// a car you take keeps the dent it had
+function carryDent(t, c) {
+  const d = t.dent; if (!d || !c.chassis) return;
+  const fx = Math.sin(c.h), fz = Math.cos(c.h), wx = c.x + fz * d.x + fx * d.z, wz = c.z - fx * d.x + fz * d.z;
+  const n = Math.hypot(d.x, d.z) || 1;
+  damage.crash(c, wx, wz, -(fz * d.x + fx * d.z) / n, -(-fx * d.x + fz * d.z) / n, 5 + d.s / 0.013);
+}
+// the car radio: it comes on when you get in (on the station you left it on)
+const radio = makeRadio(() => ({ wanted: crime.S.wanted, night: sky.state.night > 0.5, rain: ((weather.W && weather.W.rain) || 0) > 0.3 }));
+const hasRadio = c => c && c.kind !== "jetski" && c.kind !== "bike" && !(c.spec && c.spec.bike);
+let radioToastT = -1;
+function radioOn(c, delay = 0) { if (!hasRadio(c)) return; radio.on(); radioToastT = delay; }
+function radioToast(dt) { if (radioToastT < 0) return; radioToastT -= dt; if (radioToastT < 0) { const s = radio.station; hud.toast("📻 " + s.name + (s.tag ? " · " + s.tag : ""), 2.2); } }
 // the city's sound: how busy, green, close to the surf and wet it is right where you are
 const AMB = { green: 0, downtown: 0, traffic: 0, crowd: 0, beach: 0, t: 0 };
 function ambienceTick(dt, f) {
@@ -913,7 +931,7 @@ requestAnimationFrame(frame);
 // debug / test hooks
 globalThis.__pc2 = {
   THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, hijack, P, cars, state, rig, I,
-  interior, props, skids, animals, damage, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
+  interior, props, skids, animals, damage, radio, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },
 };
