@@ -87,6 +87,7 @@ export function createHUD(plan) {
   dlg.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); advance(); });
   addEventListener("keydown", e => { if (dlgLines && ["Enter", "Space", "KeyE", "KeyF"].includes(e.code)) { e.preventDefault(); e.stopImmediatePropagation(); advance(); } }, true);
   const H_ = {
+    cityMap: { img: map, X, Z, S },                 // the same painted city, for the phone's Maps app
     mapInfo: { canvas: map, X, Z, S },
     dialogue(lines, cb) { dlgLines = lines; dlgI = 0; dlgCb = cb; renderDlg(); dlg.classList.add("on"); document.body.classList.add("talking"); },
     talking: () => !!dlgLines,
@@ -160,7 +161,7 @@ export function createHUD(plan) {
       if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) banner.classList.remove("on"); }
       if (dlgLines && dlgShown < dlgFull.length) { dlgShown = Math.min(dlgFull.length, dlgShown + dt * 55); dlg.querySelector(".txt").textContent = dlgFull.slice(0, Math.floor(dlgShown)); }
     },
-    minimap(px, pz, heading, camYaw, dots, marker) {
+    minimap(px, pz, heading, camYaw, dots, marker, gps) {
       const w = mm.width, h = mm.height, ctx = mctx, zoom = 1.25;
       ctx.save();
       ctx.clearRect(0, 0, w, h);
@@ -179,6 +180,15 @@ export function createHUD(plan) {
         if (d > lim) { mx *= lim / d; mz *= lim / d; }
         ctx.fillStyle = marker.c || "#ffc861"; ctx.strokeStyle = "#3a2206"; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(mx, mz, 6 / zoom * 1.2, 0, 6.3); ctx.fill(); ctx.stroke();
+      }
+      if (gps) {
+        // your own GPS pin (set from the phone's Maps): a cyan diamond, also held to the rim
+        let mx = (gps.x - px) * S, mz = (gps.z - pz) * S;
+        const lim = (w / 2 - 12) / zoom, d = Math.hypot(mx, mz);
+        if (d > lim) { mx *= lim / d; mz *= lim / d; }
+        const k = 6.5 / zoom;
+        ctx.fillStyle = "#3ee0ff"; ctx.strokeStyle = "#04303a"; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(mx, mz - k); ctx.lineTo(mx + k, mz); ctx.lineTo(mx, mz + k); ctx.lineTo(mx - k, mz); ctx.closePath(); ctx.fill(); ctx.stroke();
       }
       ctx.restore();
       // player arrow (points where the player/car faces, relative to the camera)

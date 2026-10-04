@@ -7,7 +7,8 @@ import { createCity } from "./city.js";
 import { bakeStreetLights, setStreetLights, setHeadlights } from "./streetlight.js";
 import { makeAnimals } from "./animals.js";
 import { makeDamage } from "./damage.js";
-import { makeRadio } from "./radio.js";
+import { makeRadio, STATIONS } from "./radio.js";
+import * as PA from "./phoneapps.js";
 import { buildBeach } from "./beach.js";
 import { paint, place, merge, vcMaterial } from "./geo.js";
 import { buildCarts } from "./streetlife.js";
@@ -152,7 +153,7 @@ await step(88);
 // save. The first time you open the new city, progress from the original game comes with you
 // (cash, businesses, homes, story chapter, level).
 const SAVE_KEY = "palmcity_save";
-const SAVE_FIELDS = ["money", "xp", "lvl", "owned", "apt", "home", "house", "mi", "bank", "stats", "weapons", "ammo", "turf", "nem", "term", "shares", "sprice", "sfair", "scost", "ledger", "pcars", "mods", "palms", "races", "medals", "ach", "treasure", "jetpack", "look", "decor", "decorBy", "beach", "villa", "pent", "garage", "cmods"];
+const SAVE_FIELDS = ["money", "xp", "lvl", "owned", "apt", "home", "house", "mi", "bank", "stats", "weapons", "ammo", "turf", "nem", "term", "shares", "sprice", "sfair", "scost", "ledger", "pcars", "mods", "palms", "races", "medals", "ach", "treasure", "jetpack", "look", "decor", "decorBy", "beach", "villa", "pent", "garage", "cmods", "followers", "sponsor"];
 let save = null, imported = false;
 try { save = JSON.parse(localStorage.getItem(SAVE_KEY) || localStorage.getItem("palmcity2_save") || "null"); } catch (e) {}
 if ((!save || save.mi === undefined) && !localStorage.getItem("sunset_city_save_v1_imported")) {
@@ -418,11 +419,100 @@ function mechanic() {
   AudioSys.play("door", 0.6); writeSave();
   return null;
 }
+// ---- the phone's newer apps: the bits that reach into the world ----
+// PalmRide: pay the fare, the screen goes to the back seat for a moment, you step out at the kerb
+const rideBusy = () => heistActive() || jobs.active() || events.active() || act2.active() || !!extras.objective() || (story.state().mState === "active" && st.mi < 12);
+let rideCard = null;
+function phoneRide(d) {
+  if (crime.S.wanted > 0) return "No driver will pick you up with the cops on you.";
+  if (P.car) return "You're driving — park up and get out first.";
+  if (interior.inside) return "Step outside first — the driver waits at the kerb.";
+  if (rideBusy()) return "Finish what you're doing first.";
+  const dist = Math.hypot(d.x - P.x, d.z - P.z), fare = PA.fare(dist);
+  if (dist < 30) return "You're already there.";
+  if (st.money < fare) return "That ride is $" + fare.toLocaleString() + " — you've got $" + Math.floor(st.money).toLocaleString() + ".";
+  st.money -= fare;
+  if (!rideCard) { rideCard = document.createElement("div"); rideCard.id = "ride"; document.getElementById("ui").appendChild(rideCard); }
+  rideCard.innerHTML = `<div><div class="k">🚕 PALMRIDE</div><div class="big">${d.name.replace(/[<>&]/g, "")}</div><div class="small">${Math.round(dist / 10) * 10} m · $${fare.toLocaleString()}</div></div>`;
+  rideCard.classList.add("on"); AudioSys.play("door", 0.5);
+  setTimeout(() => {
+    // a dropped pin may be inside a building or out at sea: step out at the nearest open kerb
+    let x = clamp(d.x, -HALF - 380, HALF + 380), z = clamp(d.z, -HALF - 260, HALF + 38);
+    const q = collider.resolve(x, z, 0.8); x = q.x; z = q.z;
+    respawnAt({ x, z, face: d.face !== undefined ? d.face : Math.atan2(x - P.x, z - P.z) });
+    if (d.face !== undefined) { const q2 = collider.resolve(P.x, P.z, 0.5); P.x = q2.x; P.z = q2.z; }
+    for (const p of crowd.people) if (!p.beach && !p.gang) crowd.respawnNear(p, P.x, P.z);
+    for (const c of traffic.cars) if (c.alive) traffic.respawnNear(c, P.x, P.z, 30);
+    writeSave();
+  }, 650);
+  setTimeout(() => rideCard.classList.remove("on"), 1700);
+  return null;
+}
+// Camera: render the view (or turn it round on you for a selfie), keep a small JPEG, and size up the shot
+const _camP = new THREE.Vector3(), _camQ = new THREE.Quaternion();
+let snapCv = null;
+function phoneSnap(selfie) {
+  if (selfie && P.car) return "Eyes on the road — no selfies at the wheel.";
+  _camP.copy(camera.position); _camQ.copy(camera.quaternion);
+  if (selfie) {
+    const a = P.yaw, fx = Math.sin(a), fz = Math.cos(a), rx = Math.cos(a), rz = -Math.sin(a);
+    camera.position.set(P.x + fx * 1.25 - rx * 0.25, P.y + 1.72, P.z + fz * 1.25 - rz * 0.25);
+    camera.lookAt(P.x, P.y + 1.5, P.z);
+    P.selfie = true;
+  }
+  render();
+  const src = R.renderer.domElement, W = 360, H = 270;
+  if (!snapCv) { snapCv = document.createElement("canvas"); snapCv.width = W; snapCv.height = H; }
+  const sw = src.width, sh = src.height, k = Math.min(sw / W, sh / H), cw = W * k, ch = H * k;
+  snapCv.getContext("2d").drawImage(src, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, W, H);
+  const img = snapCv.toDataURL("image/jpeg", 0.72);
+  P.selfie = false;
+  camera.position.copy(_camP); camera.quaternion.copy(_camQ); camera.updateMatrixWorld();
+  // what's in it
+  const near = (x, z, r) => (x - P.x) ** 2 + (z - P.z) ** 2 < r * r;
+  let cops = 0; for (const u of crime.units) if (u.active && near(u.x, u.z, 60)) cops++;
+  const fire = cars.some(c => c.boom && near(c.x, c.z, 45)) || traffic.cars.some(c => c.boom && near(c.x, c.z, 45)) || parked.around(P.x, P.z).some(c => c.boom && near(c.x, c.z, 45));
+  let crowdN = 0; for (const p of crowd.people) if (near(p.x, p.z, 16)) crowdN++;
+  const lm = [["fountain", "plaza"], ["marina", "marina"], ["club", "nightlife"], ["gallery", "art"], ["arcade", "palmbowl"]].find(([id]) => near(PLACES[id].x, PLACES[id].z, 28));
+  const nearCar = P.car || cars.concat(parked.around(P.x, P.z)).find(c => !c.boom && near(c.x, c.z, 7));
+  const r = PA.rateShot({ selfie, wanted: crime.S.wanted, cops, fire, night: sky.state.night > 0.5, beach: P.z > HALF + 2, car: nearCar ? (nearCar.type || "car") : null, crowd: crowdN, landmark: lm && lm[1] });
+  return { img, ...r };
+}
+function phoneDoctor() {
+  if (crime.S.health >= 100) return "Dr. Ramos: \"You look fine to me. That'll be... no, go on, get out of here.\"";
+  if (crime.S.wanted > 0) return "Dr. Ramos won't come out with the cops around.";
+  if (st.money < PA.DOCTOR_FEE) return "House calls are $" + PA.DOCTOR_FEE + ", cash.";
+  st.money -= PA.DOCTOR_FEE; crime.S.health = 100; AudioSys.play("blip", 0.6); writeSave(); return null;
+}
+function phoneLawyer() {
+  const w = crime.S.wanted;
+  if (!w) return "Lenny: \"Nobody's looking for you, kid. Keep it that way.\"";
+  if (w > PA.LAWYER_MAX) return "Lenny: \"" + w + " stars? I can't make THAT go away. Lose them first.\"";
+  const fee = w * PA.LAWYER_PER_STAR;
+  if (st.money < fee) return "Lenny wants $" + fee.toLocaleString() + " up front. Cash.";
+  st.money -= fee; crime.reset(); AudioSys.play("cash", 0.6); writeSave(); return null;
+}
+function phoneEmpire() {
+  const biz = BIZ.map(b => ({ id: b.id, name: bizNames[b.id] || b.id, lvl: st.owned[b.id] || 0, rate: b.rate * (st.owned[b.id] || 0), base: b.rate, cost: b.cost, tips: b.tips || 0, x: b.p.x, z: b.p.z, face: b.p.face }));
+  const props = PROPS.map(p => ({ label: p.label, owned: !!st[p.flag], cost: p.cost, x: p.p.x, z: p.p.z, face: p.p.face }));
+  return { rate: eco.incomeRate(), biz, props, turf: st.turf ? Object.values(st.turf).filter(Boolean).length : 0 };
+}
+function phoneMapDots() {
+  const d = [];
+  for (const b of BIZ) d.push({ x: b.p.x, z: b.p.z, c: st.owned[b.id] ? "#2fae6a" : "#d9962a", r: 5, t: "$" });
+  for (const pr of PROPS) if (st[pr.flag]) d.push({ x: pr.p.x, z: pr.p.z, c: "#7a6ad8", r: 5, t: "⌂" });
+  for (const p of PA.DIRECTORY) d.push({ x: p.x, z: p.z, c: "rgba(20,24,34,.85)", r: 5.5, t: p.ico === "⛽" ? "F" : p.ico === "🔫" ? "G" : p.ico === "🏥" ? "+" : p.ico === "🔧" ? "C" : p.ico === "🚓" ? "P" : "•" });
+  d.push({ x: extras.GARAGE.x, z: extras.GARAGE.z, c: "rgba(20,24,34,.85)", r: 5.5, t: "🅶" });
+  for (const u of crime.units) if (u.active) d.push({ x: u.x, z: u.z, c: "#ff3030", r: 3 });
+  return d;
+}
 let phone = null;
 const makePhone = () => createPhone({
+  cityMap: hud.cityMap, mapDots: phoneMapDots, heading: () => P.car ? P.car.h : P.yaw, ride: phoneRide, snap: phoneSnap, get radio() { return radio; }, stations: STATIONS,
+  empire: phoneEmpire, lawyer: phoneLawyer, doctor: phoneDoctor, wanted: () => crime.S.wanted, health: () => crime.S.health, now: () => time,
   st, clock: () => { const t = sky.state.t, m = Math.floor(t * 1440), h = Math.floor(m / 60); return (h % 12 || 12) + ":" + String(m % 60).padStart(2, "0") + (h < 12 ? " AM" : " PM"); },
   objective: () => currentObjective(), focus: focusInfo, jobs, heists: { active: heistActive }, startHeist: a => startHeist(a),
-  hire: () => jobs.hire(), mechanic, toast: m => hud.toast(m), sound: (k, v) => AudioSys.play(k, v), save: () => writeSave(),
+  hire: () => jobs.hire(), mechanic, toast: (m, t) => hud.toast(m, t), sound: (k, v) => AudioSys.play(k, v), save: () => writeSave(),
 });
 
 function currentObjective() {
@@ -1092,6 +1182,7 @@ function render() {
     const hands = !P.swim && combat.hands();
     if (hands) over = Object.assign({}, over || {}, hands);
     const hj = hijack.playerPose(); if (hj) over = hj;
+    if (P.selfie) over = Object.assign({}, over || {}, { armR: -1.6, elbowR: -0.95, armL: 0, elbowL: -0.1 });   // phone held out for the selfie
     // down behind cover: a deep crouch, the gun held low, ready to come up
     const crouch = cov.on && cov.peekT <= 0 && !P.swim && !interior.inside && !hj;
     if (crouch) over = Object.assign({}, over || {}, { thighL: -1.75, thighR: -1.25, kneeL: 2.35, kneeR: 2.05, lean: 0.32 },
@@ -1198,11 +1289,12 @@ function render() {
     if (!P.car && !near && (P.x - extras.GARAGE.x) ** 2 + (P.z - extras.GARAGE.z) ** 2 < 400 && !act) { hud.buttons(false, false, "GARAGE"); hud.prompt("<b>CITY GARAGE</b> · buy, upgrade & repaint" + (I.touch ? "" : " · <b>E</b>")); }
     if (!P.car && (P.x - PLACES.guns.x) ** 2 + (P.z - PLACES.guns.z) ** 2 < 16 && !act) { actLabel = "SHOP"; actPrompt = "<b>AMMU-PALM</b> · guns & ammo"; hud.buttons(false, !!near, actLabel); hud.prompt(actPrompt); }
     if (interior.inside) { const ia = interior.action(P); hud.buttons(false, false, ia && ia[0]); hud.prompt(ia ? ia[1] + (I.touch ? "" : " · <b>E</b>") : ""); }
-    if (obj) {
+    if (obj && !(st.gps && obj.side)) {                       // your own GPS pin outranks an optional side job
       hud.objective(obj.title, obj.text);
       const f = P.car || P;
       hud.objDistance(obj.x !== undefined ? Math.hypot(f.x - obj.x, f.z - obj.z) : null);
-    } else { hud.objective("Palm City", st.mi >= 12 ? "The city is yours — keep building" : "Explore the city"); hud.objDistance(null); }
+    } else if (st.gps) { hud.objective("📍 GPS", st.gps.name); const f = P.car || P; hud.objDistance(Math.hypot(f.x - st.gps.x, f.z - st.gps.z)); }
+    else { hud.objective("Palm City", st.mi >= 12 ? "The city is yours — keep building" : "Explore the city"); hud.objDistance(null); }
     hud.speed(P.car ? P.car.speed * 3.6 : 0, !!P.car, P.car && P.car.fuel !== undefined ? P.car.fuel : null);
     hud.cash(state.money);
     const dots = [];
@@ -1217,7 +1309,7 @@ function render() {
     for (const u of crime.units) if (u.active) dots.push({ x: u.x, z: u.z, c: Math.floor(time * 6) % 2 ? "#ff3030" : "#3060ff", r: 3.5 });
     if (crime.heli.active) dots.push({ x: crime.heli.x, z: crime.heli.z, c: "#ffffff", r: 4.5 });
     for (const p of gangs.members) if (!p.hidden && p.knocked <= 0 && (p.goon || (p.x - focus.x) ** 2 + (p.z - focus.z) ** 2 < 3600)) dots.push({ x: p.x, z: p.z, c: p.boss ? "#ff00aa" : "#ff5a3a", r: p.boss ? 4 : 2.5 });
-    hud.minimap(focus.x, focus.z, P.car ? P.car.h : P.yaw, rig.yaw, dots, obj && obj.x !== undefined ? { x: obj.x, z: obj.z, c: obj.side ? "#ff8a4c" : "#ffc861" } : null);
+    hud.minimap(focus.x, focus.z, P.car ? P.car.h : P.yaw, rig.yaw, dots, obj && obj.x !== undefined ? { x: obj.x, z: obj.z, c: obj.side ? "#ff8a4c" : "#ffc861" } : null, st.gps);
   }
   probe.update(P.car || P, [P.car && P.car.group, P.ch.group], interior.inside);
   R.render(scene, camera, time);

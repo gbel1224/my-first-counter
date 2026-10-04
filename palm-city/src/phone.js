@@ -60,10 +60,14 @@ export function toggleLike(id) {
   return p.liked;
 }
 // your own posts: they don't mark themselves unread, and nobody notifies you about you
-export function pushUserPost(text) {
-  posts.unshift({ id: nextId++, handle: "@you", name: "You", text, likes: 0, age: 0, liked: false, mine: true });
+// a photo post (img: a data URL) earns `target` likes, rolling in over the next half minute or so
+export function pushUserPost(text, img, target = 0) {
+  posts.unshift({ id: nextId++, handle: "@you", name: "You", text, likes: 0, age: 0, liked: false, mine: true, img, target });
   if (posts.length > MAX_POSTS) posts.length = MAX_POSTS;
 }
+// people reacting to your photo: a comment or two from the city's regulars
+const REPLIES = ["ok this is hard 🔥", "where is this??", "palm city never sleeps", "LMAOOO", "the vibes 🌴", "be careful out there fr", "screenshotting this", "main character energy"];
+export function replyTo() { const src = pick([HANDLES.rando, HANDLES.rando2, HANDLES.rando3, HANDLES.gossip]); add(src, "@you " + pick(REPLIES), 1, 40); }
 
 // ---- the reactive posts: these fire off real game state ----
 const HEAT_UP = [
@@ -118,7 +122,14 @@ export function pushCustom(text) { add(HANDLES.news, text, 20, 800); }
 // Edge-detected from a state snapshot rather than wired into a dozen call sites — the feed watches
 // the game the way a city would, instead of every system having to remember to tell it.
 export function updateFeed(dt, snap) {
-  for (const p of posts) p.age += dt;
+  let gained = 0;
+  for (const p of posts) {
+    p.age += dt;
+    if (p.target > p.likes) {                       // likes on your photos roll in, fast at first
+      const n = Math.min(p.target - p.likes, Math.max(1, Math.round((p.target - p.likes) * Math.min(1, dt * 0.18) + prng() * 0.6)));
+      p.likes += n; gained += n;
+    }
+  }
   if (prev) {
     if (snap.wanted > 0 && prev.wanted === 0) add(HANDLES.scanner, pick(HEAT_UP)(areaName(snap.x, snap.z)), 40, 900, true);
     if (snap.searching && !prev.searching) add(HANDLES.scanner, pick(SEARCHING)(areaName(snap.x, snap.z)), 80, 2000, true);
@@ -131,6 +142,7 @@ export function updateFeed(dt, snap) {
     const [src, fn] = pick(AMBIENT);
     add(src, fn(), 3, 260);
   }
+  return gained;
 }
 
 export function feed() { return posts; }

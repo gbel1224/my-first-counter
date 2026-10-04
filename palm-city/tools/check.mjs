@@ -190,6 +190,17 @@ try {
         o.talkOpen = !!who && !!who.face && who.face.talk > 0;
         if (who) { who.persona = "tough"; who.fear = 0; G.life.choose("insult"); for (let k = 0; k < 6 && !(who.fightT > 0); k++) run(60); o.talkFight = who.fightT > 0 && who.face.expr === "mad"; }
       }
+      // the phone's newer apps: a PalmRide across town, the lawyer, a photo posted for followers, earbuds
+      { if (G.P.car) G.exitCar(); G.crime.reset(); G.events.cancel(); if (G.jobs.active()) G.jobs.cancel(); G.st.money = 50000; const ph = G.phone(), q = s => document.querySelector("#phone " + s);
+        const g0 = G.PLACES.guns; ph.show(true); ph.setApp("ride");
+        const bi = [...document.querySelectorAll("#phone [data-ride]")].findIndex(e => e.textContent.includes("Ammu-Palm"));
+        if (bi >= 0) document.querySelectorAll("#phone [data-ride]")[bi].click();
+        await new Promise(r => setTimeout(r, 1100)); run(5);
+        o.rideTo = Math.round(Math.hypot(G.P.x - g0.x, G.P.z - g0.z));
+        G.crime.addCrime(1); ph.show(true); ph.setApp("contacts"); q('[data-act="lawyer"]').click(); o.lawyerCleared = G.crime.S.wanted === 0;
+        ph.setApp("cam"); q('[data-act="snap"]').click(); q('[data-act="postPhoto"]').click(); const f0 = G.st.followers || 0; run(900);
+        o.photoFollowers = (G.st.followers || 0) - f0;
+        ph.setApp("music"); q('[data-station="1"]').click(); o.earbuds = G.radio.earbuds; q('[data-act="musicOff"]').click(); ph.show(false); }
       return o;
     });
     ok("RPG rocket wrecks a car", r2.rpgWreck, r2);
@@ -200,6 +211,10 @@ try {
     ok("cars knock street props flying", r2.prop, r2);
     ok("strangers talk back with moving mouths", r2.talkOpen, r2);
     ok("insulting a tough guy starts a fight (and he looks mad)", r2.talkFight, r2);
+    ok("phone: PalmRide drops you at the place you picked", r2.rideTo < 6, r2);
+    ok("phone: the lawyer makes a 1-star wanted level go away", r2.lawyerCleared, r2);
+    ok("phone: a posted photo earns followers", r2.photoFollowers > 0, r2);
+    ok("phone: Music plays a station through your earbuds", r2.earbuds, r2);
     ok("no page errors", errs.length === 0, errs.slice(0, 3));
     await pg.close();
   }
