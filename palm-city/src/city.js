@@ -10,6 +10,7 @@ import { buildPalms } from "./palms.js";
 import { buildShrubs, buildGrass } from "./plants.js";
 import { buildHouses } from "./houses.js";
 import { buildParks } from "./parks.js";
+import { buildLandmarks, buildCrowns } from "./landmarks.js";
 import { signAtlas } from "./signs.js";
 import { addTile } from "./cull.js";
 
@@ -232,6 +233,12 @@ function facadeMaterial(U) {
               col = mix(col, wall * 0.45, spandrel * (1.0 - mull));
               glass = (1.0 - mull) * (1.0 - spandrel);
               fRough = mix(0.5, 0.04 + tint * 0.12, glass);   // every pane reflects slightly differently
+              // some towers wash their top floors in coloured light after dark
+              float crownK = h12(vec2(seed, 77.0));
+              if (crownK > 0.4) {
+                vec3 cc = crownK > 0.85 ? vec3(0.9, 0.3, 1.0) : crownK > 0.7 ? vec3(0.3, 0.7, 1.0) : crownK > 0.55 ? vec3(1.0, 0.8, 0.45) : vec3(0.85, 0.9, 1.0);
+                fEmit += cc * (1.0 - smoothstep(0.0, 9.0, top)) * (0.4 + 0.6 * mull) * uNight * 1.3;
+              }
             } else if (style == 5) {
               // attached garage: stucco like the house; on the street side a sectional door with
               // raised panels and a row of little windows in its top section, in a trim frame
@@ -466,7 +473,7 @@ function facadeMaterial(U) {
 }
 
 function buildBuildings(scene, city, U) {
-  const B = city.buildings;
+  const B = city.buildings.filter(b => b.style !== STYLE.LANDMARK);     // the landmarks are built by landmarks.js
   const geo = new THREE.BoxGeometry(1, 1, 1); geo.translate(0, 0.5, 0);
   const mesh = new THREE.InstancedMesh(geo, facadeMaterial(U), B.length);
   const style = new Float32Array(B.length * 4), col = new Float32Array(B.length * 3);
@@ -543,7 +550,7 @@ function buildBuildings(scene, city, U) {
       parts.push(place(paint(new THREE.BoxGeometry(t, H, b.d), C), b.x + b.w / 2 + t / 2, top + H / 2 - 0.2, b.z));
       parts.push(place(paint(new THREE.BoxGeometry(t, H, b.d), C), b.x - b.w / 2 - t / 2, top + H / 2 - 0.2, b.z));
     }
-    if (b.style === STYLE.GLASS && b.h > 90 && r() < 0.6) {
+    if (b.style === STYLE.GLASS && b.h > 90 && (!b.crown || b.crown === "flat") && r() < 0.6) {
       parts.push(place(paint(new THREE.CylinderGeometry(0.18, 0.3, 14, 6), 0xd0d0d0), b.x, top + 7, b.z));
       parts.push(place(paint(new THREE.SphereGeometry(0.45, 8, 6), 0xff3030, 6), b.x, top + 14.2, b.z));   // aircraft warning light
     }
@@ -1142,8 +1149,10 @@ export function createCity(scene, city, gy) {
   const props = buildProps(scene, city, U, gy);
   const houses = buildHouses(scene, city, U, GLSL_COMMON);
   buildParks(scene, city, U, GLSL_COMMON);
+  const landmarks = buildLandmarks(scene, city, U, GLSL_COMMON);
+  buildCrowns(scene, city);
   function update(time, night) {
-    houses.update(night);
+    houses.update(night); landmarks.update(night);
     U.uTime.value = time; U.uNight.value = night;
     U.uDamp.value = Math.min(1, night * 0.7 + U.uWet.value);             // the streets are damp after dark, soaked in the rain
     props.lampMat.userData.emit.value = night * 3.0;
