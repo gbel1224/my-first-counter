@@ -54,6 +54,7 @@ const CRACK_FN = `
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _m = new THREE.Matrix4(), _mi = new THREE.Matrix4(), _n3 = new THREE.Matrix3();
 function ownGeometry(mesh) {
   if (mesh.userData.ownGeo) return mesh.geometry;
+  mesh.userData.origGeo = mesh.geometry;
   mesh.geometry = mesh.geometry.clone(); mesh.userData.ownGeo = true;
   return mesh.geometry;
 }
@@ -74,7 +75,7 @@ function crackGlass(mesh) {
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.82, 0.86, 0.88), ck * 0.85); diffuseColor.a = max(diffuseColor.a, ck * 0.92); }`);
   };
   m.customProgramCacheKey = () => "glass-crack";
-  mesh.material = m;
+  mesh.material = m; mesh.userData.glassBase = base;
   return (mesh.userData.crack = { U, n: 0 });
 }
 
@@ -204,5 +205,15 @@ export function makeDamage(scene, g) {
       }
     }
   }
-  return { crash, update, bits };
+  // the body shop: panels beaten back out, new glass, new tyres — good as new
+  function repair(c) {
+    if (c.chassis) c.chassis.traverse(o => {
+      if (!o.isMesh) return;
+      if (o.userData.ownGeo) { o.geometry.dispose(); o.geometry = o.userData.origGeo; o.userData.ownGeo = false; }
+      if (o.userData.crack) { o.material.dispose(); o.material = o.userData.glassBase; o.userData.crack = null; }
+    });
+    c.dmg = null; c.dent = null; c.limp = 1; c.pull = 0; c.headOut = false; c.flat = 0; c.flatSet = null; c.hp = 100;
+    if (c.chassis) c.chassis.position.y = 0;
+  }
+  return { crash, update, bits, repair };
 }

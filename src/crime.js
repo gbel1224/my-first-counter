@@ -11,7 +11,7 @@ import { buildCraft } from "./craft.js";
 export const COP_SIGHT = 90;
 const MAX_UNITS = 6;
 
-function makeCruiser(scene) {
+export function makeCruiser(scene) {
   const C = makeCar("sedan", 0xf2f2f0);
   // black-and-white livery: dark lower body under the beltline
   // (on top of the paint's own wear shader: the livery goes on first, the road grime over it)

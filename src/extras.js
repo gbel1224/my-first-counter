@@ -191,7 +191,7 @@ export function makeExtras(scene, g) {
     ["jump1", "Daredevil", "Land a 1.0s+ stunt jump", () => (S.bestJump || 0) >= 1],
     ["race1", "Speed Demon", "Win a street race", () => Object.keys(st.races).length > 0],
     ["goldrush", "Gold Rush", "Gold on every circuit", () => CIRCUITS.every(C => (st.medals[C.id] || 0) >= 3)],
-    ["homeowner", "Homeowner", "Buy a home", () => st.apt || st.home || st.house],
+    ["homeowner", "Homeowner", "Buy a home", () => st.apt || st.home || st.house || st.beach || st.villa || st.pent],
     ["turf3", "Kingpin", "Take all 3 gang turfs", () => Object.keys(st.turf || {}).length >= 3],
     ["shark", "Shark Hunter", "Defeat Vic 'The Shark' Moreno", () => ((st.nem && st.nem.defeated) || 0) >= 1],
     ["tycoon", "Palm City Tycoon", "Have $50,000", () => (S.maxMoney || 0) >= 50000],

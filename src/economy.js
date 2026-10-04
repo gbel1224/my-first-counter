@@ -2,6 +2,7 @@
 // properties (a place to respawn and rest), XP and levels (every payout gives XP; each level lifts
 // all earnings 3%). Numbers match the original game so the balance carries over.
 import { PLACES } from "./places.js";
+import { TURF_INCOME } from "./gangs.js";
 
 export const BIZ = [
   { id: "dogs", cost: 500, rate: 30 },
@@ -16,6 +17,9 @@ export const PROPS = [
   { id: "apartment", flag: "apt", label: "Apartment", cost: 2500 },
   { id: "condo", flag: "home", label: "Condo", cost: 6000 },
   { id: "house", flag: "house", label: "House", cost: 12000 },
+  { id: "bungalow", flag: "beach", label: "Ocean View Loft", cost: 9000, plan: "apartment" },
+  { id: "villa", flag: "villa", label: "Palm Villa", cost: 22000, plan: "house" },
+  { id: "penthouse", flag: "pent", label: "Skyline Penthouse", cost: 40000, plan: "condo" },
 ].map(p => ({ ...p, p: PLACES[p.id] }));
 
 export const LVL_MAX = 30;
@@ -36,6 +40,7 @@ export function incomeRate(st) {
     if (b.id === "club" && st.mi > 10) r *= 1.25;     // Rosa runs the club (ch 11)
     s += r;
   }
+  if (st.turf) for (const k in st.turf) if (st.turf[k]) s += TURF_INCOME;   // the blocks you hold pay up
   if (st.mi === 9) s *= 0.5;                          // Sterling's trucks bleed you (ch 10)
   if (st.mi > 9) s *= 1.1;                            // your crews' loyalty (won in ch 10)
   return Math.round(s * lvlMult(st));
@@ -109,6 +114,7 @@ export function makeEconomy(st, fx) {
       }
     }
   }
-  const home = () => PROPS.find(pr => st[pr.flag]) || null;
+  // where you wake up: the best place you own
+  const home = () => { let h = null; for (const pr of PROPS) if (st[pr.flag]) h = pr; return h; };
   return { addXP, earn, actionAt, doAction, tick, home, incomeRate: () => incomeRate(st) };
 }

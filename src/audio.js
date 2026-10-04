@@ -95,7 +95,17 @@ export const AudioSys = (() => {
     const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35 * vol, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0008, t + 0.1);
     o.connect(g); g.connect(sfxGain); o.start(t); o.stop(t + 0.12);
   }
-  const SYNTH = { gun, boom, blip };
+  function pop(vol = 1) {                              // a tyre bursting: a hard crack, then the air hissing out
+    if (!ready || muted || !ctx) return;
+    const t = ctx.currentTime;
+    const s = noiseSrc(); const hp = ctx.createBiquadFilter(); hp.type = "bandpass"; hp.frequency.value = 900; hp.Q.value = 0.6;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.9 * vol, t + 0.004); g.gain.exponentialRampToValueAtTime(0.002, t + 0.12);
+    s.connect(hp); hp.connect(g); g.connect(sfxGain); s.start(t); s.stop(t + 0.15);
+    const s2 = noiseSrc(); const hf = ctx.createBiquadFilter(); hf.type = "highpass"; hf.frequency.value = 3200;
+    const g2 = ctx.createGain(); g2.gain.setValueAtTime(0.0001, t + 0.05); g2.gain.exponentialRampToValueAtTime(0.18 * vol, t + 0.1); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+    s2.connect(hf); hf.connect(g2); g2.connect(sfxGain); s2.start(t + 0.05); s2.stop(t + 0.95);
+  }
+  const SYNTH = { gun, boom, blip, pop };
   function play(k, vol = 1, rate = 1) {
     if (SYNTH[k]) { SYNTH[k](vol); return; }           // synthesized SFX (gun/boom/blip) need no file
     if (!ready || muted || !buffers[k]) return;
