@@ -141,6 +141,9 @@ export function makeInterior(scene, g) {
   // g: { st, sky, hud, toast, sound, save, sleep(), venueAction(kind, site) }
   const st = g.st;
   st.decor = Object.assign({}, DECOR_DEFAULT, st.decor || {});
+  // every home is decorated on its own (the old single decor seeds the first time you walk in)
+  if (!st.decorBy) st.decorBy = {};
+  const decorOf = id => st.decorBy[id] || (st.decorBy[id] = Object.assign({}, st.decor));
   const root = new THREE.Group(); root.position.set(ROOM.x, 0, ROOM.z); root.visible = false; scene.add(root);
   const view = { day: viewTex(false), night: viewTex(true) };
   const viewMat = new THREE.MeshBasicMaterial({ map: view.day });
@@ -657,7 +660,7 @@ export function makeInterior(scene, g) {
   // decor → furniture choices
   // ------------------------------------------------------------------------------------------
   function decorSpec() {
-    const d = st.decor, o = k => DECOR[k].opts[d[k]] || DECOR[k].opts[0];
+    const d = decorOf(prop ? prop.id : "apartment"), o = k => DECOR[k].opts[d[k]] || DECOR[k].opts[0];
     const col = k => (o(k).none ? null : o(k).c);
     const t = o("table");
     return {
@@ -700,7 +703,7 @@ export function makeInterior(scene, g) {
   function enter(pr, P) {
     prop = pr; S.pr = pr;
     const ds = decorSpec();
-    open(PLANS[pr.id] || PLANS.condo, { decor: ds.spec, wall: ds.wall, wallMat: ds.wallMat, floor: ds.floor, label: pr.label }, P);
+    open(PLANS[pr.plan || pr.id] || PLANS.condo, { decor: ds.spec, wall: ds.wall, wallMat: ds.wallMat, floor: ds.floor, label: pr.label }, P);
     g.sound("door", 0.6); g.toast("🏠 " + pr.label + " · the front door takes you back out");
   }
   function enterVenue(id, P) {
@@ -942,11 +945,12 @@ export function makeInterior(scene, g) {
     rows.push({ label: "ROOM", sub: Object.keys(DECOR).map(k => (k === slot ? "▸ " : "") + DECOR[k].name).join(" · "), btn: "NEXT ▸", onClick: () => { const ks = Object.keys(DECOR); panel(ks[(ks.indexOf(slot) + 1) % ks.length]); } });
     const D2 = DECOR[slot];
     D2.opts.forEach((o, i) => {
-      const on = st.decor[slot] === i, cost = o.none ? 0 : D2.cost;
+      const dec = decorOf(prop ? prop.id : "apartment");
+      const on = dec[slot] === i, cost = o.none ? 0 : D2.cost;
       rows.push({ label: D2.name.toUpperCase() + " · " + o.n + (on ? "  ✓" : ""), sub: o.none ? "Clear it out" : "$" + cost, btn: on ? "PLACED" : o.none ? "REMOVE" : "BUY", disabled: on,
         onClick: () => {
           if (cost && st.money < cost) { g.toast("You need $" + Math.ceil(cost - st.money) + " more"); return; }
-          st.money -= cost; st.decor[slot] = i; g.sound("cash", 0.5); g.save();
+          st.money -= cost; dec[slot] = i; g.sound("cash", 0.5); g.save();
           if (S.inside && prop && !prop.theme && g.player) rebuildHome(g.player());
           panel(slot);
         } });

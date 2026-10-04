@@ -148,7 +148,7 @@ try {
       const act = G.eco.actionAt(G.P.x, G.P.z); if (act && act.kind === "rest") G.interior.enter(act.pr, G.P);
       o.home = G.interior.inside;
       G.interior.panel("sofa"); const m0 = G.st.money; [...document.querySelectorAll("#panel .prow button")][3].click(); G.hud.closePanel();
-      o.decor = G.st.decor.sofa === 2 && G.st.money < m0;
+      o.decor = Object.values(G.st.decorBy || {}).some(d => d.sofa === 2) && G.st.money < m0;
       G.interior.exit(G.P); o.homeOut = !G.interior.inside;
       // venue: walk into the burger joint, eat at the counter, leave
       G.interior.enterVenue("burger", G.P); const R = G.interior.ROOM, v = G.interior.venue();

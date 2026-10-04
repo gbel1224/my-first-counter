@@ -21,7 +21,8 @@ export function driveStep(v, inp, dt, collider) {
   let lon = v.vx * fx + v.vz * fz, lat = v.vx * rx + v.vz * rz;
   const thr = clamp(inp.mz, -1, 1);
   const boost = inp.sprintHeld && thr > 0;
-  const top = S.top * (boost ? 1.22 : 1) * (v.limp || 1);          // a bent car won't do its top speed
+  const fl = v.flat || 0;                                           // shredded tyres (spike strip): slow, slithery, wandering
+  const top = S.top * (boost ? 1.22 : 1) * (v.limp || 1) * (1 - fl * 0.12);          // a bent car won't do its top speed
   if (thr > 0.02) {
     if (lon < -0.5) lon += 30 * thr * dt;                            // braking out of reverse
     else lon += S.accel * (boost ? 1.5 : 1) * thr * Math.max(0, 1 - (lon / top) ** 2) * dt;
@@ -30,10 +31,11 @@ export function driveStep(v, inp, dt, collider) {
     else lon = Math.max(-11, lon - 9 * -thr * dt);                   // reverse
   } else lon -= Math.sign(lon) * Math.min(Math.abs(lon), (1.2 + Math.abs(lon) * 0.05) * dt);   // coasting
   if (inp.handbrakeHeld) lon -= Math.sign(lon) * Math.min(Math.abs(lon), 6 * dt);
-  const grip = inp.handbrakeHeld ? 1.3 : S.grip * (1 - clamp(Math.abs(lat) / 22, 0, 0.5));
+  const grip = (inp.handbrakeHeld ? 1.3 : S.grip * (1 - clamp(Math.abs(lat) / 22, 0, 0.5))) * (1 - fl * 0.09);
   lat *= Math.exp(-grip * dt);
   // steering
-  v.steer = lerp(v.steer || 0, clamp(inp.mx + (v.pull || 0) * clamp(Math.abs(lon) / 8, 0, 1), -1, 1), 1 - Math.exp(-10 * dt));   // ...and pulls to one side
+  const wob = fl ? Math.sin(v.wobT = (v.wobT || 0) + dt * (2.3 + Math.abs(lon) * 0.25)) * 0.05 * fl * clamp(Math.abs(lon) / 6, 0, 1) : 0;
+  v.steer = lerp(v.steer || 0, clamp(inp.mx + wob + (v.pull || 0) * clamp(Math.abs(lon) / 8, 0, 1), -1, 1), 1 - Math.exp(-10 * dt));   // ...and pulls to one side
   const sp = Math.abs(lon);
   const auth = clamp(sp / 7, 0, 1) * (1 - 0.5 * clamp(sp / S.top, 0, 1));
   const yawT = -v.steer * S.turn * auth * Math.sign(lon || 1) * (inp.handbrakeHeld ? 1.45 : 1);
@@ -107,17 +109,27 @@ export function updatePlayerOnFoot(P, inp, dt, camYaw, collider) {
   let dx = fx * inp.mz + rx * inp.mx, dz = fz * inp.mz + rz * inp.mx;
   const dl = Math.hypot(dx, dz);
   const sprint = inp.sprintHeld && m > 0.3;
-  const target = m < 0.05 ? 0 : (sprint ? 7.2 : 1.6 + m * 2.2);
-  P.speed = lerp(P.speed, target, 1 - Math.exp(-(target > P.speed ? 6 : 10) * dt));
+  let target = m < 0.05 ? 0 : (sprint ? 7.2 : 1.6 + m * 2.2);
   if (dl > 0.01) {
     dx /= dl; dz /= dl;
-    P.yaw = lerpAngle(P.yaw, Math.atan2(dx, dz), 1 - Math.exp(-12 * dt));
+    // a sharp change of direction is a pivot on the spot, not a wide arc: turn faster, and
+    // carry less speed through it
+    let diff = Math.atan2(dx, dz) - P.yaw; while (diff > Math.PI) diff -= Math.PI * 2; while (diff < -Math.PI) diff += Math.PI * 2;
+    const ad = Math.abs(diff);
+    if (ad > 0.9) target *= clamp(1.25 - ad * 0.45, 0.15, 1);
+    P.yaw = lerpAngle(P.yaw, Math.atan2(dx, dz), 1 - Math.exp(-(ad > 1.6 ? 22 : 13) * dt));
   }
+  P.speed = lerp(P.speed, target, 1 - Math.exp(-(target > P.speed ? 6 : 10) * dt));
   const vx = Math.sin(P.yaw) * P.speed, vz = Math.cos(P.yaw) * P.speed;
+  const x0 = P.x, z0 = P.z;
   P.x += vx * dt; P.z += vz * dt;
   const res = collider.resolve(P.x, P.z, 0.38);
   P.x = res.x; P.z = res.z;
   P.x = clamp(P.x, -HALF - 420, HALF + 420); P.z = clamp(P.z, -HALF - 280, HALF + 600);
+  // how fast you REALLY went (a wall in the way stops you): the legs follow that, so pushing into a
+  // wall doesn't run on the spot, and sliding along one walks
+  const real = dt > 0 ? Math.hypot(P.x - x0, P.z - z0) / dt : 0;
+  if (res.hit && real < P.speed * 0.85) P.speed = lerp(P.speed, Math.max(real, 0), 1 - Math.exp(-10 * dt));
   // jumping / kerbs
   const gy = groundY(P.x, P.z);
   if (inp.jump && P.grounded) { P.vy = 5.4; P.grounded = false; }
@@ -125,7 +137,7 @@ export function updatePlayerOnFoot(P, inp, dt, camYaw, collider) {
   if (P.y <= gy) { P.y = lerp(P.y, gy, P.vy < -2 ? 1 : 0.5); if (P.y - gy < 0.02) P.y = gy; P.vy = 0; P.grounded = true; }
   P.amt = P.speed < 0.15 ? 0 : P.speed < 3.6 ? P.speed / 3.6 : 1 + (P.speed - 3.6) / 3.6;
   P.phase += P.speed * dt * (P.amt > 1 ? 1.55 : 2.25);
-  P.vx = vx; P.vz = vz;
+  P.vx = (P.x - x0) / (dt || 1); P.vz = (P.z - z0) / (dt || 1);
 }
 
 export function poseOnFoot(P, time, over) {
@@ -154,6 +166,7 @@ export function syncCar(v) {
   v.group.position.set(v.x, v.y || 0, v.z);
   v.group.rotation.set(0, v.h, 0);
   v.chassis.rotation.set(v.pitch || 0, 0, v.roll || 0);
+  if (v.flat) v.chassis.position.y = -0.028 * v.flat;                 // sitting on its rims
 }
 
 // ============================================================================================

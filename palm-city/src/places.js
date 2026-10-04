@@ -2,7 +2,7 @@
 // sidewalk spot in front of a real building, with a lit sign on the facade, so "go to Pronto
 // Pizza" means walking up to an actual shopfront rather than a marker on an empty corner.
 import * as THREE from "../vendor/three.module.js";
-import { BLOCK, WALK, CURB, ROAD, blockMin, blockC, roadC, PLAZA } from "./world.js";
+import { BLOCK, WALK, CURB, ROAD, blockMin, blockC, roadC, PLAZA, groundY as groundYAt } from "./world.js";
 
 // a spot on block (i,j)'s sidewalk. side: "N" | "S" | "E" | "W"; off: metres along the side from its centre.
 function walk(i, j, side, off = 0) {
@@ -48,6 +48,9 @@ export const PLACES = {
   apartment:  { ...walk(11, 3, "S", 8), label: "APARTMENTS", bg: "#4a4238", fg: "#f0e8d8" },
   condo:      { ...walk(8, 8, "W", 6), label: "PALM CONDOS", bg: "#2a3a4a", fg: "#f4f0e8" },
   house:      { ...walk(1, 3, "E", -12.25), label: null },
+  bungalow:   { ...walk(5, 13, "S", -10), label: null },
+  villa:      { ...walk(1, 7, "E", -12.25), label: null },
+  penthouse:  { ...walk(7, 4, "S", -10), label: null },
 };
 // race checkpoints sit on intersections
 export const RACE = [[1, 1], [13, 1], [13, 12], [3, 6], [6, 9], [7, 7]].map(([i, j]) => ({ x: roadC(i), z: roadC(j) }));
@@ -114,4 +117,39 @@ export function makeBeacon(scene, color) {
       col.material.opacity = 0.1 + Math.min(0.25, camDist / 400);   // columns read from far away, stay subtle up close
     },
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// realtor boards outside the homes you can buy: FOR SALE and the price, on a post in the yard or
+// on the sidewalk; gone once it's yours
+function saleTexture(price) {
+  const c = document.createElement("canvas"); c.width = 256; c.height = 192;
+  const g = c.getContext("2d");
+  g.fillStyle = "#f4f1ea"; g.fillRect(0, 0, 256, 192);
+  g.fillStyle = "#b8231c"; g.fillRect(0, 0, 256, 62);
+  g.fillStyle = "#fff"; g.font = "900 44px Outfit, system-ui, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText("FOR SALE", 128, 33);
+  g.fillStyle = "#1a1a1a"; g.font = "800 40px Outfit, system-ui, sans-serif"; g.fillText("$" + price.toLocaleString(), 128, 102);
+  g.fillStyle = "#555"; g.font = "700 20px Outfit, system-ui, sans-serif"; g.fillText("PALM REALTY · 555-0199", 128, 152);
+  g.strokeStyle = "#b8231c"; g.lineWidth = 6; g.strokeRect(3, 3, 250, 186);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+export function buildSaleSigns(scene, props) {
+  const post = new THREE.MeshStandardMaterial({ color: 0xece8e0, roughness: 0.6 });
+  const list = props.map(pr => {
+    const p = pr.p, grp = new THREE.Group();
+    const board = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.68, 0.03), [post, post, post, post, new THREE.MeshStandardMaterial({ map: saleTexture(pr.cost), roughness: 0.55 }), post]);
+    board.position.y = 1.25; board.castShadow = true;
+    const pole = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.65, 0.07), post); pole.position.set(-0.5, 0.82, 0); pole.castShadow = true;
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.06, 0.06), post); arm.position.set(-0.02, 1.62, 0);
+    const hooks = [-0.3, 0.3].map(x => { const h = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.05, 0.015), post); h.position.set(x, 1.57, 0); return h; });
+    grp.add(board, pole, arm, ...hooks);
+    const tx = Math.cos(p.face), tz = -Math.sin(p.face);
+    grp.position.set(p.x + tx * 1.9 - Math.sin(p.face) * 0.6, groundYAt(p.x + tx * 1.9, p.z + tz * 1.9), p.z + tz * 1.9 - Math.cos(p.face) * 0.6);
+    grp.rotation.y = p.face;
+    scene.add(grp);
+    return { pr, grp };
+  });
+  return { update(st) { for (const s of list) s.grp.visible = !st[s.pr.flag]; } };
 }

@@ -26,7 +26,7 @@ import { makeHijack } from "./hijack.js";
 import { createPlayer, updatePlayerOnFoot, poseOnFoot, spawnCar, syncCar, driveStep, createCamRig, updateCam } from "./play.js";
 import { makeCharacter } from "./people.js";
 import { setExpr, HAIR_U } from "./face.js";
-import { PLACES, buildSigns, setSignNight, makeBeacon } from "./places.js";
+import { PLACES, buildSigns, setSignNight, makeBeacon, buildSaleSigns } from "./places.js";
 import { BIZ, PROPS, newState, makeEconomy, xpNeed } from "./economy.js";
 import { makeStory } from "./story.js";
 import { STORY } from "./strings.js";
@@ -39,6 +39,7 @@ import * as PH from "./phone.js";
 import { initHeists, updateHeists, heistObjective, heistActive, startHeist, abortHeist, _debug as heistsDebug } from "./heists.js";
 import { makeEvents } from "./events.js";
 import { makeJobs } from "./jobs.js";
+import { makeRoadblocks } from "./roadblock.js";
 import { makeExtras, CIRCUITS } from "./extras.js";
 import { createWeather } from "./weather.js";
 import { createMenu } from "./menu.js";
@@ -143,7 +144,7 @@ await step(88);
 // save. The first time you open the new city, progress from the original game comes with you
 // (cash, businesses, homes, story chapter, level).
 const SAVE_KEY = "palmcity_save";
-const SAVE_FIELDS = ["money", "xp", "lvl", "owned", "apt", "home", "house", "mi", "bank", "stats", "weapons", "ammo", "turf", "nem", "term", "shares", "sprice", "sfair", "scost", "ledger", "pcars", "mods", "palms", "races", "medals", "ach", "treasure", "jetpack", "look", "decor"];
+const SAVE_FIELDS = ["money", "xp", "lvl", "owned", "apt", "home", "house", "mi", "bank", "stats", "weapons", "ammo", "turf", "nem", "term", "shares", "sprice", "sfair", "scost", "ledger", "pcars", "mods", "palms", "races", "medals", "ach", "treasure", "jetpack", "look", "decor", "decorBy", "beach", "villa", "pent"];
 let save = null, imported = false;
 try { save = JSON.parse(localStorage.getItem(SAVE_KEY) || localStorage.getItem("palmcity2_save") || "null"); } catch (e) {}
 if ((!save || save.mi === undefined) && !localStorage.getItem("sunset_city_save_v1_imported")) {
@@ -185,6 +186,7 @@ const cars = [];
 // ---------------------------------------------------------------------------------------------
 // the named city: shop signs, the objective beacons, the story's people, the hot-dog cart
 const signs = buildSigns(scene);
+const saleSigns = buildSaleSigns(scene, PROPS);
 const beacon = makeBeacon(scene, 0xffc861), sideBeacon = makeBeacon(scene, 0xff8a4c);
 const NPC_LOOKS = {
   marco: { skin: 0xb57a52, hair: 0x16100c, shirt: 0xe8e6e0, pants: 0x2a3a52, bald: false, h: 1.02, bulk: 1.08 },
@@ -281,6 +283,8 @@ const gangs = makeGangs({
   earn: n => eco.earn(n), paused: () => hud.talking() || state.phase !== "play",
   player: () => P.car ? { x: P.car.x, z: P.car.z, car: true, speed: P.car.speed } : { x: P.x, z: P.z, car: false, speed: P.speed },
   boss: (on, name, frac) => hud.boss(on, name, frac),
+  scene, save: () => writeSave(),
+  busy: () => crime.S.wanted > 0 || jobs.active() || events.active() || interior.inside || story.state().mState === "active" && st.mi === 11,
 });
 { const add = crime.addCrime; crime.addCrime = n => { add(n); gangs.grudge(3 * (n || 1)); }; }
 // ---------------------------------------------------------------------------------------------
@@ -301,6 +305,13 @@ const events = makeEvents(scene, {
   sound: (k, v, r) => AudioSys.play(k, v, r), toast: (m, t) => hud.toast(m, t), banner: (a, b, k, t) => hud.banner(a, b, k, t),
   earn: n => eco.earn(n), save: () => writeSave(), shake: a => { rig.shake = Math.max(rig.shake, a); },
   canStart: () => freeplay() && !heistActive() && !jobs.active() && crime.S.wanted === 0,
+});
+// at 3★ they get ahead of you: cruisers across the road, officers behind them, a spike strip in front
+const roadblocks = makeRoadblocks(scene, {
+  crime, crowd, traffic, fx,
+  focus: () => P.car ? { x: P.car.x, z: P.car.z, car: P.car, speed: P.car.speed } : { x: P.x, z: P.z, car: null, speed: P.speed },
+  sound: (k, v, r) => AudioSys.play(k, v, r), toast: (m, t) => hud.toast(m, t), shake: a => { rig.shake = Math.max(rig.shake, a); },
+  paused: () => hud.talking() || state.phase !== "play" || !!interior.inside,
 });
 const jobs = makeJobs({
   hospital: () => PLACES.hospital,
@@ -327,7 +338,7 @@ const makePhone = () => createPhone({
 function currentObjective() {
   const o = story.objective();
   if (o && o.main) return o;
-  return (extras && extras.objective()) || heistObjectiveNew() || jobs.objective() || events.objective() || o;
+  return (extras && extras.objective()) || heistObjectiveNew() || jobs.objective() || gangs.objective() || events.objective() || o;
 }
 function heistObjectiveNew() { const h = heistObjective(); return h ? { ...h, r: 5, event: true } : null; }
 const extras = makeExtras(scene, {
@@ -545,7 +556,7 @@ if (newg) newg.addEventListener("click", () => askConfirm("Start a new game? You
 addEventListener("keydown", e => { if (e.code === "Enter" && state.phase === "title") start(); });
 
 // ---------------------------------------------------------------------------------------------
-let time = 0, last = performance.now(), frozen = false, saveT = 0;
+let time = 0, last = performance.now(), frozen = false, saveT = 0, shopT = 0;
 const sim = { dt: 0 };
 function nearestCar() {
   let best = null, bd = 3.4 * 3.4, traf = null;
@@ -624,7 +635,11 @@ function update(dt) {
       else {
         const wallHit = driveStep(c, inp, dt, collider), wh = c.hit;
         const parkHit = parked.collide(c), ph = parked.lastHit;
-        impact = Math.max(wallHit, parkHit);
+        const blockHit = roadblocks.collide(c), bh = roadblocks.lastHit;
+        impact = Math.max(wallHit, parkHit, blockHit);
+        if (blockHit > 4 && bh) { damage.crash(c, bh.x, bh.z, bh.nx, bh.nz, blockHit); damage.crash(bh.car, bh.x, bh.z, -bh.nx, -bh.nz, blockHit * 0.9); if (blockHit > 6) crime.addCrime(1); }
+        // on the rims: sparks off the road at speed
+        if (c.flat && c.speed > 7 && Math.random() < dt * c.speed * 0.5) { const s = Math.random() < 0.5 ? -1 : 1, o = (c.flatSet.fr && (!c.flatSet.rr || Math.random() < 0.5) ? 1 : -1) * c.spec.len * 0.32; fx.sparks(c.x + Math.sin(c.h) * o + Math.cos(c.h) * s * 0.85, 0.1, c.z + Math.cos(c.h) * o - Math.sin(c.h) * s * 0.85, 2); }
         // the damage shows: on your car where it hit, and on whatever you hit
         if (wallHit > 4 && wh) damage.crash(c, wh.x, wh.z, wh.nx, wh.nz, wallHit);
         if (parkHit > 4 && ph) { damage.crash(c, ph.x, ph.z, ph.nx, ph.nz, parkHit); damage.crash(ph.car, ph.x, ph.z, -ph.nx, -ph.nz, parkHit * 0.9); }
@@ -657,6 +672,28 @@ function update(dt) {
             if (rel > 5) { rig.shake = Math.min(1, rel / 20); AudioSys.play("door", 0.8, 0.5); combat.damageCar(t, rel * 2, "traffic"); combat.damageCar(c, rel * 0.8, "player"); } }
           c.x -= nx * (3 - d) * 0.5; c.z -= nz * (3 - d) * 0.5;
         }
+      }
+      // the body shop at the Marina Car Wash: pull up, stop, and it's fixed (free if the wash is yours);
+      // with the cops searching, a respray loses them too
+      if (!c.kind) {
+        const W = PLACES.wash, near = (c.x - W.x) ** 2 + (c.z - W.z) ** 2 < 11 * 11;
+        const hurt = (c.hp !== undefined && c.hp < 100) || c.flat || c.dmg;
+        if (near && hurt && Math.abs(c.speed) < 1.2) {
+          shopT += dt;
+          if (shopT > 1.2) {
+            shopT = -999;
+            const own = !!st.owned.wash, cost = own ? 0 : 150;
+            if (st.money < cost) hud.toast("🔧 Body shop: $" + cost + " — you're short");
+            else {
+              st.money -= cost; damage.repair(c); AudioSys.play("cash", 0.8);
+              const lose = crime.S.wanted > 0 && crime.S.searching;
+              if (lose) crime.reset();
+              hud.banner("BODY SHOP", (lose ? "Fresh plates, they've lost you · " : "Good as new · ") + (cost ? "$" + cost : "on the house"), "", 2.4);
+            }
+          }
+        } else if (!near) shopT = 0;
+        if (near && hurt && shopT === 0 && !c.shopHint) { c.shopHint = true; hud.toast("🔧 Body shop — stop here to get the car fixed", 3); }
+        if (!near) c.shopHint = false;
       }
       syncCar(c);
       AudioSys.engine(isFinite(c.speed) ? c.speed / c.spec.top : 0);
@@ -731,7 +768,8 @@ function update(dt) {
     else if (crime.S.wanted >= 3 && f.hold <= 0) setExpr(f, P.speed > 5 ? "scared" : "annoyed", 1);
   }
   if (state.phase === "play" && !hud.talking() && !interior.inside) {             // the world holds its breath during dialogue
-    crime.update(dt, time); combat.update(dt, time); gangs.update(dt);
+    saleSigns.update(st);
+    crime.update(dt, time); roadblocks.update(dt, time); combat.update(dt, time); gangs.update(dt);
     updateHeists(dt, time); events.update(dt); jobs.update(dt); extras.update(dt); life.update(dt);
     if (P.car && P.car.boom && !P.car.charred) {           // your ride went up: you're thrown clear, it's a burnt shell
       const c = P.car; c.charred = true;
@@ -965,7 +1003,8 @@ function render() {
     for (const pr of PROPS) dots.push({ x: pr.p.x, z: pr.p.z, c: st[pr.flag] ? "#2fae6a" : "#7a6ad8", r: 5, t: "⌂" });
     if (st.mi >= 5) dots.push({ x: PLACES.depot.x, z: PLACES.depot.z, c: "#8a6a3a", r: 5, t: "D" });
     for (const c of cars) if (c !== P.car) dots.push({ x: c.x, z: c.z, c: "#2f7cff", r: 3 });
-    for (const G of GANGS) if (!st.turf[G.id]) dots.unshift({ x: G.x, z: G.z, c: ["rgba(200,40,40,.22)", "rgba(40,80,200,.22)", "rgba(40,150,70,.22)"][GANGS.indexOf(G)], r: G.r * 0.5 });
+    const W = gangs.war();
+    for (const G of GANGS) dots.unshift({ x: G.x, z: G.z, c: st.turf[G.id] ? (W && W.G === G && Math.floor(time * 3) % 2 ? "rgba(255,60,40,.35)" : "rgba(230,175,40,.24)") : ["rgba(200,40,40,.22)", "rgba(40,80,200,.22)", "rgba(40,150,70,.22)"][GANGS.indexOf(G)], r: G.r * 0.5 });
     for (const u of crime.units) if (u.active) dots.push({ x: u.x, z: u.z, c: Math.floor(time * 6) % 2 ? "#ff3030" : "#3060ff", r: 3.5 });
     if (crime.heli.active) dots.push({ x: crime.heli.x, z: crime.heli.z, c: "#ffffff", r: 4.5 });
     for (const p of gangs.members) if (!p.hidden && p.knocked <= 0 && (p.goon || (p.x - focus.x) ** 2 + (p.z - focus.z) ** 2 < 3600)) dots.push({ x: p.x, z: p.z, c: p.boss ? "#ff00aa" : "#ff5a3a", r: p.boss ? 4 : 2.5 });
@@ -985,7 +1024,7 @@ requestAnimationFrame(frame);
 // debug / test hooks
 globalThis.__pc2 = {
   THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, hijack, P, cars, state, rig, I,
-  interior, props, skids, animals, damage, radio, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
+  interior, props, skids, animals, damage, radio, roadblocks, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },
 };
