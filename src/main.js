@@ -830,7 +830,7 @@ function update(dt) {
         const blockHit = roadblocks.collide(c), bh = roadblocks.lastHit, missionHit = act2.collide(c);
         impact = Math.max(wallHit, parkHit, blockHit, missionHit);
         act2.impact(Math.max(wallHit, parkHit, blockHit, missionHit, c._trafficHit || 0)); c._trafficHit = 0;
-        if (blockHit > 4 && bh) { damage.crash(c, bh.x, bh.z, bh.nx, bh.nz, blockHit); damage.crash(bh.car, bh.x, bh.z, -bh.nx, -bh.nz, blockHit * 0.9); if (blockHit > 6) crime.addCrime(1); }
+        if (blockHit > 4 && bh) { damage.crash(c, bh.x, bh.z, bh.nx, bh.nz, blockHit); damage.crash(bh.car, bh.x, bh.z, -bh.nx, -bh.nz, blockHit * 0.9); if (blockHit > 6 && !crime.S.wanted) crime.addCrime(1); }   // (a crash mid-chase doesn't stack)
         // on the rims: sparks off the road at speed
         if (c.flat && c.speed > 7 && Math.random() < dt * c.speed * 0.5) { const s = Math.random() < 0.5 ? -1 : 1, o = (c.flatSet.fr && (!c.flatSet.rr || Math.random() < 0.5) ? 1 : -1) * c.spec.len * 0.32; fx.sparks(c.x + Math.sin(c.h) * o + Math.cos(c.h) * s * 0.85, 0.1, c.z + Math.cos(c.h) * o - Math.sin(c.h) * s * 0.85, 2); }
         // the damage shows: on your car where it hit, and on whatever you hit
@@ -983,7 +983,8 @@ function update(dt) {
   }
   // world sim — while you're indoors the street carries on around your front door
   const focus = interior.inside ? interior.doorWorld() : P.car || P;
-  const hz = P.car ? [{ x: P.car.x, z: P.car.z, speed: P.car.speed, vx: P.car.vx, vz: P.car.vz, onHit: (p, sp) => { rig.shake = 0.35; AudioSys.play("door", 0.5, 0.8); if (sp > 9) { crime.addCrime(1); if (sp > 16) p.dead = true, p.knocked = 22; } } }] : [];
+  // running someone down starts trouble; mid-chase it only stacks if a cop saw it, and only up to 3★ (4-5★ take shooting at the police)
+  const hz = P.car ? [{ x: P.car.x, z: P.car.z, speed: P.car.speed, vx: P.car.vx, vz: P.car.vz, onHit: (p, sp) => { rig.shake = 0.35; AudioSys.play("door", 0.5, 0.8); if (sp > 9) { if (!crime.S.wanted || crime.S.wanted < 3 && crime.units.some(u => u.active && (u.x - p.x) ** 2 + (u.z - p.z) ** 2 < 3600 && crime.los(u.x, u.z, p.x, p.z))) crime.addCrime(1); if (sp > 16) p.dead = true, p.knocked = 22; } } }] : [];
   for (const u of crime.units) if (u.active && u.speed > 5) hz.push({ x: u.x, z: u.z, speed: u.speed, vx: u.vx, vz: u.vz });
   interior.update(dt, time);
   if (interior.inside || hud.talking()) life.quiet();
