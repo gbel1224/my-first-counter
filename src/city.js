@@ -568,16 +568,16 @@ function buildBuildings(scene, city, U) {
 function groundMaterial(U) {
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
   m.onBeforeCompile = sh => {
-    sh.uniforms.uWet = U.uWet;
+    sh.uniforms.uWet = U.uWet; sh.uniforms.uDamp = U.uDamp; sh.uniforms.uTime = U.uTime; sh.uniforms.uNight = U.uNight;
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vWP;")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\nvWP = (modelMatrix * vec4(position, 1.0)).xyz;");
     sh.fragmentShader = sh.fragmentShader
       .replace("#include <common>", `#include <common>
-        uniform float uWet; varying vec3 vWP;
+        uniform float uWet, uDamp, uTime, uNight; varying vec3 vWP;
         ${GLSL_COMMON}
         const float HALF = ${HALF.toFixed(3)}, CELL = ${CELL.toFixed(3)}, ROAD = ${ROAD.toFixed(3)};`)
       .replace("#include <color_fragment>", `#include <color_fragment>
-        float gRough = 0.9;
+        float gRough = 0.9, gPud = 0.0, gH = 0.0, gMetal = 0.0; vec3 gEmit = vec3(0.0);
         {
           vec2 p = vWP.xz;
           vec3 col;
@@ -645,14 +645,87 @@ function groundMaterial(U) {
               oil *= 0.5 + 0.8 * (step(along, ROAD + 12.0) + step(CELL - 12.0, along));
               col *= 1.0 - clamp(oil, 0.0, 1.0) * 0.45;
             }
+            // raised yellow reflectors between the double centre lines, every 12 m; they catch headlights
+            if (ns != ew) {
+              float rm = (1.0 - step(0.09, abs(c))) * (1.0 - step(0.08, abs(fract(a / 12.0) - 0.5) * 12.0));
+              mk = max(mk, rm); mc = mix(mc, vec3(0.95, 0.75, 0.15), rm); gEmit += vec3(1.0, 0.7, 0.15) * rm * uNight * 0.9; gH += rm * 0.02;
+            }
             col = mix(col, mc, mk);
             gRough = mix(0.88, 0.55, mk);
-            // wet roads: darker and glossy
-            col *= 1.0 - uWet * 0.35; gRough = mix(gRough, 0.12, uWet);
+            if (ns != ew) {
+              // manhole covers down the lanes: a raised rim, a diamond-tread lid, a sheen of worn metal
+              float seg = floor(a / 37.0), sgn = h12(vec2(seg, 3.0)) < 0.5 ? -1.0 : 1.0;
+              vec2 mc0 = vec2(sgn * (h12(vec2(seg, 5.0)) < 0.5 ? 1.8 : 4.9), (seg + 0.3 + h12(vec2(seg, 9.0)) * 0.4) * 37.0);
+              vec2 mq = vec2(c, a) - mc0; float mr = length(mq);
+              if (mr < 0.62 && h12(vec2(seg, 11.0)) < 0.7) {
+                float rim = line1(mr, 0.52, 0.62);
+                vec2 dq = mq * 7.0;
+                float tread = step(0.5, fract(dq.x + dq.y)) * step(0.5, fract(dq.x - dq.y));
+                col = mix(vec3(0.16, 0.15, 0.14), vec3(0.24, 0.23, 0.21), tread) * (0.85 + vnoise(p * 9.0) * 0.3);
+                col = mix(col, vec3(0.13), rim);
+                gRough = 0.5 - tread * 0.15; gMetal = 0.6; gH += tread * 0.006 - rim * 0.01;
+              }
+              // storm drain inlets at the gutter, just before each crosswalk
+              float g0 = ROAD + 5.4, g1 = CELL - 6.4;
+              float inA = line1(along, g0, g0 + 1.0) + line1(along, g1, g1 + 1.0);
+              float edge = line1(abs(c), 7.3, 7.95);
+              if (inA * edge > 0.01) {
+                float slot = step(0.45, fract(along * 9.0));
+                col = mix(vec3(0.14, 0.13, 0.12), vec3(0.02), slot) * inA * edge + col * (1.0 - inA * edge);
+                gMetal = max(gMetal, 0.5 * inA * edge); gH -= slot * 0.02 * inA * edge;
+              }
+            }
+            // puddles: in the dips and along the gutters, standing after rain and on damp nights;
+            // dark, mirror-flat water (its reflections are added with the lighting, below)
+            float dip = vnoise(p * 0.16 + 5.0) * 0.7 + vnoise(p * 0.9 + 2.0) * 0.3;
+            float gut = (ns != ew) ? smoothstep(6.9, 7.7, abs(c)) * smoothstep(0.45, 0.6, vnoise(vec2(a * 0.25, 3.0))) : 0.0;
+            float pudAmt = clamp(uDamp * 1.1 - 0.2, 0.0, 1.0);
+            float pd = max(smoothstep(0.66 - pudAmt * 0.08, 0.7 - pudAmt * 0.08, dip), gut);
+            gPud = pd * smoothstep(0.0, 0.25, pudAmt);
+            // damp: the whole road darkens a touch and takes on a sheen; full rain makes it glossy
+            float damp = max(uDamp * 0.55, uWet);
+            col *= 1.0 - damp * 0.3; gRough = mix(gRough, mix(0.42, 0.14, uWet), damp);
+            col = mix(col, col * 0.45, gPud); gRough = mix(gRough, 0.02, gPud); gH *= 1.0 - gPud;
+            // rain: rings spreading on the puddles
+            if (uWet > 0.05) { vec2 rq = p * 2.0; vec2 ri = floor(rq); float ph = fract(uTime * 0.9 + h12(ri)); float rr = length(fract(rq) - 0.5);
+              gH += gPud * uWet * sin((rr - ph * 0.5) * 40.0) * (1.0 - ph) * 0.0015 * step(rr, ph * 0.5); }
           }
           diffuseColor.rgb = col;
         }`)
-      .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = gRough;");
+      .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = gRough;")
+      .replace("#include <metalnessmap_fragment>", "#include <metalnessmap_fragment>\nmetalnessFactor = gMetal;")
+      .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\nnormal = bumpN(normal, gH * clamp(1.0 - length(vViewPosition) / 60.0, 0.0, 1.0), vViewPosition);")
+      .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += gEmit;")
+      // puddles mirror the street: the night skyline with its lit windows, and every street lamp as a
+      // long streak (found by following the reflected ray up to lamp height and reading the light map there)
+      .replace("#include <lights_fragment_end>", `#include <lights_fragment_end>
+        if (gPud > 0.01) {
+          vec3 vdw = normalize(vWP - cameraPosition);
+          vec3 R = reflect(vdw, vec3(0.0, 1.0, 0.0));
+          R.xz += (vec2(vnoise(vWP.xz * 3.0 + uTime * 0.3), vnoise(vWP.xz * 3.0 + 7.0 - uTime * 0.25)) - 0.5) * (0.01 + uWet * 0.05);
+          R = normalize(R);
+          float az = atan(R.z, R.x);
+          float colI = floor(az * 9.0);
+          float hgt = 0.08 + 0.5 * h12(vec2(colI, 3.0)) * h12(vec2(colI, 9.0) + 1.0);
+          float bld = 1.0 - smoothstep(hgt - 0.01, hgt + 0.01, R.y);
+          vec2 wg = vec2(az * 28.0, R.y * 34.0);
+          float wins = smoothstep(0.2, 0.35, fract(wg.x)) * smoothstep(0.8, 0.65, fract(wg.x)) * smoothstep(0.25, 0.4, fract(wg.y)) * smoothstep(0.75, 0.6, fract(wg.y)) * step(0.66, h12(floor(wg) + colI));
+          vec3 sky = vec3(0.03, 0.04, 0.07) * (1.0 - uNight) * 8.0 + vec3(0.01, 0.015, 0.03);
+          #ifdef USE_ENVMAP
+            sky = getIBLRadiance(geometryViewDir, normalize(geometryNormal), 0.02);
+          #endif
+          vec3 refl = mix(sky, vec3(0.02, 0.02, 0.025) + vec3(1.0, 0.72, 0.42) * wins * uNight * 0.3, bld * 0.9);
+          if (R.y > 0.03) {
+            vec3 lp = vWP + R * (6.2 / R.y);
+            vec2 luv = (lp.xz - uSLParam.yz) * uSLParam.w;
+            if (luv.x > 0.0 && luv.y > 0.0 && luv.x < 1.0 && luv.y < 1.0) {
+              float le = texture2D(uSLMap, luv).r; le = le * le * 2.0;
+              refl += vec3(1.0, 0.78, 0.5) * pow(clamp((le - 0.75) / 0.6, 0.0, 1.0), 2.0) * uSLParam.x * 0.7;
+            }
+          }
+          float F = 0.02 + 0.98 * pow(1.0 - clamp(dot(-vdw, vec3(0.0, 1.0, 0.0)), 0.0, 1.0), 5.0);
+          reflectedLight.indirectSpecular = mix(reflectedLight.indirectSpecular, refl * mix(0.25, 1.0, F), gPud);
+        }`);
   };
   return m;
 }
@@ -1051,7 +1124,7 @@ function buildProps(scene, city, U, gy) {
 }
 
 export function createCity(scene, city, gy) {
-  const U = { uNight: { value: 0 }, uTime: { value: 0 }, uWet: { value: 0 } };
+  const U = { uNight: { value: 0 }, uTime: { value: 0 }, uWet: { value: 0 }, uDamp: { value: 0 } };
   // flat land from the northern outskirts down to where the beach starts to slope
   const z0 = -HALF - 700, z1 = HALF + 30;
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(HALF * 2 + 1400, z1 - z0, 1, 1), groundMaterial(U));
@@ -1072,6 +1145,7 @@ export function createCity(scene, city, gy) {
   function update(time, night) {
     houses.update(night);
     U.uTime.value = time; U.uNight.value = night;
+    U.uDamp.value = Math.min(1, night * 0.7 + U.uWet.value);             // the streets are damp after dark, soaked in the rain
     props.lampMat.userData.emit.value = night * 3.0;
     props.halo.visible = night > 0.05; props.halo.material.opacity = Math.min(1, night * 1.5) * 0.9;
     props.spray.scale.y = 1 + Math.sin(time * 5) * 0.06;
