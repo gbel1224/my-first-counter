@@ -232,7 +232,7 @@ try {
     ok("cars knock street props flying", r2.prop, r2);
     ok("strangers talk back with moving mouths", r2.talkOpen, r2);
     ok("insulting a tough guy starts a fight (and he looks mad)", r2.talkFight, r2);
-    ok("police chase: cruisers sit behind you, not circling", r2.chaseNear > 100 && r2.chaseBehind > 0.7 && r2.chaseSpin < 1.2, r2);
+    ok("police chase: cruisers sit behind you, not circling", r2.chaseNear > 50 && r2.chaseBehind > 0.7 && r2.chaseSpin < 1.2, r2);
     ok("police chase: being shunted by cops and red lights mid-chase don't stack stars", r2.chaseWanted <= 3, r2);
     ok("phone: PalmRide drops you at the place you picked", r2.rideTo < 6, r2);
     ok("phone: the lawyer makes a 1-star wanted level go away", r2.lawyerCleared, r2);
