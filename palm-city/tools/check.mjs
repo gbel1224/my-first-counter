@@ -190,6 +190,20 @@ try {
         o.talkOpen = !!who && !!who.face && who.face.talk > 0;
         if (who) { who.persona = "tough"; who.fear = 0; G.life.choose("insult"); for (let k = 0; k < 6 && !(who.fightT > 0); k++) run(60); o.talkFight = who.fightT > 0 && who.face.expr === "mad"; }
       }
+      // police chase: down a long straight at speed, the cruisers line up BEHIND you — no circling
+      { if (G.P.car) G.exitCar(); G.crime.reset(); G.events.cancel(); const W = await import("/src/world.js");
+        const c = G.cars[0], rx = W.roadC(3) + 2.2; c.x = rx; c.z = -W.HALF + 60; c.h = 0; c.vx = c.vz = 0; c.speed = 0;
+        G.P.x = c.x - 1.5; G.P.z = c.z; G.enterNearest(); run(40); const car = G.P.car;
+        if (car) { car.x = rx; car.z = -W.HALF + 60; car.h = 0; car.vx = car.vz = 0;
+          G.crime.addCrime(2); let behind = 0, near = 0; const lastH = {}; let spin = 0;
+          for (let f = 0; f < 60 * 12; f++) {
+            G.I.mz = car.speed < 22 ? 0.8 : 0.05; G.I.mx = Math.max(-1, Math.min(1, (car.x - rx) * 0.25 + car.h * 2)); run(1);
+            G.crime.units.forEach((u, i) => { if (!u.active) return; const d = Math.hypot(u.x - car.x, u.z - car.z);
+              if (lastH[i] !== undefined && d < 40) { let dh = u.h - lastH[i]; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); spin = Math.max(spin, (u._sp = (u._sp || 0) + Math.abs(dh))); }
+              lastH[i] = u.h; if (d < 40) { near++; if ((u.x - car.x) * Math.sin(car.h) + (u.z - car.z) * Math.cos(car.h) < 0) behind++; } });
+          }
+          G.I.mz = 0; G.I.mx = 0; o.chaseBehind = near ? +(behind / near).toFixed(2) : 0; o.chaseNear = near; o.chaseSpin = +(spin / 6.283).toFixed(2); o.chaseWanted = G.crime.S.wanted;
+          G.exitCar(); G.crime.reset(); } }
       // the phone's newer apps: a PalmRide across town, the lawyer, a photo posted for followers, earbuds
       { if (G.P.car) G.exitCar(); G.crime.reset(); G.events.cancel(); if (G.jobs.active()) G.jobs.cancel(); G.st.money = 50000; const ph = G.phone(), q = s => document.querySelector("#phone " + s);
         const g0 = G.PLACES.guns; ph.show(true); ph.setApp("ride");
@@ -211,6 +225,8 @@ try {
     ok("cars knock street props flying", r2.prop, r2);
     ok("strangers talk back with moving mouths", r2.talkOpen, r2);
     ok("insulting a tough guy starts a fight (and he looks mad)", r2.talkFight, r2);
+    ok("police chase: cruisers sit behind you, not circling", r2.chaseNear > 100 && r2.chaseBehind > 0.7 && r2.chaseSpin < 1.2, r2);
+    ok("police chase: being shunted by cops and red lights mid-chase don't stack stars", r2.chaseWanted <= 3, r2);
     ok("phone: PalmRide drops you at the place you picked", r2.rideTo < 6, r2);
     ok("phone: the lawyer makes a 1-star wanted level go away", r2.lawyerCleared, r2);
     ok("phone: a posted photo earns followers", r2.photoFollowers > 0, r2);

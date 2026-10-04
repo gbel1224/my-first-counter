@@ -161,7 +161,7 @@ export function createHUD(plan) {
       if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) banner.classList.remove("on"); }
       if (dlgLines && dlgShown < dlgFull.length) { dlgShown = Math.min(dlgFull.length, dlgShown + dt * 55); dlg.querySelector(".txt").textContent = dlgFull.slice(0, Math.floor(dlgShown)); }
     },
-    minimap(px, pz, heading, camYaw, dots, marker, gps) {
+    minimap(px, pz, heading, camYaw, dots, marker, gps, cops, t = 0) {
       const w = mm.width, h = mm.height, ctx = mctx, zoom = 1.25;
       ctx.save();
       ctx.clearRect(0, 0, w, h);
@@ -180,6 +180,37 @@ export function createHUD(plan) {
         if (d > lim) { mx *= lim / d; mz *= lim / d; }
         ctx.fillStyle = marker.c || "#ffc861"; ctx.strokeStyle = "#3a2206"; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(mx, mz, 6 / zoom * 1.2, 0, 6.3); ctx.fill(); ctx.stroke();
+      }
+      if (cops && cops.length) {
+        // the police: while they search, each cruiser's sight cone (stay out of them); every unit a
+        // flashing blip, and the ones still out past the edge pinned to the rim, pointing the way they're coming from
+        const lim = (w / 2 - 10) / zoom, flash = Math.floor(t * 6) % 2;
+        for (const c of cops) {
+          const mx = (c.x - px) * S, mz = (c.z - pz) * S;
+          if (c.cone && Math.hypot(mx, mz) < lim + 40) {
+            const R = 48 * S, a0 = Math.PI / 2 - c.h;                    // world heading -> canvas angle (x right, z down)
+            const g = ctx.createRadialGradient(mx, mz, 0, mx, mz, R);
+            g.addColorStop(0, c.seen ? "rgba(255,50,50,.85)" : "rgba(70,130,255,.8)"); g.addColorStop(0.75, c.seen ? "rgba(255,50,50,.4)" : "rgba(70,130,255,.35)"); g.addColorStop(1, "rgba(70,130,255,0)");
+            ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(mx, mz); ctx.arc(mx, mz, R, a0 - 0.62, a0 + 0.62); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = "rgba(70,130,255,.28)"; ctx.beginPath(); ctx.arc(mx, mz, 11 * S, 0, 6.3); ctx.fill();
+          }
+        }
+        for (const c of cops) {
+          let mx = (c.x - px) * S, mz = (c.z - pz) * S;
+          const d = Math.hypot(mx, mz), col = c.tank ? "#ffb020" : (flash ^ (c.x > px)) ? "#ff3030" : "#3a6bff";
+          if (d > lim) {
+            mx *= lim / d; mz *= lim / d;
+            const ang = Math.atan2(mz, mx);
+            ctx.save(); ctx.translate(mx, mz); ctx.rotate(ang);
+            const k = 2 / zoom;
+            ctx.fillStyle = col; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.2 / zoom;
+            ctx.beginPath(); ctx.moveTo(6 * k, 0); ctx.lineTo(-4 * k, -5 * k); ctx.lineTo(-4 * k, 5 * k); ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.restore();
+          } else {
+            ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(mx, mz, c.tank ? 7 : 6.2, 0, 6.3); ctx.fill();
+            ctx.fillStyle = col; ctx.beginPath(); ctx.arc(mx, mz, c.tank ? 5.2 : 4.6, 0, 6.3); ctx.fill();
+          }
+        }
       }
       if (gps) {
         // your own GPS pin (set from the phone's Maps): a cyan diamond, also held to the rim

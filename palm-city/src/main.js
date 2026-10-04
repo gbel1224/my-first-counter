@@ -255,7 +255,9 @@ function respawnAt(place, label) {
 }
 const crime = makeCrime(scene, {
   collider, fxParticles: fx,
-  focus: () => P.car ? { x: P.car.x, z: P.car.z, car: true, speed: P.car.speed } : { x: P.x, z: P.z, car: false, speed: P.speed },
+  focus: () => P.car ? { x: P.car.x, z: P.car.z, car: true, speed: P.car.speed, vx: P.car.vx, vz: P.car.vz, h: P.car.h, ref: P.car } : { x: P.x, z: P.z, car: false, speed: P.speed, h: P.yaw },
+  // what a cruiser has to drive round: live traffic and parked cars near the action
+  obstacles: (x, z) => traffic.cars.filter(c => c.alive && (c.x - x) ** 2 + (c.z - z) ** 2 < 200 * 200).concat(parked.around(x, z)),
   sound: (k, v, r) => AudioSys.play(k, v, r), toast: m => hud.toast(m), shake: a => { rig.shake = Math.max(rig.shake, a); },
   paused: () => hud.talking() || state.phase !== "play",
   cover: (sx, sz, air) => coverMult(sx, sz, air),
@@ -403,7 +405,7 @@ const services = makeServices(scene, {
   },
 });
 crowd.onKilled = p => { if (!p.svc && !p.hidden && p.x < 9e4) services.report("medical", p.x, p.z, { body: p }); };
-traffic.sirens = () => services.sirens();
+traffic.sirens = () => services.sirens().concat(crime.units.filter(u => u.active && !u.tank));   // pull over for the cops too
 const jobs = makeJobs({
   hospital: () => PLACES.hospital,
   focus: focusInfo, traffic, crowd, gangs, crime, combat, fx, collider, st,
@@ -857,7 +859,7 @@ function update(dt) {
         const dx = u.x - c.x, dz = u.z - c.z, d2 = dx * dx + dz * dz;
         if (d2 < 10) {
           const d = Math.sqrt(d2) || 1, nx = dx / d, nz = dz / d, rel = (c.vx - u.vx) * nx + (c.vz - u.vz) * nz;
-          if (rel > 0) { c.vx -= nx * rel * 0.7; c.vz -= nz * rel * 0.7; u.vx += nx * rel * 0.7; u.vz += nz * rel * 0.7; if (rel > 6) { crime.addCrime(1); combat.damageCar(u, rel * 1.5, "cop"); }
+          if (rel > 0) { c.vx -= nx * rel * 0.7; c.vz -= nz * rel * 0.7; u.vx += nx * rel * 0.7; u.vz += nz * rel * 0.7; if (rel > 6) { if (c.vx * nx + c.vz * nz > -(u.vx * nx + u.vz * nz)) crime.addCrime(1); combat.damageCar(u, rel * 1.5, "cop"); }   // (only YOU ramming THEM is a crime — not them shunting you)
             if (rel > 4) { const hx = (c.x + u.x) / 2, hz = (c.z + u.z) / 2; damage.crash(c, hx, hz, -nx, -nz, rel); damage.crash(u, hx, hz, nx, nz, rel); } }
           c.x -= nx * (3.2 - d) * 0.5; c.z -= nz * (3.2 - d) * 0.5; u.x += nx * (3.2 - d) * 0.5; u.z += nz * (3.2 - d) * 0.5;
         }
@@ -1121,7 +1123,8 @@ function redLight(c) {
     const edge = axis === "x" ? Math.abs(c.x - cx) > ROAD / 2 - 2.5 : Math.abs(c.z - cz) > ROAD / 2 - 2.5;
     if (edge && sp > 5 && signalState(i, j, axis, SIGNAL.t) === RED) {
       const cop = crime.units.some(u => u.active && (u.x - c.x) ** 2 + (u.z - c.z) ** 2 < 70 * 70);
-      if (cop) { hud.toast("🚦 Ran a red light — in front of the cops"); crime.addCrime(1); }
+      if (cop && crime.S.wanted === 0) { hud.toast("🚦 Ran a red light — in front of the cops"); crime.addCrime(1); }   // (mid-chase it doesn't stack)
+      else if (cop) {}
       else { if (Math.random() < 0.6) AudioSys.play("horn", 0.5, 0.9 + Math.random() * 0.2); hud.toast("🚦 Ran a red light", 1.2); }
     }
   }
@@ -1306,10 +1309,9 @@ function render() {
     for (const c of cars) if (c !== P.car) dots.push({ x: c.x, z: c.z, c: "#2f7cff", r: 3 });
     const W = gangs.war();
     for (const G of GANGS) dots.unshift({ x: G.x, z: G.z, c: st.turf[G.id] ? (W && W.G === G && Math.floor(time * 3) % 2 ? "rgba(255,60,40,.35)" : "rgba(230,175,40,.24)") : ["rgba(200,40,40,.22)", "rgba(40,80,200,.22)", "rgba(40,150,70,.22)"][GANGS.indexOf(G)], r: G.r * 0.5 });
-    for (const u of crime.units) if (u.active) dots.push({ x: u.x, z: u.z, c: Math.floor(time * 6) % 2 ? "#ff3030" : "#3060ff", r: 3.5 });
     if (crime.heli.active) dots.push({ x: crime.heli.x, z: crime.heli.z, c: "#ffffff", r: 4.5 });
     for (const p of gangs.members) if (!p.hidden && p.knocked <= 0 && (p.goon || (p.x - focus.x) ** 2 + (p.z - focus.z) ** 2 < 3600)) dots.push({ x: p.x, z: p.z, c: p.boss ? "#ff00aa" : "#ff5a3a", r: p.boss ? 4 : 2.5 });
-    hud.minimap(focus.x, focus.z, P.car ? P.car.h : P.yaw, rig.yaw, dots, obj && obj.x !== undefined ? { x: obj.x, z: obj.z, c: obj.side ? "#ff8a4c" : "#ffc861" } : null, st.gps);
+    hud.minimap(focus.x, focus.z, P.car ? P.car.h : P.yaw, rig.yaw, dots, obj && obj.x !== undefined ? { x: obj.x, z: obj.z, c: obj.side ? "#ff8a4c" : "#ffc861" } : null, st.gps, crime.S.wanted > 0 ? crime.radar() : null, time);
   }
   probe.update(P.car || P, [P.car && P.car.group, P.ch.group], interior.inside);
   R.render(scene, camera, time);
