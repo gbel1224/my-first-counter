@@ -138,6 +138,21 @@ try {
     const r2 = await pg.evaluate(async () => {
       const G = window.__pc2, run = n => { for (let i = 0; i < n; i++) { G.crime.S.health = 100; G.step(1 / 60); G.crime.S.bustT = 0; } }, o = {};
       if (G.P.car) G.exitCar(); G.crime.reset(); G.st.mi = 12; G.st.money = 200000; G.hud.closePanel();
+      // police chase: down a long straight at speed, the cruisers line up BEHIND you — no circling
+      { if (G.P.car) G.exitCar(); G.crime.reset(); G.events.cancel(); G.events.forceIdle && G.events.forceIdle(999); const W = await import("/src/world.js");
+        const Pm = await import("/src/play.js"), rx = W.roadC(3) + 2.2;
+        const c = Pm.spawnCar(G.scene, "sedan", 0xd0d0d0, rx, -W.HALF + 60, 0); G.cars.push(c);
+        G.P.x = c.x - 1.5; G.P.z = c.z; G.P.car = null; G.enterNearest(); run(40); const car = G.P.car; o.chaseCar = car === c ? "fresh" : (car ? car.kind || car.type : "none");
+        if (car) { car.x = rx; car.z = -W.HALF + 60; car.h = 0; car.vx = car.vz = 0;
+          G.crime.addCrime(2); let behind = 0, near = 0; const lastH = {}; let spin = 0;
+          for (let f = 0; f < 60 * 12; f++) {
+            G.I.mz = car.speed < 22 ? 0.8 : 0.05; G.I.mx = Math.max(-1, Math.min(1, (car.x - rx) * 0.25 + car.h * 2)); run(1);
+            G.crime.units.forEach((u, i) => { if (!u.active) return; const d = Math.hypot(u.x - car.x, u.z - car.z);
+              if (lastH[i] !== undefined && d < 40) { let dh = u.h - lastH[i]; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); spin = Math.max(spin, (u._sp = (u._sp || 0) + Math.abs(dh))); }
+              lastH[i] = u.h; if (d < 40) { near++; if ((u.x - car.x) * Math.sin(car.h) + (u.z - car.z) * Math.cos(car.h) < 0) behind++; } });
+          }
+          G.I.mz = 0; G.I.mx = 0; o.chaseSpeed = +car.speed.toFixed(1); o.chaseZ = Math.round(car.z); o.chaseBehind = near ? +(behind / near).toFixed(2) : 0; o.chaseNear = near; o.chaseSpin = +(spin / 6.283).toFixed(2); o.chaseWanted = G.crime.S.wanted;
+          G.exitCar(); G.crime.reset(); } G.events.forceIdle && G.events.forceIdle(30); }
       // RPG: a rocket at a traffic car wrecks it
       const W = id => G.combat.WEAPONS.find(w => w.id === id);
       G.combat.buy(W("rpg")); G.combat.S.weapon = G.combat.WEAPONS.indexOf(W("rpg"));
@@ -190,20 +205,6 @@ try {
         o.talkOpen = !!who && !!who.face && who.face.talk > 0;
         if (who) { who.persona = "tough"; who.fear = 0; G.life.choose("insult"); for (let k = 0; k < 6 && !(who.fightT > 0); k++) run(60); o.talkFight = who.fightT > 0 && who.face.expr === "mad"; }
       }
-      // police chase: down a long straight at speed, the cruisers line up BEHIND you — no circling
-      { if (G.P.car) G.exitCar(); G.crime.reset(); G.events.cancel(); const W = await import("/src/world.js");
-        const c = G.cars[0], rx = W.roadC(3) + 2.2; c.x = rx; c.z = -W.HALF + 60; c.h = 0; c.vx = c.vz = 0; c.speed = 0;
-        G.P.x = c.x - 1.5; G.P.z = c.z; G.enterNearest(); run(40); const car = G.P.car;
-        if (car) { car.x = rx; car.z = -W.HALF + 60; car.h = 0; car.vx = car.vz = 0;
-          G.crime.addCrime(2); let behind = 0, near = 0; const lastH = {}; let spin = 0;
-          for (let f = 0; f < 60 * 12; f++) {
-            G.I.mz = car.speed < 22 ? 0.8 : 0.05; G.I.mx = Math.max(-1, Math.min(1, (car.x - rx) * 0.25 + car.h * 2)); run(1);
-            G.crime.units.forEach((u, i) => { if (!u.active) return; const d = Math.hypot(u.x - car.x, u.z - car.z);
-              if (lastH[i] !== undefined && d < 40) { let dh = u.h - lastH[i]; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); spin = Math.max(spin, (u._sp = (u._sp || 0) + Math.abs(dh))); }
-              lastH[i] = u.h; if (d < 40) { near++; if ((u.x - car.x) * Math.sin(car.h) + (u.z - car.z) * Math.cos(car.h) < 0) behind++; } });
-          }
-          G.I.mz = 0; G.I.mx = 0; o.chaseBehind = near ? +(behind / near).toFixed(2) : 0; o.chaseNear = near; o.chaseSpin = +(spin / 6.283).toFixed(2); o.chaseWanted = G.crime.S.wanted;
-          G.exitCar(); G.crime.reset(); } }
       // the phone's newer apps: a PalmRide across town, the lawyer, a photo posted for followers, earbuds
       { if (G.P.car) G.exitCar(); G.crime.reset(); G.events.cancel(); if (G.jobs.active()) G.jobs.cancel(); G.st.money = 50000; const ph = G.phone(), q = s => document.querySelector("#phone " + s);
         const g0 = G.PLACES.guns; ph.show(true); ph.setApp("ride");
