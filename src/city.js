@@ -573,19 +573,45 @@ function buildBuildings(scene, city, U) {
 // ============================================================================================
 // ground: roads, markings, sand, outskirts — one big plane, all shader
 // ============================================================================================
+// photo-scanned surface detail (Poly Haven, CC0): the albedo maps are greyscale and only modulate the
+// procedural colour (normalised by their mean, so the overall tone stays as tuned); the normal maps
+// give the grain real relief. Until they load, a flat 1x1 stand-in keeps the shaders valid.
+const SURF = {};
+function surfTex(name, color) {
+  if (SURF[name]) return SURF[name];
+  const flat = new THREE.DataTexture(new Uint8Array(color ? [128, 128, 128, 255] : [128, 128, 255, 255]), 1, 1);
+  flat.needsUpdate = true;
+  const u = { value: flat };
+  new THREE.TextureLoader().load(`assets/tex/${name}.jpg`, t => {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+    if (color) t.colorSpace = THREE.SRGBColorSpace;
+    u.value = t;
+  });
+  return (SURF[name] = u);
+}
+// tangent-space normal for a flat, upward-facing surface whose texture u runs along world x and v along world z
+const GLSL_SURF = `
+  vec3 surfN(vec3 n, vec3 tn) {
+    vec3 T = normalize((viewMatrix * vec4(1.0, 0.0, 0.0, 0.0)).xyz), B = normalize((viewMatrix * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
+    return normalize(T * tn.x + B * tn.y + n * tn.z);
+  }
+`;
+
 function groundMaterial(U) {
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
   m.onBeforeCompile = sh => {
     sh.uniforms.uWet = U.uWet; sh.uniforms.uDamp = U.uDamp; sh.uniforms.uTime = U.uTime; sh.uniforms.uNight = U.uNight;
+    sh.uniforms.uAsD = surfTex("asphalt_04_Diffuse", true); sh.uniforms.uAsN = surfTex("asphalt_04_nor_gl", false);
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vWP;")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\nvWP = (modelMatrix * vec4(position, 1.0)).xyz;");
     sh.fragmentShader = sh.fragmentShader
       .replace("#include <common>", `#include <common>
         uniform float uWet, uDamp, uTime, uNight; varying vec3 vWP;
-        ${GLSL_COMMON}
+        uniform sampler2D uAsD, uAsN;
+        ${GLSL_COMMON}${GLSL_SURF}
         const float HALF = ${HALF.toFixed(3)}, CELL = ${CELL.toFixed(3)}, ROAD = ${ROAD.toFixed(3)};`)
       .replace("#include <color_fragment>", `#include <color_fragment>
-        float gRough = 0.9, gPud = 0.0, gH = 0.0, gMetal = 0.0; vec3 gEmit = vec3(0.0);
+        float gRough = 0.9, gPud = 0.0, gH = 0.0, gMetal = 0.0; vec3 gEmit = vec3(0.0); vec3 gTN = vec3(0.0, 0.0, 1.0);
         {
           vec2 p = vWP.xz;
           vec3 col;
@@ -635,7 +661,14 @@ function groundMaterial(U) {
             col = mix(vec3(0.42, 0.5, 0.26), vec3(0.62, 0.58, 0.36), n3) * (0.85 + n1 * 0.2);
           } else {
             // asphalt: fine aggregate, patching, darker wheel tracks in each lane
-            col = vec3(0.118, 0.114, 0.11) * (0.78 + n1 * 0.26 + n2 * 0.16 + n3 * 0.1);
+            // the aggregate itself is a photo scan, read at two scales (the larger one turned) so it never visibly tiles
+            float sFar = clamp(length(vViewPosition) / 70.0, 0.0, 1.0);
+            vec2 sa = p / 3.5, sb = mat2(0.8, -0.6, 0.6, 0.8) * p / 11.3;
+            float det = texture2D(uAsD, sa).r * 0.62 + texture2D(uAsD, sb).r * 0.38;
+            det = mix(det / 0.227, 1.0, sFar * 0.5);
+            col = vec3(0.118, 0.114, 0.11) * (0.86 + n1 * 0.08 + n2 * 0.16 + n3 * 0.1) * clamp(det, 0.35, 1.9);
+            vec3 tnA = texture2D(uAsN, sa).xyz * 2.0 - 1.0;
+            gTN = normalize(vec3(tnA.xy * 0.8 * (1.0 - sFar), 1.0));
             // square-cut repair patches (fresher, darker tarmac) and older faded ones
             vec2 pc = floor(p / vec2(7.0, 4.0));
             float patchK = h12(pc + 13.0);
@@ -727,6 +760,7 @@ function groundMaterial(U) {
             float damp = max(uDamp * 0.55, uWet);
             col *= 1.0 - damp * 0.3; gRough = mix(gRough, mix(0.42, 0.14, uWet), damp);
             col = mix(col, col * 0.45, gPud); gRough = mix(gRough, 0.02, gPud); gH *= 1.0 - gPud;
+            gTN = normalize(mix(gTN, vec3(0.0, 0.0, 1.0), max(gPud, mk * 0.5)));   // water and paint fill the grain
             // rain: rings spreading on the puddles
             if (uWet > 0.05) { vec2 rq = p * 2.0; vec2 ri = floor(rq); float ph = fract(uTime * 0.9 + h12(ri)); float rr = length(fract(rq) - 0.5);
               gH += gPud * uWet * sin((rr - ph * 0.5) * 40.0) * (1.0 - ph) * 0.0015 * step(rr, ph * 0.5); }
@@ -735,7 +769,7 @@ function groundMaterial(U) {
         }`)
       .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = gRough;")
       .replace("#include <metalnessmap_fragment>", "#include <metalnessmap_fragment>\nmetalnessFactor = gMetal;")
-      .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\nnormal = bumpN(normal, gH * clamp(1.0 - length(vViewPosition) / 60.0, 0.0, 1.0), vViewPosition);")
+      .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\nnormal = surfN(normal, gTN);\nnormal = bumpN(normal, gH * clamp(1.0 - length(vViewPosition) / 60.0, 0.0, 1.0), vViewPosition);")
       .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += gEmit;")
       // puddles mirror the street: the night skyline with its lit windows, and every street lamp as a
       // long streak (found by following the reflected ray up to lamp height and reading the light map there)
@@ -778,18 +812,20 @@ function groundMaterial(U) {
 function blockMaterial() {
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
   m.onBeforeCompile = sh => {
+    sh.uniforms.uCoD = surfTex("concrete_floor_worn_001_Diffuse", true); sh.uniforms.uCoN = surfTex("concrete_floor_worn_001_nor_gl", false);
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float aKind; varying float vKind; varying vec3 vWP; varying vec3 vON; varying vec3 vBC;")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\nvWP = (modelMatrix * instanceMatrix * vec4(position,1.0)).xyz; vKind = aKind; vON = normal; vBC = (modelMatrix * instanceMatrix * vec4(0.0,0.0,0.0,1.0)).xyz;");
     sh.fragmentShader = sh.fragmentShader
       .replace("#include <common>", `#include <common>
         varying float vKind; varying vec3 vWP; varying vec3 vON; varying vec3 vBC;
-        ${GLSL_COMMON}
+        uniform sampler2D uCoD, uCoN;
+        ${GLSL_COMMON}${GLSL_SURF}
         const float BLOCK = ${BLOCK.toFixed(3)}, WALK = ${WALK.toFixed(3)};
         // the park paths (world.js parkPathD): a gravel loop, cross paths, a paved round
         float parkLoop(vec2 q) { vec2 a = abs(q) - 12.0; return length(max(a, 0.0)) + min(max(a.x, a.y), 0.0) - 3.0; }
         float parkPathD(vec2 q) { vec2 a = abs(q); return min(min(abs(parkLoop(q)) - 1.4, min(a.x, a.y) - 1.2), length(q) - 6.5); }`)
       .replace("#include <color_fragment>", `#include <color_fragment>
-        float bRough = 0.85;
+        float bRough = 0.85; vec3 bTN = vec3(0.0, 0.0, 1.0);
         {
           vec2 q = vWP.xz - vBC.xz;
           float edge = BLOCK * 0.5 - max(abs(q.x), abs(q.y));   // distance in from the kerb
@@ -801,8 +837,13 @@ function blockMaterial() {
             vec2 t = vWP.xz / 1.5;
             float joint = 1.0 - band(t.x, 0.03, 1.0) * band(t.y, 0.03, 1.0);
             float big = vnoise(vWP.xz * 0.13), fine = vnoise(vWP.xz * 3.0);
-            col = vec3(0.36, 0.345, 0.32) * (0.86 + fine * 0.12 + h12(floor(t)) * 0.1 + big * 0.12);
+            // worn poured concrete, a photo scan; each slab reads its own patch of it
+            float sFar = clamp(length(vViewPosition) / 50.0, 0.0, 1.0);
+            vec2 su = vWP.xz / 2.4 + h12(floor(t) + 21.0) * 7.0;
+            float cd = 1.0 + (texture2D(uCoD, su).r / 0.0936 - 1.0) * mix(1.7, 0.6, sFar);
+            col = vec3(0.36, 0.345, 0.32) * (0.9 + fine * 0.04 + h12(floor(t)) * 0.1 + big * 0.12) * clamp(cd, 0.4, 1.8);
             col *= 1.0 - joint * 0.3;
+            bTN = normalize(vec3((texture2D(uCoN, su).xy * 2.0 - 1.0) * 1.8 * (1.0 - sFar), 1.0));
             // stains, gum, hairline cracks across some slabs
             col *= 1.0 - smoothstep(0.6, 0.85, vnoise(vWP.xz * 0.5 + 5.0)) * 0.28;
             // gum: small round dark spots
@@ -884,7 +925,8 @@ function blockMaterial() {
           }
           diffuseColor.rgb = col;
         }`)
-      .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = bRough;");
+      .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = bRough;")
+      .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\nnormal = surfN(normal, bTN);");
   };
   return m;
 }
