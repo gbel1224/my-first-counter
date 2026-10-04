@@ -11,6 +11,8 @@ import { buildCraft } from "./craft.js";
 export const COP_SIGHT = 90;
 // a searching cruiser's view: a cone ahead of it, plus a small ring all round (it hears you)
 export const CONE_R = 48, CONE_HALF = 0.62, CONE_NEAR = 11;
+// low heat, low effort: how fast a pursuing cruiser will go, and how far it can pick you out, by stars
+export const CHASE_TOP = [0, 31, 38, 44, 47, 47], SIGHT_BY = [0, 60, 75, 90, 90, 90];
 // how long a search lasts before they give up: longer the hotter you are
 export const searchTime = w => 9 + w * 4;
 const MAX_UNITS = 6;
@@ -90,7 +92,7 @@ export function makeCrime(scene, g) {
   function addCrime(n = 1) {
     if (g.noHeat && g.noHeat()) return;
     S.wantedCD = 14;
-    S.fixT = 7;                                         // dispatch has your location for a few seconds after a crime
+    S.fixT = 6 + Math.min(5, S.wanted + n) * 3;          // dispatch has your location for a while after a crime (longer, the worse it was)
     if (S.crimeCD > 0 && n <= 1) return;
     S.crimeCD = 1.5;
     const before = S.wanted;
@@ -249,14 +251,20 @@ export function makeCrime(scene, g) {
       const tx = P.x - fx * gap + rx * off, tz = P.z - fz * gap + rz * off;                   // its slot, in your wake
       const along = (u.x - P.x) * fx + (u.z - P.z) * fz;                                     // + : the cruiser is out in front of you
       const facing = fxU * fx + fzU * fz;
-      if (along > 3 && facing > 0.3) {
+      if (spP < 3 && d < 14) {
+        // you've stopped: creep up and box you in (close enough to drag you out) — no shuffling round you
+        const toP = Math.abs(wrap(Math.atan2(P.x - u.x, P.z - u.z) - u.h));
+        if (toP < 1.6) { aimX = P.x; aimZ = P.z; want = d > 6.5 ? clamp((d - 5.5) * 0.8, 1.5, 7) : 0; }
+        else { aimX = u.x + fxU * 10; aimZ = u.z + fzU * 10; want = 0; }
+        u.turning = false;
+      } else if (along > 3 && facing > 0.3) {
         // got ahead of you going the same way: ease off and let you come past (a brake check, GTA-style)
         aimX = u.x + fxU * 20; aimZ = u.z + fzU * 20; want = Math.max(0, spP - 7);
       } else {
         const look = 5 + spP * 0.45;                                                         // aim down your path, not at your bumper
         aimX = tx + fx * look; aimZ = tz + fz * look;
         const e = (tx - u.x) * fx + (tz - u.z) * fz;                                         // how far short of its slot it is
-        want = spP < 2 ? clamp(Math.hypot(tx - u.x, tz - u.z) * 0.7, 0, 16) : clamp(spP + clamp(e * 0.8, -9, 16), 0, u.spec.top);
+        want = spP < 2 ? clamp(Math.hypot(tx - u.x, tz - u.z) * 0.7, 0, 16) : clamp(spP + clamp(e * 0.8, -9, 16), 0, Math.min(u.spec.top, CHASE_TOP[heat] || 46));
       }
     } else if (role && seen && !F.car) {
       // ---- on foot: come at you and stop alongside (officers don't do donuts round you) ----
@@ -270,7 +278,7 @@ export function makeCrime(scene, g) {
       const lane = ctx.searching ? 4.6 : 2.0;
       aimX = rx - uz / ul * lane; aimZ = rz + ux / ul * lane;
       const turn = Math.abs(wrap(Math.atan2(aimX - u.x, aimZ - u.z) - u.h));
-      const cruise = ctx.searching ? 12 : u.tank ? 18 : d > 70 ? 40 : 27;                   // code 3 to get there, steadier once close
+      const cruise = ctx.searching ? 12 : u.tank ? 18 : d > 70 ? Math.min(40, CHASE_TOP[heat] || 40) : 27;   // code 3 to get there, steadier once close
       want = cruise * (1 - clamp(turn / 1.1, 0, 0.62));
       if (junction && ul < 32) want = Math.min(want, 9 + ul * 0.55);                          // brake for the corner
       if (!junction && ul < 20 && d < 30) want = Math.min(want, 6 + ul * 0.6);                 // pulling up near you
@@ -279,9 +287,14 @@ export function makeCrime(scene, g) {
     const A = ahead(u, obstacles);
     if (A.gap < 24 && lon > A.sp - 1) {
       const pass = A.gap < 16 && A.sp < 6 && !u.tank;
-      if (pass) { const k = (A.side >= 0 ? -1 : 1) * 3.4; aimX += fzU * k; aimZ += -fxU * k; }   // swing out round it
+      if (pass) { const k = (A.side >= 0 ? -1 : 1) * (u.wide ? 5 : 3.4); aimX += fzU * k; aimZ += -fxU * k; }   // swing out round it
       if (!pass || A.gap < 7) want = Math.min(want, Math.max(A.sp, (A.gap - 5) * (close ? 1.6 : 1.2)));
     }
+    // nose-up against something that isn't moving (a parked car, traffic pulled over for the siren):
+    // back off a length and go round it wider, rather than wait there forever
+    if (A.gap < 8 && A.sp < 1 && Math.abs(u.speed) < 1 && !u.turning && d > 7) { u.blockT = (u.blockT || 0) + dt; if (u.blockT > 1.5) { u.blockT = 0; u.reverseT = 1.2; u.unstick = -1; u.wide = 3; } }
+    else u.blockT = 0;
+    if (u.wide > 0) u.wide -= dt;
     if (g.paused()) want = 0;
     let dh = wrap(Math.atan2(aimX - u.x, aimZ - u.z) - u.h);
     // facing the wrong way: brake, then a proper three-point turn (reverse with the wheel the OTHER
@@ -322,7 +335,8 @@ export function makeCrime(scene, g) {
       for (const u of units) {
         if (!u.active) continue;
         const dx = px - u.x, dz = pz - u.z, d2 = dx * dx + dz * dz;
-        if (d2 > COP_SIGHT * COP_SIGHT) { u.sees = false; u.losCD = 0; continue; }
+        const R = SIGHT_BY[heat] || COP_SIGHT;
+        if (d2 > R * R) { u.sees = false; u.losCD = 0; continue; }
         u.losCD -= dt;
         if (u.losCD <= 0) {
           u.losCD = 0.13 + Math.random() * 0.12;
@@ -331,7 +345,7 @@ export function makeCrime(scene, g) {
             const d = Math.sqrt(d2), off = Math.abs(wrap(Math.atan2(dx, dz) - u.h));
             can = d < CONE_NEAR || (d < CONE_R && off < CONE_HALF) || (F.car && F.speed > 18 && d < 30);   // a car flying past gets noticed
           }
-          u.sees = can && los(u.x, u.z, px, pz, COP_SIGHT);
+          u.sees = can && los(u.x, u.z, px, pz, R);
           if (u.sees && S.searching) { u.spotted = 1.5; }
         }
         if (u.sees) seen = true;
@@ -360,7 +374,8 @@ export function makeCrime(scene, g) {
         // new units roll in toward where dispatch THINKS you are, from out of sight, on a road
         const a = Math.random() * Math.PI * 2;
         const bx = known ? px : belief.x, bz = known ? pz : belief.z;
-        const sx = clamp(bx + Math.cos(a) * 130, -HALF + 10, HALF - 10), sz = clamp(bz + Math.sin(a) * 130, -HALF + 10, HALF - 10);
+        const R0 = [0, 120, 105, 90, 80, 80][heat] || 110;       // the hotter you are, the closer the next unit already is
+        const sx = clamp(bx + Math.cos(a) * R0, -HALF + 10, HALF - 10), sz = clamp(bz + Math.sin(a) * R0, -HALF + 10, HALF - 10);
         if (Math.random() < 0.5) { u.x = roadC(nearestRoad(sx)); u.z = sz; } else { u.x = sx; u.z = roadC(nearestRoad(sz)); }
         u.h = Math.atan2(bx - u.x, bz - u.z); u.vx = u.vz = 0; u.speed = 0; u.active = true; u.reverseT = 0; u.stuckT = 0; u.boom = false; u.charred = false; u.sees = false; u.sx = undefined; u.hp = u.tank ? 700 : 100;
         u.turning = false; u.role = null; u.side = 0; u.ramT = Math.random() * 6; u.spotted = 0;
