@@ -1,7 +1,7 @@
 // Palm City — bootstrap + main loop.
 import * as THREE from "../vendor/three.module.js";
 import { createRenderer, isMobile } from "./render.js";
-import { buildCity, Collider, groundY, district, blockC, blockMin, PLAZA, HALF, ROAD, BLOCK, CURB, mulberry32, clamp } from "./world.js";
+import { buildCity, Collider, groundY, district, blockC, blockMin, PLAZA, HALF, ROAD, BLOCK, CURB, WALK, mulberry32, clamp } from "./world.js";
 import { createSky } from "./sky.js";
 import { createCity } from "./city.js";
 import { bakeStreetLights, setStreetLights, setHeadlights } from "./streetlight.js";
@@ -9,7 +9,7 @@ import { createOcean } from "./ocean.js";
 import { Crowd, randomLook } from "./people.js";
 import { Traffic, SIGNAL, Parked, signalState, walkState, RED } from "./traffic.js";
 import { buildFacadeDetail, buildStreetDetail, updateSignals } from "./detail.js";
-import { PAINTS, LAMP_U, driveLamps } from "./cars.js";
+import { PAINTS, REAL_PAINTS, LAMP_U, driveLamps } from "./cars.js";
 import { initInput, pollInput, I } from "./input.js";
 import { createHUD, askConfirm } from "./hud.js";
 import { makeProps } from "./props.js";
@@ -68,7 +68,7 @@ const city = createCity(scene, plan, groundY);
   const heads = plan.lamps.map(([x, z, a]) => [x - Math.sin(a) * 1.8, groundY(x, z) + 6.2, z - Math.cos(a) * 1.8]);
   // shop windows and lobbies spill a softer light onto the pavement in front of them
   for (const b of plan.buildings) {
-    if (b.y > 0.5 || b.h < 7 || b.style === 3) continue;          // not the houses
+    if (b.y > 0.5 || b.h < 7 || b.style === 3 || b.style === 5) continue;          // not the houses
     for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const len = nx ? b.d : b.w, n = Math.max(1, Math.round(len / 11));
       for (let k = 0; k < n; k++) {
@@ -77,6 +77,7 @@ const city = createCity(scene, plan, groundY);
       }
     }
   }
+  for (const l of city.houses.lights) heads.push(l);                 // porch, garage and pool lights
   bakeStreetLights(heads, HALF);
 }
 const facade = buildFacadeDetail(scene, plan);
@@ -88,6 +89,18 @@ const crowd = new Crowd(scene, plan, isMobile ? 380 : 520);
 await step(78);
 const traffic = new Traffic(scene, isMobile ? 110 : 150);
 const parked = new Parked(scene, district);
+// the suburbs: a car in some of the driveways, nose to the garage; nobody parks across a driveway
+{
+  const r = mulberry32(0xD21FE);
+  for (const L of plan.lots) {
+    const gx = (L.drive[0] + L.drive[2]) / 2, apronZ = L.zE + L.fz * (WALK + 2);
+    for (const c of parked.cars) if (c.alive && Math.abs(c.x - gx) < 4.6 && Math.abs(c.z - apronZ) < 3.5) c.alive = false;
+    if (!L.car) continue;
+    const type = ["sedan", "suv", "pickup", "compact", "van", "coupe", "suv", "sedan"][(r() * 8) | 0];
+    const c = { type, color: REAL_PAINTS[(r() * REAL_PAINTS.length) | 0], alive: true, x: gx + (r() - 0.5) * 0.3, z: L.garage.z + L.fz * (L.garage.d / 2 + 3.1), y: CURB, h: (L.fz > 0 ? Math.PI : 0) + (r() - 0.5) * 0.05 };
+    parked.cars.push(c); parked.gridAdd(c);
+  }
+}
 await step(88);
 
 // ---------------------------------------------------------------------------------------------

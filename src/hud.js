@@ -59,7 +59,7 @@ export function createHUD(plan) {
     c.fillRect(X(b.x0) + 0.5, Z(b.z0) + 0.5, BLOCK * S - 1, BLOCK * S - 1);
   }
   for (const b of plan.buildings) {
-    c.fillStyle = b.style === STYLE.GLASS ? "#8e9db3" : b.style === STYLE.HOUSE ? "#dcc3ae" : "#b0a89c";
+    c.fillStyle = b.style === STYLE.GLASS ? "#8e9db3" : b.style === STYLE.HOUSE || b.style === STYLE.GARAGE ? "#dcc3ae" : "#b0a89c";
     c.fillRect(X(b.x - b.w / 2), Z(b.z - b.d / 2), b.w * S, b.d * S);
   }
 

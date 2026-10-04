@@ -385,7 +385,7 @@ export class Parked {
       const M = (far ? this.meshFar : this.mesh)[c.type], i = counts[key] = (counts[key] || 0) + 1, ii = i - 1;
       if (ii >= PMAX) continue;
       this._q.setFromAxisAngle(this._y, c.h);
-      this._m.compose(this._v.set(c.x, 0, c.z), this._q, this._s);
+      this._m.compose(this._v.set(c.x, c.y || 0, c.z), this._q, this._s);
       for (const k in M) M[k].setMatrixAt(ii, this._m);
       if (M.plates) { M.plates.geometry.attributes.aPlate.setX(ii, c.plate ?? (c.plate = (Math.random() * 16) | 0)); M.plates.geometry.attributes.aPlate.needsUpdate = true; }
       this._c.set(c.color); M.paint.setColorAt(ii, this._c);

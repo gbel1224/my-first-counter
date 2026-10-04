@@ -33,7 +33,7 @@ if ( uSLParam.x > 0.001 ) {
   vec2 slUV = ( slW.xz - uSLParam.yz ) * uSLParam.w;
   if ( slW.y < 16.0 && slUV.x > 0.0 && slUV.y > 0.0 && slUV.x < 1.0 && slUV.y < 1.0 ) {
     vec4 slS = texture2D( uSLMap, slUV );
-    if ( slS.r > 0.004 ) {
+    if ( slS.r + slS.a > 0.004 ) {
       vec2 slOff = ( slS.gb * 2.0 - 1.0 ) * ${DIR.toFixed(1)};
       float slR2 = dot( slOff, slOff );
       float slH = max( ${H.toFixed(2)} - slW.y, 0.35 );
@@ -44,15 +44,20 @@ if ( uSLParam.x > 0.001 ) {
       float slCos = ${H.toFixed(2)} * inversesqrt( ${(H * H).toFixed(2)} + slR2 );
       float slFade = 1.0 - smoothstep( 5.5, 11.0, slW.y );
       IncidentLight slLight;
-      slLight.color = vec3( 1.0, 0.76, 0.48 ) * ( slS.r * slS.r * 2.0 * uSLParam.x * slNear * slFade / max( slCos, 0.65 ) );
+      vec3 slNw0 = geometryNormal * mat3( viewMatrix );
+      // the map is light on flat ground; a surface facing the lamp would catch more, but only the
+      // ground gets that correction (walls lit by it read as floodlit)
+      float slUp = max( slNw0.y, 0.0 );
+      float slE = slS.r * slS.r * 2.0 * mix( 1.0, slNear, slUp ) / mix( 1.0, max( slCos, 0.65 ), slUp ) + slS.a * slS.a * 2.0 * mix( 0.25, 1.0, slUp );
+      slLight.color = vec3( 1.0, 0.76, 0.48 ) * ( slE * uSLParam.x * slFade );
       slLight.direction = normalize( mat3( viewMatrix ) * slL );
       slLight.visible = true;
       RE_Direct( slLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
       // lamplight doesn't only fall straight down: it bounces off the pavement and the walls, so
       // a body, a face or a car door standing in a pool is lit all round, a little from below too
-      vec3 slAmb = vec3( 1.0, 0.78, 0.52 ) * ( slS.r * slS.r * 2.0 * uSLParam.x * slFade );
+      vec3 slAmb = vec3( 1.0, 0.78, 0.52 ) * ( ( slS.r * slS.r + slS.a * slS.a * 0.3 ) * 2.0 * uSLParam.x * slFade );
       vec3 slNw = geometryNormal * mat3( viewMatrix );
-      reflectedLight.indirectDiffuse += slAmb * ( 0.34 - 0.28 * max( slNw.y, 0.0 ) ) * BRDF_Lambert( material.diffuseColor ) * 3.14159;
+      reflectedLight.indirectDiffuse += slAmb * ( 0.2 - 0.14 * max( slNw.y, 0.0 ) ) * BRDF_Lambert( material.diffuseColor ) * 3.14159;
       #ifdef STANDARD
         // and every shiny thing (paint, clearcoat, chrome, glass) shows a warm sheen of it
         reflectedLight.indirectSpecular += slAmb * 0.32 * EnvironmentBRDF( geometryNormal, geometryViewDir, material.specularColor, material.specularF90, material.roughness );
@@ -94,7 +99,7 @@ for (const k of ["lambert", "phong", "standard", "physical", "toon"]) {
 export function bakeStreetLights(heads, half) {
   const ext = half + 40, mpp = (ext * 2) / RES;
   P.ox = -ext; P.oz = -ext; P.inv = 1 / (ext * 2);
-  const E = new Float32Array(RES * RES), VX = new Float32Array(RES * RES), VZ = new Float32Array(RES * RES);
+  const E = new Float32Array(RES * RES), F = new Float32Array(RES * RES), VX = new Float32Array(RES * RES), VZ = new Float32Array(RES * RES);
   for (const [lx, ly, lz, I = 1, reach = REACH] of heads) {
     const h = Math.max(2.5, ly), ci = Math.round((lx + ext) / mpp), cj = Math.round((lz + ext) / mpp), rp = Math.ceil(reach / mpp);
     for (let j = Math.max(0, cj - rp); j <= Math.min(RES - 1, cj + rp); j++) {
@@ -105,9 +110,9 @@ export function bakeStreetLights(heads, half) {
         const d2 = r2 + h * h, cut = 1 - r2 / (reach * reach);
         // ground irradiance from a point light (cos / d^2), plus the soft glow a real lamp spreads
         // well past its pool (bounce off the pavement, haze), so the gaps between lamps aren't black
-        const e = I * ((h / (d2 * Math.sqrt(d2))) * cut * cut * H * H + 0.07 * cut * cut);
+        const e = I * (h / (d2 * Math.sqrt(d2))) * cut * cut * H * H, fe = I * 0.07 * cut * cut;
         const k = j * RES + i;
-        E[k] += e; VX[k] += e * dx; VZ[k] += e * dz;
+        E[k] += e; F[k] += fe; VX[k] += (e + fe) * dx; VZ[k] += (e + fe) * dz;
       }
     }
   }
@@ -115,10 +120,10 @@ export function bakeStreetLights(heads, half) {
     const e = E[k];
     // stored as sqrt so the dim edges of a pool keep their precision
     data[k * 4] = Math.min(255, Math.sqrt(Math.min(e, 2) / 2) * 255);
-    const ox = e > 0 ? VX[k] / e : 0, oz = e > 0 ? VZ[k] / e : 0;
+    const et = e + F[k], ox = et > 0 ? VX[k] / et : 0, oz = et > 0 ? VZ[k] / et : 0;
     data[k * 4 + 1] = Math.round(127.5 + Math.max(-1, Math.min(1, ox / DIR)) * 127.5);
     data[k * 4 + 2] = Math.round(127.5 + Math.max(-1, Math.min(1, oz / DIR)) * 127.5);
-    data[k * 4 + 3] = 255;
+    data[k * 4 + 3] = Math.min(255, Math.sqrt(Math.min(F[k], 2) / 2) * 255);   // the soft fill, kept apart
   }
   tex.needsUpdate = true;
 }

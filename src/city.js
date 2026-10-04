@@ -8,6 +8,7 @@ import { N, ROAD, BLOCK, WALK, CURB, CELL, HALF, STYLE, blockC, blockMin, distri
 import { paint, place, merge, vcMaterial, tileInstances } from "./geo.js";
 import { buildPalms } from "./palms.js";
 import { buildShrubs, buildGrass } from "./plants.js";
+import { buildHouses } from "./houses.js";
 import { addTile } from "./cull.js";
 
 // shared GLSL: hashing, value noise, and an anti-aliased "is this pixel inside a repeating cell
@@ -150,6 +151,30 @@ function facadeMaterial(U) {
               col = mix(col, wall * 0.45, spandrel * (1.0 - mull));
               glass = (1.0 - mull) * (1.0 - spandrel);
               fRough = mix(0.5, 0.04 + tint * 0.12, glass);   // every pane reflects slightly differently
+            } else if (style == 5) {
+              // attached garage: stucco like the house; on the street side a sectional door with
+              // raised panels and a row of little windows in its top section, in a trim frame
+              int fc = int(vStyle.z + 0.5) - 10;
+              vec3 fd = fc == 0 ? vec3(0.0, 0.0, 1.0) : fc == 1 ? vec3(0.0, 0.0, -1.0) : fc == 2 ? vec3(1.0, 0.0, 0.0) : vec3(-1.0, 0.0, 0.0);
+              if (dot(vON, fd) > 0.5) {
+                float du = u - halfW, dv = v - 0.22;
+                float door = step(abs(du), 2.45) * step(dv, 2.35) * step(0.0, dv);
+                float frame = step(abs(du), 2.62) * step(dv, 2.5) * step(0.0, dv) - door;
+                vec3 dc = vec3(0.9, 0.89, 0.86);
+                float sec = dv / 0.5875, fs = fract(sec);
+                float groove = (1.0 - smoothstep(0.0, 0.04, min(fs, 1.0 - fs)));
+                vec2 pnl = vec2((du + 2.45) / 0.6125, fs);
+                float raised = band(pnl.x, 0.1, 0.9) * line1(pnl.y, 0.18, 0.82);
+                float wins = step(3.0, sec) * band(pnl.x, 0.12, 0.88) * line1(pnl.y, 0.25, 0.78) * step(0.5, h12(vec2(seed, 5.0)));
+                vec3 dcol = dc * (1.0 - groove * 0.35) * (0.96 + raised * 0.06);
+                dcol = mix(dcol, vec3(0.08, 0.1, 0.12), wins);
+                col = mix(col, dcol, door);
+                col = mix(col, vec3(0.94, 0.93, 0.9), frame);
+                gH += door * (raised * 0.012 - groove * 0.01) - frame * 0.0 + frame * 0.02 - door * 0.05;
+                glass = 0.0;
+                fEmit += vec3(1.0, 0.72, 0.4) * wins * door * uNight * 0.35;
+                fRough = mix(fRough, 0.5, door);
+              }
             } else {
               float fh = style == 3 ? 3.0 : (style == 4 ? 3.6 : 3.3);
               float bay = style == 3 ? 4.2 : (style == 2 ? 2.8 : (style == 4 ? 1.7 : 3.2));
@@ -365,7 +390,7 @@ function buildBuildings(scene, city, U) {
   const houses = [];
   const byTile = new Map();
   for (const b of B) {
-    if (b.style === STYLE.HOUSE) { houses.push(b); continue; }
+    if (b.style === STYLE.HOUSE || b.style === STYLE.GARAGE) { houses.push(b); continue; }
     const p0 = parts.length;
     const top = b.y + b.h;
     const n = Math.min(5, Math.floor(b.w * b.d / 180) + 1);
@@ -432,23 +457,6 @@ function buildBuildings(scene, city, U) {
     mm.castShadow = true; mm.receiveShadow = true; scene.add(mm);
     mm.geometry.computeBoundingSphere(); mm.boundingSphere = mm.geometry.boundingSphere;
     addTile(mm, 520);
-  }
-  // pitched roofs: a prism per house, terracotta or slate
-  if (houses.length) {
-    const pr = [];
-    for (const b of houses) {
-      const g = new THREE.CylinderGeometry(1, 1, 1, 3, 1);   // triangular prism
-      g.rotateZ(Math.PI / 2); g.rotateX(Math.PI / 6 * 0);
-      // scale so the triangle spans the house depth and sticks out a bit
-      const alongX = b.w >= b.d;
-      const span = (alongX ? b.d : b.w) + 1.2, len = (alongX ? b.w : b.d) + 1.2;
-      const geo2 = paint(g, r() < 0.6 ? 0xb4553a : 0x5d6470);
-      // the prism's triangle has circumradius 1 → width sqrt(3), height 1.5
-      place(geo2, b.x, b.y + b.h + 0.75 * (span / 1.732) * 0.6 - 0.02, b.z, 0, alongX ? 0 : Math.PI / 2, 0, len, (span / 1.732) * 0.6, span / 1.732);
-      pr.push(geo2);
-    }
-    const rm = new THREE.Mesh(merge(pr), vcMaterial({ roughness: 0.75 }));
-    rm.castShadow = true; rm.receiveShadow = true; scene.add(rm);
   }
   return mesh;
 }
@@ -850,18 +858,21 @@ function buildProps(scene, city, U, gy) {
     return T[0][0];
   };
   if (city.shrubs && city.shrubs.length) {
-    const sl = city.shrubs.map(([x, z, s]) => [x, z, r() * 6.28, s, pickSp(kindAt(x, z), r())]);
+    const sl = city.shrubs.map(([x, z, s, sp]) => [x, z, r() * 6.28, s, sp || pickSp(kindAt(x, z), r())]);
     buildShrubs(U, sl, (geo, mat, items, maxD, minD) => instanced(scene, geo, mat, items, gy, true, maxD, minD));
   }
   // grass: tufts and wildflowers over the lawns and parks (only drawn near you)
   {
     const gr = mulberry32(0x6A55), tufts = [];
+    const hardRects = [];
+    for (const L of city.lots || []) { hardRects.push(L.drive, L.path, L.porch); if (L.deck) hardRects.push(L.deck); }
     for (const b of city.blocks) {
       if (b.kind !== "park" && b.kind !== "suburb") continue;
       const homes = city.buildings.filter(h => Math.abs(h.x - (b.x0 + b.x1) / 2) < BLOCK && Math.abs(h.z - (b.z0 + b.z1) / 2) < BLOCK);
       for (let x = b.x0 + WALK + 0.4; x < b.x1 - WALK - 0.4; x += 0.85) for (let z = b.z0 + WALK + 0.4; z < b.z1 - WALK - 0.4; z += 0.85) {
         const px = x + (gr() - 0.5) * 0.8, pz = z + (gr() - 0.5) * 0.8;
         if (homes.some(h => Math.abs(px - h.x) < h.w / 2 + 0.5 && Math.abs(pz - h.z) < h.d / 2 + 0.5)) continue;
+        if (hardRects.some(([a0, b0, a1, b1]) => px > a0 - 0.3 && px < a1 + 0.3 && pz > b0 - 0.3 && pz < b1 + 0.3)) continue;
         const k = gr();
         tufts.push([px, pz, gr() * 6.28, 0.7 + gr() * 0.6, k < 0.07 ? "flower" : k < 0.15 ? "dry" : "grass"]);
       }
@@ -930,11 +941,13 @@ export function createCity(scene, city, gy) {
   buildBlocks(scene, city);
   const buildings = buildBuildings(scene, city, U);
   const props = buildProps(scene, city, U, gy);
+  const houses = buildHouses(scene, city, U, GLSL_COMMON);
   function update(time, night) {
+    houses.update(night);
     U.uTime.value = time; U.uNight.value = night;
     props.lampMat.userData.emit.value = night * 3.0;
     props.halo.visible = night > 0.05; props.halo.material.opacity = Math.min(1, night * 1.5) * 0.9;
     props.spray.scale.y = 1 + Math.sin(time * 5) * 0.06;
   }
-  return { update, U, buildings };
+  return { update, U, buildings, houses };
 }
