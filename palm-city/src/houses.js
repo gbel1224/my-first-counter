@@ -169,7 +169,7 @@ function fenceMaterial(glsl) {
 }
 // pool water: depth gradient from the shallow end, rippling caustics, a band of waterline tile,
 // the underwater light glowing after dark
-function poolMaterial(U, glsl) {
+export function poolMaterial(U, glsl) {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.04, metalness: 0, envMapIntensity: 1.2 });
   m.onBeforeCompile = sh => {
     sh.uniforms.uTime = U.uTime; sh.uniforms.uNight = U.uNight;

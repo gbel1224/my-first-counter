@@ -331,6 +331,16 @@ export class Crowd {
       this.people.push({ beach: true, x: -HALF + r() * HALF * 2, z: HALF + 8 + r() * 26, yaw: r() * 6.28, speed: 0.8 + r() * 0.5, look,
         phase: r() * 6, style: { stride: 0.8 + r() * 0.3, arm: 0.6 + r() * 0.6 }, pause: 0, knocked: 0, vx: 0, vy: 0, vz: 0, y: 0, spin: 0, dir: 1, t: 0 });
     }
+    // the parks: people walking and jogging the loop path, and people sitting on the benches
+    for (const pk of plan.parks || []) {
+      const mk = (extra) => {
+        const look = randomLook(r);
+        return Object.assign({ bi: pk.i, bj: pk.j, inset: BLOCK / 2 - 15 + (r() - 0.5) * 1.2, t: r() * 4, dir: r() < 0.5 ? 1 : -1, speed: 0.9 + r() * 0.4, look,
+          phase: r() * 6.28, x: 0, z: 0, yaw: 0, style: { stride: 0.8 + r() * 0.4, arm: 0.6 + r() * 0.8 }, pause: 0, cross: null, knocked: 0, vx: 0, vy: 0, vz: 0, y: 0, spin: 0, park: true }, extra);
+      };
+      for (let k = 0; k < 12; k++) { const p = mk(k < 4 ? { jog: true, speed: 2.6 + r() * 0.6 } : {}); this.place(p); this.people.push(p); }
+      for (const [x, z, yaw] of pk.sitters) { const p = mk({ sit: { x, z, yaw } }); p.x = x; p.z = z; p.yaw = yaw; this.people.push(p); }
+    }
     // instanced meshes, one per part
     this.meshes = {};
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75 });
@@ -417,7 +427,7 @@ export class Crowd {
     const r = this.r;
     for (const p of this.people) {
       if (p.hidden) continue;
-      if (!p.beach && !p.gang && (p.x - fx) ** 2 + (p.z - fz) ** 2 > 200 * 200) { this.respawnNear(p, fx, fz); continue; }
+      if (!p.beach && !p.gang && !p.park && (p.x - fx) ** 2 + (p.z - fz) ** 2 > 200 * 200) { this.respawnNear(p, fx, fz); continue; }
       if (p.knocked > 0) {                        // sent flying by a car: tumble, lie there, get up
         p.knocked -= dt;
         if (p.y > 0 || p.vy > 0) { p.vy -= 22 * dt; p.x += p.vx * dt; p.z += p.vz * dt; p.y = Math.max(0, p.y + p.vy * dt); p.spin += dt * 9; if (p.y === 0) { p.vx *= 0.3; p.vz *= 0.3; } }
@@ -429,6 +439,8 @@ export class Crowd {
         continue;
       }
       if (p.ai) { p.ai(p, dt); continue; }
+      // on a park bench: stay put, unless something gives them a fright — then up and off round the path
+      if (p.sit) { if (!(p.fear > 0)) { p.amt = 0; p.x = p.sit.x; p.z = p.sit.z; p.yaw = p.sit.yaw; continue; } p.sit = null; p.t = r() * 4; }
       if (p.pause > 0) { p.pause -= dt; continue; }
       // flee anything fast coming at them
       if (p.fear > 0) p.fear -= dt;
@@ -444,8 +456,8 @@ export class Crowd {
         if (h.speed > 6 && d2 < 50) { fleeing = true; }
       }
       if (p.knocked > 0) continue;
-      const sp = p.speed * (fleeing ? 2.4 : 1);
-      p.amt = fleeing ? 2 : 1;
+      const sp = p.speed * (fleeing ? (p.jog ? 1.2 : 2.4) : 1);
+      p.amt = fleeing ? 2 : p.jog ? 1.75 : 1;
       if (p.beach) {
         p.yaw += (r() - 0.5) * dt * 0.8;
         p.x += Math.sin(p.yaw) * sp * dt; p.z += Math.cos(p.yaw) * sp * dt;
@@ -475,7 +487,7 @@ export class Crowd {
         if (dx * dx + dz * dz > 1e-6) p.yaw = lerpAngle(p.yaw, Math.atan2(dx, dz), Math.min(1, dt * 10));
         p.x = x; p.z = z;
         // at a corner, sometimes cross to the neighbouring block
-        if (Math.floor(pt) !== Math.floor(p.t) && r() < 0.35) this.startCross(p);
+        if (Math.floor(pt) !== Math.floor(p.t) && r() < 0.35 && !p.park) this.startCross(p);
         else if (r() < dt * 0.02) p.pause = 1 + r() * 4;
       }
       p.phase += sp * dt * (p.amt > 1.5 ? 3.2 : 2.6) / Math.max(0.9, p.look.h);
@@ -546,6 +558,11 @@ export class Crowd {
       } else if (p.fear > 0 && p.amt > 1.5) { g.gripL = g.gripR = 0.6; }
       else if (p.phoneT > 0) Object.assign(g, { armR: -2.6, elbowR: -2.3, armL: -0.2 });                  // on the phone
       else if (p.workT > 0) Object.assign(g, { armL: -0.9 + Math.sin(p.workT * 2) * 0.15, armR: -1.0, elbowL: -0.8, elbowR: -0.7, lean: 0.25 });   // busy at the back of the van
+    }
+    if (p.sit && p.knocked <= 0) {
+      // sitting on a bench: hips on the seat, hands resting in the lap
+      Object.assign(g, { thighL: -1.45, thighR: -1.45, kneeL: 1.45, kneeR: 1.45, armL: -0.42, armR: -0.38, elbowL: -1.05, elbowR: -1.0, lean: -0.08, bob: 0, twist: 0, roll: 0 });
+      return { g, extra, y: groundY(p.x, p.z) + 0.5 - RIG.hipY * p.look.h };
     }
     if (p.knocked > 0) {
       // tumbling in the air, then flat on the ground

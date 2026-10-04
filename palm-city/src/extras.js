@@ -22,7 +22,8 @@ const PALM_SPOTS = [[1, 1, 4, 4], [12, 1, -4, 4], [6, 4, 0, -27], [3, 5, 0, 0], 
   [9, 13, 0, 40], [2, 13, 0, 42], [12, 13, 0, 44], [5, 8, -27, 12]].map(([i, j, dx, dz]) => ({ x: blockC(i) + dx, z: blockC(j) + dz }));
 // stunt ramps: a wedge you hit at speed. [x, z, heading]
 const RAMPS = [
-  [blockC(3), blockC(5) - 18, 0], [blockC(10), blockC(10) + 18, Math.PI], [blockC(7), blockC(2) - 16, 0],
+  // out on the open ground past the city's edges (the parks have paths, fountains and playgrounds now)
+  [-HALF - 45, -120, Math.PI / 2], [HALF + 45, 80, -Math.PI / 2], [140, -HALF - 45, 0],
   [-HALF + 120, HALF + 22, Math.PI / 2], [HALF - 160, HALF + 22, -Math.PI / 2], [blockC(PLAZA.i) - 18, blockC(PLAZA.j) - 24, Math.PI / 2],
 ];
 const RL = 9, RW = 4.6, RH = 2.1;
