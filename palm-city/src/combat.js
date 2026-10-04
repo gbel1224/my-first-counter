@@ -3,6 +3,7 @@
 import * as THREE from "../vendor/three.module.js";
 import { clamp } from "./world.js";
 import { makeCar } from "./cars.js";
+import { weaponModel } from "./human.js";
 
 export const WEAPONS = [
   { id: "fists", name: "Fists", cost: 0, dmg: 0, rate: 0.42, range: 1.6, spread: 0, pellets: 0, ammo: 0 },
@@ -14,6 +15,8 @@ export const WEAPONS = [
   { id: "minigun", name: "Minigun", cost: 25000, dmg: 18, rate: 0.045, range: 55, spread: 0.07, pellets: 1, ammo: 500, ammoCost: 400, clip: 100, reload: 3.2, kick: 0.004, head: 0.05, snd: 1.1 },
   { id: "gl", name: "Grenade Launcher", cost: 18000, dmg: 0, rate: 1.0, range: 45, spread: 0, pellets: 0, ammo: 12, ammoCost: 350, proj: "grenade", clip: 6, reload: 2.6, kick: 0.03 },
   { id: "rpg", name: "RPG", cost: 30000, dmg: 0, rate: 1.6, range: 120, spread: 0, pellets: 0, ammo: 6, ammoCost: 500, proj: "rocket", clip: 1, reload: 2.2, kick: 0.05 },
+  { id: "bat", name: "Baseball Bat", cost: 250, dmg: 48, rate: 0.62, range: 2.3, spread: 0, pellets: 0, ammo: 0, melee: true },
+  { id: "grenade", name: "Grenades", cost: 400, dmg: 0, rate: 1.1, range: 30, spread: 0, pellets: 0, ammo: 5, ammoCost: 300, proj: "grenade", thrown: true },
 ];
 
 export function makeCombat(scene, g) {
@@ -32,7 +35,8 @@ export function makeCombat(scene, g) {
   const projs = [];
   const projMat = new THREE.MeshStandardMaterial({ color: 0x3a4030, roughness: 0.6, metalness: 0.4 });
   function launch(kind, x, y, z, dx, dz, T, owner) {
-    const m = new THREE.Mesh(kind === "rocket" ? new THREE.CylinderGeometry(0.07, 0.07, 0.7, 8) : new THREE.SphereGeometry(0.11, 10, 8), projMat);
+    const real = kind === "grenade" ? weaponModel("grenade") : null;
+    const m = real ? (real.matrixAutoUpdate = true, real) : new THREE.Mesh(kind === "rocket" ? new THREE.CylinderGeometry(0.07, 0.07, 0.7, 8) : new THREE.SphereGeometry(0.11, 10, 8), projMat);
     if (kind === "rocket") m.rotation.set(Math.PI / 2, Math.atan2(dx, dz), 0, "YXZ");
     scene.add(m);
     const sp = kind === "rocket" ? 55 : 22;
@@ -53,6 +57,7 @@ export function makeCombat(scene, g) {
       }
       p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
       p.m.position.set(p.x, p.y, p.z);
+      if (p.kind === "grenade") { p.m.rotation.x += dt * 9; p.m.rotation.y += dt * 2; }   // tumbling end over end
       if (p.kind === "rocket" && Math.random() < 0.8) g.fx.smoke(p.x, p.y, p.z, 0.6);
       let boom = p.t > p.fuse;
       if (p.y < 0.12) { if (p.kind === "grenade") { p.y = 0.12; p.vy *= -0.35; p.vx *= 0.6; p.vz *= 0.6; } else boom = true; }
@@ -215,13 +220,36 @@ export function makeCombat(scene, g) {
     return true;
   }
 
+  // a bat: a big two-handed swing at whoever's in front — hurts the tough ones, flattens the rest
+  function swing(w) {
+    if (S.cd > 0) return false;
+    const P = g.player();
+    S.cd = w.rate; S.punchT = 0.45; S.fistT = 0;
+    const fx = Math.sin(P.yaw), fz = Math.cos(P.yaw);
+    setTimeout(() => {                                    // contact a beat into the swing
+      const t = g.crowd.nearest(P.x + fx * 1.1, P.z + fz * 1.1, w.range * 0.75, null);
+      const ex = g.extraTargets ? g.extraTargets().find(o => o.alive && (o.x - P.x - fx) ** 2 + (o.z - P.z - fz) ** 2 < w.range * w.range) : null;
+      if (t) {
+        let dead;
+        if (t.hp !== undefined) { t.hp -= w.dmg; dead = t.hp <= 0; } else dead = Math.random() < 0.35;
+        g.crowd.knock(t, fx * 8, 3.2, fz * 8, dead);
+        if (g.fx.blood) g.fx.blood(t.x, 1.4, t.z, fx, fz, 6);
+        g.sound("door", 0.9, 0.7); g.shake(0.3); g.crowd.scare(P.x, P.z, 16, 5); g.crime.addCrime(1);
+        if (g.onHit) g.onHit(dead, false);
+      } else if (ex && ex.hit) { ex.hit(w.dmg * 0.6, fx, fz); g.sound("door", 0.8, 0.9); g.shake(0.2); }
+      else g.sound("blip", 0.15, 0.5);                    // a whoosh of air
+    }, 170);
+    return true;
+  }
   function fire(aimYaw) {
     const w = current();
     if (w.id === "fists") return punch();
+    if (w.melee) return swing(w);
     if (S.cd > 0 || S.reloadT > 0) return false;
     if ((g.st.ammo[w.id] || 0) <= 0) { S.cd = 0.4; g.sound("blip", 0.3, 0.5); g.toast && g.toast("Out of ammo — buy more at the gun shop"); return false; }
-    if (mag(w) <= 0) { reload(); return false; }
-    S.cd = w.rate; g.st.ammo[w.id]--; S.mag[w.id]--; S.shotT = Math.min(0.12, w.rate * 0.7);   // the trigger finger pulls
+    if (w.clip && mag(w) <= 0) { reload(); return false; }
+    S.cd = w.rate; g.st.ammo[w.id]--; if (w.clip) S.mag[w.id]--; S.shotT = Math.min(0.12, w.rate * 0.7);   // the trigger finger pulls
+    if (w.thrown) S.throwT = 0.55;
     if (g.recoil) g.recoil(w.kick || 0);
     if (S.mag[w.id] <= 0 && g.st.ammo[w.id] > 0) setTimeout(() => { if (current() === w) reload(); }, Math.max(80, w.rate * 1000));   // last round: straight into a reload
     const P = g.player();
@@ -229,6 +257,7 @@ export function makeCombat(scene, g) {
       let dx = Math.sin(aimYaw), dz = Math.cos(aimYaw);
       const T = findTarget(P.x, P.z, dx, dz, w.range, 0.9, w.proj === "rocket");
       if (T) { dx = (T.x - P.x) / T.d; dz = (T.z - P.z) / T.d; P.yaw = Math.atan2(dx, dz); }
+      if (w.thrown) { const tt = T || { d: 20 }; setTimeout(() => launch("grenade", P.x + dx * 0.4, (P.y || 0) + 1.75, P.z + dz * 0.4, dx, dz, { d: Math.min(tt.d, 28) * 0.85 }), 230); g.sound("blip", 0.25, 0.6); return true; }   // the arm comes over, then it's away
       launch(w.proj, P.x + dx * 0.8, (P.y || 0) + 1.5, P.z + dz * 0.8, dx, dz, T);
       g.sound(w.proj === "rocket" ? "boom" : "gun", 0.4); g.shake(0.2); g.crowd.scare(P.x, P.z, 40, 8);
       return true;
@@ -296,6 +325,7 @@ export function makeCombat(scene, g) {
     if (S.comboT > 0) S.comboT -= dt;
     if (S.punchT > 0) S.punchT -= dt;
     if (S.shotT > 0) S.shotT -= dt;
+    if (S.throwT > 0) S.throwT -= dt;
     if (S.fistT > 0) S.fistT -= dt;
     const P = g.player();
     // damaged cars smoke, then burn, then go up
@@ -313,6 +343,8 @@ export function makeCombat(scene, g) {
   // the hands: fists when fighting, a grip and a trigger finger with a gun out
   function hands() {
     const w = current();
+    if (w.melee) return { gun: w.id, gripR: 1, gripL: 1, swing: S.punchT > 0 ? 1 - S.punchT / 0.45 : 0 };
+    if (w.thrown) return { gun: (g.st.ammo[w.id] || 0) > 0 || S.throwT > 0.25 ? w.id : null, gripR: 1, swing: S.throwT > 0 ? 1 - S.throwT / 0.55 : 0 };
     if (w.id === "fists") return S.fistT > 0 ? { gripL: 1, gripR: 1 } : null;
     const two = w.id !== "pistol";
     return { gun: w.id, gripR: 0.95, indexR: S.shotT > 0 ? 1 : 0.3, gripL: two ? 0.75 : 0.5 };
@@ -323,6 +355,7 @@ export function makeCombat(scene, g) {
       const f = 1 - S.reloadT / S.reloadLen, k = Math.sin(f * Math.PI);
       return { armR: -0.95, elbowR: -0.9, armL: -0.7 - 0.5 * (1 - k), elbowL: -1.5 + k * 0.7, headPitch: 0.35 };
     }
+    if (current().melee) { if (S.punchT <= 0) return { twist: -0.35 }; const e = 1 - S.punchT / 0.45; return { twist: -0.45 + e * 1.1, lean: 0.1 * Math.sin(e * Math.PI) }; }   // a bat: the hips lead the swing
     if (S.punchT <= 0) return null;
     const kick = S.combo === 2;
     const t = S.punchT / (kick ? 0.38 : 0.26);

@@ -179,6 +179,38 @@ function gunGeometry(id) {
   return (GUNGEO[id] = merge(p));
 }
 
+// real guns (photo-scanned models), baked into the same frame as the built ones: grip at the origin,
+// barrel along -y, top along +z. Until they've loaded (or if they don't), the built guns stand in.
+const REAL = {}; let GUNVER = 0;
+const REAL_SRC = {
+  pistol: { file: "pistol", grip: [-0.015, 0.0, 0] },       // the service pistol: muzzle along +x, top +y
+  sniper: { file: "rifle", grip: [-0.33, -0.035, 0] },      // the scoped bolt-action
+  bat: { file: "bat", grip: [0, -0.17, 0], axis: true },    // along +y, knob at the bottom
+  grenade: { file: "grenade", grip: [0, -0.06, 0], axis: true },
+};
+// a fresh copy of a real model, in its held frame (for a thrown grenade in flight, etc.)
+export function weaponModel(id) { return REAL[id] ? REAL[id].clone() : null; }
+export function loadWeapons(base = "") {
+  const loader = new GLTFLoader();
+  // model space -> gun frame: +x (muzzle) to -y, +y (top) to +z
+  const R = new THREE.Matrix4().makeBasis(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(-1, 0, 0));
+  return Promise.all(Object.entries(REAL_SRC).map(async ([id, s]) => {
+    try {
+      const g = await loader.loadAsync(base + "assets/weapons/" + s.file + ".glb");
+      g.scene.updateMatrixWorld(true);
+      const M = new THREE.Matrix4().copy(R).multiply(new THREE.Matrix4().makeTranslation(-s.grip[0], -s.grip[1], -s.grip[2]));
+      // long things held by one end (a bat, a stick grenade): their +y becomes the frame's forward (-y)
+      const MA = new THREE.Matrix4().makeBasis(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, -1)).multiply(new THREE.Matrix4().makeTranslation(-s.grip[0], -s.grip[1], -s.grip[2]));
+      const grp = new THREE.Group();
+      g.scene.traverse(o => {
+        if (!o.isMesh) return;
+        const geo = o.geometry.clone().applyMatrix4(o.matrixWorld).applyMatrix4(s.axis ? MA : M);
+        const m = new THREE.Mesh(geo, o.material); m.castShadow = true; grp.add(m);
+      });
+      REAL[id] = grp; GUNVER++;
+    } catch (e) { console.warn("weapon model failed", id, e); }
+  }));
+}
 // how each gun is held. at: "shoulder" (stock in the shoulder; butt = metres from grip to butt),
 // "front" (out in both hands, the left cupping the right), "hip", "tube" (on the shoulder).
 // fore: [forward, up] from the grip to where the left hand holds. twist: blade the body.
@@ -191,6 +223,8 @@ const HOLD = {
   gl: { at: "shoulder", butt: 0.3, fore: [0.2, 0.0], support: 0.8, twist: 0.4 },
   minigun: { at: "hip", fore: [0.05, 0.12], support: 0.9, twist: 0.25 },
   rpg: { at: "tube", fore: [0.25, 0.0], support: 0.8, twist: 0.3 },
+  bat: { at: "swing", fore: [-0.09, 0.0], support: 0.9, twist: 0.15 },
+  grenade: { at: "throw", fore: [0, 0], support: 0, twist: 0.1 },
 };
 const _k = {}; for (const n of ["f", "u", "r", "sR", "sL", "G", "b", "x", "fp", "rf", "rp", "lf", "lp", "la", "pr", "pl"]) _k[n] = new THREE.Vector3();
 // two-bone IK: put the wrist at `wrist` (world), the elbow toward `pole`, the hand turned to the
@@ -343,10 +377,11 @@ export function makeHuman(look, kind = modelFor(look)) {
     // both arms reach for it — the right hand round the grip, the left under the barrel or cupping
     // the right — by two-bone IK, and the skeleton is posed again
     const gid = gun;
-    if (gid !== human._gunId) {
+    if (gid !== human._gunId || human._gunVer !== GUNVER) {
       if (human._gun) { root.remove(human._gun); human._gun = null; }
-      human._gunId = gid;
-      if (gid) { human._gun = new THREE.Mesh(gunGeometry(gid), gunMaterial()); human._gun.matrixAutoUpdate = false; human._gun.castShadow = true; root.add(human._gun); }
+      human._gunId = gid; human._gunVer = GUNVER;
+      if (gid && REAL[gid]) { human._gun = REAL[gid].clone(); human._gun.matrixAutoUpdate = false; root.add(human._gun); }
+      else if (gid) { human._gun = new THREE.Mesh(gunGeometry(gid), gunMaterial()); human._gun.matrixAutoUpdate = false; human._gun.castShadow = true; root.add(human._gun); }
     }
     if (kindG && bones.RightArm && bones.LeftArm && B.C.F.Right && B.C.F.Left) {
       root.updateMatrixWorld(true);
@@ -357,21 +392,38 @@ export function makeHuman(look, kind = modelFor(look)) {
       if (kindG.at === "shoulder") G.copy(sR).addScaledVector(right, -0.075 * hs).addScaledVector(fwd, (kindG.butt + 0.03) * hs).addScaledVector(up, -0.035 * hs);
       else if (kindG.at === "hip") G.copy(sR).addScaledVector(fwd, 0.28 * hs).addScaledVector(up, -0.42 * hs).addScaledVector(right, -0.02 * hs);
       else if (kindG.at === "tube") G.copy(sR).addScaledVector(fwd, 0.16 * hs).addScaledVector(up, -0.06 * hs).addScaledVector(right, -0.05 * hs);
+      else if (kindG.at === "swing") {
+        // a bat: cocked up over the right shoulder, then (g.swing 0 -> 1) brought round in front and across
+        const s = g.swing || 0, e = s * s * (3 - 2 * s);
+        G.copy(sR).add(sL).multiplyScalar(0.5).addScaledVector(fwd, (0.22 + 0.22 * Math.sin(e * Math.PI)) * hs).addScaledVector(right, (0.16 - 0.4 * e) * hs).addScaledVector(up, (-0.12 - 0.12 * e) * hs);
+      }
+      else if (kindG.at === "throw") {
+        // a grenade: held low in the right hand, wound back over the shoulder as it's thrown (g.swing)
+        const s = g.swing || 0, back = Math.sin(Math.min(1, s * 1.6) * Math.PI);
+        G.copy(sR).addScaledVector(fwd, (0.12 - 0.3 * back) * hs).addScaledVector(up, (-0.38 + 0.55 * back) * hs).addScaledVector(right, -0.05 * hs);
+      }
       else G.copy(sR).add(sL).multiplyScalar(0.5).addScaledVector(fwd, kindG.reach * hs).addScaledVector(up, kindG.lift * hs).addScaledVector(right, 0.02 * hs);
-      // the gun's frame: barrel along fwd, sights up
-      const back = _k.b.copy(fwd).negate(), gx = _k.x.crossVectors(back, up);
-      _gm.makeBasis(gx, back, up).setPosition(G);
+      // the gun's frame: barrel along fwd, sights up (a bat or grenade: its length along `aim`)
+      let aim = fwd;
+      if (kindG.at === "swing") { const e = (g.swing || 0); aim = _k.x.copy(up).multiplyScalar(1 - e).addScaledVector(fwd, 0.25 + e * 0.6).addScaledVector(right, (-0.3 + e * 1.4) * 0.6).addScaledVector(fwd, 0).normalize().clone(); }
+      else if (kindG.at === "throw") aim = _k.x.copy(up).addScaledVector(fwd, 0.3).normalize().clone();
+      const back = _k.b.copy(aim).negate(), sideV = new THREE.Vector3().crossVectors(back, up);
+      if (sideV.lengthSq() < 1e-4) sideV.copy(right);
+      sideV.normalize();
+      const upV = new THREE.Vector3().crossVectors(sideV, back).normalize();
+      const gx = _k.x.copy(sideV);
+      _gm.makeBasis(gx, back, upV).setPosition(G);
       _gm.scale(_gs.set(hs, hs, hs));
       human._gun.matrix.copy(root.matrixWorld).invert().multiply(_gm);
       // where each hand goes, and how it's turned (knuckles' direction, palm's facing)
-      const fore = _k.fp.copy(G).addScaledVector(fwd, kindG.fore[0] * hs).addScaledVector(up, kindG.fore[1] * hs);
+      const fore = _k.fp.copy(G).addScaledVector(kindG.at === "swing" ? aim : fwd, kindG.fore[0] * hs).addScaledVector(up, kindG.fore[1] * hs);   // (a bat: the left hand just below the right, on the handle)
       const rFing = _k.rf.copy(fwd).addScaledVector(up, -0.45).normalize(), rPalm = _k.rp.copy(right).negate();
       let lFing, lPalm, lAt;
       if (kindG.at === "front") { lFing = _k.lf.copy(fwd).addScaledVector(up, -0.6).normalize(); lPalm = _k.lp.copy(right); lAt = _k.la.copy(G).addScaledVector(right, -0.035 * hs).addScaledVector(up, -0.02 * hs); }
       else { lFing = _k.lf.copy(right).multiplyScalar(0.75).addScaledVector(fwd, 0.65).normalize(); lPalm = _k.lp.copy(up); lAt = _k.la.copy(fore).addScaledVector(up, -0.02 * hs); }
       const wristFor = (at, f, pa) => at.clone().addScaledVector(f, -0.075 * hs).addScaledVector(pa, -0.035 * hs);
       reach(human, A, "Right", wristFor(G, rFing, rPalm), _k.pr.copy(right).multiplyScalar(0.6).addScaledVector(up, -1), rFing, rPalm, yaw);
-      reach(human, A, "Left", wristFor(lAt, lFing, lPalm), _k.pl.copy(right).multiplyScalar(-0.6).addScaledVector(up, -1), lFing, lPalm, yaw);
+      if (kindG.support > 0) reach(human, A, "Left", wristFor(lAt, lFing, lPalm), _k.pl.copy(right).multiplyScalar(-0.6).addScaledVector(up, -1), lFing, lPalm, yaw);
       fk();
     }
     // the eyes follow their gaze
