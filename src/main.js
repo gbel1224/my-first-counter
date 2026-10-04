@@ -769,6 +769,28 @@ function update(dt) {
   }
   if (state.phase === "play" && !hud.talking() && !interior.inside) {             // the world holds its breath during dialogue
     saleSigns.update(st);
+    // on foot, a cruiser (or the tank) is solid: it shoves you aside, and a fast one knocks you down
+    if (!P.car) for (const u of crime.units) {
+      if (!u.active) continue;
+      const R = u.tank ? 3.4 : 2.3, dx = P.x - u.x, dz = P.z - u.z, d = Math.hypot(dx, dz);
+      if (d < R && d > 1e-3) {
+        P.x = u.x + dx / d * R; P.z = u.z + dz / d * R;
+        if (u.speed > 7 && !u.hitCD) { u.hitCD = 1; crime.hurt(Math.round(u.speed * 1.2)); rig.shake = Math.max(rig.shake, 0.5); AudioSys.play("door", 0.7, 0.6); }
+      }
+      if (u.hitCD) u.hitCD = Math.max(0, u.hitCD - dt);
+    }
+    // people are solid: you brush past them instead of walking through, and someone you step in
+    // front of stops for a beat rather than walking through you
+    if (!P.car && !P.swim) for (const p of crowd.people) {
+      if (p.hidden || p.knocked > 0 || p.ally) continue;
+      const dx = P.x - p.x, dz = P.z - p.z;
+      if (dx * dx + dz * dz > 0.72 * 0.72) continue;
+      const d = Math.hypot(dx, dz) || 1e-3;
+      P.x = p.x + dx / d * 0.72; P.z = p.z + dz / d * 0.72;
+      if (!p.fixed && !p.ai && !p.sit && (Math.sin(p.yaw) * dx + Math.cos(p.yaw) * dz) > 0) p.pause = Math.max(p.pause || 0, 0.6);
+    }
+    // whatever shoved you this frame (a cruiser, a blast, a door), you never end up inside a wall
+    if (!P.car && !P.swim) { const q = collider.resolve(P.x, P.z, 0.38); if (q.hit) { P.x = q.x; P.z = q.z; } }
     crime.update(dt, time); roadblocks.update(dt, time); combat.update(dt, time); gangs.update(dt);
     updateHeists(dt, time); events.update(dt); jobs.update(dt); extras.update(dt); life.update(dt);
     if (P.car && P.car.boom && !P.car.charred) {           // your ride went up: you're thrown clear, it's a burnt shell

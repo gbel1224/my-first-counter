@@ -45,7 +45,13 @@ export function initInput(ui) {
     if (e.pointerId === joyId) {
       let dx = e.clientX - jx, dy = e.clientY - jy;
       const d = Math.hypot(dx, dy);
-      if (d > R) { dx *= R / d; dy *= R / d; }
+      if (d > R) {
+        // past the rim: the base slides after your thumb, so pulling back the other way answers at once
+        // instead of first having to travel all the way back to where the base was left
+        jx = e.clientX - dx * R / d; jy = e.clientY - dy * R / d;
+        joy.style.left = jx + "px"; joy.style.top = jy + "px";
+        dx *= R / d; dy *= R / d;
+      }
       knob.style.transform = `translate(${dx}px,${dy}px)`;
       I.mx = dx / R; I.mz = -dy / R;
       const m = Math.hypot(I.mx, I.mz);
@@ -59,6 +65,19 @@ export function initInput(ui) {
     if (e.pointerId === joyId) { joyId = null; joy.style.display = "none"; I.mx = 0; I.mz = 0; I.sprint = false; }
     if (e.pointerId === lookId) lookId = null;
   };
+  // the app loses focus mid-drag (a call, a notification, the home gesture): the finger's "up" never
+  // arrives, so let go of everything rather than walking off on your own
+  const releaseAll = () => {
+    joyId = null; lookId = null; joy.style.display = "none"; I.mx = 0; I.mz = 0; I.sprint = false;
+    I.handbrake = I.boostBtn = I.fireBtn = I.hornBtn = false;
+    for (const b of [ui.bB, ui.bC, ui.bF, ui.bD]) b && b.classList.remove("down");
+    keys.clear();
+  };
+  addEventListener("blur", releaseAll);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) releaseAll(); });
+  addEventListener("pagehide", releaseAll);
+  // a touch that ends with no finger left on the screen: nothing can still be held
+  addEventListener("touchend", e => { if (e.touches && e.touches.length === 0 && (joyId !== null || lookId !== null)) releaseAll(); }, { passive: true });
   addEventListener("pointerdown", onDown, { passive: true });
   addEventListener("pointermove", onMove, { passive: true });
   addEventListener("pointerup", onUp); addEventListener("pointercancel", onUp);

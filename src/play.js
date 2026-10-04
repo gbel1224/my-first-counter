@@ -135,8 +135,11 @@ export function updatePlayerOnFoot(P, inp, dt, camYaw, collider) {
   if (inp.jump && P.grounded) { P.vy = 5.4; P.grounded = false; }
   P.vy -= 17 * dt; P.y += P.vy * dt;
   if (P.y <= gy) { P.y = lerp(P.y, gy, P.vy < -2 ? 1 : 0.5); if (P.y - gy < 0.02) P.y = gy; P.vy = 0; P.grounded = true; }
-  P.amt = P.speed < 0.15 ? 0 : P.speed < 3.6 ? P.speed / 3.6 : 1 + (P.speed - 3.6) / 3.6;
-  P.phase += P.speed * dt * (P.amt > 1 ? 1.55 : 2.25);
+  // the legs: driven by the real ground speed, eased so a kerb or a corner doesn't stutter them
+  P.gait = lerp(P.gait || 0, Math.min(real, 8), 1 - Math.exp(-14 * dt));
+  const gs = P.gait < 0.12 ? 0 : P.gait;
+  P.amt = gs < 0.15 ? 0 : gs < 3.6 ? gs / 3.6 : 1 + (gs - 3.6) / 3.6;
+  P.phase += gs * dt * (P.amt > 1 ? 1.55 : 2.25);
   P.vx = (P.x - x0) / (dt || 1); P.vz = (P.z - z0) / (dt || 1);
 }
 
@@ -200,8 +203,11 @@ export function updateCam(C, dt, target, inp, collider, driving, time) {
   const cz = target.z - Math.cos(C.yaw) * Math.cos(C.pitch) * C.dist;
   let cy = ty + Math.sin(C.pitch) * C.dist + (driving ? 0.6 : 0.2);
   // pull in if a building is between the target and the camera
-  const t = collider.segmentHit(target.x, target.z, cx, cz, cy);
-  const px = lerp(target.x, cx, Math.max(0.15, t - 0.05)), pz = lerp(target.z, cz, Math.max(0.15, t - 0.05));
+  // (fine steps so it doesn't come in notches; in at once so it never sees through a wall, back out
+  // gently so walking past a corner doesn't make it pump in and out)
+  const t = Math.max(0.15, collider.segmentHit(target.x, target.z, cx, cz, cy, 0.35) - 0.05);
+  C.occ = C.occ === undefined || t < C.occ ? t : lerp(C.occ, t, 1 - Math.exp(-3.5 * dt));
+  const px = lerp(target.x, cx, C.occ), pz = lerp(target.z, cz, C.occ);
   cy = Math.max(cy, groundY(px, pz) + 0.5);
   const want = new THREE.Vector3(px, cy, pz);
   if (!C.init) { C.pos.copy(want); C.init = true; }

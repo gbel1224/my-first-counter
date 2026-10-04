@@ -380,8 +380,8 @@ export class Collider {
     return r;
   }
   // does the segment (ax,az)->(bx,bz) at height y pass through a building? (camera + line of sight)
-  segmentHit(ax, az, bx, bz, y) {
-    const steps = Math.ceil(Math.hypot(bx - ax, bz - az) / 1.5);
+  segmentHit(ax, az, bx, bz, y, step = 1.5) {
+    const steps = Math.ceil(Math.hypot(bx - ax, bz - az) / step);
     for (let s = 1; s <= steps; s++) {
       const t = s / steps, x = ax + (bx - ax) * t, z = az + (bz - az) * t;
       for (const b of this.near(x, z)) if (x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1 && y < b.h) return t;
