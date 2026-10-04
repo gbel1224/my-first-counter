@@ -188,7 +188,7 @@ export function createHUD(plan) {
         for (const c of cops) {
           const mx = (c.x - px) * S, mz = (c.z - pz) * S;
           if (c.cone && Math.hypot(mx, mz) < lim + 40) {
-            const R = 48 * S, a0 = Math.PI / 2 - c.h;                    // world heading -> canvas angle (x right, z down)
+            const R = (c.foot ? 38 : 48) * S, a0 = Math.PI / 2 - c.h;      // world heading -> canvas angle (x right, z down)
             const g = ctx.createRadialGradient(mx, mz, 0, mx, mz, R);
             g.addColorStop(0, c.seen ? "rgba(255,50,50,.85)" : "rgba(70,130,255,.8)"); g.addColorStop(0.75, c.seen ? "rgba(255,50,50,.4)" : "rgba(70,130,255,.35)"); g.addColorStop(1, "rgba(70,130,255,0)");
             ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(mx, mz); ctx.arc(mx, mz, R, a0 - 0.62, a0 + 0.62); ctx.closePath(); ctx.fill();
@@ -207,8 +207,9 @@ export function createHUD(plan) {
             ctx.beginPath(); ctx.moveTo(6 * k, 0); ctx.lineTo(-4 * k, -5 * k); ctx.lineTo(-4 * k, 5 * k); ctx.closePath(); ctx.fill(); ctx.stroke();
             ctx.restore();
           } else {
-            ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(mx, mz, c.tank ? 7 : 6.2, 0, 6.3); ctx.fill();
-            ctx.fillStyle = col; ctx.beginPath(); ctx.arc(mx, mz, c.tank ? 5.2 : 4.6, 0, 6.3); ctx.fill();
+            const rr = c.tank ? 7 : c.foot ? 4.2 : 6.2;               // (officers on foot: smaller blips)
+            ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(mx, mz, rr, 0, 6.3); ctx.fill();
+            ctx.fillStyle = col; ctx.beginPath(); ctx.arc(mx, mz, rr - 1.8, 0, 6.3); ctx.fill();
           }
         }
       }

@@ -80,6 +80,7 @@ export function makeCrime(scene, g) {
   const S = { wanted: 0, wantedCD: 0, crimeCD: 0, searching: false, searchT: 0, onYou: false, health: 100, hurtCD: 0, bustT: 0, flash: 0 };
   const belief = { x: 0, z: 0 };
   const units = [];
+  let pit = null;
   for (let i = 0; i < MAX_UNITS; i++) units.push(makeCruiser(scene));
   units.push(makeTank(scene));                         // the last slot is the tank — only rolls out at 5★
   const heli = makeHeli(scene);
@@ -109,7 +110,7 @@ export function makeCrime(scene, g) {
     if (S.health <= 0) wasted();
   }
   function reset() {
-    S.wanted = 0; S.wantedCD = 0; S.crimeCD = 0; S.fixT = 0; S.searching = false; S.searchT = 0; S.onYou = false; S.bustT = 0;
+    pit = null; S.wanted = 0; S.wantedCD = 0; S.crimeCD = 0; S.fixT = 0; S.searching = false; S.searchT = 0; S.onYou = false; S.bustT = 0;
     for (const u of units) { u.active = false; u.group.visible = false; }
     heliOff();
   }
@@ -121,7 +122,7 @@ export function makeCrime(scene, g) {
     if (heli.hp <= 0) { heli.fall = 1; heli.vy = 0; g.fxParticles.explosion(heli.x, heli.y + 1.5, heli.z, 0.8); g.sound("boom", 0.8); addCrime(1); g.toast("🚁 Chopper down!"); return true; }
     return false;
   }
-  function updateHeli(dt, time, px, pz, heat, seenByCars) {
+  function updateHeli(dt, time, px, pz, heat, seenByCars, F) {
     const H = heli;
     if (H.cool > 0) H.cool -= dt;
     if (H.fall) {                                        // spinning down, trailing smoke, then it's a fireball
@@ -148,11 +149,20 @@ export function makeCrime(scene, g) {
     const covered = g.inside && g.inside();
     H.sees = !covered && dH < 75;
     const tx = H.sees || seenByCars ? px : belief.x, tz = H.sees || seenByCars ? pz : belief.z;
-    // orbit the target at a stand-off radius, a lazy circle when searching
-    H.orbit += dt * 0.35;
-    const R = H.sees ? 20 : 34;
-    const gx = tx + Math.cos(H.orbit) * R, gz = tz + Math.sin(H.orbit) * R;
-    const dx = gx - H.x, dz = gz - H.z, d = Math.hypot(dx, dz) || 1, sp = Math.min(30, d * 0.9);
+    // on you and you're moving: ride alongside, a little ahead, gunner's door toward you, and keep
+    // pace however fast you go; you stop, it circles you; it's lost you, it circles where you were
+    const vx = (F && F.vx) || 0, vz = (F && F.vz) || 0, spP = Math.hypot(vx, vz);
+    let gx, gz, top = 30;
+    if ((H.sees || seenByCars) && spP > 6) {
+      const fx = vx / spP, fz = vz / spP, side = H.side || (H.side = Math.random() < 0.5 ? 1 : -1);
+      gx = px + vx * 0.9 + fz * side * 18; gz = pz + vz * 0.9 - fx * side * 18;
+      top = spP + 22;
+    } else {
+      H.orbit += dt * (H.sees ? 0.45 : 0.3);
+      const R = H.sees ? 22 : 34;
+      gx = tx + Math.cos(H.orbit) * R; gz = tz + Math.sin(H.orbit) * R;
+    }
+    const dx = gx - H.x, dz = gz - H.z, d = Math.hypot(dx, dz) || 1, sp = Math.min(top, d * 1.1);
     H.x += dx / d * sp * dt; H.z += dz / d * sp * dt; H.y += (36 + Math.sin(time * 0.7) * 2 - H.y) * Math.min(1, dt);
     H.h = lerpAngle(H.h, Math.atan2(tx - H.x, tz - H.z), Math.min(1, dt * 1.5));
     H.group.position.set(H.x, H.y, H.z); H.group.rotation.set(Math.min(0.25, sp / 120), H.h, 0);
@@ -211,7 +221,7 @@ export function makeCrime(scene, g) {
       if (o === u) continue;
       const dx = o.x - u.x, dz = o.z - u.z; if (dx * dx + dz * dz > 30 * 30) continue;
       const al = dx * fx + dz * fz, lat = dx * fz - dz * fx;
-      if (al > 0 && al < gap && Math.abs(lat) < 2.6) { gap = al; side = lat; sp = o.speed || 0; }
+      if (al > 0 && al < gap && Math.abs(lat) < (o.barMatR ? 1.9 : 2.6)) { gap = al; side = lat; sp = o.speed || 0; }   // (a fellow cruiser only blocks if it's truly in the way)
     }
     return { gap, side, sp };
   }
@@ -246,7 +256,8 @@ export function makeCrime(scene, g) {
       u.ramT = (u.ramT || 0) + dt;
       let gap = clamp(6.5 + spP * 0.22, 7, 13), off = 0;
       if (role === "lead" && heat >= 2 && u.ramT % 9 > 6.5) gap = -0.5;                    // every so often: a shove in the bumper
-      if (role === "flank") { gap += 3; off = side * 2.9; if (heat >= 3 && u.ramT % 8 > 5.5) { gap = 1.2; off = side * 1.6; } }   // ...and a PIT on the rear quarter
+      let pitRun = false;
+      if (role === "flank") { gap += 3; off = side * 3.2; if (heat >= 3 && u.ramT % 9 > 5) { gap = 1.0; off = side * 1.7; pitRun = true; } }   // ...and a PIT on the rear quarter
       if (role === "trail") gap = 20 + (u.slot || 0) * 6;
       const tx = P.x - fx * gap + rx * off, tz = P.z - fz * gap + rz * off;                   // its slot, in your wake
       const along = (u.x - P.x) * fx + (u.z - P.z) * fz;                                     // + : the cruiser is out in front of you
@@ -265,6 +276,7 @@ export function makeCrime(scene, g) {
         aimX = tx + fx * look; aimZ = tz + fz * look;
         const e = (tx - u.x) * fx + (tz - u.z) * fz;                                         // how far short of its slot it is
         want = spP < 2 ? clamp(Math.hypot(tx - u.x, tz - u.z) * 0.7, 0, 16) : clamp(spP + clamp(e * 0.8, -9, 16), 0, Math.min(u.spec.top, CHASE_TOP[heat] || 46));
+        if (pitRun && e > 0) want = Math.max(want, Math.min(u.spec.top, spP + 7));          // going for it: close the gap hard
       }
     } else if (role && seen && !F.car) {
       // ---- on foot: come at you and stop alongside (officers don't do donuts round you) ----
@@ -296,6 +308,7 @@ export function makeCrime(scene, g) {
     else u.blockT = 0;
     if (u.wide > 0) u.wide -= dt;
     if (g.paused()) want = 0;
+    if (u.hold > 0) { u.hold -= dt; if (!F.car) want = 0; }          // pulled over: an officer's getting out
     let dh = wrap(Math.atan2(aimX - u.x, aimZ - u.z) - u.h);
     // facing the wrong way: brake, then a proper three-point turn (reverse with the wheel the OTHER
     // way — that's what turns a car round in reverse — then pull forward on full lock)
@@ -351,7 +364,8 @@ export function makeCrime(scene, g) {
         if (u.sees) seen = true;
       }
     }
-    if (updateHeli(dt, time, px, pz, heat, seen)) seen = true;
+    if (heat > 0 && g.footSees && g.footSees()) seen = true;          // an officer on foot has eyes on you
+    if (updateHeli(dt, time, px, pz, heat, seen, F)) seen = true;
     if (seen && S.searching) { g.toast("🚨 Spotted! They're back on you"); g.sound("blip", 0.9); S.wantedCD = searchTime(heat); }
     if (S.fixT > 0) S.fixT -= dt;
     const known = seen || S.fixT > 0;                   // eyes on you, or the call just came in
@@ -361,12 +375,19 @@ export function makeCrime(scene, g) {
     const chasing = units.filter(u => u.active && !u.tank && !S.searching && (u.x - px) ** 2 + (u.z - pz) ** 2 < 160 * 160)
       .sort((a, b) => ((a.x - px) ** 2 + (a.z - pz) ** 2) - ((b.x - px) ** 2 + (b.z - pz) ** 2));
     const fxP = F.car ? Math.sin(F.h || 0) : 0, fzP = F.car ? Math.cos(F.h || 0) : 0;
-    chasing.forEach((u, k) => {
-      u.role = k === 0 ? "lead" : k === 1 ? "flank" : "trail"; u.slot = k - 2;
-      if (u.role === "flank" && !u.side) u.side = ((u.x - px) * fzP - (u.z - pz) * fxP) >= 0 ? 1 : -1;
-    });
+    // roles stick while a cruiser stays in the chase (re-ranking every frame made the flanker and the
+    // lead swap jobs the moment one got close — so nobody ever committed to a PIT); gaps get filled nearest-first
+    for (const u of units) if (!chasing.includes(u) && (u.role === "lead" || u.role === "flank")) u.role = null;
+    for (const r of ["lead", "flank"]) if (!chasing.some(u => u.role === r)) { const n = chasing.find(u => u.role !== "lead" && u.role !== "flank"); if (n) { n.role = r; if (r === "flank") n.side = ((n.x - px) * fzP - (n.z - pz) * fxP) >= 0 ? 1 : -1; } }
+    let slot = 0;
+    for (const u of chasing) if (u.role !== "lead" && u.role !== "flank") { u.role = "trail"; u.slot = slot++; }
     const obstacles = (g.obstacles ? g.obstacles(px, pz) : []).concat(units.filter(u => u.active));
     let grabbing = false;
+    if (pit) {                                           // a PIT in progress: the spin plays out
+      pit.t -= dt;
+      if (pit.C !== F.ref || pit.t <= 0) pit = null;
+      else { pit.C.h += pit.rate * dt; pit.rate *= Math.exp(-1.7 * dt); pit.C.yawRate = 0; }
+    }
     for (let i = 0; i < units.length; i++) {
       const u = units[i];
       const want = u.tank ? heat >= 5 : i < Math.min(MAX_UNITS, heat + (heat >= 3 ? 1 : 0));
@@ -403,14 +424,17 @@ export function makeCrime(scene, g) {
       if (F.car && d < 3.6 && u.speed > 4 && !u.pitCD) {
         u.pitCD = 1.2; hurt(u.role === "flank" ? 12 : 9); g.shake(0.6); g.sound("door", 0.9, 0.5);
         const C = F.ref;
-        if (C && u.role === "flank" && heat >= 3) {
+        if (C && u.role === "flank" && heat >= 3 && !pit) {
+          // the PIT: their nose into your rear quarter swings your tail out — your heading is wrenched
+          // round (momentum keeps going the old way, so you slide), most of the way to facing back
           const lat = (u.x - C.x) * Math.cos(C.h) - (u.z - C.z) * Math.sin(C.h);
-          C.yawRate = (C.yawRate || 0) + (lat > 0 ? 1 : -1) * 3.2; C.vx *= 0.85; C.vz *= 0.85;
+          const along = (u.x - C.x) * Math.sin(C.h) + (u.z - C.z) * Math.cos(C.h);
+          if (along < 0.8 && Math.abs(lat) > 0.6) { pit = { C, rate: (lat > 0 ? 1 : -1) * 4.4, t: 1.1 }; S.pits = (S.pits || 0) + 1; g.toast("💥 PIT maneuver!"); }
         }
       }
       if (u.pitCD) u.pitCD = Math.max(0, u.pitCD - dt);
       if (!S.searching && u.speed < 4 && u.sees) {
-        if (!F.car && d < 6) grabbing = true;
+        if (!F.car && d < 6 && Math.abs(F.speed || 0) < 2.5) grabbing = true;   // (a parked car can't grab someone sprinting past — that's the officers' job)
         if (F.car && d < 7.5 && Math.abs(F.speed) < 1.2) grabbing = true;            // stopped with a cruiser on you: out of the car
       }
       if (u.tank) {                                     // the turret tracks you; the cannon fires shells
@@ -438,8 +462,9 @@ export function makeCrime(scene, g) {
         }
       }
     }
+    if (g.footGrab && g.footGrab()) grabbing = true;   // an officer on foot has his hands on you
     // cornered by a stopped cruiser for a moment (on foot, or sat still in a car): BUSTED
-    if (grabbing) { S.bustT += dt; if (S.bustT > (F.car ? 2.2 : 1.4)) { busted(); return; } } else S.bustT = Math.max(0, S.bustT - dt * 2);
+    if (grabbing) { S.bustT += dt; if (S.bustT > (F.car ? (heat <= 1 ? 3.5 : 2.2) : 1.4)) { busted(); return; } }   // (at one star they give you a moment to get going again) else S.bustT = Math.max(0, S.bustT - dt * 2);
     // heat only cools while they've genuinely lost you: the stars flash while they search, and if
     // the search runs out without anyone spotting you, every star goes at once (GTA rules)
     if (S.wanted > 0) {
