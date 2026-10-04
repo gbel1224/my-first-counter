@@ -8,12 +8,12 @@ import { isMobile } from "./render.js";
 // Palette keyed by sun elevation (radians). Colours are linear-ish scene values.
 const KEYS = [
   { e: -0.30, zen: 0x070b1c, hor: 0x141a30, sun: 0x000000, si: 0.0, hemi: 0.42, sky: 0x3c4a84, gnd: 0x2a2220, fog: 0x121a2c },
-  { e: -0.05, zen: 0x16244e, hor: 0xc86a52, sun: 0xff6a3a, si: 0.3, hemi: 0.22, sky: 0x6a6a9a, gnd: 0x2a1e1c, fog: 0x7a5a5c },
-  { e: 0.06, zen: 0x2a58a0, hor: 0xf2a070, sun: 0xff9050, si: 2.6, hemi: 0.26, sky: 0x98a8cc, gnd: 0x5a4030, fog: 0xd8a888 },
+  { e: -0.05, zen: 0x14244e, hor: 0xd8643a, sun: 0xff6a30, si: 0.4, hemi: 0.22, sky: 0x5a6a98, gnd: 0x2a1e1c, fog: 0x7a5a5c },
+  { e: 0.06, zen: 0x2656a4, hor: 0xf8a85a, sun: 0xffa048, si: 3.1, hemi: 0.26, sky: 0x8a9cc4, gnd: 0x6a4a30, fog: 0xd8a888 },
   // day: deep saturated blue overhead, a pale humid haze at the horizon, a hot hard sun
-  { e: 0.22, zen: 0x1c56b4, hor: 0xe6d6bc, sun: 0xffd6a0, si: 3.6, hemi: 0.42, sky: 0x9ab2d4, gnd: 0x9a7e60, fog: 0xd8d0c0 },
-  { e: 0.60, zen: 0x1650b8, hor: 0xd4dcdc, sun: 0xfff0dc, si: 4.0, hemi: 0.45, sky: 0xa0b8dc, gnd: 0xa08466, fog: 0xcfd6d4 },
-  { e: 1.40, zen: 0x124cb8, hor: 0xcad8e0, sun: 0xffffff, si: 4.2, hemi: 0.45, sky: 0xa6bee0, gnd: 0xa08a6c, fog: 0xc8d4d8 },
+  { e: 0.22, zen: 0x1c56b4, hor: 0xe6d6bc, sun: 0xffd6a0, si: 3.6, hemi: 0.42, sky: 0x9ab2d4, gnd: 0x9a7e60, fog: 0xc4ccd4 },
+  { e: 0.60, zen: 0x1650b8, hor: 0xd4dcdc, sun: 0xfff0dc, si: 4.0, hemi: 0.45, sky: 0xa0b8dc, gnd: 0xa08466, fog: 0xbcc8d4 },
+  { e: 1.40, zen: 0x124cb8, hor: 0xcad8e0, sun: 0xffffff, si: 4.2, hemi: 0.45, sky: 0xa6bee0, gnd: 0xa08a6c, fog: 0xb8c6d6 },
 ];
 const _c1 = new THREE.Color(), _c2 = new THREE.Color();
 function sample(e, key, out) {
@@ -26,7 +26,7 @@ function sample(e, key, out) {
 }
 
 const SKY_FRAG = `
-  uniform vec3 uZen, uHor, uSunCol, uSunDir; uniform float uTime, uNight, uCloud, uEnv;
+  uniform vec3 uZen, uHor, uSunCol, uSunDir; uniform float uTime, uNight, uCloud, uEnv, uStorm, uFlash;
   varying vec3 vDir;
   float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
   float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
@@ -57,8 +57,20 @@ const SKY_FRAG = `
     }
     // the sun disc itself — HDR bright so the bloom picks it up
     col += uSunCol * smoothstep(0.99955, 0.99975, sd) * 26.0 * (1.0 - uNight) * (1.0 - uEnv);   // the sun is the key light's job, not the IBL's
+    // a storm: the sky closes over in a low, heavy grey, darker overhead, the cloud base ragged and
+    // moving; lightning lights the whole lot from inside
+    if (uStorm > 0.001) {
+      vec2 sp = d.xz / (max(h, 0.0) + 0.12) * 0.8 + vec2(uTime * 0.02, uTime * 0.008);
+      float sn = fbm(sp * 1.2) * 0.65 + fbm(sp * 3.7) * 0.35;
+      float dayL = mix(1.0, 0.12, uNight);
+      vec3 ovc = mix(vec3(0.42, 0.45, 0.5), vec3(0.2, 0.22, 0.26), smoothstep(-0.1, 0.6, h)) * dayL * (0.75 + sn * 0.45);
+      ovc = mix(ovc, uHor * 0.55 + vec3(0.06), smoothstep(0.08, -0.05, h) * 0.6);
+      ovc = mix(ovc, vec3(0.13, 0.09, 0.07) * (1.0 - clamp(h, 0.0, 1.0) * 0.65) * (0.8 + sn * 0.4), uNight * 0.85);   // at night the cloud base glows with the city's light
+      col = mix(col, ovc, smoothstep(0.0, 1.0, uStorm));
+      col += vec3(0.75, 0.8, 1.0) * uFlash * (0.4 + sn * 1.2) * uStorm;
+    }
     // stars at night
-    if (uNight > 0.0 && h > 0.0) {
+    if (uNight > 0.0 && h > 0.0 && uStorm < 0.6) {
       vec2 sp = d.xz / (h + 0.3) * 90.0;
       float s = step(0.9985, hash(floor(sp))) * uNight * smoothstep(0.0, 0.3, h);
       col += vec3(s * 1.6);
@@ -70,6 +82,7 @@ export function createSky(scene, renderer) {
   const U = {
     uZen: { value: new THREE.Color() }, uHor: { value: new THREE.Color() }, uSunCol: { value: new THREE.Color() },
     uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uTime: { value: 0 }, uNight: { value: 0 }, uCloud: { value: 0.5 }, uEnv: { value: 0 },
+    uStorm: { value: 0 }, uFlash: { value: 0 },
   };
   const skyMat = new THREE.ShaderMaterial({
     uniforms: U, side: THREE.BackSide, depthWrite: false, fog: false,
@@ -91,7 +104,7 @@ export function createSky(scene, renderer) {
   scene.add(sun, sun.target);
   const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
   scene.add(hemi);
-  scene.fog = new THREE.FogExp2(0xffffff, 0.0021);   // humid air: haze thickens with distance, never a hard wall
+  scene.fog = new THREE.FogExp2(0xffffff, 0.0016);   // humid air: haze thickens with distance, never a hard wall
 
   // environment map: the same sky, rendered once into a prefiltered cube for PBR reflections
   const envScene = new THREE.Scene();
@@ -112,7 +125,8 @@ export function createSky(scene, renderer) {
   let envRT = null, envAt = -1;
 
   const sunDir = new THREE.Vector3();
-  const base = { si: 3, hemi: 0.4, fog: new THREE.Color() }, grey = new THREE.Color(0x8a9096);
+  const base = { si: 3, hemi: 0.4, fog: new THREE.Color(), sky: new THREE.Color() }, grey = new THREE.Color(0x8a9096), stormSky = new THREE.Color(0x7a828c);
+  let envStorm = 0; const _sc = new THREE.Color();
   const out = {};
   const state = { t: 0.63, cycle: false, night: 0, elev: 0, cloud: 0.5 };
 
@@ -131,7 +145,7 @@ export function createSky(scene, renderer) {
     sample(el, "sky", hemi.color); sample(el, "gnd", hemi.groundColor);
     hemi.intensity = sample(el, "hemi");
     sample(el, "fog", scene.fog.color);
-    base.si = sun.intensity; base.hemi = hemi.intensity; base.fog.copy(scene.fog.color);
+    base.si = sun.intensity; base.hemi = hemi.intensity; base.fog.copy(scene.fog.color); base.sky.copy(hemi.color);
     groundMat.color.copy(hemi.groundColor).multiplyScalar(0.8);
     // moonlight: keep a faint cool key light so night isn't pitch black
     if (el < 0) { sun.color.set(0x8fa6e0); sun.intensity = 0.55; sunDir.set(0.3, 0.8, -0.4).normalize(); }
@@ -150,9 +164,18 @@ export function createSky(scene, renderer) {
     if (state.cycle) set(state.t + dt / 960);            // a full day in 16 minutes
     // weather: a shower dims the sun, flattens the light, thickens and greys the haze
     const w = out.weatherDim || 0;
-    sun.intensity = base.si * (1 - 0.78 * w); hemi.intensity = base.hemi * (1 + 0.15 * w);
+    // a storm: the sun goes, the light goes flat and grey; lightning floods everything for an instant
+    const fl = out.flash || 0;
+    U.uStorm.value = Math.min(1, w * 1.15); U.uFlash.value = fl;
+    sun.intensity = base.si * (1 - 0.97 * w); hemi.intensity = base.hemi * (1 - 0.1 * w) + fl * 1.6;   // overcast: no shadows to speak of
+    _sc.copy(stormSky).multiplyScalar(1 - state.night * 0.8);
+    hemi.color.copy(base.sky).lerp(_sc, Math.min(1, w)); if (fl > 0) hemi.color.offsetHSL(0, 0, fl * 0.3);
     if (out.indoor) { sun.intensity = 0; hemi.intensity = 0; }        // indoors the rooms light themselves
-    scene.fog.density = 0.0021 * (1 + w * 1.4); scene.fog.color.copy(base.fog).lerp(grey, w * 0.7);
+    // haze: lighter by day so the skyline reads, thicker at dawn and in the rain
+    const hazeK = 1 + Math.max(0, 0.25 - Math.abs(state.elev - 0.05)) * 2.4;
+    scene.fog.density = 0.0016 * hazeK * (1 + w * 1.9); scene.fog.color.copy(base.fog).lerp(grey, w * 0.85).multiplyScalar(1 - w * 0.35 * (1 - state.night));
+    // the reflections follow the storm too
+    if (Math.abs(w - envStorm) > 0.08) { envStorm = w; if (envRT) envRT.dispose(); envRT = pmrem.fromScene(envScene, 0, 0.1, 100); scene.environment = envRT.texture; }
     dome.position.copy(camera.position);
     // shadow frustum follows the action, snapped to whole texels so edges don't crawl
     const tex = (R * 2) / SM;

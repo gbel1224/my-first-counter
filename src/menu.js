@@ -59,7 +59,7 @@ export function createMenu(g) {
       const opt = (key, label, vals) => `<div class="set"><span>${label}</span><div>${vals.map(([v, t]) => `<button data-k="${key}" data-v="${v}" class="${String(s[key]) === String(v) ? "on" : ""}">${t}</button>`).join("")}</div></div>`;
       body.innerHTML = opt("quality", "Graphics", [["high", "High"], ["perf", "Performance"]]) + opt("cycle", "Day / night cycle", [["false", "Off"], ["true", "On"]]) +
         opt("time", "Time of day", [["0.3", "Morning"], ["0.5", "Noon"], ["0.63", "Afternoon"], ["0.73", "Sunset"], ["0.9", "Night"]]) +
-        opt("weather", "Weather", [["0", "Auto"], ["2", "Clear"], ["1", "Rain"]]) + opt("sound", "Sound", [["true", "On"], ["false", "Off"]]) +
+        opt("weather", "Weather", [["0", "Auto"], ["2", "Clear"], ["1", "Rain"], ["3", "Storm"]]) + opt("sound", "Sound", [["true", "On"], ["false", "Off"]]) +
         '<button class="photo">📷 Photo mode</button><button class="reset">Start a new game</button>';
       body.querySelectorAll("button[data-k]").forEach(b => b.addEventListener("click", () => { g.settings.set(b.dataset.k, b.dataset.v); render(); }));
       body.querySelector(".photo").addEventListener("click", () => { show(false); setPhoto(true); });
