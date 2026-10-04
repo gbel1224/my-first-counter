@@ -70,12 +70,16 @@ try {
       vic.x = G.P.x + Math.sin(G.P.yaw) * 0.9; vic.z = G.P.z + Math.cos(G.P.yaw) * 0.9;
       G.combat.S.cd = 0; G.combat.punch(); out.wanted = G.crime.S.wanted;
       // a lone 1★ can slip the patrols and fade — re-offend (up to 5 times) until they catch you
-      for (let tries = 0; tries < 5; tries++) {
+      // (measured per try against the cash going in, so business income ticking in can't mask the fine)
+      out.bustedFine = 0;
+      for (let tries = 0; tries < 6; tries++) {
+        const m0 = G.st.money;
         let k = 0; while (G.crime.S.wanted > 0 && k++ < 3600) { talk(); G.step(1 / 60); }
-        if (G.st.money < 1000) break;
+        if (G.st.money < m0 - 50) { out.bustedFine = Math.round(m0 - G.st.money); break; }
+        G.crime.reset(); for (let i = 0; i < 30; i++) G.step(1 / 60);
         G.P.x = G.PLACES.fountain.x + 16; G.P.z = G.PLACES.fountain.z; G.crime.addCrime(1);
       }
-      out.bustedFine = 1000 - Math.round(G.st.money); out.bankKept = G.st.bank;
+      out.bankKept = G.st.bank;
       // guns: buy a pistol, it fires and spends ammo
       G.st.money = 2000; G.combat.buy(G.combat.WEAPONS[1]); const a0 = G.st.ammo.pistol; G.combat.S.cd = 0; G.combat.fire(0); out.ammoUsed = a0 - G.st.ammo.pistol;
       // phone bank: a deposit you can't afford shows the red error and moves nothing
