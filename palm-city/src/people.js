@@ -331,6 +331,33 @@ export class Crowd {
       this.people.push({ beach: true, x: -HALF + r() * HALF * 2, z: HALF + 8 + r() * 26, yaw: r() * 6.28, speed: 0.8 + r() * 0.5, look,
         phase: r() * 6, style: { stride: 0.8 + r() * 0.3, arm: 0.6 + r() * 0.6 }, pause: 0, knocked: 0, vx: 0, vy: 0, vz: 0, y: 0, spin: 0, dir: 1, t: 0 });
     }
+    // street life (its own random stream, so the walkers above stay where they were): vendors at
+    // their carts, people stopped to chat in twos and threes, people on the city's benches, joggers
+    const r2 = mulberry32(0x57EE7);
+    const stand = (x, z, yaw, extra) => {
+      const look = randomLook(r2);
+      const p = Object.assign({ x, z, yaw, look, phase: r2() * 6.28, style: { stride: 0.8 + r2() * 0.4, arm: 0.6 + r2() * 0.8 }, pause: 0, cross: null, knocked: 0, vx: 0, vy: 0, vz: 0, y: 0, spin: 0,
+        speed: 1.05 + r2() * 0.5, dir: r2() < 0.5 ? 1 : -1, t: 0, inset: 2.5, bi: 0, bj: 0, fixed: true }, extra);
+      this.people.push(p); return p;
+    };
+    for (const c of plan.carts || []) stand(c.x - Math.sin(c.yaw) * 0.95, c.z - Math.cos(c.yaw) * 0.95, c.yaw, { vendor: true });
+    const walkBlocks = plan.blocks.filter(b => b.kind !== "suburb" && b.kind !== "park");
+    for (let g = 0; g < 38; g++) {
+      const b = walkBlocks[(r2() * walkBlocks.length) | 0], tmp = { bi: b.i, bj: b.j, inset: 2.0 + r2() * 1.2 };
+      const [cx, cz] = this.ringPos(tmp, r2() * 4), n = r2() < 0.6 ? 2 : 3, a0 = r2() * 6.28;
+      for (let k = 0; k < n; k++) {
+        const a = a0 + k / n * Math.PI * 2, x = cx + Math.cos(a) * 0.55, z = cz + Math.sin(a) * 0.55;
+        stand(x, z, Math.atan2(cx - x, cz - z), { chat: { k, n, g } });
+      }
+    }
+    const inPark = (x, z) => (plan.parks || []).some(pk => Math.abs(x - pk.cx) < BLOCK / 2 && Math.abs(z - pk.cz) < BLOCK / 2);
+    for (const [x, z, a] of plan.benches || []) {
+      if (inPark(x, z) || r2() > 0.45) continue;
+      const fx = -Math.sin(a), fz = -Math.cos(a);                       // a bench faces its local -z
+      stand(x - fx * 0.05, z - fz * 0.05, Math.atan2(fx, fz), { sit: { x: x - fx * 0.05, z: z - fz * 0.05, yaw: Math.atan2(fx, fz) } });
+    }
+    for (const p of this.people) if (!p.beach && !p.fixed && r2() < 0.05) { p.jog = true; p.speed = 2.6 + r2() * 0.6; }
+
     // the parks: people walking and jogging the loop path, and people sitting on the benches
     for (const pk of plan.parks || []) {
       const mk = (extra) => {
@@ -427,7 +454,7 @@ export class Crowd {
     const r = this.r;
     for (const p of this.people) {
       if (p.hidden) continue;
-      if (!p.beach && !p.gang && !p.park && (p.x - fx) ** 2 + (p.z - fz) ** 2 > 200 * 200) { this.respawnNear(p, fx, fz); continue; }
+      if (!p.beach && !p.gang && !p.park && !p.fixed && (p.x - fx) ** 2 + (p.z - fz) ** 2 > 200 * 200) { this.respawnNear(p, fx, fz); continue; }
       if (p.knocked > 0) {                        // sent flying by a car: tumble, lie there, get up
         p.knocked -= dt;
         if (p.y > 0 || p.vy > 0) { p.vy -= 22 * dt; p.x += p.vx * dt; p.z += p.vz * dt; p.y = Math.max(0, p.y + p.vy * dt); p.spin += dt * 9; if (p.y === 0) { p.vx *= 0.3; p.vz *= 0.3; } }
@@ -440,7 +467,9 @@ export class Crowd {
       }
       if (p.ai) { p.ai(p, dt); continue; }
       // on a park bench: stay put, unless something gives them a fright — then up and off round the path
-      if (p.sit) { if (!(p.fear > 0)) { p.amt = 0; p.x = p.sit.x; p.z = p.sit.z; p.yaw = p.sit.yaw; continue; } p.sit = null; p.t = r() * 4; }
+      if (p.sit) { if (!(p.fear > 0)) { p.amt = 0; p.x = p.sit.x; p.z = p.sit.z; p.yaw = p.sit.yaw; continue; } p.sit = null; if (p.park) p.t = r() * 4; else this.release(p); }
+      // stopped at a cart or chatting: stay put (turning to face whoever's talking) unless spooked
+      if (p.vendor || p.chat) { if (!(p.fear > 0)) { p.amt = 0; continue; } p.vendor = false; p.chat = null; this.release(p); }
       if (p.pause > 0) { p.pause -= dt; continue; }
       // flee anything fast coming at them
       if (p.fear > 0) p.fear -= dt;
@@ -492,6 +521,12 @@ export class Crowd {
       }
       p.phase += sp * dt * (p.amt > 1.5 ? 3.2 : 2.6) / Math.max(0.9, p.look.h);
     }
+  }
+  // someone who was standing or sitting about (fixed in place) joins the walkers on the nearest block ring
+  release(p) {
+    p.fixed = false;
+    p.bi = clamp(Math.floor((p.x + HALF - ROAD) / CELL), 0, N - 1); p.bj = clamp(Math.floor((p.z + HALF - ROAD) / CELL), 0, N - 1);
+    this.snapToRing(p);
   }
   // knock someone down (a punch, a bullet, a blast). dead: they don't get up
   knock(p, vx, vy, vz, dead) {
@@ -559,6 +594,18 @@ export class Crowd {
       else if (p.phoneT > 0) Object.assign(g, { armR: -2.6, elbowR: -2.3, armL: -0.2 });                  // on the phone
       else if (p.workT > 0) Object.assign(g, { armL: -0.9 + Math.sin(p.workT * 2) * 0.15, armR: -1.0, elbowL: -0.8, elbowR: -0.7, lean: 0.25 });   // busy at the back of the van
     }
+    if ((p.vendor || p.chat) && p.knocked <= 0) {
+      const t = performance.now() / 1000;
+      if (p.vendor) Object.assign(g, { armL: -0.75, armR: -0.7 + Math.sin(t * 1.3 + p.phase) * 0.1, elbowL: -0.9, elbowR: -1.0, lean: 0.12 });
+      else {
+        // whoever's turn it is to talk gestures; the others listen, arms folded or hands in pockets
+        const speaking = Math.floor(t / 2.6 + p.chat.g * 1.3) % p.chat.n === p.chat.k;
+        if (speaking) Object.assign(g, { armR: -0.55 + Math.sin(t * 3.1 + p.phase) * 0.25, elbowR: -1.2 + Math.sin(t * 4.3) * 0.3, armL: -0.25 + Math.sin(t * 2.2) * 0.12, elbowL: -0.7 });
+        else if (p.look.hs > 0.5) Object.assign(g, { armL: -0.55, armR: -0.55, elbowL: -1.9, elbowR: -1.9 });
+        else Object.assign(g, { armL: 0.12, armR: 0.12, elbowL: -0.35, elbowR: -0.35 });
+        g.twist = Math.sin(t * 0.7 + p.phase) * 0.08;
+      }
+    }
     if (p.sit && p.knocked <= 0) {
       // sitting on a bench: hips on the seat, hands resting in the lap
       Object.assign(g, { thighL: -1.45, thighR: -1.45, kneeL: 1.45, kneeR: 1.45, armL: -0.42, armR: -0.38, elbowL: -1.05, elbowR: -1.0, lean: -0.08, bob: 0, twist: 0, roll: 0 });
@@ -624,6 +671,7 @@ export class Crowd {
         f.base = L.mood || "neutral";
         const auto = this.exprFor(p);
         if (auto) { f.expr = auto; f.hold = 0.35; }
+        if (p.chat && Math.floor(now / 2.6 + p.chat.g * 1.3) % p.chat.n === p.chat.k) f.talk = Math.max(f.talk, 0.3);
         tickFace(f, dt, now);
         const cam = this._cam;
         if (cam && p._d2 < 64) { let a = Math.atan2(cam.x - p.x, cam.z - p.z) - p.yaw; a = Math.atan2(Math.sin(a), Math.cos(a)); f.look = Math.abs(a) < 1.2 ? (f._lk || (f._lk = { x: 0, y: 0 }), f._lk.x = Math.max(-0.4, Math.min(0.4, a * 0.7)), f._lk.y = Math.max(-0.2, Math.min(0.2, (cam.y - 1.6) * 0.08)), f._lk) : null; }
@@ -636,6 +684,7 @@ export class Crowd {
       f.base = L.mood || "neutral";
       const auto = this.exprFor(p);
       if (auto) { f.expr = auto; f.hold = 0.35; }
+      if (p.chat && Math.floor(now / 2.6 + p.chat.g * 1.3) % p.chat.n === p.chat.k) f.talk = Math.max(f.talk, 0.3);
       tickFace(f, dt, now);
       const bk = L.beard ? BEARD_KIND[L.beard] : null;
       // the low-detail head and hair step aside for the sculpted ones

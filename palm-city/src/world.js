@@ -265,6 +265,15 @@ export function buildCity(seed = 0x9A1C17) {
     landmarks.push({ kind: "deco", x: cx, z: cz, w: w * 0.5, y });
   }
 
+  // street food: carts on the plaza, along the promenade, at the park gates and on downtown corners
+  const carts = [], cr = mulberry32(seed ^ 0xCA27);
+  const KINDS = ["icecream", "fruit", "taco", "coconut", "pretzel"];
+  { const px = blockC(PLAZA.i), pz = blockC(PLAZA.j);
+    for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + Math.PI / 4 + 0.2; carts.push({ x: px + Math.cos(a) * 21, z: pz + Math.sin(a) * 21, yaw: Math.atan2(-Math.cos(a), -Math.sin(a)), kind: KINDS[k % 3] }); } }
+  for (let k = 0; k < 3; k++) carts.push({ x: -HALF + 160 + k * 300 + cr() * 40, z: HALF + 12.6, yaw: Math.PI, kind: k === 1 ? "icecream" : "coconut" });
+  for (const pk of parks) carts.push({ x: pk.cx + 3.6, z: pk.cz + 19.5, yaw: -Math.PI / 2, kind: cr() < 0.5 ? "icecream" : "pretzel" });
+  for (const b of blocks) if (b.kind === "downtown" && cr() < 0.35) carts.push({ x: b.x0 + 9 + cr() * 30, z: b.z0 + 2.6, yaw: 0, kind: KINDS[(cr() * KINDS.length) | 0] });
+
   // the promenade: a row of palms along the sand, benches looking at the sea
   for (let x = -HALF + 8; x < HALF; x += 16) {
     palms.push([x + r() * 4, HALF + 14 + r() * 3, 1.0 + r() * 0.35]);
@@ -312,7 +321,7 @@ export function buildCity(seed = 0x9A1C17) {
       if (parkPathD(lx, lz) > 1.6 && !pk.quads.some(([a, b]) => Math.abs(lx - a * 9) < 5.4 && Math.abs(lz - b * 9) < 5.4)) shrubs.push([x, z, sc]);
     }
   }
-  return { buildings, blocks, palms, trees, lamps, benches, shrubs, lots: homeLots, parks, landmarks };
+  return { buildings, blocks, palms, trees, lamps, benches, shrubs, lots: homeLots, parks, landmarks, carts };
 }
 
 // the park paths: signed distance (m, negative on the path) from a point given relative to the park's
