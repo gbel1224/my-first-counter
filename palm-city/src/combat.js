@@ -177,7 +177,7 @@ export function makeCombat(scene, g) {
       if (score < bs && g.crime.los(x, z, tx, tz)) { bs = score; best = { o, x: tx, z: tz, kind, d }; }
     };
     for (const u of g.crime.units) if (u.active) consider(u, u.x, u.z, "cop");
-    for (const p of g.crowd.people) if (!p.hidden && p.knocked <= 0 && (p.x - x) ** 2 + (p.z - z) ** 2 < range * range) consider(p, p.x, p.z, "ped", p.gang ? 0.4 : 1);
+    for (const p of g.crowd.people) if (!p.hidden && p.knocked <= 0 && (p.x - x) ** 2 + (p.z - z) ** 2 < range * range) consider(p, p.x, p.z, "ped", p.gang && !p.svc && !p.ally ? 0.4 : 1);
     for (const c of g.traffic.cars) if (c.alive && (c.x - x) ** 2 + (c.z - z) ** 2 < range * range) consider(c, c.x, c.z, "traffic");
     if (g.extraTargets) for (const t of g.extraTargets()) consider(t, t.x, t.z, t.kind);
     // the chopper: up above the rooftops, so no wall gets in the way — it wins over street targets when aimed near
@@ -307,7 +307,8 @@ export function makeCombat(scene, g) {
     if (P.car) burn(P.car);
     for (const u of g.crime.units) if (u.active) burn(u);
     for (const c of g.traffic.cars) if (c.alive) burn(c);
-    for (const w of wrecks) { w.t += dt; if (w.t < 10 && Math.random() < dt * 10) g.fx.fire(w.x, 0.8, w.z); if (w.t < 25 && Math.random() < dt * 5) g.fx.smoke(w.x, 1.4, w.z, 0.12); }
+    // a wreck burns until it burns out (or the fire crew put it out), then smoulders
+    for (const w of wrecks) { w.t += dt; const lit = !w.out && w.t < 45; if (lit && Math.random() < dt * 10) g.fx.fire(w.x, 0.8, w.z); if ((lit || (w.out && w.t < 70)) && Math.random() < dt * (w.out ? 3 : 5)) g.fx.smoke(w.x, 1.4, w.z, w.out ? 0.55 : 0.12); }
   }
   // the hands: fists when fighting, a grip and a trigger finger with a gun out
   function hands() {

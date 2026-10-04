@@ -492,6 +492,8 @@ export class Crowd {
         continue;
       }
       if (p.stagT > 0) { p.stagT -= dt; p.amt = 0; p.aimT = 0; continue; }   // hit and staggering: a beat before they can do anything
+      // a gun pointed at them: frozen, hands up — and the moment it's off them, they run
+      if (p.handsUp > 0 && !p.ai) { p.handsUp -= dt; p.amt = 0; p.pause = 0; if (p.handsUp <= 0) { p.fearMax = 7; p.fear = 7; p.sit = null; p.vendor = false; p.chat = null; } continue; }
       if (p.ai) { p.ai(p, dt); continue; }
       // on a park bench: stay put, unless something gives them a fright — then up and off round the path
       if (p.sit) { if (!(p.fear > 0)) { p.amt = 0; p.x = p.sit.x; p.z = p.sit.z; p.yaw = p.sit.yaw; continue; } p.sit = null; if (p.park) p.t = r() * 4; else this.release(p); }
@@ -572,6 +574,7 @@ export class Crowd {
   // knock someone down (a punch, a bullet, a blast). dead: they don't get up
   knock(p, vx, vy, vz, dead) {
     if (dead && !p.dead && p.onDeath) p.onDeath(p);
+    if (dead && !p.dead && this.onKilled) this.onKilled(p);
     p.knocked = dead ? 22 : 3.5 + this.r() * 2; p.dead = !!dead;
     p.vx = vx; p.vy = vy; p.vz = vz; p.y = Math.max(0.01, p.y || 0); p.cross = null; p.pause = 0;
   }
@@ -631,7 +634,8 @@ export class Crowd {
       } else if (p.aimT > 0) {
         // shooting: gun arm out, the trigger finger pulls on each shot
         Object.assign(g, { armR: -1.45, elbowR: -0.1, armL: -1.2, elbowL: -0.5, gun: p.weapon || "pistol", gripR: 0.95, indexR: p.shotT > 0 ? 1 : 0.3, gripL: 0.6 });
-      } else if (p.fear > 0 && p.amt > 1.5) { g.gripL = g.gripR = 0.6; }
+      } else if (p.handsUp > 0) Object.assign(g, { armL: -2.95, armR: -2.95, elbowL: -0.35, elbowR: -0.35, gripL: 0, gripR: 0 });   // a gun on them: hands high
+      else if (p.fear > 0 && p.amt > 1.5) { g.gripL = g.gripR = 0.6; }
       else if (p.phoneT > 0) Object.assign(g, { armR: -2.6, elbowR: -2.3, armL: -0.2 });                  // on the phone
       else if (p.umb) Object.assign(g, { armR: -0.9, elbowR: -1.75, gripR: 1 });                          // holding an umbrella
       else if (p.workT > 0) Object.assign(g, { armL: -0.9 + Math.sin(p.workT * 2) * 0.15, armR: -1.0, elbowL: -0.8, elbowR: -0.7, lean: 0.25 });   // busy at the back of the van

@@ -99,7 +99,7 @@ export class Traffic {
     this._y = new THREE.Vector3(0, 1, 0);
   }
   syncPos(c) {
-    const off = laneOffset(c.axis, c.dir, c.lane), cl = roadC(c.road) + off;
+    const off = laneOffset(c.axis, c.dir, c.lane) + (c.lshift || 0), cl = roadC(c.road) + off;
     if (c.axis === "z") { c.x = cl; c.z = c.s; c.h = c.dir > 0 ? 0 : Math.PI; }
     else { c.x = c.s; c.z = cl; c.h = c.dir > 0 ? Math.PI / 2 : -Math.PI / 2; }
   }
@@ -154,8 +154,23 @@ export class Traffic {
       const k = ((c.x / 12) | 0) + "," + ((c.z / 12) | 0);
       let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(c);
     }
+    // how many cars are out: rush hours busy, the small hours quiet (the rest wait off-screen)
+    const want = Math.round(this.cars.length * (this.density ?? 1));
+    const sirens = this.sirens ? this.sirens() : [];
+    this.cars.forEach((c, i) => {
+      if (i >= want && c.alive && !c.turn) {
+        const d2 = (c.x - player[0].x) ** 2 + (c.z - player[0].z) ** 2;
+        if (d2 > 140 * 140 && !c.marked) { c.alive = false; c.dormant = true; }
+      } else if (i < want && c.dormant) { c.dormant = false; c.alive = true; this.respawnNear(c, player[0].x, player[0].z); }
+      // a car that was wrecked or taken: its place in the traffic comes back as a new car, out of sight
+      else if (i < want && !c.alive && !c.dormant) {
+        c.deadT = (c.deadT || 0) + dt;
+        if (c.deadT > 20) { c.deadT = 0; c.alive = true; c.boom = false; c.hp = undefined; c.marked = false; c.charred = false; c.siren = !!carSpec(c.type).emergency && this.r() < 0.55; this.respawnNear(c, player[0].x, player[0].z); }
+      }
+    });
     for (const c of this.cars) {
       if (!c.alive) continue;
+      if (c.lshift) { c.lshift *= Math.exp(-3 * dt); if (Math.abs(c.lshift) < 0.02) c.lshift = 0; }
       const fdx = c.x - player[0].x, fdz = c.z - player[0].z;
       if (fdx * fdx + fdz * fdz > 400 * 400) { this.respawnNear(c, player[0].x, player[0].z); continue; }
       if (c.stun > 0) { c.stun -= dt; c.speed *= Math.exp(-3 * dt); }
@@ -183,6 +198,16 @@ export class Traffic {
       }
       let target = c.vmax;
       if (gap < 18) target = Math.min(target, Math.max(0, (gap - 5.5) * 1.3));
+      // a siren coming up behind: get over to the kerb lane, or slow right down and let it by
+      for (const s of sirens) {
+        const sx = Math.sin(s.h), sz = Math.cos(s.h), dx = c.x - s.x, dz = c.z - s.z, ahead = dx * sx + dz * sz, side = Math.abs(dx * sz - dz * sx);
+        if (ahead > 0 && ahead < 45 && side < 3.5 && fx * sx + fz * sz > 0.6 && !c.turn) {
+          if (c.lane === 0 && this.laneFree(c, 1)) this.changeLane(c, 1);
+          else if (c.lane === 0) target = Math.min(target, 2);
+          else target = Math.min(target, 6);
+          c.yieldT = 2;
+        }
+      }
       if (!c.turn) {
         const j = this.nextJunction(c);
         if (!j) {                                   // reached the edge: U-turn into the other direction
@@ -208,7 +233,7 @@ export class Traffic {
       // stuck behind something that isn't moving (a wreck, a double-parked van): change lanes
       if (!c.turn && c.speed < 0.5 && gap < 9 && !c.atRed) {
         c.stuckT = (c.stuckT || 0) + dt;
-        if (c.stuckT > 2.5 && this.laneFree(c, 1 - c.lane)) { c.lane = 1 - c.lane; c.stuckT = 0; c.planned = false; this.syncPos(c); }
+        if (c.stuckT > 2.5 && this.laneFree(c, 1 - c.lane)) { this.changeLane(c, 1 - c.lane); c.stuckT = 0; }
       } else c.stuckT = 0;
       // and lean on the horn if it's you in the way on a green
       c.honk = Math.max(0, (c.honk || 0) - dt);
@@ -235,6 +260,13 @@ export class Traffic {
         if (c.planned && this.nextJunctionPassed(c)) c.planned = false;
       }
     }
+  }
+  // slide across to the other lane (over a second or so, not in one jump)
+  changeLane(c, lane) {
+    const before = laneOffset(c.axis, c.dir, c.lane) + (c.lshift || 0);
+    c.lane = lane; c.planned = false;
+    c.lshift = before - laneOffset(c.axis, c.dir, lane);
+    this.syncPos(c);
   }
   // is anyone coming the other way through this car's junction (for a left turn)?
   oncoming(c) {
@@ -263,7 +295,7 @@ export class Traffic {
       const k = Math.round((cross + HALF - ROAD / 2) / CELL) + ((r() * 9) | 0) - 4;
       if (k < 1 || k > N - 1) continue;
       c.road = k; c.s = clamp(along + (r() - 0.5) * 640, -HALF + 20, HALF - 20);
-      c.turn = null; c.planned = false; c.speed = c.vmax * 0.6; c.stun = 0; c.dent = null; c.dmg = null;
+      c.turn = null; c.planned = false; c.speed = c.vmax * 0.6; c.stun = 0; c.dent = null; c.dmg = null; c.lshift = 0;
       this.syncPos(c);
       const d2 = (c.x - fx) ** 2 + (c.z - fz) ** 2;
       if (d2 > minD * minD && d2 < 330 * 330) return;
