@@ -65,15 +65,15 @@ export const AudioSys = (() => {
   }
   // ---- synthesized one-shot SFX (no audio files needed) ----
   function noiseSrc(dur) { const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = true; return s; }
-  function gun(vol = 1) {                              // punchy weapon crack: noise transient + low body thump
-    if (!ready || muted || !ctx) return;
+  function gun(vol = 1, rate = 1) {                    // punchy weapon crack: noise transient + low body thump
+    if (!ready || muted || !ctx) return;              // (rate: <1 a heavier gun, >1 a lighter, snappier one)
     const t = ctx.currentTime;
-    const s = noiseSrc(); const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 850;
+    const s = noiseSrc(); const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 850 * rate;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.95 * vol, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0007, t + 0.15);
     s.connect(hp); hp.connect(g); g.connect(sfxGain); s.start(t); s.stop(t + 0.18);
-    const o = ctx.createOscillator(); o.type = "sine"; o.frequency.setValueAtTime(190, t); o.frequency.exponentialRampToValueAtTime(70, t + 0.08);
-    const og = ctx.createGain(); og.gain.setValueAtTime(0.55 * vol, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+    const o = ctx.createOscillator(); o.type = "sine"; o.frequency.setValueAtTime(190 * rate, t); o.frequency.exponentialRampToValueAtTime(70 * rate, t + 0.08 / rate);
+    const og = ctx.createGain(); og.gain.setValueAtTime(0.55 * vol / Math.sqrt(rate), t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
     o.connect(og); og.connect(sfxGain); o.start(t); o.stop(t + 0.13);
   }
   function boom(vol = 1) {                             // explosion: down-swept noise rumble + sub thump
@@ -107,7 +107,7 @@ export const AudioSys = (() => {
   }
   const SYNTH = { gun, boom, blip, pop };
   function play(k, vol = 1, rate = 1) {
-    if (SYNTH[k]) { SYNTH[k](vol); return; }           // synthesized SFX (gun/boom/blip) need no file
+    if (SYNTH[k]) { SYNTH[k](vol, rate); return; }           // synthesized SFX (gun/boom/blip) need no file
     if (!ready || muted || !buffers[k]) return;
     const s = ctx.createBufferSource();
     s.buffer = buffers[k];

@@ -199,7 +199,7 @@ export function makeGangs(g) {
         g.fx.tracer(p.x, 1.35, p.z, P.x + (r() - 0.5) * 2, 1.1, P.z + (r() - 0.5) * 2);
         g.sound("gun", 0.35);
         const fast = P.speed > 6;
-        if (r() < clamp((p.boss ? 0.62 : 0.45) - d * 0.008 - (fast ? 0.15 : 0), 0.05, 0.6)) g.crime.hurt(Math.round((p.boss ? 11 : 7) * (P.car ? 0.6 : 1)));
+        if (r() < clamp((p.boss ? 0.62 : 0.45) - d * 0.008 - (fast ? 0.15 : 0), 0.05, 0.6)) g.crime.hurt(Math.round((p.boss ? 11 : 7) * (P.car ? 0.6 : 1)), p.x, p.z);
       }
     } else {
       // loiter near home

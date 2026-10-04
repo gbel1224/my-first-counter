@@ -6,21 +6,21 @@ import { makeCar } from "./cars.js";
 
 export const WEAPONS = [
   { id: "fists", name: "Fists", cost: 0, dmg: 0, rate: 0.42, range: 1.6, spread: 0, pellets: 0, ammo: 0 },
-  { id: "pistol", name: "Pistol", cost: 600, dmg: 34, rate: 0.32, range: 55, spread: 0.02, pellets: 1, ammo: 48, ammoCost: 60 },
-  { id: "smg", name: "Micro SMG", cost: 2200, dmg: 20, rate: 0.085, range: 45, spread: 0.06, pellets: 1, ammo: 150, ammoCost: 120 },
-  { id: "shotgun", name: "Shotgun", cost: 3500, dmg: 22, rate: 0.85, range: 22, spread: 0.14, pellets: 7, ammo: 24, ammoCost: 150 },
-  { id: "rifle", name: "Assault Rifle", cost: 6000, dmg: 30, rate: 0.12, range: 75, spread: 0.025, pellets: 1, ammo: 120, ammoCost: 200 },
-  { id: "sniper", name: "Sniper Rifle", cost: 9000, dmg: 150, rate: 1.2, range: 160, spread: 0.002, pellets: 1, ammo: 20, ammoCost: 250 },
-  { id: "minigun", name: "Minigun", cost: 25000, dmg: 18, rate: 0.045, range: 55, spread: 0.07, pellets: 1, ammo: 500, ammoCost: 400 },
-  { id: "gl", name: "Grenade Launcher", cost: 18000, dmg: 0, rate: 1.0, range: 45, spread: 0, pellets: 0, ammo: 12, ammoCost: 350, proj: "grenade" },
-  { id: "rpg", name: "RPG", cost: 30000, dmg: 0, rate: 1.6, range: 120, spread: 0, pellets: 0, ammo: 6, ammoCost: 500, proj: "rocket" },
+  { id: "pistol", name: "Pistol", cost: 600, dmg: 34, rate: 0.32, range: 55, spread: 0.02, pellets: 1, ammo: 48, ammoCost: 60, clip: 12, reload: 1.1, kick: 0.014, head: 0.18, snd: 1.15 },
+  { id: "smg", name: "Micro SMG", cost: 2200, dmg: 20, rate: 0.085, range: 45, spread: 0.06, pellets: 1, ammo: 150, ammoCost: 120, clip: 30, reload: 1.5, kick: 0.006, head: 0.1, snd: 1.3 },
+  { id: "shotgun", name: "Shotgun", cost: 3500, dmg: 22, rate: 0.85, range: 22, spread: 0.14, pellets: 7, ammo: 24, ammoCost: 150, clip: 6, reload: 2.2, kick: 0.045, head: 0.06, snd: 0.7 },
+  { id: "rifle", name: "Assault Rifle", cost: 6000, dmg: 30, rate: 0.12, range: 75, spread: 0.025, pellets: 1, ammo: 120, ammoCost: 200, clip: 30, reload: 1.8, kick: 0.01, head: 0.2, snd: 0.95 },
+  { id: "sniper", name: "Sniper Rifle", cost: 9000, dmg: 150, rate: 1.2, range: 160, spread: 0.002, pellets: 1, ammo: 20, ammoCost: 250, clip: 5, reload: 2.4, kick: 0.07, head: 0.55, snd: 0.6 },
+  { id: "minigun", name: "Minigun", cost: 25000, dmg: 18, rate: 0.045, range: 55, spread: 0.07, pellets: 1, ammo: 500, ammoCost: 400, clip: 100, reload: 3.2, kick: 0.004, head: 0.05, snd: 1.1 },
+  { id: "gl", name: "Grenade Launcher", cost: 18000, dmg: 0, rate: 1.0, range: 45, spread: 0, pellets: 0, ammo: 12, ammoCost: 350, proj: "grenade", clip: 6, reload: 2.6, kick: 0.03 },
+  { id: "rpg", name: "RPG", cost: 30000, dmg: 0, rate: 1.6, range: 120, spread: 0, pellets: 0, ammo: 6, ammoCost: 500, proj: "rocket", clip: 1, reload: 2.2, kick: 0.05 },
 ];
 
 export function makeCombat(scene, g) {
   // g: { crowd, traffic, parked, crime, fx, sound, shake, st, player(), camYaw(), earnCombo }
   const wrecks = [];
   const charMat = new THREE.MeshStandardMaterial({ color: 0x1a1816, roughness: 1, metalness: 0.1 });
-  const S = { punchT: 0, combo: 0, comboT: 0, cd: 0, weapon: 0, shotT: 0, fistT: 0 };
+  const S = { punchT: 0, combo: 0, comboT: 0, cd: 0, weapon: 0, shotT: 0, fistT: 0, mag: {}, reloadT: 0, reloadLen: 1, lock: null, lockT: 0, hitT: 0 };
   if (!g.st.weapons) g.st.weapons = { fists: true };
   if (!g.st.ammo) g.st.ammo = {};
 
@@ -86,10 +86,26 @@ export function makeCombat(scene, g) {
     if (g.onCombo) g.onCombo(S.rampX, S.ramp);
   }
   function current() { return WEAPONS[S.weapon]; }
+  // ---- the magazine: what's loaded (part of the ammo you carry); empty means a reload ----
+  function mag(w = current()) {
+    if (!w.clip) return 0;
+    const total = g.st.ammo[w.id] || 0;
+    if (S.mag[w.id] === undefined) S.mag[w.id] = Math.min(w.clip, total);
+    return (S.mag[w.id] = Math.min(S.mag[w.id], total));
+  }
+  function reload() {
+    const w = current();
+    if (!w.clip || S.reloadT > 0) return false;
+    const total = g.st.ammo[w.id] || 0, m = mag(w);
+    if (m >= w.clip || total <= m) return false;
+    S.reloadT = S.reloadLen = w.reload; S.reloadW = w.id;
+    g.sound("blip", 0.25, 0.55);                              // the mag drops out
+    return true;
+  }
   function cycle() {
     for (let k = 1; k <= WEAPONS.length; k++) {
       const i = (S.weapon + k) % WEAPONS.length;
-      if (own(WEAPONS[i])) { S.weapon = i; return WEAPONS[i]; }
+      if (own(WEAPONS[i])) { S.weapon = i; S.reloadT = 0; S.lock = null; return WEAPONS[i]; }
     }
     return current();
   }
@@ -155,7 +171,8 @@ export function makeCombat(scene, g) {
       if (d > range || d < 0.3) return;
       const dot = (dx * dirX + dz * dirZ) / d;
       if (dot < cone) return;
-      const score = d * (2 - dot) * w;                   // armed hostiles win ties over bystanders
+      const lockW = S.lock && S.lock.o === o ? 0.35 : 1;   // stay on whoever you were already shooting
+      const score = d * (2 - dot) * w * lockW;           // armed hostiles win ties over bystanders
       if (score < bs && g.crime.los(x, z, tx, tz)) { bs = score; best = { o, x: tx, z: tz, kind, d }; }
     };
     for (const u of g.crime.units) if (u.active) consider(u, u.x, u.z, "cop");
@@ -200,9 +217,12 @@ export function makeCombat(scene, g) {
   function fire(aimYaw) {
     const w = current();
     if (w.id === "fists") return punch();
-    if (S.cd > 0) return false;
+    if (S.cd > 0 || S.reloadT > 0) return false;
     if ((g.st.ammo[w.id] || 0) <= 0) { S.cd = 0.4; g.sound("blip", 0.3, 0.5); g.toast && g.toast("Out of ammo — buy more at the gun shop"); return false; }
-    S.cd = w.rate; g.st.ammo[w.id]--; S.shotT = Math.min(0.12, w.rate * 0.7);   // the trigger finger pulls
+    if (mag(w) <= 0) { reload(); return false; }
+    S.cd = w.rate; g.st.ammo[w.id]--; S.mag[w.id]--; S.shotT = Math.min(0.12, w.rate * 0.7);   // the trigger finger pulls
+    if (g.recoil) g.recoil(w.kick || 0);
+    if (S.mag[w.id] <= 0 && g.st.ammo[w.id] > 0) setTimeout(() => { if (current() === w) reload(); }, Math.max(80, w.rate * 1000));   // last round: straight into a reload
     const P = g.player();
     if (w.proj) {
       let dx = Math.sin(aimYaw), dz = Math.cos(aimYaw);
@@ -217,7 +237,9 @@ export function makeCombat(scene, g) {
     const T = findTarget(ox, oz, dx, dz, w.range, 0.82);
     if (T) { const d = Math.hypot(T.x - ox, T.z - oz); dx = (T.x - ox) / d; dz = (T.z - oz) / d; P.yaw = Math.atan2(dx, dz); }
     g.fx.muzzle(ox + dx * 0.6, oy, oz + dz * 0.6, dx, dz);
-    g.sound("gun", w.id === "shotgun" ? 1 : 0.6);
+    if (g.fx.casing) g.fx.casing(ox + dx * 0.35, oy + 0.05, oz + dz * 0.35, dx, dz);
+    S.lock = T && T.kind !== "heli" ? { o: T.o, kind: T.kind } : T ? { o: T.o, kind: "heli" } : S.lock; S.lockT = 1.6;
+    g.sound("gun", w.id === "shotgun" ? 1 : 0.6, (w.snd || 1) * (0.96 + Math.random() * 0.08));
     g.shake(w.id === "shotgun" ? 0.25 : 0.08);
     g.crowd.scare(ox, oz, 40, 8);
     g.crime.addCrime(1);
@@ -235,12 +257,24 @@ export function makeCombat(scene, g) {
       g.fx.tracer(ox + sx * 0.8, oy, oz + sz * 0.8, hx, hit ? hit.y || 1.1 : oy - 0.1, hz);
       if (!hit) { g.fx.sparks(hx, oy - 0.2, hz, 4); continue; }
       if (hit.kind === "ped") {
-        const o = hit.o;
-        if (o.hp !== undefined) { o.hp -= w.dmg; if (o.hp > 0) { o.x += sx * 0.3; o.z += sz * 0.3; g.fx.sparks(hit.x, 1.2, hit.z, 2); continue; } }
-        g.crowd.knock(o, sx * 3, 1.5, sz * 3, true); g.fx.sparks(hit.x, 1.2, hit.z, 2); if (o.gang) mayhem(1);
+        const o = hit.o, head = Math.random() < (w.head || 0.1) * (w.pellets > 1 ? 0.5 : 1), hy = head ? 1.62 * (o.look ? o.look.h || 1 : 1) : 1.15;
+        const dmg = w.dmg * (head ? 2.6 : 1);
+        if (g.fx.blood) { g.fx.blood(hit.x, hy, hit.z, sx, sz, head ? 16 : 9); } else g.fx.sparks(hit.x, 1.2, hit.z, 2);
+        if (o.hp !== undefined) {
+          o.hp -= dmg;
+          if (o.hp > 0) {                                  // hurt, not down: knocked back a step, staggering
+            o.x += sx * 0.35; o.z += sz * 0.35; o.stagT = 0.3 + Math.min(0.4, dmg / 120); o.shootCD = Math.max(o.shootCD || 0, 0.5);
+            if (g.onHit) g.onHit(false, head);
+            continue;
+          }
+        }
+        g.crowd.knock(o, sx * (head ? 2 : 3.5), 1.5, sz * (head ? 2 : 3.5), true); if (o.gang) mayhem(1);
+        if (g.fx.splat) setTimeout(() => g.fx.splat(o.x + sx * 0.4, Math.max(0, o.y || 0), o.z + sz * 0.4, 0.45 + Math.random() * 0.3), 600);
+        if (g.onHit) g.onHit(true, head);
+        if (S.lock && S.lock.o === o) S.lock = null;
       }
       else if (hit.kind === "heli") { if (g.crime.hitHeli(w.dmg * 0.6)) mayhem(5); }
-      else if (hit.kind === "cop") { damageCar(hit.o, w.dmg * 0.9, "cop"); g.fx.sparks(hit.x, 1, hit.z, 6); }
+      else if (hit.kind === "cop") { damageCar(hit.o, w.dmg * 0.9, "cop"); g.fx.sparks(hit.x, 1, hit.z, 6); if (g.onHit) g.onHit(!!hit.o.boom, false); }
       else if (hit.kind === "traffic") { damageCar(hit.o, w.dmg * 0.9, "traffic"); hit.o.stun = 3; g.fx.sparks(hit.x, 1, hit.z, 6); }
       else if (hit.o.hit) hit.o.hit(w.dmg, sx, sz);
     }
@@ -251,6 +285,13 @@ export function makeCombat(scene, g) {
     stepProjs(dt);
     if (S.rampT > 0) { S.rampT -= dt; if (S.rampT <= 0) { if (S.ramp >= 6 && g.onComboEnd) g.onComboEnd(S.ramp, S.rampX); S.ramp = 0; S.rampX = 1; } }
     if (S.cd > 0) S.cd -= dt;
+    if (S.reloadT > 0) {
+      S.reloadT -= dt;
+      if (current().id !== S.reloadW) S.reloadT = 0;
+      else if (S.reloadT <= 0) { const w = current(); S.mag[w.id] = Math.min(w.clip, g.st.ammo[w.id] || 0); g.sound("blip", 0.3, 1.4); }   // and slams home
+    }
+    if (S.lockT > 0) { S.lockT -= dt; if (S.lockT <= 0) S.lock = null; }
+    if (S.lock && (S.lock.o.knocked > 0 || S.lock.o.hidden || S.lock.o.boom || S.lock.o.alive === false || S.lock.o.active === false)) S.lock = null;
     if (S.comboT > 0) S.comboT -= dt;
     if (S.punchT > 0) S.punchT -= dt;
     if (S.shotT > 0) S.shotT -= dt;
@@ -276,6 +317,10 @@ export function makeCombat(scene, g) {
   }
   // pose override for the attack animation
   function pose() {
+    if (S.reloadT > 0) {                                   // gun dipped and tilted, the off hand down to the mag well and back
+      const f = 1 - S.reloadT / S.reloadLen, k = Math.sin(f * Math.PI);
+      return { armR: -0.95, elbowR: -0.9, armL: -0.7 - 0.5 * (1 - k), elbowL: -1.5 + k * 0.7, headPitch: 0.35 };
+    }
     if (S.punchT <= 0) return null;
     const kick = S.combo === 2;
     const t = S.punchT / (kick ? 0.38 : 0.26);
@@ -285,5 +330,15 @@ export function makeCombat(scene, g) {
     return right ? { armR: -1.55 * ext, elbowR: -0.2 - (1 - ext) * 1.2, armL: -0.5, elbowL: -1.8, twist: -0.25 * ext }
                  : { armL: -1.55 * ext, elbowL: -0.2 - (1 - ext) * 1.2, armR: -0.5, elbowR: -1.8, twist: 0.25 * ext };
   }
-  return { S, WEAPONS, current, cycle, buy, own, fire, punch, update, pose, hands, damageCar, explodeCar, blast, wrecks, launch, asCops, projs };
+  // who the gun is on right now (for the reticle): the locked target, or what a shot would pick
+  function aimPreview(aimYaw) {
+    const w = current();
+    if (w.id === "fists") return null;
+    const P = g.player();
+    let T = null;
+    if (S.lock) { const o = S.lock.o; const d = Math.hypot(o.x - P.x, o.z - P.z); if (d < w.range) T = { o, x: o.x, z: o.z, y: S.lock.kind === "heli" ? o.y + 1.5 : undefined, kind: S.lock.kind, d, locked: true }; }
+    if (!T) T = findTarget(P.x, P.z, Math.sin(aimYaw), Math.cos(aimYaw), w.range, w.proj ? 0.9 : 0.82, w.proj === "rocket");
+    return T;
+  }
+  return { S, WEAPONS, current, cycle, buy, own, fire, punch, update, pose, hands, damageCar, explodeCar, blast, wrecks, launch, asCops, projs, mag, reload, aimPreview };
 }

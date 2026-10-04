@@ -1,7 +1,7 @@
 // Palm City — bootstrap + main loop.
 import * as THREE from "../vendor/three.module.js";
 import { createRenderer, isMobile } from "./render.js";
-import { buildCity, Collider, groundY, district, blockC, blockMin, PLAZA, HALF, ROAD, BLOCK, CURB, WALK, mulberry32, clamp } from "./world.js";
+import { buildCity, Collider, groundY, district, blockC, blockMin, PLAZA, HALF, ROAD, BLOCK, CURB, WALK, mulberry32, clamp, lerp, lerpAngle } from "./world.js";
 import { createSky } from "./sky.js";
 import { createCity } from "./city.js";
 import { bakeStreetLights, setStreetLights, setHeadlights } from "./streetlight.js";
@@ -249,6 +249,7 @@ const crime = makeCrime(scene, {
   focus: () => P.car ? { x: P.car.x, z: P.car.z, car: true, speed: P.car.speed } : { x: P.x, z: P.z, car: false, speed: P.speed },
   sound: (k, v, r) => AudioSys.play(k, v, r), toast: m => hud.toast(m), shake: a => { rig.shake = Math.max(rig.shake, a); },
   paused: () => hud.talking() || state.phase !== "play",
+  cover: (sx, sz, air) => coverMult(sx, sz, air),
   heatMult: () => (P.car && P.car.heatMult) || 1,
   noHeat: () => story.state().mState === "active" && st.mi === 11,        // no cops during the Grand Race
   night: () => sky.state.night,
@@ -277,7 +278,61 @@ const combat = makeCombat(scene, {
   crowd, traffic, parked, crime, fx, collider, st, propsBlast: (x, z, r) => props.blast(x, z, r),
   sound: (k, v, r) => AudioSys.play(k, v, r), shake: a => { rig.shake = Math.max(rig.shake, a); }, toast: m => hud.toast(m),
   player: () => P.car ? { x: P.car.x, z: P.car.z, y: P.car.y, car: P.car, yaw: P.car.h } : P,
+  recoil: k => { rig.shake = Math.max(rig.shake, k * 7); },
+  onHit: (kill, head) => { hud.hitMark(kill, head); AudioSys.play("blip", kill ? 0.3 : 0.16, kill ? 0.75 : 1.9); },
 });
+// ---- cars are solid on foot, and they're cover ----
+// every car-shaped thing near a point, as a capsule: the nearest point on its centre line, so the
+// whole flank is solid (and a wall to hide behind), not just round the wheels
+function carCircles(x, z, out = []) {
+  out.length = 0;
+  const add = (c, len) => { if (!c || c === P.car) return; const L = Math.max(0, (len || 4.6) / 2 - 1.0), fx = Math.sin(c.h || 0), fz = Math.cos(c.h || 0);
+    const t = clamp((x - c.x) * fx + (z - c.z) * fz, -L, L); out.push({ x: c.x + fx * t, z: c.z + fz * t, c }); };
+  for (const c of parked.around(x, z)) add(c, c.len || 4.6);
+  for (const c of traffic.cars) if (c.alive && (c.x - x) ** 2 + (c.z - z) ** 2 < 100) add(c, c.len || 4.6);
+  for (const c of cars) if (!c.kind && (c.x - x) ** 2 + (c.z - z) ** 2 < 100) add(c, c.spec && c.spec.len);
+  for (const u of crime.units) if (u.active && (u.x - x) ** 2 + (u.z - z) ** 2 < 100) add(u, u.spec && u.spec.len);
+  if (roadblocks && roadblocks.B.active) for (const u of roadblocks.cars) add(u, 4.6);
+  for (const w of combat.wrecks) if ((w.x - x) ** 2 + (w.z - z) ** 2 < 100) out.push({ x: w.x, z: w.z, c: w });
+  return out;
+}
+const CAR_R = 1.0, _circ = [], _rv = new THREE.Vector3();
+let aimScanT = 0, aimT = null;
+// cover: in a fight, stop next to a car (or a wall) and you drop behind it; shoot and you pop up to
+// fire over it, then duck back down. Shots from the far side mostly hit the car.
+const cov = { on: false, nx: 0, nz: 0, still: 0, peekT: 0, idle: 0, told: false };
+function coverMult(sx, sz, air) {
+  if (!cov.on || P.car) return 1;
+  const dx = sx - P.x, dz = sz - P.z, d = Math.hypot(dx, dz) || 1;
+  const behind = (dx * cov.nx + dz * cov.nz) / d < -0.15;          // the shooter's on the far side of what you're behind
+  if (air) return cov.peekT > 0 ? 0.8 : 0.55;
+  if (!behind) return 0.9;
+  return cov.peekT > 0 ? 0.45 : 0.08;
+}
+function updateCover(dt, inp) {
+  // (a gunfight, not just heat: you've just fired, or someone's just fired at you)
+  const fight = (crime.S.hurtCD > 1.5 && crime.S.from) || combat.S.lockT > 0 || (crime.S.wanted >= 3 && crime.S.hurtCD > 0) || (gangs.war && gangs.war()) || gangs.showdown();
+  const moving = Math.hypot(inp.mx, inp.mz) > 0.25 || !P.grounded;
+  cov.still = moving ? 0 : cov.still + dt;
+  if (cov.peekT > 0) cov.peekT -= dt;
+  if (inp.fire || inp.fireHeld) cov.peekT = 0.75;
+  // the nearest surface: a car side, or a building wall
+  let best = null, bg = 0.55;
+  for (const k of carCircles(P.x, P.z, _circ)) { const dx = P.x - k.x, dz = P.z - k.z, d = Math.hypot(dx, dz) || 1e-3, gap = d - CAR_R - 0.38; if (gap < bg) { bg = gap; best = { nx: dx / d, nz: dz / d }; } }
+  const wall = collider.resolve(P.x, P.z, 0.38 + 0.5);
+  if (wall.hit) { const gapW = 0.5 - Math.hypot(wall.x - P.x, wall.z - P.z); if (gapW < bg) { bg = gapW; best = { nx: wall.nx, nz: wall.nz }; } }
+  if (!cov.on) {
+    if (fight && best && cov.still > 0.2 && !P.swim) {
+      cov.on = true; cov.nx = best.nx; cov.nz = best.nz; cov.idle = 0;
+      if (!cov.told) { cov.told = true; hud.toast("🛡 In cover — shots from the other side mostly hit it. Fire to pop up.", 3.5); }
+    }
+  } else {
+    if (best) { cov.nx = best.nx; cov.nz = best.nz; }
+    cov.idle = fight ? 0 : cov.idle + dt;
+    if (moving || !best || cov.idle > 4 || P.swim) cov.on = false;
+    else if (cov.peekT <= 0) P.yaw = lerpAngle(P.yaw, Math.atan2(-cov.nx, -cov.nz), 1 - Math.exp(-10 * dt));   // face the cover, down behind it
+  }
+}
 const gangs = makeGangs({
   crowd, crime, fx, st, collider, toast: (m, t) => hud.toast(m, t), banner: (a, b, k, t) => hud.banner(a, b, k, t), sound: (k, v) => AudioSys.play(k, v),
   earn: n => eco.earn(n), paused: () => hud.talking() || state.phase !== "play",
@@ -464,6 +519,9 @@ for (const c of traffic.cars) traffic.respawnNear(c, P.x, P.z, 30);
 // ---------------------------------------------------------------------------------------------
 const hud = createHUD(plan);
 initInput(hud.ui);
+// tap the ammo count to reload
+hud.ui.wpn.classList.add("pe");
+hud.ui.wpn.addEventListener("pointerdown", e => { e.stopPropagation(); if (!P.car) combat.reload(); });
 phone = makePhone();
 // settings (persisted per device) + the ☰ menu
 const SET_KEY = "palmcity_settings";
@@ -600,6 +658,7 @@ function enterCar(n) {
   if (c.kind === "plane") hud.toast("✈️ Push forward to build speed, hold ▲ (Shift) to take off", 3.5);
 }
 function exitCar() {
+  cov.on = false;
   const c = P.car;
   // step out where the get-in routine starts: the driver's side (the bus: its door, kerb side)
   const spot = doors.exitSpot(c);
@@ -726,6 +785,13 @@ function update(dt) {
         P.jetOn = true; P.grounded = false; P.vy = Math.min(7, P.vy + 28 * dt);
         if (Math.random() < dt * 40) fx.fire(P.x - Math.sin(P.yaw) * 0.3, P.y + 0.7, P.z - Math.cos(P.yaw) * 0.3);
       } else if (P.grounded) P.jetOn = false;
+      // cars are solid: you walk round them, not through them
+      if (!P.swim) for (const k of carCircles(P.x, P.z, _circ)) {
+        const dx = P.x - k.x, dz = P.z - k.z, d = Math.hypot(dx, dz), R = CAR_R + 0.38;
+        if (d < R && d > 1e-4 && P.y < 1.2) { P.x = k.x + dx / d * R; P.z = k.z + dz / d * R; }
+      }
+      updateCover(dt, inp);
+      if (inp.radio) combat.reload();                     // R on a keyboard (on foot)
       const act = eco.actionAt(P.x, P.z);
       const n = nearestCar();
       const atGuns = (P.x - PLACES.guns.x) ** 2 + (P.z - PLACES.guns.z) ** 2 < 16;
@@ -946,7 +1012,14 @@ function render() {
     const hands = !P.swim && combat.hands();
     if (hands) over = Object.assign({}, over || {}, hands);
     const hj = hijack.playerPose(); if (hj) over = hj;
+    // down behind cover: a deep crouch, the gun held low, ready to come up
+    const crouch = cov.on && cov.peekT <= 0 && !P.swim && !interior.inside && !hj;
+    if (crouch) over = Object.assign({}, over || {}, { thighL: -1.75, thighR: -1.25, kneeL: 2.35, kneeR: 2.05, lean: 0.32 },
+      combat.current().id !== "fists" ? { armR: -0.85, elbowR: -1.1, armL: -0.75, elbowL: -1.35 } : { armL: -0.4, armR: -0.4, elbowL: -1.2, elbowR: -1.2 });
+    P._crouch = lerp(P._crouch || 0, crouch ? 1 : 0, 1 - Math.exp(-14 * (1 / 60)));
+    const y0 = P.y; P.y -= P._crouch * 0.46;
     poseOnFoot(P, time, over);
+    P.y = y0;
   }
   camera.updateMatrixWorld(); setView(camera);
   crowd.render(camera.position.x * 0.5 + focus.x * 0.5, camera.position.z * 0.5 + focus.z * 0.5, camera);
@@ -1008,7 +1081,32 @@ function render() {
     hud.level(st.lvl, st.xp, xpNeed(st.lvl), eco.incomeRate());
     hud.comboTick(combat.S.rampT);
     const w = combat.current();
-    hud.vitals(crime.S.health, crime.S.wanted, crime.S.searching, w.name, w.id === "fists" ? null : (st.ammo[w.id] || 0), !P.car);
+    // ammo: what's in the gun / what's left in your pockets (tap it to reload)
+    const tot = st.ammo[w.id] || 0, inMag = combat.mag(w);
+    const ammoTxt = w.id === "fists" ? null : combat.S.reloadT > 0 ? '<span class="rl">RELOADING</span>' : w.clip ? inMag + " <small>/ " + Math.max(0, tot - inMag) + "</small>" : String(tot);
+    hud.vitals(crime.S.health, crime.S.wanted, crime.S.searching, w.name, ammoTxt, !P.car);
+    hud.cover(cov.on && !P.car, cov.peekT > 0);
+    // the reticle on whoever the gun is on
+    if (!P.car && !interior.inside && w.id !== "fists" && state.phase === "play") {
+      if (--aimScanT <= 0) { aimScanT = 5; aimT = combat.aimPreview(rig.yaw); }
+      const T = aimT;
+      if (T && T.o && !(T.o.knocked > 0) && !T.o.hidden && !T.o.boom) {
+        const o = T.o, ty = T.kind === "ped" ? 1.25 * ((o.look && o.look.h) || 1) + (o.y || 0) : T.kind === "heli" ? o.y + 1.5 : 1.0;
+        _rv.set(o.x, ty, o.z).project(camera);
+        if (_rv.z < 1) {
+          const cw = R.renderer.domElement.clientWidth, ch = R.renderer.domElement.clientHeight;
+          if (o.hp !== undefined) o.hpMax = Math.max(o.hpMax || (T.kind === "ped" ? 0 : 100), o.hp);
+          const hostile = T.kind === "cop" || T.kind === "heli" || (o.gang && !o.ally && (o.goon || o.crew || o.cop || o.hitman || o.boss || (o.G && !st.turf[o.G.id])));
+          hud.reticle((_rv.x + 1) / 2 * cw, (1 - _rv.y) / 2 * ch, hostile, o.hp !== undefined && o.hpMax ? o.hp / o.hpMax : null, combat.S.lock && combat.S.lock.o === o);
+        } else hud.reticle(null);
+      } else hud.reticle(null);
+    } else hud.reticle(null);
+    // hit from where? an arc on the side the shots are coming from
+    const fr = crime.S.from;
+    if (fr && !P.car) {
+      const dx = fr.x - P.x, dz = fr.z - P.z, fwd = dx * Math.sin(rig.yaw) + dz * Math.cos(rig.yaw), rgt = -dx * Math.cos(rig.yaw) + dz * Math.sin(rig.yaw);
+      hud.dmgDir(Math.atan2(rgt, fwd), Math.min(1, fr.t));
+    } else hud.dmgDir(0, 0);
     hud.hurt(crime.S.flash + (crime.S.health < 25 ? 0.25 + Math.sin(time * 6) * 0.1 : 0));
     if (!P.car && !near && (P.x - extras.GARAGE.x) ** 2 + (P.z - extras.GARAGE.z) ** 2 < 400 && !act) { hud.buttons(false, false, "GARAGE"); hud.prompt("<b>CITY GARAGE</b> · buy, upgrade & repaint" + (I.touch ? "" : " · <b>E</b>")); }
     if (!P.car && (P.x - PLACES.guns.x) ** 2 + (P.z - PLACES.guns.z) ** 2 < 16 && !act) { actLabel = "SHOP"; actPrompt = "<b>AMMU-PALM</b> · guns & ammo"; hud.buttons(false, !!near, actLabel); hud.prompt(actPrompt); }
@@ -1045,7 +1143,7 @@ requestAnimationFrame(frame);
 
 // debug / test hooks
 globalThis.__pc2 = {
-  THREE, scene, camera, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, hijack, P, cars, state, rig, I,
+  THREE, scene, camera, coverState: () => cov, coverMult, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, hijack, P, cars, state, rig, I,
   interior, props, skids, animals, damage, radio, roadblocks, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },
