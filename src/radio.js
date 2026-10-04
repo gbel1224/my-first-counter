@@ -185,13 +185,14 @@ export function makeRadio(getState) {
     return say(text, { voice: v, rate: v ? 1.1 : 1.0, pitch: v === 2 ? 1.25 : v === 3 ? 0.85 : 1 });
   }
   // ---- per frame ----
-  let level = 0, where = 0, carRef = null;
+  let level = 0, where = 0, carRef = null, earbuds = false;
   function update(dt, { inCar, car, px, pz, indoor }) {
     if (!init()) return;
     if (inCar) carRef = car;
     // how loud: in the car full; out of it, through the body, fading with distance; indoors, off
     let target = 0, cut = 16000;
-    if (station && !AudioSys.muted && !indoor) {
+    if (station && !AudioSys.muted && earbuds && !inCar) target = 0.8;          // the phone's Music app, in your ears anywhere
+    else if (station && !AudioSys.muted && !indoor) {
       if (inCar) target = 1.0;
       else if (carRef && !carRef.boom) { const d = Math.hypot(carRef.x - px, carRef.z - pz); target = 0.55 * Math.max(0, 1 - d / 32); cut = 900; }
     }
@@ -200,7 +201,7 @@ export function makeRadio(getState) {
     gain.gain.setTargetAtTime(level * (STATIONS[station].vol || 1), ctx.currentTime, 0.1);
     filt.frequency.setTargetAtTime(cut, ctx.currentTime, 0.2);
     AudioSys.duck(level > 0.05 && STATIONS[station].id !== "talk" ? 0 : 1);
-    if (level < 0.01) { if (typeof speechSynthesis !== "undefined" && speechSynthesis.speaking && !inCar) speechSynthesis.cancel(); return; }
+    if (level < 0.01) { if (typeof speechSynthesis !== "undefined" && speechSynthesis.speaking && !inCar && !earbuds) speechSynthesis.cancel(); return; }
     const st = STATIONS[station];
     if (!station) return;                                       // switched off: just the fade
     if (st.talk) {
@@ -233,6 +234,14 @@ export function makeRadio(getState) {
     update, tune,
     on() { if (!station) { station = lastMusic; song = null; } return STATIONS[station]; },
     get station() { return STATIONS[station]; },
+    get index() { return station; },
+    get earbuds() { return earbuds; },
+    // the phone: play station i through your earbuds (0 / null: take them out; the car radio keeps the station)
+    listen(i) {
+      if (!i) { earbuds = false; return null; }
+      if (i !== station) { station = 0; tune(i); }
+      earbuds = true; return STATIONS[station];
+    },
     get level() { return level; },
   };
 }

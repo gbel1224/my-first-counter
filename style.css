@@ -249,6 +249,45 @@ body.talking #bF, body.talking #bW, body.talking #bR { opacity: 0 !important; po
 #phone .nerr { position: absolute; left: 22px; right: 22px; top: 64px; z-index: 5; padding: 11px 14px; border-radius: 16px; background: rgba(214,36,36,.96); color: #fff;
   font-size: 13px; font-weight: 700; box-shadow: 0 10px 26px rgba(0,0,0,.45); opacity: 0; transform: translateY(-8px); transition: opacity .2s, transform .2s; pointer-events: none; }
 #phone .nerr.on { opacity: 1; transform: none; }
+/* PalmRide: the back-seat moment between pickup and drop-off */
+#ride { position: absolute; inset: 0; z-index: 80; display: grid; place-items: center; background: #000; opacity: 0; pointer-events: none; transition: opacity .55s; text-align: center; color: #fff; }
+#ride.on { opacity: 1; pointer-events: auto; }
+#ride .k { font-size: 13px; letter-spacing: 3px; color: #ffd84a; font-weight: 800; }
+#ride .big { font-size: 30px; font-weight: 800; margin: 6px 0; }
+#ride .small { font-size: 14px; opacity: .7; }
+/* newer apps: Maps, PalmRide, Camera, Music, Empire */
+#phone .cmap { display: block; width: 100%; aspect-ratio: 1; border-radius: 18px; background: #0d3c55; cursor: crosshair; touch-action: manipulation; }
+@media (max-height: 500px) { #phone .cmap { width: 72%; margin: 0 auto; } }
+#phone .maphint { font-size: 10.5px; opacity: .55; text-align: center; margin: 5px 0 0; }
+#phone .gpsc { background: linear-gradient(160deg, rgba(62,224,255,.22), rgba(20,110,150,.18)); }
+#phone .gpsc b { display: block; font-size: 16px; margin-top: 2px; }
+#phone .pills.two { grid-template-columns: 1fr 1fr; margin-top: 8px; }
+#phone .pills button.on { background: #0a84ff; }
+#phone .pills button:disabled { opacity: .5; }
+#phone .rrow { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
+#phone .rrow > span { display: flex; flex-direction: column; min-width: 0; }
+#phone .rrow i { font-style: normal; font-weight: 800; font-size: 14px; color: #ffd84a; white-space: nowrap; }
+#phone .rrow i.r { color: #ff453a; }
+#phone .card.ride { background: linear-gradient(160deg, rgba(255,216,74,.22), rgba(224,162,0,.12)); }
+#phone .shutter { display: block; width: 74px; height: 74px; margin: 16px auto 4px; border-radius: 50%; border: 4px solid #fff; background: none; padding: 5px; cursor: pointer; }
+#phone .shutter i { display: block; width: 100%; height: 100%; border-radius: 50%; background: #fff; transition: transform .1s; }
+#phone .shutter:active i { transform: scale(.88); }
+#phone.flash .bezel::after { content: ""; position: absolute; inset: 7px; border-radius: 40px; background: #fff; z-index: 6; pointer-events: none; animation: phflash .45s ease-out forwards; }
+@keyframes phflash { from { opacity: .95; } to { opacity: 0; } }
+#phone .pimg { display: block; width: 100%; border-radius: 12px; margin: 6px 0 4px; aspect-ratio: 4 / 3; object-fit: cover; background: #111; }
+#phone .thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+#phone .thumbs button { padding: 0; border: 2px solid transparent; border-radius: 10px; overflow: hidden; background: #111; cursor: pointer; aspect-ratio: 4 / 3; }
+#phone .thumbs button.on { border-color: #0a84ff; }
+#phone .thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#phone .fol { font-size: 12px; opacity: .8; margin: 8px 2px 0; }
+#phone .row.on { background: rgba(255,106,138,.22); border-color: rgba(255,106,138,.4); }
+#phone .card.music { background: linear-gradient(160deg, rgba(255,106,138,.26), rgba(210,38,79,.16)); }
+#phone .eq { display: flex; gap: 3px; align-items: flex-end; height: 18px; margin-top: 6px; }
+#phone .eq i { width: 4px; border-radius: 2px; background: #ff6a8a; animation: eqb .8s ease-in-out infinite alternate; }
+#phone .eq i:nth-child(2) { animation-delay: -.3s; } #phone .eq i:nth-child(3) { animation-delay: -.55s; } #phone .eq i:nth-child(4) { animation-delay: -.15s; } #phone .eq i:nth-child(5) { animation-delay: -.7s; }
+@keyframes eqb { from { height: 3px; } to { height: 18px; } }
+#phone .stars { color: #ffd84a; font-size: 12px; letter-spacing: 1px; }
+#phone .card .big small { display: inline; font-size: 13px; opacity: .7; }
 #notif { position: absolute; left: 50%; top: calc(10px + var(--safe-t)); transform: translate(-50%, -140%); width: min(92vw, 380px); padding: 10px 14px; font-size: 13px;
   line-height: 1.35; transition: transform .35s cubic-bezier(.2,.9,.25,1); z-index: 45; cursor: pointer; }
 #notif.on { transform: translate(-50%, 0); }
