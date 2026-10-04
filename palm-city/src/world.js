@@ -340,13 +340,16 @@ export class Collider {
   constructor(buildings) {
     this.cell = 40;
     this.map = new Map();
-    this.boxes = buildings.map(b => ({ x0: b.x - b.w / 2, x1: b.x + b.w / 2, z0: b.z - b.d / 2, z1: b.z + b.d / 2, h: b.y + b.h }));
-    for (const bx of this.boxes) {
-      for (let gx = Math.floor(bx.x0 / this.cell); gx <= Math.floor(bx.x1 / this.cell); gx++)
-        for (let gz = Math.floor(bx.z0 / this.cell); gz <= Math.floor(bx.z1 / this.cell); gz++) {
-          const k = gx + "," + gz; let a = this.map.get(k); if (!a) this.map.set(k, a = []); a.push(bx);
-        }
-    }
+    this.boxes = [];
+    for (const b of buildings) this.add({ x0: b.x - b.w / 2, x1: b.x + b.w / 2, z0: b.z - b.d / 2, z1: b.z + b.d / 2, h: b.y + b.h });
+  }
+  // another solid box (street furniture that stops cars: barriers)
+  add(bx) {
+    this.boxes.push(bx);
+    for (let gx = Math.floor(bx.x0 / this.cell); gx <= Math.floor(bx.x1 / this.cell); gx++)
+      for (let gz = Math.floor(bx.z0 / this.cell); gz <= Math.floor(bx.z1 / this.cell); gz++) {
+        const k = gx + "," + gz; let a = this.map.get(k); if (!a) this.map.set(k, a = []); a.push(bx);
+      }
   }
   near(x, z) { return this.map.get(Math.floor(x / this.cell) + "," + Math.floor(z / this.cell)) || []; }
   // push a circle (x,z,r) out of any building; returns {x, z, hit, nx, nz}

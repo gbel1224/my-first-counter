@@ -20,9 +20,24 @@ export function makeProps(street, g) {
   }
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
   const dirty = new Set();
-  function write(o) { m.compose(p.set(o.x, o.y, o.z), q.setFromEuler(e.set(o.rx, o.ry, o.rz)), one); o.mesh.setMatrixAt(o.i, m); dirty.add(o.mesh); }
+  function write(o) { if (o.i < 0) return; m.compose(p.set(o.x, o.y, o.z), q.setFromEuler(e.set(o.rx, o.ry, o.rz)), one); o.mesh.setMatrixAt(o.i, m); dirty.add(o.mesh); }
+  // only the props within reach are drawn: each refresh packs them into the front of their mesh's
+  // instance list and trims its count (loose ones always stay in), so a citywide spread of scanned
+  // hydrants costs the same as the few dozen you can actually see
+  const R2 = 130 * 130, byMesh = new Map();
+  for (const o of items) { if (!byMesh.has(o.mesh)) byMesh.set(o.mesh, []); byMesh.get(o.mesh).push(o); }
+  let cx = 1e9, cz = 1e9, recull = true;
+  function cull(F) {
+    if (!recull && (F.x - cx) ** 2 + (F.z - cz) ** 2 < 64) return;
+    cx = F.x; cz = F.z; recull = false;
+    for (const [mesh, list] of byMesh) {
+      let k = 0;
+      for (const o of list) { if (o.loose || (o.x0 - F.x) ** 2 + (o.z0 - F.z) ** 2 < R2) { o.i = k++; write(o); } else o.i = -1; }
+      mesh.count = k; dirty.add(mesh);
+    }
+  }
   function knock(o, vx, vy, vz) {
-    if (!o.loose) { o.loose = true; loose.push(o); if (o.kind === "hydrant") o.spray = 9; }
+    if (!o.loose) { o.loose = true; loose.push(o); recull = true; if (o.kind === "hydrant") o.spray = 9; }
     o.vx = vx; o.vy = vy; o.vz = vz; o.t = 0; o.rest = false;
     o.sx = (Math.random() - 0.5) * 12; o.sy = (Math.random() - 0.5) * 6; o.sz = (Math.random() - 0.5) * 12;
     g.sound("door", 0.35, o.kind === "bin" ? 0.7 : 1.3);
@@ -52,6 +67,7 @@ export function makeProps(street, g) {
   }
   function update(dt, time) {
     const F = g.focus();
+    cull(F);
     for (const c of g.movers()) {
       if ((c.x - F.x) ** 2 + (c.z - F.z) ** 2 > 140 * 140) continue;
       if (sweep(c) && c === g.playerCar()) { c.vx *= 0.93; c.vz *= 0.93; g.shake && g.shake(0.12); }
@@ -77,7 +93,7 @@ export function makeProps(street, g) {
         write(o);
       } else if (o.t > 60 && o.spray <= 0 && (o.x0 - F.x) ** 2 + (o.z0 - F.z) ** 2 > 130 * 130) {
         // back where it belongs, out of sight
-        o.loose = false; o.rest = false; o.x = o.x0; o.y = o.y0; o.z = o.z0; o.rx = 0; o.ry = o.ry0; o.rz = 0; write(o); loose.splice(k, 1);
+        o.loose = false; o.rest = false; o.x = o.x0; o.y = o.y0; o.z = o.z0; o.rx = 0; o.ry = o.ry0; o.rz = 0; write(o); loose.splice(k, 1); recull = true;
       }
     }
     for (const mesh of dirty) mesh.instanceMatrix.needsUpdate = true;

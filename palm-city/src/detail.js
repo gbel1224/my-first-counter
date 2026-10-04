@@ -304,15 +304,58 @@ export function buildStreetDetail(scene, plan) {
 
   // ---- sidewalk furniture ----
   const hyd = [], bin = [], news = [], sign = [];
+  // the scanned clutter (realprops.js): trash bags piled against the shop walls, boxes and crates
+  // put out back, and here and there a run of concrete barriers fencing off kerb works
+  const clutter = { trashbag: [], box: [], crate: [], barrier: [] }, solids = [];
+  const cr = mulberry32(0xC1077E);
   for (const b of plan.blocks) {
     if (b.kind === "plaza") continue;
+    const town = b.kind !== "park" && b.kind !== "suburb";
+    const walls = town ? plan.buildings.filter(w => (w.y || 0) < 1 && w.x + w.w / 2 > b.x0 && w.x - w.w / 2 < b.x1 && w.z + w.d / 2 > b.z0 && w.z - w.d / 2 < b.z1)
+      .map(w => ({ x0: w.x - w.w / 2, x1: w.x + w.w / 2, z0: w.z - w.d / 2, z1: w.z + w.d / 2 })) : [];
     for (let side = 0; side < 4; side++) {
       const [nx, nz] = [[0, -1], [0, 1], [-1, 0], [1, 0]][side];
-      const along = t => nx ? [nx < 0 ? b.x0 + 1.0 : b.x1 - 1.0, b.z0 + t] : [b.x0 + t, nz < 0 ? b.z0 + 1.0 : b.z1 - 1.0];
+      // a point t metres along this side, `inset` metres in from the kerb
+      const at = (t, inset = 1.0) => nx ? [nx < 0 ? b.x0 + inset : b.x1 - inset, b.z0 + t] : [b.x0 + t, nz < 0 ? b.z0 + inset : b.z1 - inset];
+      const along = t => at(t);
+      // how far in from the kerb the first building wall is at t (null: open ground, no wall near)
+      const wallAt = t => { for (let d = WALK - 0.6; d < WALK + 12; d += 0.25) { const [x, z] = at(t, d); if (walls.some(w => x > w.x0 && x < w.x1 && z > w.z0 && z < w.z1)) return d; } return null; };
       const rot = Math.atan2(nx, nz);
+      const works = town && cr() < 0.07;
       if (r() < 0.7) { const [x, z] = along(8 + r() * 10); hyd.push([x, CURB, z, rot]); }
-      if (r() < 0.8) { const [x, z] = along(20 + r() * 20); bin.push([x, CURB, z, rot]); }
+      if (r() < 0.8 && !works) { const [x, z] = along(20 + r() * 20); bin.push([x, CURB, z, rot]); }
       if (r() < 0.35) { const [x, z] = along(14 + r() * 30); news.push([x, CURB, z, rot + Math.PI]); }
+      if (!town) continue;
+      // kerb works: three barriers end to end along the kerb, solid to anything driving
+      if (works) {
+        const t0 = 24 + cr() * 8;
+        for (let k = 0; k < 3; k++) {
+          const [x, z] = at(t0 + k * 2.05, 0.5);
+          clutter.barrier.push([x, CURB, z, rot + (cr() - 0.5) * 0.05]);
+          solids.push(nx ? { x0: x - 0.32, x1: x + 0.32, z0: z - 1.0, z1: z + 1.0, h: CURB + 0.8 } : { x0: x - 1.0, x1: x + 1.0, z0: z - 0.32, z1: z + 0.32, h: CURB + 0.8 });
+        }
+        if (cr() < 0.6) { const [x, z] = at(t0 + 6.6, 0.55); clutter.crate.push([x, CURB, z, rot + cr() * 0.4]); }
+      }
+      // trash out against the wall: a heap of bags, maybe a box or two thrown on
+      if (cr() < 0.38) {
+        const t = 6 + cr() * 46, n = 2 + Math.floor(cr() * 3), w = wallAt(t);
+        if (w !== null) {
+          for (let k = 0; k < n; k++) {
+            const [x, z] = at(t + (cr() - 0.5) * 1.6, w - 0.3 - cr() * 0.35);
+            clutter.trashbag.push([x, CURB - 0.02, z, cr() * 6.28, (cr() - 0.5) * 0.25, 0.85 + cr() * 0.35]);
+          }
+          if (cr() < 0.35) { const [x, z] = at(t + 1.2 + cr(), w - 0.35); clutter.box.push([x, CURB, z, cr() * 6.28, 0, 0.9 + cr() * 0.25]); }
+        }
+      }
+      if (cr() < 0.12) {
+        const t = 6 + cr() * 46, w = wallAt(t);
+        if (w !== null) {
+          const [x, z] = at(t, w - 0.3);
+          clutter.crate.push([x, CURB, z, rot + (cr() - 0.5) * 0.3]);
+          if (cr() < 0.5) clutter.crate.push([x, CURB + 0.34, z, rot + (cr() - 0.5) * 0.5]);
+          if (cr() < 0.5) { const [x2, z2] = at(t + 0.9, w - 0.35); clutter.box.push([x2, CURB, z2, cr() * 6.28, 0, 1]); }
+        }
+      }
     }
     // a street-name sign on each corner
     sign.push([b.x0 + 1.2, CURB, b.z0 + 1.2, r() * 6.28]);
@@ -338,7 +381,7 @@ export function buildStreetDetail(scene, plan) {
   ]), vcMaterial({ roughness: 0.5, metalness: 0.4 }), sign);
 
   // the loose stuff a car can send flying (see props.js)
-  return { signals, props: [["hydrant", hydM, hyd], ["bin", binM, bin], ["news", newsM, news]] };
+  return { signals, props: [["hydrant", hydM, hyd], ["bin", binM, bin], ["news", newsM, news]], clutter, solids };
 }
 
 // light every signal for this moment: each junction's own phase (see signalState / walkState)

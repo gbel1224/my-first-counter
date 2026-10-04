@@ -45,6 +45,10 @@ try {
       out.trafficBad = T.filter(c => !isFinite(c.x) || !isFinite(c.z)).length;
       out.trafficMoving = T.filter(c => c.speed > 1).length;
       out.crowdBad = G.crowd.people.filter(p => !isFinite(p.x) || !isFinite(p.z)).length;
+      // street props: barriers are solid; only the hydrants near you are drawn
+      { const sd = G.street.solids[0], hm = G.street.props[0][1];
+        out.barriers = G.street.solids.length; out.barrierSolid = !!sd && G.collider.resolve((sd.x0 + sd.x1) / 2, (sd.z0 + sd.z1) / 2, 0.5).hit;
+        out.hydDrawn = hm.count; out.hydTotal = G.street.props[0][2].length; }
       const near = G.crowd.people.filter(p => (p.x - G.P.x) ** 2 + (p.z - G.P.z) ** 2 < 150 * 150).length;
       out.crowdNear = near; out.pos = [Math.round(G.P.x), Math.round(G.P.z)];
       G.renderOnce();
@@ -110,6 +114,8 @@ try {
     ok("PLAY starts the game", r.phase1 === "play", r);
     ok("walking moves the player", r.walked > 3, r);
     ok("can get in a car", r.entered, r);
+    ok("concrete barriers stand in the street and stop cars", r.barriers > 20 && r.barrierSolid, r);
+    ok("street props draw only near you", r.hydDrawn > 0 && r.hydDrawn < r.hydTotal / 2, r);
     ok("car accelerates", r.carSpeed > 8, r);
     ok("can get out", r.exited, r);
     ok("traffic positions valid", r.trafficBad === 0, r);
@@ -135,13 +141,16 @@ try {
       // RPG: a rocket at a traffic car wrecks it
       const W = id => G.combat.WEAPONS.find(w => w.id === id);
       G.combat.buy(W("rpg")); G.combat.S.weapon = G.combat.WEAPONS.indexOf(W("rpg"));
-      const tc = G.traffic.cars.find(c => c.alive);
-      // stand 16 m down the car's own road and fire straight at it (a few tries: auto-aim may grab a passer-by)
-      for (let k = 0; k < 3 && tc.alive; k++) {
-        G.P.x = tc.x + Math.sin(tc.h) * 16; G.P.z = tc.z + Math.cos(tc.h) * 16; tc.speed = 0; tc.stun = 30; G.combat.S.cd = 0; G.combat.S.reloadT = 0; G.combat.S.mag.rpg = 1;   // (one rocket per tube: reload between tries)
+      // stand 16 m down a car's own road and fire straight at it (a few tries, a fresh car each time:
+      // auto-aim may grab a passer-by, or another car may pull into the line)
+      o.rpgWreck = false;
+      for (let k = 0; k < 5 && !o.rpgWreck; k++) {
+        const tc = G.traffic.cars.filter(c => c.alive)[k]; if (!tc) break;
+        G.P.x = tc.x + Math.sin(tc.h) * 16; G.P.z = tc.z + Math.cos(tc.h) * 16; tc.speed = 0; tc.stun = 30; G.combat.S.cd = 0; G.combat.S.reloadT = 0;
+        G.combat.S.mag.rpg = 1; G.st.ammo.rpg = Math.max(G.st.ammo.rpg || 0, 3);   // (one rocket per tube: reload between tries)
         G.combat.fire(Math.atan2(tc.x - G.P.x, tc.z - G.P.z)); run(60);
+        o.rpgWreck = !tc.alive;
       }
-      o.rpgWreck = !tc.alive;
       // 4★ brings the chopper, 5★ the tank
       G.crime.reset(); G.P.x = G.PLACES.fountain.x + 16; G.P.z = G.PLACES.fountain.z;
       G.crime.S.crimeCD = 0; G.crime.addCrime(4); run(5); o.heli = G.crime.heli.active;
