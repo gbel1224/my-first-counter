@@ -43,6 +43,7 @@ import { makeEvents } from "./events.js";
 import { makeJobs } from "./jobs.js";
 import { makeRoadblocks } from "./roadblock.js";
 import { makeFootCops } from "./footcops.js";
+import { makePoliceRadio } from "./policeradio.js";
 import { makeCustoms, applyCarMods } from "./customs.js";
 import { makeAct2 } from "./act2.js";
 import { makeServices } from "./services.js";
@@ -391,6 +392,15 @@ const footcops = makeFootCops({
   paused: () => hud.talking() || state.phase !== "play" || !!interior.inside,
   tackle: o => { if (P.car || P.tackleT > 0) return; P.tackleT = 2.4; P.speed = 0; P.yaw = Math.atan2(P.x - o.x, P.z - o.z); rig.shake = Math.max(rig.shake, 0.45); AudioSys.play("door", 0.9, 0.55); hud.toast("👮 Tackled!", 1.6); },
 });
+// the police radio: dispatch talking you through your own chase (and a subtitle chip for it)
+const dispatchEl = document.createElement("div"); dispatchEl.id = "dispatch"; document.getElementById("ui").appendChild(dispatchEl);
+let dispatchT = 0;
+const policeRadio = makePoliceRadio({
+  crime, footcops, roadblocks,
+  focus: () => P.car ? { x: P.car.x, z: P.car.z, car: P.car, vx: P.car.vx, vz: P.car.vz, h: P.car.h, speed: P.car.speed } : { x: P.x, z: P.z, car: null, vx: Math.sin(P.yaw) * P.speed, vz: Math.cos(P.yaw) * P.speed, h: P.yaw, speed: P.speed },
+  squelch: v => AudioSys.squelch(v), muted: () => AudioSys.muted,
+  subtitle: t => { dispatchEl.innerHTML = t; dispatchEl.classList.add("on"); dispatchT = 4.2; },
+});
 crimeHooks.footSees = () => footcops.sees(); crimeHooks.footGrab = () => footcops.grabbing();
 { const r0 = crime.reset; crime.reset = () => { r0(); footcops.reset(); }; }
 // Act Two: the Shark's chapters, once the first story's done
@@ -447,9 +457,7 @@ function phoneRide(d) {
   if (dist < 30) return "You're already there.";
   if (st.money < fare) return "That ride is $" + fare.toLocaleString() + " — you've got $" + Math.floor(st.money).toLocaleString() + ".";
   st.money -= fare;
-  if (!rideCard) { rideCard = document.createElement("div"); rideCard.id = "ride"; document.getElementById("ui").appendChild(rideCard); }
-  rideCard.innerHTML = `<div><div class="k">🚕 PALMRIDE</div><div class="big">${d.name.replace(/[<>&]/g, "")}</div><div class="small">${Math.round(dist / 10) * 10} m · $${fare.toLocaleString()}</div></div>`;
-  rideCard.classList.add("on"); AudioSys.play("door", 0.5);
+  curtain("🚕 PALMRIDE", d.name, `${Math.round(dist / 10) * 10} m · $${fare.toLocaleString()}`, 1700);
   setTimeout(() => {
     // a dropped pin may be inside a building or out at sea: step out at the nearest open kerb
     let x = clamp(d.x, -HALF - 380, HALF + 380), z = clamp(d.z, -HALF - 260, HALF + 38);
@@ -460,8 +468,15 @@ function phoneRide(d) {
     for (const c of traffic.cars) if (c.alive) traffic.respawnNear(c, P.x, P.z, 30);
     writeSave();
   }, 650);
-  setTimeout(() => rideCard.classList.remove("on"), 1700);
   return null;
+}
+// a moment of black between two places (a cab ride, the paint shop's shutter)
+function curtain(k, big, small = "", ms = 1700) {
+  if (!rideCard) { rideCard = document.createElement("div"); rideCard.id = "ride"; document.getElementById("ui").appendChild(rideCard); }
+  const e = t => String(t).replace(/[<>&]/g, "");
+  rideCard.innerHTML = `<div><div class="k">${e(k)}</div><div class="big">${e(big)}</div><div class="small">${e(small)}</div></div>`;
+  rideCard.classList.add("on"); AudioSys.play("door", 0.5);
+  clearTimeout(curtain.t); curtain.t = setTimeout(() => rideCard.classList.remove("on"), ms);
 }
 // Camera: render the view (or turn it round on you for a selfie), keep a small JPEG, and size up the shot
 const _camP = new THREE.Vector3(), _camQ = new THREE.Quaternion();
@@ -661,6 +676,7 @@ const hud = createHUD(plan);
 initInput(hud.ui);
 // Palm Customs, and the garages at your homes
 const customs = makeCustoms(scene, {
+  wanted: () => crime.S.wanted, copsSee: () => crime.S.seen, clearHeat: () => crime.reset(), curtain: (a, b) => curtain(a, b, "", 1600),
   st, cars, toast: (m, t) => hud.toast(m, t), banner: (a, b, k, t) => hud.banner(a, b, k, t), sound: (k, v, r) => AudioSys.play(k, v, r), save: () => writeSave(),
   panel: (t, rows) => hud.panel(t, rows), closePanel: () => hud.closePanel(), repair: c => damage.repair(c),
   spawn: (type, color, x, z, h) => { const v = spawnCar(scene, type, color, x, z, h); cars.push(v); return v; },
@@ -1033,11 +1049,24 @@ function update(dt) {
     }
     // whatever shoved you this frame (a cruiser, a blast, a door), you never end up inside a wall
     if (!P.car && !P.swim) { const q = collider.resolve(P.x, P.z, 0.38); if (q.hit) { P.x = q.x; P.z = q.z; } }
-    crime.update(dt, time); footcops.update(dt); roadblocks.update(dt, time); combat.update(dt, time); gangs.update(dt);
+    crime.update(dt, time); footcops.update(dt); policeRadio.update(dt); roadblocks.update(dt, time);
+    if (dispatchT > 0) { dispatchT -= dt; if (dispatchT <= 0) dispatchEl.classList.remove("on"); } combat.update(dt, time); gangs.update(dt);
     updateHeists(dt, time); events.update(dt); jobs.update(dt); act2.update(dt); services.update(dt);
     // sirens you can hear: the nearest ambulance / fire engine on a call, or the police on your tail
-    { let cop = 0; if (crime.S.wanted > 0) for (const u of crime.units) if (u.active) cop = Math.max(cop, 1 - Math.hypot(u.x - focus0().x, u.z - focus0().z) / 200);
-      const sv = services.sirenLevel(); AudioSys.siren(Math.max(cop, sv), cop > sv ? 1 : 0); } extras.update(dt); life.update(dt);
+    // (the two nearest cruisers: each placed left/right of the camera, pitch bent by Doppler as it closes or passes)
+    { const L = P.car || P, lvx = P.car ? P.car.vx : Math.sin(P.yaw) * P.speed, lvz = P.car ? P.car.vz : Math.cos(P.yaw) * P.speed;
+      const rx = camera.matrixWorld.elements[0], rz = camera.matrixWorld.elements[2], rl = Math.hypot(rx, rz) || 1;
+      const voices = [];
+      if (crime.S.wanted > 0) for (const u of crime.units) {
+        if (!u.active) continue;
+        const dx = u.x - L.x, dz = u.z - L.z, d = Math.hypot(dx, dz) || 1, level = 1 - d / 220;
+        if (level <= 0) continue;
+        const vrad = ((u.vx - lvx) * dx + (u.vz - lvz) * dz) / d;            // + : moving apart
+        voices.push({ level, kind: 1, doppler: 343 / (343 + vrad), pan: (dx * rx + dz * rz) / (d * rl) });
+      }
+      voices.sort((a, b) => b.level - a.level);
+      const sv = services.sirenLevel(); if (sv > 0 && (voices.length < 2 || sv > voices[1].level)) voices.splice(voices.length && voices[0].level > sv ? 1 : 0, 0, { level: sv, kind: 0, doppler: 1, pan: 0 });
+      AudioSys.sirens(voices.slice(0, 2), dt); } extras.update(dt); life.update(dt);
     if (P.car && P.car.boom && !P.car.charred) {           // your ride went up: you're thrown clear, it's a burnt shell
       const c = P.car; c.charred = true;
       c.group.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.color && o.material.color.set(0x1a1816); o.material.metalness = 0.1; o.material.roughness = 1; } });
@@ -1320,7 +1349,7 @@ function render() {
     for (const b of BIZ) dots.push({ x: b.p.x, z: b.p.z, c: st.owned[b.id] ? "#2fae6a" : "#d9962a", r: 5, t: "$" });
     for (const pr of PROPS) dots.push({ x: pr.p.x, z: pr.p.z, c: st[pr.flag] ? "#2fae6a" : "#7a6ad8", r: 5, t: "⌂" });
     if (st.mi >= 5) dots.push({ x: PLACES.depot.x, z: PLACES.depot.z, c: "#8a6a3a", r: 5, t: "D" });
-    dots.push({ x: PLACES.customs.x, z: PLACES.customs.z, c: "#e0601a", r: 5, t: "C" });
+    dots.push(crime.S.wanted > 0 ? { x: PLACES.customs.x, z: PLACES.customs.z, c: Math.floor(time * 3) % 2 ? "#e0601a" : "#ffb020", r: 7, t: "🎨" } : { x: PLACES.customs.x, z: PLACES.customs.z, c: "#e0601a", r: 5, t: "C" });   // wanted: the paint shop lights up
     dots.push({ x: PLACES.tattoo.x, z: PLACES.tattoo.z, c: "#8a4a8a", r: 4.5, t: "T" });
     for (const c of cars) if (c !== P.car) dots.push({ x: c.x, z: c.z, c: "#2f7cff", r: 3 });
     const W = gangs.war();
@@ -1343,7 +1372,7 @@ requestAnimationFrame(frame);
 // debug / test hooks
 globalThis.__pc2 = {
   THREE, scene, camera, customs, applyCarMods, act2, services, coverState: () => cov, coverMult, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, hijack, P, cars, state, rig, I,
-  interior, props, street, skids, animals, damage, radio, roadblocks, footcops, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
+  interior, props, street, skids, animals, damage, radio, roadblocks, footcops, policeRadio, AudioSys, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },
 };
