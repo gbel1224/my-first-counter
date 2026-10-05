@@ -228,6 +228,7 @@ try {
               if (lastH[i] !== undefined && d < 40) { let dh = u.h - lastH[i]; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); spin = Math.max(spin, (u._sp = (u._sp || 0) + Math.abs(dh))); }
               lastH[i] = u.h; if (d < 40) { near++; if ((u.x - car.x) * Math.sin(car.h) + (u.z - car.z) * Math.cos(car.h) < 0) behind++; } });
           }
+          o.radio = document.getElementById("dispatch").textContent;
           G.I.mz = 0; G.I.mx = 0; o.chasePaused = G.hud.talking() || G.state.phase; o.chaseSpeed = +car.speed.toFixed(1); o.chaseZ = Math.round(car.z); o.chaseBehind = near ? +(behind / near).toFixed(2) : 0; o.chaseNear = near; o.chaseSpin = +(spin / 6.283).toFixed(2); o.chaseWanted = G.crime.S.wanted;
           G.exitCar(); G.crime.reset(); }
         G.P.x = home[0]; G.P.z = home[1]; for (const p of G.crowd.people) if (!p.beach && !p.gang) G.crowd.respawnNear(p, G.P.x, G.P.z); run(60);
@@ -242,6 +243,7 @@ try {
     ok("cars knock street props flying", r2.prop, r2);
     ok("strangers talk back with moving mouths", r2.talkOpen, r2);
     ok("insulting a tough guy starts a fight (and he looks mad)", r2.talkFight, r2);
+    ok("police radio: dispatch calls the chase", /DISPATCH/.test(r2.radio || "") && /suspect|unit/i.test(r2.radio || ""), r2);
     ok("Pay 'n' Spray: no use while a cop is watching", r2.sprayRefused, r2);
     ok("Pay 'n' Spray: new paint, stars gone, $250 a star", r2.sprayWorked, r2);
     ok("police chase: cruisers sit behind you, not circling", r2.chaseNear > 50 && r2.chaseBehind > 0.7 && r2.chaseSpin < 1.2, r2);

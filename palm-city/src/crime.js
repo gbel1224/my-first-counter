@@ -191,11 +191,11 @@ export function makeCrime(scene, g) {
   }
   function busted() {
     const fine = 100 + 80 * S.wanted;
-    reset(); g.onBust(fine);
+    reset(); S.ended = "busted"; g.onBust(fine);
   }
   function wasted() {
     const fine = 100 + 60 * S.wanted;
-    reset(); S.health = 100; g.onWasted(fine);
+    reset(); S.ended = "wasted"; S.health = 100; g.onWasted(fine);
   }
   // route along the road grid: head down your road to the cross street nearest the target, then turn
   function routeTarget(u, tx, tz) {
@@ -473,7 +473,7 @@ export function makeCrime(scene, g) {
       else {
         if (S.onYou) { S.onYou = false; g.toast("🔍 Out of sight — stay out of their cones!"); }
         S.wantedCD -= dt * (g.heatMult ? g.heatMult() : 1);
-        if (S.wantedCD <= 0) { S.wanted = 0; S.searching = false; g.toast("You lost the cops"); g.sound("jingle", 0.5); }
+        if (S.wantedCD <= 0) { S.wanted = 0; S.searching = false; S.ended = "lost"; g.toast("You lost the cops"); g.sound("jingle", 0.5); }
       }
     } else S.searching = false;
   }

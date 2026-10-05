@@ -121,21 +121,50 @@ export const AudioSys = (() => {
     lastHorn = t;
     play("horn", 1);
   }
-  // a siren somewhere in the city: a two-tone wail (lazily built; level 0..1 by distance)
-  let sirenG = null, sirenO = null, sirenL = null;
-  function sirenLive(level, kind = 0) {
+  // sirens you can hear: up to two at once (the nearest cruisers, or an ambulance), each placed left or
+  // right of you, its pitch bent by Doppler as it closes and passes, and — police — switching between the
+  // long wail, the fast yelp and the hi-lo the way a driver works the panel (lazily built)
+  const SV = [];
+  const MODES = [{ rate: 0.32, depth: 360, type: "sine" }, { rate: 2.4, depth: 330, type: "sine" }, { rate: 0.85, depth: 210, type: "square" }];
+  function sirenVoice() {
+    const v = { g: ctx.createGain(), o: ctx.createOscillator(), l: ctx.createOscillator(), d: ctx.createGain(), f: ctx.createBiquadFilter(),
+      p: ctx.createStereoPanner ? ctx.createStereoPanner() : null, mode: -1, modeT: 0 };
+    v.g.gain.value = 0; v.f.type = "bandpass"; v.f.frequency.value = 1100; v.f.Q.value = 0.8;
+    v.o.type = "sawtooth"; v.o.frequency.value = 900; v.l.frequency.value = 0.32; v.d.gain.value = 360;
+    v.l.connect(v.d); v.d.connect(v.o.frequency); v.o.connect(v.f); v.f.connect(v.g);
+    if (v.p) { v.g.connect(v.p); v.p.connect(comp); } else v.g.connect(comp);
+    v.o.start(); v.l.start(); return v;
+  }
+  // voices: [{ level 0..1, kind 0 ambulance/fire 1 police, doppler (pitch ×), pan -1..1 }]
+  function sirens(voices, dt = 1 / 60) {
     if (!ctx || !ready) return;
-    if (!sirenG) {
-      sirenG = ctx.createGain(); sirenG.gain.value = 0;
-      const f = ctx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 1100; f.Q.value = 0.8;
-      sirenO = ctx.createOscillator(); sirenO.type = "sawtooth"; sirenO.frequency.value = 900;
-      sirenL = ctx.createOscillator(); sirenL.frequency.value = 0.32;            // the wail: up and down, a few times a second-ish
-      const depth = ctx.createGain(); depth.gain.value = 360; sirenL.connect(depth); depth.connect(sirenO.frequency);
-      sirenO.connect(f); f.connect(sirenG); sirenG.connect(comp); sirenO.start(); sirenL.start();
+    for (let i = 0; i < 2; i++) {
+      const want = voices[i];
+      if (!SV[i]) { if (!want || want.level <= 0) continue; SV[i] = sirenVoice(); }
+      const v = SV[i], lv = want ? Math.min(1, want.level) : 0;
+      const target = muted ? 0 : lv * (i ? 0.045 : 0.07);
+      v.g.gain.value += (target - v.g.gain.value) * 0.08;
+      if (!want) continue;
+      // which pattern: ambulances wail; police yelp up close and switch it up every few seconds
+      v.modeT -= dt;
+      if (v.modeT <= 0 || v.mode < 0) { v.mode = want.kind ? (lv > 0.65 ? (Math.random() < 0.65 ? 1 : 2) : (Math.random() < 0.6 ? 0 : 2)) : 0; v.modeT = 3 + Math.random() * 4; }
+      const M = MODES[v.mode], dop = Math.max(0.82, Math.min(1.2, want.doppler || 1));
+      v.l.type = M.type; v.l.frequency.value = M.rate * (1 + i * 0.07);
+      v.o.frequency.value = 900 * dop * (1 + i * 0.03); v.d.gain.value = M.depth * dop;
+      if (v.p) v.p.pan.value += ((want.pan || 0) * 0.85 - v.p.pan.value) * 0.15;
     }
-    const target = muted ? 0 : Math.min(1, level) * 0.07;
-    sirenG.gain.value += (target - sirenG.gain.value) * 0.08;
-    sirenL.frequency.value = kind ? 2.2 : 0.32;                          // police: the fast yelp; ambulance/fire: the long wail
+  }
+  const sirenLive = (level, kind = 0) => sirens(level > 0 ? [{ level, kind, doppler: 1, pan: 0 }] : []);
+  // a radio keying up: a burst of hiss through a narrow band, and a chirp
+  function squelch(vol = 1) {
+    if (!ready || muted || !ctx) return;
+    const t = ctx.currentTime;
+    const s = noiseSrc(); const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 2200; bp.Q.value = 1.4;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22 * vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0006, t + 0.16);
+    s.connect(bp); bp.connect(g); g.connect(sfxGain); s.start(t); s.stop(t + 0.18);
+    const o = ctx.createOscillator(); o.type = "square"; o.frequency.setValueAtTime(1250, t + 0.02); o.frequency.setValueAtTime(1650, t + 0.07);
+    const og = ctx.createGain(); og.gain.setValueAtTime(0.0001, t); og.gain.exponentialRampToValueAtTime(0.05 * vol, t + 0.025); og.gain.exponentialRampToValueAtTime(0.0006, t + 0.12);
+    o.connect(og); og.connect(sfxGain); o.start(t + 0.02); o.stop(t + 0.13);
   }
   function engine(speed) {
     if (!engineGain) return;
@@ -326,6 +355,6 @@ export const AudioSys = (() => {
     if (amb.sirenT < 0) { amb.sirenT = 60 + Math.random() * 120; if (c.downtown > 0.3 || c.traffic > 0.5) siren(0.025); }
   }
   function duck(v) { duckMul += (v - duckMul) * 0.08; }
-  return { init, play, gun, boom, horn, engine, siren: sirenLive, intensity, skid, setMuted, indoor, beat, ambience, wings, duck,
+  return { init, play, gun, boom, horn, engine, siren: sirenLive, sirens, squelch, intensity, skid, setMuted, indoor, beat, ambience, wings, duck,
     get ctx() { return ready ? ctx : null; }, get out() { return comp; }, get noise() { return noiseBuf; }, get muted() { return muted; } };
 })();

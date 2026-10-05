@@ -164,7 +164,7 @@ export function makeRoadblocks(scene, g) {
     const S = g.crime.S, F = g.focus(), c = F.car;
     B.cd -= dt;
     if (!B.active) {
-      if (B.cd <= 0 && S.wanted >= 3 && !g.paused() && c && !c.kind && Math.abs(c.speed) > 10) { if (!spawn(c)) B.cd = 4; else { B.cd = 40 + r() * 25; g.toast("📻 Dispatch: \"Roadblock up ahead — box him in!\"", 3); } }
+      if (B.cd <= 0 && S.wanted >= 3 && !g.paused() && c && !c.kind && Math.abs(c.speed) > 10) { if (!spawn(c)) B.cd = 4; else B.cd = 40 + r() * 25; }   // (the police radio announces it)
       return;
     }
     B.t += dt;

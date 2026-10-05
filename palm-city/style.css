@@ -249,6 +249,12 @@ body.talking #bF, body.talking #bW, body.talking #bR { opacity: 0 !important; po
 #phone .nerr { position: absolute; left: 22px; right: 22px; top: 64px; z-index: 5; padding: 11px 14px; border-radius: 16px; background: rgba(214,36,36,.96); color: #fff;
   font-size: 13px; font-weight: 700; box-shadow: 0 10px 26px rgba(0,0,0,.45); opacity: 0; transform: translateY(-8px); transition: opacity .2s, transform .2s; pointer-events: none; }
 #phone .nerr.on { opacity: 1; transform: none; }
+/* the police radio: dispatch's lines while you're wanted */
+#dispatch { position: absolute; left: 50%; bottom: calc(118px + var(--safe-b)); transform: translate(-50%, 12px); max-width: min(88vw, 520px); padding: 8px 14px; border-radius: 14px;
+  background: rgba(10, 16, 34, .82); border: 1px solid rgba(90, 140, 255, .45); color: #dfe8ff; font-size: 13px; line-height: 1.35; text-align: center; opacity: 0;
+  transition: opacity .25s, transform .25s; pointer-events: none; z-index: 30; font-family: ui-monospace, Menlo, Consolas, monospace; }
+#dispatch.on { opacity: 1; transform: translate(-50%, 0); }
+#dispatch b { color: #7fb0ff; letter-spacing: 1px; }
 /* PalmRide: the back-seat moment between pickup and drop-off */
 #ride { position: absolute; inset: 0; z-index: 80; display: grid; place-items: center; background: #000; opacity: 0; pointer-events: none; transition: opacity .55s; text-align: center; color: #fff; }
 #ride.on { opacity: 1; pointer-events: auto; }
