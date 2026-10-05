@@ -368,6 +368,7 @@ export function makeCrime(scene, g) {
     if (updateHeli(dt, time, px, pz, heat, seen, F)) seen = true;
     if (seen && S.searching) { g.toast("🚨 Spotted! They're back on you"); g.sound("blip", 0.9); S.wantedCD = searchTime(heat); }
     if (S.fixT > 0) S.fixT -= dt;
+    S.seen = seen;
     const known = seen || S.fixT > 0;                   // eyes on you, or the call just came in
     if (known) { belief.x = px; belief.z = pz; S.searchT = 0; } else S.searchT += dt;
     S.searching = heat > 0 && !known && S.searchT > 1.3;

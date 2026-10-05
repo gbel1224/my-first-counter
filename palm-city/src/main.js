@@ -447,9 +447,7 @@ function phoneRide(d) {
   if (dist < 30) return "You're already there.";
   if (st.money < fare) return "That ride is $" + fare.toLocaleString() + " — you've got $" + Math.floor(st.money).toLocaleString() + ".";
   st.money -= fare;
-  if (!rideCard) { rideCard = document.createElement("div"); rideCard.id = "ride"; document.getElementById("ui").appendChild(rideCard); }
-  rideCard.innerHTML = `<div><div class="k">🚕 PALMRIDE</div><div class="big">${d.name.replace(/[<>&]/g, "")}</div><div class="small">${Math.round(dist / 10) * 10} m · $${fare.toLocaleString()}</div></div>`;
-  rideCard.classList.add("on"); AudioSys.play("door", 0.5);
+  curtain("🚕 PALMRIDE", d.name, `${Math.round(dist / 10) * 10} m · $${fare.toLocaleString()}`, 1700);
   setTimeout(() => {
     // a dropped pin may be inside a building or out at sea: step out at the nearest open kerb
     let x = clamp(d.x, -HALF - 380, HALF + 380), z = clamp(d.z, -HALF - 260, HALF + 38);
@@ -460,8 +458,15 @@ function phoneRide(d) {
     for (const c of traffic.cars) if (c.alive) traffic.respawnNear(c, P.x, P.z, 30);
     writeSave();
   }, 650);
-  setTimeout(() => rideCard.classList.remove("on"), 1700);
   return null;
+}
+// a moment of black between two places (a cab ride, the paint shop's shutter)
+function curtain(k, big, small = "", ms = 1700) {
+  if (!rideCard) { rideCard = document.createElement("div"); rideCard.id = "ride"; document.getElementById("ui").appendChild(rideCard); }
+  const e = t => String(t).replace(/[<>&]/g, "");
+  rideCard.innerHTML = `<div><div class="k">${e(k)}</div><div class="big">${e(big)}</div><div class="small">${e(small)}</div></div>`;
+  rideCard.classList.add("on"); AudioSys.play("door", 0.5);
+  clearTimeout(curtain.t); curtain.t = setTimeout(() => rideCard.classList.remove("on"), ms);
 }
 // Camera: render the view (or turn it round on you for a selfie), keep a small JPEG, and size up the shot
 const _camP = new THREE.Vector3(), _camQ = new THREE.Quaternion();
@@ -661,6 +666,7 @@ const hud = createHUD(plan);
 initInput(hud.ui);
 // Palm Customs, and the garages at your homes
 const customs = makeCustoms(scene, {
+  wanted: () => crime.S.wanted, copsSee: () => crime.S.seen, clearHeat: () => crime.reset(), curtain: (a, b) => curtain(a, b, "", 1600),
   st, cars, toast: (m, t) => hud.toast(m, t), banner: (a, b, k, t) => hud.banner(a, b, k, t), sound: (k, v, r) => AudioSys.play(k, v, r), save: () => writeSave(),
   panel: (t, rows) => hud.panel(t, rows), closePanel: () => hud.closePanel(), repair: c => damage.repair(c),
   spawn: (type, color, x, z, h) => { const v = spawnCar(scene, type, color, x, z, h); cars.push(v); return v; },
@@ -1320,7 +1326,7 @@ function render() {
     for (const b of BIZ) dots.push({ x: b.p.x, z: b.p.z, c: st.owned[b.id] ? "#2fae6a" : "#d9962a", r: 5, t: "$" });
     for (const pr of PROPS) dots.push({ x: pr.p.x, z: pr.p.z, c: st[pr.flag] ? "#2fae6a" : "#7a6ad8", r: 5, t: "⌂" });
     if (st.mi >= 5) dots.push({ x: PLACES.depot.x, z: PLACES.depot.z, c: "#8a6a3a", r: 5, t: "D" });
-    dots.push({ x: PLACES.customs.x, z: PLACES.customs.z, c: "#e0601a", r: 5, t: "C" });
+    dots.push(crime.S.wanted > 0 ? { x: PLACES.customs.x, z: PLACES.customs.z, c: Math.floor(time * 3) % 2 ? "#e0601a" : "#ffb020", r: 7, t: "🎨" } : { x: PLACES.customs.x, z: PLACES.customs.z, c: "#e0601a", r: 5, t: "C" });   // wanted: the paint shop lights up
     dots.push({ x: PLACES.tattoo.x, z: PLACES.tattoo.z, c: "#8a4a8a", r: 4.5, t: "T" });
     for (const c of cars) if (c !== P.car) dots.push({ x: c.x, z: c.z, c: "#2f7cff", r: 3 });
     const W = gangs.war();

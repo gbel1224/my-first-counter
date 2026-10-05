@@ -201,6 +201,16 @@ try {
         ph.setApp("cam"); q('[data-act="snap"]').click(); q('[data-act="postPhoto"]').click(); const f0 = G.st.followers || 0; run(900);
         o.photoFollowers = (G.st.followers || 0) - f0;
         ph.setApp("music"); q('[data-station="1"]').click(); o.earbuds = G.radio.earbuds; q('[data-act="musicOff"]').click(); ph.show(false); }
+      // Pay 'n' Spray: refused while a cop watches, works once you've lost them
+      { if (G.P.car) G.exitCar(); G.crime.reset(); const Pm = await import("/src/play.js"), bay = G.customs.bay;
+        const c = Pm.spawnCar(G.scene, "sedan", 0xb0101c, bay.x, bay.z, 0); G.cars.push(c); G.P.x = c.x - 1.6; G.P.z = c.z; G.P.car = null; G.enterNearest(); run(40);
+        const car = G.P.car;
+        if (car) { car.x = bay.x; car.z = bay.z; car.vx = car.vz = 0; car.speed = 0; G.st.money = 5000;
+          G.crime.addCrime(2); G.crime.S.seen = true; const a1 = G.customs.carAction(car); if (a1) a1[2](); o.sprayRefused = G.crime.S.wanted === 2 && G.st.money === 5000;
+          for (const u of G.crime.units) { u.active = false; u.group.visible = false; } G.crime.S.fixT = 0; G.crime.S.seen = false; G.crime.S.searching = true;
+          const col0 = car.body.material.color.getHex(), a2 = G.customs.carAction(car); if (a2) a2[2]();
+          o.sprayWorked = !!a2 && a2[0] === "SPRAY" && G.crime.S.wanted === 0 && G.st.money === 4500 && car.body.material.color.getHex() !== col0;
+          G.exitCar(); } }
       // police chase: down a long straight at speed, the cruisers line up BEHIND you — no circling
       { if (G.P.car) G.exitCar(); G.crime.reset(); G.events.cancel(); G.events.forceIdle && G.events.forceIdle(999);
         { let k = 0; while (G.hud.talking() && k++ < 80) { G.hud.advance(); G.hud.advance(); } } G.hud.closePanel(); G.state.phase = "play";   // nothing on screen holding the game
@@ -232,6 +242,8 @@ try {
     ok("cars knock street props flying", r2.prop, r2);
     ok("strangers talk back with moving mouths", r2.talkOpen, r2);
     ok("insulting a tough guy starts a fight (and he looks mad)", r2.talkFight, r2);
+    ok("Pay 'n' Spray: no use while a cop is watching", r2.sprayRefused, r2);
+    ok("Pay 'n' Spray: new paint, stars gone, $250 a star", r2.sprayWorked, r2);
     ok("police chase: cruisers sit behind you, not circling", r2.chaseNear > 50 && r2.chaseBehind > 0.7 && r2.chaseSpin < 1.2, r2);
     ok("police chase: being shunted by cops and red lights mid-chase don't stack stars", r2.chaseWanted <= 3, r2);
     ok("phone: PalmRide drops you at the place you picked", r2.rideTo < 6, r2);

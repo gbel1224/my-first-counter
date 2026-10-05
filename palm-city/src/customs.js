@@ -30,6 +30,7 @@ const PERF = [
   ["armor", "Armour", "takes less damage", [2500, 6000, 12000]],
 ];
 const SLOTS = { apartment: 2, condo: 3, house: 4, bungalow: 2, villa: 4, penthouse: 5 };
+export const SPRAY_PER_STAR = 250;
 export const freshMods = () => ({ paint: null, finish: 0, tint: 0, lower: 0, neon: 0, engine: 0, turbo: 0, brakes: 0, handling: 0, armor: 0 });
 
 // a soft glow under the car: a radial gradient on a plane, additive
@@ -92,6 +93,23 @@ export function makeCustoms(scene, g) {
     if (st.money < cost) { g.toast("You need $" + Math.ceil(cost - st.money).toLocaleString() + " more"); g.sound("door", 0.3); return false; }
     st.money -= cost; g.sound("cash", 0.6); return true;
   }
+  // Pay 'n' Spray: wanted, you pull in where they can't see you, the shutter comes down, and you roll
+  // out in a new colour with every panel fixed and no stars. If they watched you go in, it's no use.
+  function spray(v) {
+    const w = g.wanted();
+    if (g.copsSee && g.copsSee()) { g.toast("🚨 They saw you pull in — lose them first!", 2.6); g.sound("door", 0.4); return false; }
+    if (!charge(SPRAY_PER_STAR * w)) return false;
+    if (!v.mods) v.mods = freshMods();
+    const cur = v.mods.paint ?? v.color, pool = PAINT_SET.filter(([, c]) => c !== cur);
+    v.mods.paint = pool[(Math.random() * pool.length) | 0][1];
+    if (g.repair) g.repair(v);
+    applyCarMods(v); keep(v);
+    if (g.curtain) g.curtain("🎨 PAY 'N' SPRAY", PAINT_SET.find(([, c]) => c === v.mods.paint)[0] + " · all fixed up");
+    g.clearHeat();
+    g.sound("blip", 0.7);
+    setTimeout(() => g.toast("🎨 Fresh paint — the cops have lost you", 3), 1500);
+    g.save(); return true;
+  }
   const TABS = ["Paint", "Finish", "Neon", "Tint", "Stance", "Performance", "Repair"];
   function open(v, tab = "Paint") {
     if (!v.mods) v.mods = freshMods();
@@ -148,10 +166,11 @@ export function makeCustoms(scene, g) {
   // showroom cars get their mods back on load
   if (g.cars) for (const v of g.cars) if (v.personal && st.cmods[v.personal.id]) { v.mods = st.cmods[v.personal.id]; applyCarMods(v); }
   return {
-    bay, atShop, open,
+    bay, atShop, open, spray,
     // in a car: what the action button does here (null = nothing special)
     carAction(v) {
       if (!v || v.kind) return null;
+      if (atShop(v) && g.wanted && g.wanted() > 0) return ["SPRAY", "🎨 <b>PAY 'N' SPRAY</b> · new paint, lose the cops · $" + (SPRAY_PER_STAR * g.wanted()).toLocaleString(), () => spray(v)];
       if (atShop(v)) return ["MODS", "<b>PALM CUSTOMS</b> · paint, neon, tint, performance", () => open(v)];
       if (Math.abs(v.speed || 0) < 1.5 && homeNear(v.x, v.z, 5)) return ["STORE", "🅿 Park this car in your garage", () => store(v)];
       return null;
