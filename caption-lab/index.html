@@ -4,7 +4,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@700;800&display=swap">
 <style>
-/* Layout: a small photo studio. The print (your photo, its palette and specs) on the left, the caption desk on the right; one column under 880px with the print first. */
+/* Layout: a small photo studio. The print (your photo or photo dump, its palette and specs) on the left, the caption desk on the right; one column under 880px with the print first. */
 :root {
   --bg: #FBF6F1;
   --glow: rgba(246, 167, 76, 0.24);
@@ -20,6 +20,8 @@
   --print: #FFFFFF;
   --print-ink: #2A2233;
   --print-muted: #756B80;
+  --badge-bg: rgba(20, 14, 28, 0.72);
+  --badge-ink: #FFFFFF;
   --veil: rgba(34, 26, 46, 0.55);
   --danger: #A8261B;
   --danger-bg: #FCEBE8;
@@ -45,6 +47,8 @@
     --print: #EFE7DD;
     --print-ink: #2A2233;
     --print-muted: #6E6479;
+    --badge-bg: rgba(20, 14, 28, 0.72);
+    --badge-ink: #FFFFFF;
     --veil: rgba(8, 6, 12, 0.72);
     --danger: #FF9A8A;
     --danger-bg: #3B1C22;
@@ -67,6 +71,8 @@
   --print: #EFE7DD;
   --print-ink: #2A2233;
   --print-muted: #6E6479;
+  --badge-bg: rgba(20, 14, 28, 0.72);
+  --badge-ink: #FFFFFF;
   --veil: rgba(8, 6, 12, 0.72);
   --danger: #FF9A8A;
   --danger-bg: #3B1C22;
@@ -88,7 +94,7 @@ body {
   padding-block: 0 40px;
   -webkit-font-smoothing: antialiased;
 }
-button, input { font: inherit; color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: default; }
 :focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 3px; }
@@ -110,7 +116,7 @@ button:disabled { cursor: default; }
 
 /* Studio */
 .studio { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 48px); align-items: start; }
-.print-col { min-width: 0; display: grid; gap: 14px; }
+.print-col { min-width: 0; display: grid; gap: 12px; }
 .desk { min-width: 0; display: grid; gap: 18px; }
 
 /* Drop zone */
@@ -140,12 +146,21 @@ button:disabled { cursor: default; }
   background: linear-gradient(100deg, transparent 30%, rgba(255, 196, 120, 0.42) 50%, transparent 70%);
   background-size: 260% 100%; mix-blend-mode: screen; animation: sweep 1.9s ease-in-out infinite; }
 @keyframes sweep { from { background-position: 130% 0; } to { background-position: -30% 0; } }
+.badge { position: absolute; left: 10px; top: 10px; background: linear-gradient(110deg, var(--sun-1), var(--sun-2)); color: var(--on-sun); font-weight: 700; font-size: 0.75rem; padding: 4px 10px; border-radius: 999px; }
 .specs { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding-top: 12px; }
 .palette { display: flex; gap: 6px; list-style: none; margin: 0; padding: 0; }
 .swatch { width: 24px; height: 24px; border-radius: 4px; border: 1px solid rgba(42, 34, 51, 0.14); background: var(--c); padding: 0; }
 .swatch:hover { transform: translateY(-2px); }
 .readout { margin: 0; font-family: var(--font-mono); font-size: 0.72rem; color: var(--print-muted); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
-.print-actions { display: flex; justify-content: center; }
+
+/* Photo dump strip */
+.strip { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px; justify-content: safe center; }
+.thumb { position: relative; flex: none; width: 58px; height: 58px; padding: 0; border-radius: 8px; overflow: hidden; border: 2px solid transparent; background: var(--raised); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb[aria-pressed="true"] { border-color: var(--sun-2); }
+.thumb .num { position: absolute; left: 3px; bottom: 3px; font: 600 0.66rem/1 var(--font-mono); background: var(--badge-bg); color: var(--badge-ink); padding: 2px 4px; border-radius: 4px; }
+.thumb .star { position: absolute; right: 3px; top: 3px; font-size: 0.6rem; font-weight: 700; line-height: 1; background: linear-gradient(110deg, var(--sun-1), var(--sun-2)); color: var(--on-sun); padding: 3px 5px; border-radius: 999px; }
+.print-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 4px; }
 
 /* Buttons */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 999px; padding: 13px 22px; font-weight: 600; font-size: 1rem; line-height: 1.2; border: 1px solid transparent; transition: transform 0.15s, box-shadow 0.2s, background-color 0.2s, opacity 0.2s; }
@@ -155,33 +170,57 @@ button:disabled { cursor: default; }
 .btn-ghost { background: var(--surface); border-color: var(--line); }
 .btn-ghost:hover:not(:disabled) { border-color: var(--muted); }
 .btn-quiet { background: transparent; color: var(--muted); padding: 8px 14px; font-size: 0.92rem; }
-.btn-quiet:hover { color: var(--ink); }
+.btn-quiet:hover:not(:disabled) { color: var(--ink); }
+.btn-sm { padding: 10px 18px; font-size: 0.95rem; }
 .btn:disabled { opacity: 0.5; }
 .btn-sun:disabled { opacity: 0.75; }
-.icon-btn { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); padding: 0; }
+.icon-btn { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); padding: 0; }
 .icon-btn svg { width: 16px; height: 16px; }
 .icon-btn:disabled { opacity: 0.35; }
-.link-btn { background: none; border: 0; padding: 0; color: var(--accent-ink); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--accent-ink); font-weight: 600; font-size: 0.9rem; text-decoration: underline; text-underline-offset: 3px; }
+.danger { color: var(--danger); }
 
 /* Caption card */
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: clamp(18px, 3vw, 28px); display: grid; gap: 14px; box-shadow: 0 1px 2px rgba(34, 26, 46, 0.04); }
-.card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; }
+.card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 38px; }
 .label { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
 .label.is-example { color: var(--accent-ink); }
 .pager { display: flex; align-items: center; gap: 8px; }
 .count { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 3.4em; text-align: center; }
-.caption { margin: 0; font-weight: 600; font-size: clamp(1.45rem, 1.1rem + 1.3vw, 2rem); line-height: 1.25; letter-spacing: -0.012em; text-wrap: pretty; overflow-wrap: anywhere; min-height: 1.25em; }
+.caption { margin: 0; font-weight: 600; font-size: clamp(1.45rem, 1.1rem + 1.3vw, 2rem); line-height: 1.25; letter-spacing: -0.012em; text-wrap: pretty; overflow-wrap: anywhere; white-space: pre-line; min-height: 1.25em; }
 .caption.reveal { animation: develop-in 0.7s cubic-bezier(0.2, 0.7, 0.2, 1); }
 @keyframes develop-in { from { opacity: 0; filter: blur(10px); transform: translateY(4px); } to { opacity: 1; filter: blur(0); transform: none; } }
+.caption-edit { width: 100%; font-weight: 600; font-size: clamp(1.25rem, 1rem + 1vw, 1.7rem); line-height: 1.3; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--sun-2); background: var(--surface); resize: none; overflow: hidden; }
 .placeholder { margin: 0; color: var(--muted); font-size: 1.05rem; }
 .skel { display: grid; gap: 10px; padding-block: 4px; }
 .skel span { display: block; height: 1.35rem; border-radius: 8px; background: linear-gradient(90deg, var(--raised) 0%, var(--line) 50%, var(--raised) 100%); background-size: 200% 100%; animation: shimmer 1.3s linear infinite; }
 .skel span:last-child { width: 62%; }
 @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+.tools { display: grid; gap: 10px; }
+.tool-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tool { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 7px 13px; font-size: 0.86rem; font-weight: 600; }
+.tool svg { width: 16px; height: 16px; flex: none; }
+.tool:hover:not(:disabled) { border-color: var(--muted); }
+.tool[aria-pressed="true"] { background: var(--raised); border-color: var(--muted); }
+.tool.like[aria-pressed="true"] { color: var(--accent-ink); border-color: var(--accent-ink); }
+.tool:disabled, .tweak:disabled { opacity: 0.45; }
+.tweaks { display: flex; flex-wrap: wrap; gap: 6px; }
+.tweak { border: 1px dashed var(--line); background: transparent; border-radius: 999px; padding: 6px 12px; font-size: 0.84rem; font-weight: 500; color: var(--muted); }
+.tweak:hover:not(:disabled) { color: var(--ink); border-style: solid; border-color: var(--muted); }
+
 .saw { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .saw-label { font-size: 0.82rem; color: var(--muted); margin-right: 2px; }
 .saw-chip { font-size: 0.82rem; font-weight: 500; background: var(--raised); border-radius: 999px; padding: 3px 10px; }
+.lead-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 0.9rem; }
 .meta { margin: 0; font-family: var(--font-mono); font-size: 0.74rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.out { display: grid; gap: 8px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.out-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.tagchip { font-family: var(--font-mono); font-size: 0.8rem; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 10px; }
+.tagchip[aria-pressed="false"] { text-decoration: line-through; opacity: 0.55; }
+.alt-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.alt-list li { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; font-size: 0.9rem; }
+.alt-list span { min-width: 0; overflow-wrap: anywhere; }
 .status { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 0.92rem; color: var(--muted); }
 .dots { display: inline-flex; gap: 4px; }
 .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--sun-2); animation: blink 1.2s infinite ease-in-out; }
@@ -195,10 +234,13 @@ button:disabled { cursor: default; }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .actions #another { flex: 1 1 220px; }
 .actions #copy { flex: 0 1 auto; }
+.settings-hint { margin: -6px 0 0; font-size: 0.86rem; font-weight: 600; color: var(--accent-ink); }
 
 /* Tune */
-.tune { display: grid; gap: 16px; padding-top: 6px; }
-.field { display: grid; gap: 9px; }
+.tune { display: grid; gap: 18px; padding-top: 6px; }
+.field { display: grid; gap: 9px; min-width: 0; }
+.field-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px; }
 .opt { text-transform: none; letter-spacing: 0; font-weight: 500; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 8px 15px; font-size: 0.92rem; font-weight: 500; transition: background-color 0.15s, color 0.15s, border-color 0.15s; }
@@ -209,11 +251,25 @@ button:disabled { cursor: default; }
 .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(34, 26, 46, 0.14); }
 .seg button[data-mode="creator"][aria-pressed="true"] { background: linear-gradient(110deg, var(--sun-1), var(--sun-2)); color: var(--on-sun); }
 .check { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; cursor: pointer; }
-.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--sun-2); }
+.check input { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--sun-2); }
+.check.is-off { opacity: 0.55; }
 .note-input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-size: 1rem; }
+textarea.note-input { resize: vertical; line-height: 1.45; }
 .note-input::placeholder { color: var(--muted); opacity: 0.8; }
-.note-input:focus-visible { outline: 2px solid var(--sun-2); outline-offset: 1px; border-color: transparent; }
+.note-input:focus-visible, .select:focus-visible { outline: 2px solid var(--sun-2); outline-offset: 1px; border-color: transparent; }
+.select-wrap { position: relative; }
+.select-wrap::after { content: ""; position: absolute; right: 16px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
+.select { appearance: none; -webkit-appearance: none; width: 100%; padding: 11px 40px 11px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-size: 1rem; }
 .hint { margin: 0; font-size: 0.82rem; color: var(--muted); }
+
+.editor { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.editor-title { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; }
+.mini { font-size: 0.84rem; font-weight: 600; }
+.row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; align-items: end; }
+.row2 > div { display: grid; gap: 6px; }
+.lore { display: grid; gap: 10px; padding: 12px; border-radius: 12px; background: var(--raised); }
+.error-inline { margin: 0; color: var(--danger); font-size: 0.9rem; font-weight: 600; }
+.editor-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
 .notice { margin: 0; background: var(--raised); border-radius: 12px; padding: 12px 14px; font-size: 0.92rem; color: var(--ink); }
 
@@ -254,19 +310,19 @@ button:disabled { cursor: default; }
 
   <section class="hero">
     <h1>Drop a photo. Get a caption that <span class="fits">actually fits.</span></h1>
-    <p>It reads the subject, the light and the mood of your shot, then writes captions that match. Don't love one? Get another.</p>
+    <p>It reads the subject, the light and the mood of your shot, then writes captions that match where you're posting. Tweak the one you like or get another.</p>
   </section>
 
   <main class="studio">
-    <section class="print-col" aria-label="Your photo">
-      <input type="file" id="file" class="vh" accept="image/*">
+    <section class="print-col" aria-label="Your photos">
+      <input type="file" id="file" class="vh" accept="image/*" multiple>
       <label class="drop" id="drop" for="file">
         <span class="drop-icon" aria-hidden="true">
           <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
         </span>
         <span class="drop-title">Drop a photo here</span>
-        <span class="drop-sub">or pick one from your camera roll</span>
-        <span class="btn btn-ghost">Choose a photo</span>
+        <span class="drop-sub">or pick a few for a photo dump</span>
+        <span class="btn btn-ghost">Choose photos</span>
         <span class="drop-hint">JPG · PNG · WebP · paste works too</span>
       </label>
 
@@ -274,14 +330,19 @@ button:disabled { cursor: default; }
         <div class="photo-box">
           <img id="photo" alt="Your photo">
           <div class="develop" id="develop" hidden></div>
+          <span class="badge" id="leadBadge" hidden>Lead with this one</span>
         </div>
         <figcaption class="specs">
           <ul class="palette" id="palette" aria-label="Colors in this photo"></ul>
           <p class="readout" id="readout"></p>
         </figcaption>
       </figure>
+      <div class="strip" id="strip" role="group" aria-label="Photos in this post" hidden></div>
       <div class="print-actions" id="printActions" hidden>
-        <button class="btn btn-quiet" id="swap" type="button">Use a different photo</button>
+        <button class="btn btn-quiet" id="addMore" type="button">Add photos</button>
+        <button class="btn btn-quiet" id="makeFirst" type="button" hidden>Make this photo first</button>
+        <button class="btn btn-quiet" id="removePhoto" type="button" hidden>Remove this photo</button>
+        <button class="btn btn-quiet" id="swap" type="button">New photos</button>
       </div>
     </section>
 
@@ -300,10 +361,48 @@ button:disabled { cursor: default; }
           </div>
         </div>
         <p class="caption" id="caption" aria-live="polite"></p>
+        <textarea class="caption-edit" id="captionEdit" rows="2" aria-label="Edit caption" hidden></textarea>
         <div class="skel" id="skel" hidden aria-hidden="true"><span></span><span></span></div>
         <p class="placeholder" id="placeholder" hidden>Your captions show up here.</p>
+
+        <div class="tools" id="tools" hidden>
+          <div class="tool-row">
+            <button class="tool" id="editBtn" type="button" aria-pressed="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/></svg>
+              <span id="editLabel">Edit</span>
+            </button>
+            <button class="tool like" id="likeBtn" type="button" aria-pressed="false" aria-label="I like this one">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+            </button>
+            <button class="tool" id="passBtn" type="button" aria-pressed="false" aria-label="Not this one">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>
+            </button>
+            <button class="tool" id="moreLike" type="button">More like this</button>
+            <button class="link-btn" id="resetEdit" type="button" hidden>Undo changes</button>
+          </div>
+          <div class="tweaks" id="tweaks" role="group" aria-label="Tweak this caption"></div>
+        </div>
+
         <div class="saw" id="saw"></div>
+        <div class="lead-row" id="leadRow" hidden>
+          <span id="leadText"></span>
+          <button class="link-btn" id="leadMove" type="button">Put it first</button>
+        </div>
         <p class="meta" id="meta"></p>
+
+        <div class="out" id="tagsOut" hidden>
+          <div class="out-head">
+            <span class="label">Hashtags</span>
+            <button class="link-btn" id="copyTags" type="button">Copy caption + hashtags</button>
+          </div>
+          <div class="chips" id="tagList" role="group" aria-label="Hashtags to include"></div>
+        </div>
+        <div class="out" id="altOut" hidden>
+          <div class="out-head"><span class="label">Alt text</span></div>
+          <ul class="alt-list" id="altList"></ul>
+          <p class="hint">Paste it into the alt text setting when you post. It helps people using screen readers and helps search.</p>
+        </div>
+
         <div class="status" id="status" hidden>
           <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
           <span id="statusText" role="status">Looking at your photo…</span>
@@ -318,13 +417,14 @@ button:disabled { cursor: default; }
       <div class="actions">
         <button class="btn btn-sun" id="another" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>
-          <span id="anotherText">Choose a photo</span>
+          <span id="anotherText">Choose photos</span>
         </button>
         <button class="btn btn-ghost" id="copy" type="button" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>
           Copy
         </button>
       </div>
+      <p class="settings-hint" id="settingsHint" hidden>Settings changed. Tap Write 5 new to use them.</p>
 
       <p class="notice" id="notice" hidden></p>
 
@@ -336,50 +436,123 @@ button:disabled { cursor: default; }
             <button type="button" data-mode="creator" aria-pressed="false">Creator</button>
           </div>
           <p class="hint" id="modeHint">Clean captions for any photo.</p>
-          <label class="check" id="ctaRow" hidden><input type="checkbox" id="cta"> End with a call to action</label>
+          <label class="check" id="ctaRow" hidden><input type="checkbox" id="cta"> <span id="ctaText">End with a call to action</span></label>
         </div>
+
+        <div class="field">
+          <span class="label" id="platformLabel">Posting to</span>
+          <div class="chips" id="platforms" role="group" aria-labelledby="platformLabel"></div>
+          <div class="field" id="subField" hidden>
+            <label class="mini" for="subRules">Subreddit title rules <span class="opt">(optional)</span></label>
+            <input class="note-input" id="subRules" type="text" maxlength="200" autocomplete="off" placeholder="r/selfie: start with [F], no emoji">
+          </div>
+        </div>
+
         <div class="field">
           <span class="label" id="vibeLabel">Vibe</span>
           <div class="chips" id="vibes" role="group" aria-labelledby="vibeLabel"></div>
         </div>
+
+        <div class="field">
+          <div class="field-head">
+            <label class="label" for="voiceSelect">Voice</label>
+            <button class="link-btn" id="voiceEdit" type="button" hidden>Edit voice</button>
+          </div>
+          <div class="select-wrap"><select class="select" id="voiceSelect"></select></div>
+          <p class="hint">Make captions sound like you, or like a creator you manage.</p>
+          <div class="editor" id="voiceEditor" hidden>
+            <p class="editor-title" id="editorTitle">New voice</p>
+            <label class="mini" for="pName">Name or handle</label>
+            <input class="note-input" id="pName" type="text" maxlength="40" autocomplete="off" placeholder="@yourhandle">
+            <label class="mini" for="pExamples">Captions they've posted <span class="opt">(one per line, up to 8)</span></label>
+            <textarea class="note-input" id="pExamples" rows="4" placeholder="paste a few real captions here"></textarea>
+            <div class="row2">
+              <div>
+                <label class="mini" for="pEmoji">Emoji</label>
+                <div class="select-wrap"><select class="select" id="pEmoji">
+                  <option value="default">Sometimes</option>
+                  <option value="none">Never</option>
+                  <option value="lots">A lot</option>
+                </select></div>
+              </div>
+              <label class="check"><input type="checkbox" id="pLower"> Always lowercase</label>
+            </div>
+            <label class="mini" for="pPhrases">Words they use <span class="opt">(optional)</span></label>
+            <input class="note-input" id="pPhrases" type="text" maxlength="200" autocomplete="off" placeholder="lowkey, obsessed, the girls">
+            <label class="mini" for="pAvoid">Never say <span class="opt">(optional)</span></label>
+            <input class="note-input" id="pAvoid" type="text" maxlength="200" autocomplete="off" placeholder="babe, slay">
+            <label class="check"><input type="checkbox" id="pAi"> This is an AI-generated model</label>
+            <div class="lore" id="pLore" hidden>
+              <div class="row2">
+                <div><label class="mini" for="pAge">Age</label><input class="note-input" id="pAge" type="number" min="18" max="99" value="23"></div>
+                <div><label class="mini" for="pCity">City</label><input class="note-input" id="pCity" type="text" maxlength="60" autocomplete="off"></div>
+              </div>
+              <label class="mini" for="pStory">Backstory</label>
+              <textarea class="note-input" id="pStory" rows="3" maxlength="400" placeholder="job, hobbies, a quirk or two"></textarea>
+              <p class="hint">Captions stay consistent with this. Most platforms ask you to label AI-generated content, so use their AI label when you post.</p>
+            </div>
+            <p class="error-inline" id="pError" hidden></p>
+            <div class="editor-actions">
+              <button class="btn btn-sun btn-sm" id="pSave" type="button">Save voice</button>
+              <button class="btn btn-quiet" id="pCancel" type="button">Cancel</button>
+              <button class="btn btn-quiet danger" id="pDelete" type="button" hidden>Delete</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="pair">
+          <div class="field">
+            <label class="label" for="langSelect">Language</label>
+            <div class="select-wrap"><select class="select" id="langSelect"></select></div>
+          </div>
+          <div class="field">
+            <span class="label">Extras</span>
+            <label class="check" id="tagsRow"><input type="checkbox" id="xTags"> <span id="tagsText">Hashtags</span></label>
+            <label class="check"><input type="checkbox" id="xAlt"> Alt text</label>
+          </div>
+        </div>
+
         <div class="field">
           <label class="label" for="context">Anything to mention? <span class="opt">(optional)</span></label>
           <input class="note-input" id="context" type="text" maxlength="120" autocomplete="off" placeholder="my birthday, first trip to Tokyo, new fit…">
-          <p class="hint">Used for the next batch of captions. Press Enter to rewrite with it.</p>
         </div>
+        <p class="hint">Settings apply to the next batch you write.</p>
       </div>
 
       <ol class="steps" id="steps">
-        <li><span><b>Drop a photo</b> or pick one from your camera roll.</span></li>
-        <li><span><b>Pick a vibe</b> if you want one. Any vibe works fine too.</span></li>
-        <li><span><b>Copy</b> the caption you like, or get another.</span></li>
+        <li><span><b>Drop a photo</b>, or a few for a photo dump.</span></li>
+        <li><span><b>Pick where you're posting</b> and a vibe if you want one.</span></li>
+        <li><span><b>Tweak and copy</b> the caption you like, or get another.</span></li>
       </ol>
     </section>
   </main>
 
-  <p class="foot">Captions are written by Claude on your Claude account, and the first one asks for your OK. Your photo is sent only when captions are written. This page doesn't keep your photos.</p>
+  <p class="foot">Captions are written by Claude on your Claude account, and the first one asks for your OK. Your photos are sent only when captions are written, and this page doesn't keep them. Your settings and voice profiles are saved in this browser only.</p>
 </div>
 
-<div class="veil" id="veil" hidden><span>Drop to caption it</span></div>
+<div class="veil" id="veil" hidden><span id="veilText">Drop to caption it</span></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
-  const el = {
-    file: $("file"), drop: $("drop"), photoWrap: $("photoWrap"), photo: $("photo"), develop: $("develop"),
-    palette: $("palette"), readout: $("readout"), printActions: $("printActions"), swap: $("swap"),
-    cardLabel: $("cardLabel"), pager: $("pager"), prev: $("prev"), next: $("next"), count: $("count"),
-    caption: $("caption"), skel: $("skel"), placeholder: $("placeholder"), saw: $("saw"), meta: $("meta"),
-    status: $("status"), statusText: $("statusText"), cancel: $("cancel"),
-    error: $("error"), errorText: $("errorText"), retry: $("retry"),
-    another: $("another"), anotherText: $("anotherText"), copy: $("copy"),
-    notice: $("notice"), vibes: $("vibes"), context: $("context"), steps: $("steps"),
-    modes: $("modes"), modeHint: $("modeHint"), ctaRow: $("ctaRow"), cta: $("cta"),
-    veil: $("veil"), toast: $("toast"),
-  };
+  const el = {};
+  for (const id of [
+    "file", "drop", "photoWrap", "photo", "develop", "leadBadge", "palette", "readout", "strip", "printActions",
+    "addMore", "makeFirst", "removePhoto", "swap",
+    "cardLabel", "pager", "prev", "next", "count", "caption", "captionEdit", "skel", "placeholder",
+    "tools", "editBtn", "editLabel", "likeBtn", "passBtn", "moreLike", "resetEdit", "tweaks",
+    "saw", "leadRow", "leadText", "leadMove", "meta", "tagsOut", "copyTags", "tagList", "altOut", "altList",
+    "status", "statusText", "cancel", "error", "errorText", "retry",
+    "another", "anotherText", "copy", "settingsHint", "notice",
+    "modes", "modeHint", "ctaRow", "cta", "ctaText", "platforms", "subField", "subRules", "vibes",
+    "voiceSelect", "voiceEdit", "voiceEditor", "editorTitle", "pName", "pExamples", "pEmoji", "pLower", "pPhrases", "pAvoid",
+    "pAi", "pLore", "pAge", "pCity", "pStory", "pError", "pSave", "pCancel", "pDelete",
+    "langSelect", "tagsRow", "tagsText", "xTags", "xAlt", "context", "steps", "veil", "veilText", "toast",
+  ]) el[id] = $(id);
 
+  // ---------- what the captions can be ----------
   const VIBES = [
     { id: "any", label: "Any vibe", brief: "No set vibe. Mix it up across the five: something funny, a quiet flex, something soft, something minimal, and whatever this photo is begging for." },
     { id: "aesthetic", label: "Aesthetic", brief: "Aesthetic: lowercase, 2 to 7 words, visual and a little mysterious, like the title of a film still. It still needs an idea: pretty words alone (\"soft light\") are not a caption." },
@@ -388,18 +561,37 @@ button:disabled { cursor: default; }
     { id: "soft", label: "Soft", brief: "Soft: tender but sharp. One line that names a feeling people have had but never put into words. Never cheesy, never a quote card." },
     { id: "short", label: "Short", brief: "Short: 1 to 4 words each that hit way harder than their length. Every one still needs a twist or a double meaning." },
   ];
-  const CREATOR_STYLE = "Style: creator promo. This photo is for an adult content creator's promo post (Instagram, X, TikTok, Reddit, or a free teaser on Fanvue or OnlyFans). Write in the creator's own voice, often talking straight to whoever's looking. Make it flirty, teasing and confident: tease, don't describe. The best ones hint at more and make people tap the profile. Every caption has to be safe to post on mainstream social apps. Only use this style if everyone in the photo is clearly an adult; if anyone could be under 18, ignore this style and write regular, non-flirty captions.";
+  const PLATFORMS = [
+    { id: "instagram", label: "Instagram", words: 10, chars: 90, tags: 5, brief: "an Instagram feed post. The hook has to land in the first 125 characters, before Instagram cuts it off with \"…more\".",
+      fit: (n) => n <= 125 ? "shows in full before “…more”" : "cut off at “…more” in the feed" },
+    { id: "tiktok", label: "TikTok", words: 14, chars: 120, tags: 5, brief: "a TikTok caption. Hook first, conversational, and work in a word or two people would actually search for, naturally.",
+      fit: (n) => n <= 100 ? "quick read under the video" : "long for TikTok, keep the hook up front" },
+    { id: "story", label: "Story", words: 8, chars: 60, tags: 2, brief: "a text overlay on an Instagram Story or a Snapchat snap. Readable at a glance, about 60 characters at most.",
+      fit: (n) => n <= 80 ? "fits as a text overlay" : "long for an overlay" },
+    { id: "x", label: "X", words: 20, chars: 200, tags: 2, brief: "a post on X. It reads like a post, not a caption. Under 280 characters total.",
+      fit: (n) => n <= 280 ? `${280 - n} left of 280` : `${n - 280} over the 280 limit` },
+    { id: "threads", label: "Threads", words: 20, chars: 200, tags: 3, brief: "a Threads post. Conversational, like starting a chat. Under 500 characters total.",
+      fit: (n) => n <= 500 ? `${500 - n} left of 500` : `${n - 500} over the 500 limit` },
+    { id: "reddit", label: "Reddit title", words: 14, chars: 90, tags: 0, brief: "a Reddit post title. It reads like a title, not a caption: no emoji, no hashtags, no links, no self-promotion. Under 90 characters, 300 at most.",
+      fit: (n) => n <= 90 ? "good title length" : n <= 300 ? "long for a title (300 max)" : "over Reddit's 300 limit" },
+  ];
+  const LANGUAGES = ["English", "Spanish", "Portuguese", "French", "German", "Italian", "Hindi", "Hinglish (Hindi and English mixed)", "Spanglish (Spanish and English mixed)", "Tagalog", "Indonesian", "Arabic", "Turkish", "Japanese", "Korean"];
+  const LANG_BY_CODE = { es: "Spanish", pt: "Portuguese", fr: "French", de: "German", it: "Italian", hi: "Hindi", tl: "Tagalog", fil: "Tagalog", id: "Indonesian", ar: "Arabic", tr: "Turkish", ja: "Japanese", ko: "Korean" };
+  const TWEAKS = [
+    { id: "shorter", label: "Shorter", brief: "make it shorter and punchier. Cut every word that isn't pulling weight." },
+    { id: "funnier", label: "Funnier", brief: "make it funnier. Sharpen it into a real joke, deadpan or self-aware. No groaner puns." },
+    { id: "bolder", label: "Bolder", brief: "make it bolder. More confident, quiet-flex energy, never arrogant." },
+    { id: "softer", label: "Softer", brief: "make it softer. Warmer and more tender, still sharp, never cheesy." },
+    { id: "spicier", label: "Spicier", creatorOnly: true, brief: "make it spicier. More flirty and teasing, still suggestive rather than explicit, and still safe for mainstream apps." },
+    { id: "lower", label: "lowercase", local: (t) => t.toLowerCase() },
+    { id: "noemoji", label: "No emoji", local: (t) => stripEmoji(t) },
+  ];
+  const CREATOR_STYLE = "Style: creator promo. This is for an adult content creator's promo post (Instagram, X, TikTok, Reddit, or a free teaser on Fanvue or OnlyFans). Write in the creator's own voice, often talking straight to whoever's looking. Make it flirty, teasing and confident: tease, don't describe. The best ones hint at more and make people tap the profile. Every caption has to be safe to post on mainstream social apps. Only use this style if everyone in the photo is clearly an adult; if anyone could be under 18, ignore this style and write regular, non-flirty captions.";
   const MODE_HINT = {
     everyday: "Clean captions for any photo.",
     creator: "Flirty, teasing promo captions for creators. Still safe to post on Instagram, TikTok and X.",
   };
   const EXAMPLE = { text: "golden hour did all the heavy lifting", saw: ["sunset", "beach", "warm light"] };
-  // Originals are re-encoded to a small JPEG before sending, so this only guards browser memory.
-  const MAX_BYTES = 50 * 1024 * 1024;
-  // Creator promo captions that name a fan site or use these phrases get posts hidden on mainstream apps.
-  const PROMO_RISK = /(only\s*fans|fansly|fanvue|link\s+in\s+(my\s+)?bio|\b18\s*\+|\bsubscribe\b|\bdm\s+me\b|spicy\s+page)/i;
-  const NO_RETRY = new Set(["refused", "image_rejected", "prompt_too_large"]);
-  const FEED_PREVIEW = 125;
   const COPY = {
     not_granted: "Caption Lab needs your OK to use Claude. Reload the page and choose Allow.",
     sampling_disabled: "Claude isn't available on this account, so captions can't be written here.",
@@ -409,44 +601,118 @@ button:disabled { cursor: default; }
     images_unavailable: "This view can't send photos to Claude. Open the page in the Claude app or on claude.ai.",
     rate_limited: "That's a lot of captions at once. Give it a minute, then try again.",
     session_expired: "Your Claude sign-in expired. Sign in again, then try again.",
-    image_rejected: "Claude couldn't read that photo. Try a JPG or PNG under 20 MB.",
-    refused: "Claude won't caption this photo. If it's explicit, try a cropped or teaser version.",
+    image_rejected: "Claude couldn't read one of these photos. Try a JPG or PNG.",
+    refused: "Claude won't caption this. If a photo is explicit, try a cropped or teaser version.",
     empty_completion: "No caption came back for this one. Try again.",
-    prompt_too_large: "That note is too long. Shorten it and try again.",
+    prompt_too_large: "That's too much text for one request. Shorten the note or the voice profile.",
     upstream_error: "The connection dropped while writing captions. Try again.",
   };
   const BLOCKING = new Set(["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed", "images_unavailable"]);
+  const NO_RETRY = new Set(["refused", "image_rejected", "prompt_too_large"]);
+  // Originals are re-encoded to a small JPEG before sending, so this only guards browser memory.
+  const MAX_BYTES = 50 * 1024 * 1024;
+  // Creator promo captions that name a fan site or use these phrases get posts hidden on mainstream apps.
+  const PROMO_RISK = /(only\s*fans|fansly|fanvue|link\s+in\s+(my\s+)?bio|\b18\s*\+|\bsubscribe\b|\bdm\s+me\b|spicy\s+page|\bnsfw\b)/i;
+  const GENERIC_TAGS = new Set(["instagood", "explore", "explorepage", "fyp", "foryou", "foryoupage", "viral", "photooftheday", "love", "instadaily", "trending"]);
+
+  // ---------- per-browser settings ----------
+  const store = {
+    get(k, fallback) {
+      try {
+        const v = localStorage.getItem("captionlab." + k);
+        if (v == null) return fallback;
+        try { return JSON.parse(v); } catch { return v; }
+      } catch { return fallback; }
+    },
+    set(k, v) { try { localStorage.setItem("captionlab." + k, JSON.stringify(v)); } catch { /* storage blocked */ } },
+  };
+  const pick = (v, allowed, fallback) => allowed.includes(v) ? v : fallback;
+  function defaultLanguage() {
+    const code = String((navigator.languages && navigator.languages[0]) || navigator.language || "en").toLowerCase().split("-")[0];
+    return LANG_BY_CODE[code] || "English";
+  }
 
   const state = {
-    ready: false, sample: null, imagesOk: false, pending: false,
-    photo: null, captions: [], index: -1, saw: [],
-    vibe: "any", mode: loadMode(), busy: false, ctl: null, error: null, noRetry: false, blocked: false,
+    ready: false, sample: null, imagesOk: false, pending: false, maxImages: 5,
+    photos: [], view: 0, epoch: 0,
+    captions: [], index: -1, batches: {}, batchSeq: 0, pendingBatch: null, batchKey: null,
+    mode: pick(store.get("mode"), ["everyday", "creator"], "everyday"),
+    vibe: pick(store.get("vibe"), VIBES.map((v) => v.id), "any"),
+    platform: pick(store.get("platform"), PLATFORMS.map((p) => p.id), "instagram"),
+    language: pick(store.get("language"), LANGUAGES, defaultLanguage()),
+    personas: [], persona: "",
+    editing: false, editorId: null,
+    busy: false, busyKind: null, ctl: null, error: null, noRetry: false, blocked: false,
   };
-  function loadMode() {
-    try { return localStorage.getItem("captionlab.mode") === "creator" ? "creator" : "everyday"; } catch { return "everyday"; }
-  }
+  state.personas = (Array.isArray(store.get("personas", [])) ? store.get("personas", []) : []).map(sanitizePersona).filter(Boolean);
+  state.persona = state.personas.some((p) => p.id === store.get("persona")) ? store.get("persona") : "";
+  el.cta.checked = !!store.get("cta", false);
+  el.xTags.checked = !!store.get("tags", false);
+  el.xAlt.checked = !!store.get("alt", false);
+
   let photoSeq = 0;
   let shownText = null;
+  let pickMode = "replace";
 
   // ---------- helpers ----------
   const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-  const cleanNote = (v) => String(v || "").replace(/[<>\r\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
-  const keyNow = () => [state.mode, state.mode === "creator" && el.cta.checked, state.vibe, cleanNote(el.context.value)].join("|");
+  const oneLine = (v, n) => String(v || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, n);
   const current = () => state.captions[state.index] || null;
+  const display = (c) => (c.edited != null ? c.edited : c.text);
+  const platformNow = () => PLATFORMS.find((p) => p.id === state.platform) || PLATFORMS[0];
+  const activePersona = () => state.personas.find((p) => p.id === state.persona) || null;
+  const ctaOn = () => state.mode === "creator" && el.cta.checked && state.platform !== "reddit";
+  const tagsOn = () => el.xTags.checked && platformNow().tags > 0;
+  const canWrite = () => state.ready && !!state.sample && state.imagesOk && !state.blocked;
   const isImageFile = (f) => !!f && ((f.type || "").startsWith("image/") || /\.(jpe?g|png|webp|gif|heic|heif|avif|bmp)$/i.test(f.name || ""));
+  const newId = () => "v" + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+
+  function stripEmoji(t) {
+    return String(t)
+      .replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}‍️]/gu, "")
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/ +\n/g, "\n")
+      .trim();
+  }
+
+  function keyNow() {
+    const p = activePersona();
+    return [
+      state.mode, ctaOn(), state.vibe, state.platform, state.language,
+      p ? p.id + ":" + p.updated : "",
+      oneLine(el.context.value, 120), state.platform === "reddit" ? oneLine(el.subRules.value, 200) : "",
+      tagsOn(), el.xAlt.checked,
+      state.photos.map((ph) => ph.id).sort((a, b) => a - b).join(","),
+    ].join("|");
+  }
 
   function cleanCaption(raw) {
-    let t = String(raw || "").replace(/\s+/g, " ").trim();
-    if (/^["“‘'].*["”’']$/.test(t)) t = t.slice(1, -1).trim();
+    let t = String(raw || "").replace(/\r/g, "").replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+    if (/^["“‘'][\s\S]*["”’']$/.test(t)) t = t.slice(1, -1).trim();
     t = t.replace(/(\s+#[\p{L}\p{N}_]+)+$/u, "").trim();
-    if (t.length < 2 || t.length > 220) return "";
+    if (t.length < 2 || t.length > 600) return "";
     return t;
   }
-  const isDupe = (t) => { const n = norm(t); return state.captions.some((c) => norm(c.text) === n); };
+  const isDupe = (t) => { const n = norm(t); return state.captions.some((c) => norm(c.text) === n || norm(display(c)) === n); };
+  const riskyForCreator = (t) => PROMO_RISK.test(t) || /\bOF\b/.test(t);
 
-  function metaFor(text) {
+  function cleanTags(list, max, creator) {
+    const out = [];
+    for (const raw of list) {
+      const body = String(raw || "").trim().replace(/^#+/, "").replace(/[^\p{L}\p{N}_]/gu, "");
+      if (!body || body.length > 40 || GENERIC_TAGS.has(body.toLowerCase())) continue;
+      if (creator && PROMO_RISK.test(body)) continue;
+      const tag = "#" + body;
+      if (out.some((o) => o.toLowerCase() === tag.toLowerCase())) continue;
+      out.push(tag);
+      if (out.length >= max) break;
+    }
+    return out;
+  }
+
+  function metaFor(text, plat) {
     const n = [...text].length;
-    return `${n} characters · ` + (n <= FEED_PREVIEW ? "shows in full in the feed" : "cut off at “…more” in the feed");
+    return `${n} characters · ${plat.fit(n)}`;
   }
   function ratioLabel(w, h) {
     const r = w / h;
@@ -469,7 +735,7 @@ button:disabled { cursor: default; }
     try {
       await navigator.clipboard.writeText(text);
       toast(done);
-      return;
+      return true;
     } catch { /* clipboard API blocked here: try the older copy command */ }
     const ta = document.createElement("textarea");
     ta.value = text;
@@ -481,7 +747,7 @@ button:disabled { cursor: default; }
     let ok = false;
     try { ok = document.execCommand("copy"); } catch { ok = false; }
     ta.remove();
-    if (ok) { toast(done); return; }
+    if (ok) { toast(done); return true; }
     if (selectEl) {
       const range = document.createRange();
       range.selectNodeContents(selectEl);
@@ -490,6 +756,7 @@ button:disabled { cursor: default; }
       sel.addRange(range);
     }
     toast(failMsg);
+    return false;
   }
 
   function bringActionsIntoView() {
@@ -500,7 +767,7 @@ button:disabled { cursor: default; }
     } catch { /* scrolling is a convenience */ }
   }
 
-  // ---------- photo prep ----------
+  // ---------- photos ----------
   function loadImage(url) {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -541,9 +808,9 @@ button:disabled { cursor: default; }
   }
 
   async function preparePhoto(file) {
-    const url = URL.createObjectURL(file);
+    const src = URL.createObjectURL(file);
     try {
-      const img = await loadImage(url);
+      const img = await loadImage(src);
       const w = img.naturalWidth, h = img.naturalHeight;
       if (!w || !h) throw new Error("empty image");
       const scale = Math.min(1, 1600 / Math.max(w, h));
@@ -556,43 +823,102 @@ button:disabled { cursor: default; }
       ctx.drawImage(img, 0, 0, c.width, c.height);
       const blob = await new Promise((res) => c.toBlob(res, "image/jpeg", 0.9));
       if (!blob) throw new Error("encode failed");
-      return { id: ++photoSeq, url, blob, w, h, size: file.size, palette: extractPalette(img, w, h) };
-    } catch (e) {
-      URL.revokeObjectURL(url);
-      throw e;
+      const palette = extractPalette(img, w, h);
+      return { id: ++photoSeq, url: URL.createObjectURL(blob), blob, w, h, size: file.size, palette };
+    } finally {
+      URL.revokeObjectURL(src);
     }
   }
 
-  async function takeFile(file) {
-    if (!file) return;
-    if (!isImageFile(file)) { toast("That file isn't a photo. Try a JPG or PNG."); return; }
-    if (file.size > MAX_BYTES) { toast("That photo is over 50 MB. Try a smaller one."); return; }
-    let photo;
-    try {
-      photo = await preparePhoto(file);
-    } catch {
-      toast("This photo type can't be opened here. Try a JPG or PNG, or a screenshot of it.");
-      return;
-    }
+  function resetSession() {
     if (state.ctl) state.ctl.abort();
     state.ctl = null;
     state.busy = false;
+    state.busyKind = null;
     clearStatus();
-    if (state.photo) URL.revokeObjectURL(state.photo.url);
-    state.photo = photo;
+    state.epoch++;
+    for (const p of state.photos) URL.revokeObjectURL(p.url);
+    state.photos = [];
+    state.view = 0;
     state.captions = [];
     state.index = -1;
-    state.saw = [];
+    state.batches = {};
+    state.pendingBatch = null;
+    state.batchKey = null;
     state.error = null;
+    state.noRetry = false;
+    state.editing = false;
     shownText = null;
-    showPhoto(photo);
+  }
+
+  async function takeFiles(list, mode) {
+    const files = [...(list || [])].filter(Boolean);
+    if (!files.length) return;
+    const images = files.filter(isImageFile);
+    if (!images.length) { toast("That file isn't a photo. Try a JPG or PNG."); return; }
+    const append = mode === "add" && state.photos.length > 0;
+    if (append && state.busy) { toast("Hang on until these captions finish."); return; }
+    const room = state.maxImages - (append ? state.photos.length : 0);
+    if (room <= 0) { toast(`A post here can have up to ${state.maxImages} photos.`); return; }
+    const chosen = images.slice(0, room);
+    const prepared = [];
+    let failed = 0;
+    for (const f of chosen) {
+      if (f.size > MAX_BYTES) { failed++; continue; }
+      try { prepared.push(await preparePhoto(f)); } catch { failed++; }
+    }
+    const notes = [];
+    if (images.length > room) notes.push(`Posts here take up to ${state.maxImages} photos, so only ${room} ${room === 1 ? "was" : "were"} added.`);
+    if (failed) notes.push(failed === 1 ? "One photo couldn't be opened here. Try a JPG or PNG." : `${failed} photos couldn't be opened here. Try JPG or PNG.`);
+    if (!prepared.length) { toast(notes.join(" ") || "That photo couldn't be opened here. Try a JPG or PNG."); return; }
+
+    if (append) {
+      state.photos.push(...prepared);
+      state.view = state.photos.length - prepared.length;
+      renderPhotos();
+      render();
+      toast(notes.join(" ") || `Added ${prepared.length} photo${prepared.length === 1 ? "" : "s"}. Tap Write 5 new to caption the set.`);
+      return;
+    }
+    resetSession();
+    state.photos = prepared;
+    renderPhotos();
     render();
+    if (notes.length) toast(notes.join(" "));
     generate();
   }
 
-  function showPhoto(p) {
+  function removeViewed() {
+    if (state.busy) return;
+    const [gone] = state.photos.splice(state.view, 1);
+    if (gone) URL.revokeObjectURL(gone.url);
+    if (!state.photos.length) { resetSession(); renderPhotos(); render(); return; }
+    state.view = Math.min(state.view, state.photos.length - 1);
+    renderPhotos();
+    render();
+  }
+
+  function moveFirst(id) {
+    if (state.busy) return;
+    const i = state.photos.findIndex((p) => p.id === id);
+    if (i <= 0) return;
+    const [p] = state.photos.splice(i, 1);
+    state.photos.unshift(p);
+    state.view = 0;
+    renderPhotos();
+    render();
+  }
+
+  function renderPhotos() {
+    const p = state.photos[state.view];
+    if (!p) {
+      el.photo.removeAttribute("src");
+      el.strip.replaceChildren();
+      return;
+    }
     el.photoWrap.style.setProperty("--ar", (p.w / p.h).toFixed(4));
-    el.photo.src = p.url;
+    if (el.photo.getAttribute("src") !== p.url) el.photo.src = p.url;
+    el.photo.alt = state.photos.length > 1 ? `Photo ${state.view + 1} of ${state.photos.length}` : "Your photo";
     el.readout.textContent = `${p.w} × ${p.h} · ${ratioLabel(p.w, p.h)} · ${fmtBytes(p.size)}`;
     el.palette.replaceChildren(...p.palette.map((hex) => {
       const li = document.createElement("li");
@@ -606,14 +932,204 @@ button:disabled { cursor: default; }
       li.append(b);
       return li;
     }));
+    el.strip.replaceChildren(...state.photos.map((ph, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "thumb";
+      b.dataset.index = String(i);
+      b.dataset.id = String(ph.id);
+      b.setAttribute("aria-label", `Show photo ${i + 1}`);
+      const img = document.createElement("img");
+      img.src = ph.url;
+      img.alt = "";
+      const num = document.createElement("span");
+      num.className = "num";
+      num.textContent = String(i + 1);
+      b.append(img, num);
+      return b;
+    }));
   }
 
-  // ---------- prompt + parsing ----------
-  function buildPrompt(vibe, note, avoid, creator, cta) {
+  // ---------- voice profiles ----------
+  function sanitizePersona(p) {
+    if (!p || typeof p !== "object") return null;
+    const examples = (Array.isArray(p.examples) ? p.examples : String(p.examples || "").split("\n"))
+      .map((e) => oneLine(e, 220)).filter(Boolean).slice(0, 8);
+    return {
+      id: oneLine(p.id, 40) || newId(),
+      name: oneLine(p.name, 40) || "My voice",
+      examples,
+      emoji: ["default", "none", "lots"].includes(p.emoji) ? p.emoji : "default",
+      lowercase: !!p.lowercase,
+      phrases: oneLine(p.phrases, 200),
+      avoid: oneLine(p.avoid, 200),
+      ai: !!p.ai,
+      age: Math.min(99, Math.max(18, Math.round(Number(p.age) || 23))),
+      city: oneLine(p.city, 60),
+      backstory: oneLine(p.backstory, 400),
+      updated: Number(p.updated) || 0,
+    };
+  }
+
+  function renderVoiceSelect() {
+    const opts = [new Option("Default voice", "")];
+    for (const p of state.personas) opts.push(new Option(p.name + (p.ai ? " (AI model)" : ""), p.id));
+    opts.push(new Option("+ New voice profile", "__new"));
+    el.voiceSelect.replaceChildren(...opts);
+    el.voiceSelect.value = state.persona;
+  }
+
+  function openEditor(p) {
+    state.editorId = p ? p.id : null;
+    el.editorTitle.textContent = p ? `Edit ${p.name}` : "New voice";
+    el.pName.value = p ? p.name : "";
+    el.pExamples.value = p ? p.examples.join("\n") : "";
+    el.pEmoji.value = p ? p.emoji : "default";
+    el.pLower.checked = p ? p.lowercase : false;
+    el.pPhrases.value = p ? p.phrases : "";
+    el.pAvoid.value = p ? p.avoid : "";
+    el.pAi.checked = p ? p.ai : false;
+    el.pAge.value = p ? String(p.age) : "23";
+    el.pCity.value = p ? p.city : "";
+    el.pStory.value = p ? p.backstory : "";
+    el.pLore.hidden = !el.pAi.checked;
+    el.pDelete.hidden = !p;
+    el.pError.hidden = true;
+    el.voiceEditor.hidden = false;
+    el.pName.focus();
+  }
+
+  function closeEditor() {
+    el.voiceEditor.hidden = true;
+    state.editorId = null;
+    el.voiceSelect.value = state.persona;
+  }
+
+  function saveEditor() {
+    const age = Number(el.pAge.value);
+    if (el.pAi.checked && !(age >= 18)) {
+      el.pError.textContent = "AI models have to be 18 or older.";
+      el.pError.hidden = false;
+      el.pAge.focus();
+      return;
+    }
+    const p = sanitizePersona({
+      id: state.editorId || newId(),
+      name: el.pName.value,
+      examples: el.pExamples.value,
+      emoji: el.pEmoji.value,
+      lowercase: el.pLower.checked,
+      phrases: el.pPhrases.value,
+      avoid: el.pAvoid.value,
+      ai: el.pAi.checked,
+      age,
+      city: el.pCity.value,
+      backstory: el.pStory.value,
+      updated: Date.now(),
+    });
+    const i = state.personas.findIndex((x) => x.id === p.id);
+    if (i >= 0) state.personas[i] = p; else state.personas.push(p);
+    state.persona = p.id;
+    store.set("personas", state.personas);
+    store.set("persona", state.persona);
+    renderVoiceSelect();
+    closeEditor();
+    render();
+    toast(`Saved. Captions now sound like ${p.name}.`);
+  }
+
+  function deletePersona() {
+    const id = state.editorId;
+    if (!id) return;
+    state.personas = state.personas.filter((p) => p.id !== id);
+    if (state.persona === id) state.persona = "";
+    store.set("personas", state.personas);
+    store.set("persona", state.persona);
+    renderVoiceSelect();
+    closeEditor();
+    render();
+    toast("Voice deleted.");
+  }
+
+  // ---------- prompts ----------
+  function snapshot() {
+    return {
+      creator: state.mode === "creator",
+      cta: ctaOn(),
+      vibe: VIBES.find((v) => v.id === state.vibe) || VIBES[0],
+      platform: platformNow(),
+      language: state.language,
+      persona: activePersona(),
+      note: oneLine(el.context.value, 120),
+      subRules: state.platform === "reddit" ? oneLine(el.subRules.value, 200) : "",
+      tags: tagsOn(),
+      alt: el.xAlt.checked,
+      photoCount: state.photos.length,
+    };
+  }
+
+  function contextBlocks(ctx) {
+    const parts = ["", "Posting to: " + ctx.platform.brief];
+    if (ctx.creator) parts.push("", CREATOR_STYLE);
+    if (ctx.language !== "English") parts.push("", `Write every caption in ${ctx.language}, natively, the way people who post in it actually write. Not a translation.`);
+    const p = ctx.persona;
+    if (p) {
+      parts.push("", "Write in this person's voice:", "<voice>", "Name: " + p.name);
+      if (p.examples.length) parts.push("Captions they actually posted. Match their casing, slang, rhythm and length, but never reuse these lines or their jokes:", ...p.examples.map((e) => "- " + e));
+      if (p.lowercase) parts.push("They always write in lowercase.");
+      if (p.phrases) parts.push("Words and phrases they use: " + p.phrases);
+      if (p.avoid) parts.push("Never say: " + p.avoid);
+      if (p.ai) parts.push(`This is an AI-generated model, a character rather than a real person. Stay consistent with their backstory: ${p.age} years old${p.city ? ", based in " + p.city : ""}${p.backstory ? ". " + p.backstory : ""}. Never claim the photo is unedited or real, like "no filter" or "woke up like this".`);
+      parts.push("</voice>");
+    }
+    if (ctx.note) parts.push("", "The person posting added this note. Use it where it makes a caption hit harder, and never contradict what the photo shows:", "<note>" + ctx.note + "</note>");
+    if (ctx.subRules) parts.push("", "Subreddit rules for the title. Follow them exactly, including any required tags like [F] or (OC) and where they go:", "<rules>" + ctx.subRules + "</rules>");
+    return parts;
+  }
+
+  function ruleLines(ctx, count) {
+    const plat = ctx.platform;
+    const words = plat.words + (ctx.cta ? 4 : 0);
+    const chars = plat.chars + (ctx.cta ? 20 : 0);
+    const habit = ctx.persona ? ctx.persona.emoji : "default";
+    const lines = [
+      `- Short hits harder: most under ${words} words, none over ${chars} characters${ctx.photoCount > 1 && count > 3 ? " (a numbered photo-dump list can run longer)" : ""}.`,
+      "- Sound like a real person with taste: current and effortless, lowercase is fine. Slang only where it sounds natural, never stacked, never dated.",
+      ctx.creator
+        ? "- Flirty is the point, crude is not: no explicit sexual words or acts, no describing body parts, no swearing, and never negative about anyone's body."
+        : "- Clean: no swearing, nothing sexual, nothing mean, and no comments on anyone's body or weight.",
+      "- Don't name people or guess who anyone is. Don't invent places, dates or events you can't see. Name a place only if it's an unmistakable landmark.",
+      "- Original lines only: no song lyrics, no famous quotes, and no worn-out lines like \"living my best life\", \"good vibes only\", \"no filter needed\", \"just vibing\", \"main character energy\", \"it's giving\" or \"core memory\".",
+      "- No hashtags, no @mentions, no quotation marks around the caption.",
+      plat.id === "reddit" || habit === "none"
+        ? "- No emoji."
+        : habit === "lots"
+          ? "- Use emoji the way this person does: 1 to 3 per caption is fine when they add something."
+          : `- At most one emoji per caption and two across all ${count}; most fire captions need none.`,
+      count > 3
+        ? `- The ${count} must use different moves and different ideas. Put the strongest first.`
+        : `- The ${count} should take the change in ${count} different directions.`,
+    ];
+    if (ctx.creator) {
+      lines.push(
+        "- Skip creator clichés like \"your new obsession\", \"come say hi\", \"don't be shy\" and \"wanna see more?\".",
+        "- Never name OnlyFans, OF, Fansly, Fanvue or any adult site, and never write \"link in bio\", \"18+\", \"subscribe\", \"DM me\" or \"spicy page\": those get promo posts hidden. Keep any pointer neutral, like \"the rest is on my page\".",
+        ctx.cta
+          ? "- End every caption with a short call to action pointing to the creator's page, worded differently each time and woven into the line (\"the rest is on my page\" energy, never \"LINK IN BIO!!!\")."
+          : "- No calls to action and no \"link in bio\".",
+      );
+    }
+    return lines;
+  }
+
+  function batchPrompt(ctx, fb) {
+    const n = ctx.photoCount;
     const parts = [
-      "You're the friend everyone texts when they need a caption. Your captions make people stop scrolling and think \"damn, that's fire, why didn't I think of that.\" That reaction comes from surprise plus recognition: an angle nobody expected that is instantly, obviously right for this exact photo.",
+      "You're the friend everyone texts when they need a caption. Your captions make people stop scrolling and think \"damn, that's fire, why didn't I think of that.\" That reaction comes from surprise plus recognition: an angle nobody expected that is instantly, obviously right for this exact post.",
       "",
-      "The attached image is the photo someone is about to post. First, really look: the main subject, the setting, the light, the colors, the clothes or food or objects, what's happening, the small details most people would miss, and the feeling of the whole thing.",
+      n > 1
+        ? `The ${n} attached images are ONE carousel post, a photo dump, in order: the first image is photo 1. First, really look at every photo: the subjects, the settings, the light, the colors, the clothes or food or objects, what's happening, the small details most people would miss, and the feeling of the whole set.`
+        : "The attached image is the photo someone is about to post. First, really look: the main subject, the setting, the light, the colors, the clothes or food or objects, what's happening, the small details most people would miss, and the feeling of the whole thing.",
       "",
       "Then brainstorm privately. Come up with at least 15 candidates using different moves:",
       "- Reframe: give the scene a meaning nobody expects, so the photo becomes proof, evidence or a punchline.",
@@ -624,46 +1140,59 @@ button:disabled { cursor: default; }
       "- Double meaning: a phrase that's true about the photo and about life at the same time. It has to land on both levels, never a groaner pun.",
       "- Quiet flex: confidence that never announces itself.",
       "",
-      "Throw out anything a typical caption generator would write, anything that just describes the photo, anything that needs explaining, anything cheesy, and any line that would fit under a thousand other photos. Keep the 5 strongest. The test for each one: a stranger would screenshot it, it only works for this photo, and it sounds natural said out loud.",
+      "Throw out anything a typical caption generator would write, anything that just describes the photo, anything that needs explaining, anything cheesy, and any line that would fit under a thousand other photos. Keep the 5 strongest. The test for each one: a stranger would screenshot it, it only works for this post, and it sounds natural said out loud.",
       "",
-      "Vibe: " + vibe.brief,
+      "Vibe: " + ctx.vibe.brief,
     ];
-    if (creator) parts.push("", CREATOR_STYLE);
-    if (note) {
-      parts.push("", "The person posting added this note about the photo. Use it where it makes a caption hit harder, and never contradict what the photo shows:", "<note>" + note + "</note>");
-    }
+    if (n > 1) parts.push("", `Because this is a photo dump, make at least one of the five a numbered list with one short line per photo, in order ("1. " for photo 1, and so on for all ${n}), each line its own little joke or observation. The others work as one caption for the whole set.`);
+    parts.push(...contextBlocks(ctx));
+    if (fb.anchor) parts.push("", "They love this caption:", "<loved>" + fb.anchor + "</loved>", "Write 5 new ones with the same energy and angle, but different words and ideas. Don't paraphrase it.");
+    if (fb.liked.length) parts.push("", "They liked these. Bring this energy, with new ideas:", ...fb.liked.map((c) => "- " + c));
+    if (fb.passed.length) parts.push("", "They passed on these. Steer away from this direction:", ...fb.passed.map((c) => "- " + c));
+    parts.push("", "Rules:", ...ruleLines(ctx, 5));
+    if (fb.avoid.length) parts.push("", "Already shown. Don't repeat them, their joke, or their structure:", ...fb.avoid.map((c) => "- " + c));
     parts.push(
+      "",
+      "Reply with only these lines, in this order, one JSON object per line, and nothing else (no code fence, no commentary):",
+      `{"saw": ["3 or 4 short tags of 1 to 3 words naming what stands out ${n > 1 ? "across the set" : "in the photo"}"]}`,
+    );
+    if (n > 1) parts.push('{"lead": <the number of the photo that should go first>, "why": "under 10 words on why it stops the scroll"}');
+    parts.push('{"caption": "one caption"} written 5 times, one per line, strongest first. Inside a caption, write any line break as \\n.');
+    if (ctx.tags) parts.push(`{"tags": ["#tag", ...]} with up to ${ctx.platform.tags} hashtags made for this exact ${n > 1 ? "set" : "photo"}: specific, no spaces, never generic ones like #instagood, #explore or #fyp${ctx.creator ? ", and nothing adult or likely to be banned" : ""}.`);
+    if (ctx.alt) parts.push(n > 1
+      ? `{"alt": ["alt text for photo 1", ...]} with one plain description per photo, ${n} in all, each under 125 characters, for someone who can't see it.`
+      : '{"alt": "alt text"} with one plain description of the photo under 125 characters, for someone who can\'t see it.');
+    return parts.join("\n");
+  }
+
+  function tweakPrompt(ctx, tw, source, batch) {
+    const parts = [
+      "You're polishing one social media caption so it hits harder. The bar: someone reads it and thinks \"damn, why didn't I think of that.\"",
+      "",
+      "The caption:",
+      "<caption>" + source.replace(/\n/g, " / ") + "</caption>",
+      `What's in the ${ctx.photoCount > 1 ? "photo set" : "photo"}: ${batch && batch.saw.length ? batch.saw.join(", ") : "not known"}.`,
+      "",
+      "The change they asked for: " + tw.brief,
+      "Keep the idea that made it work unless the change needs a new one.",
+      ...contextBlocks(ctx),
       "",
       "Rules:",
-      "- Short hits harder: most captions under " + (cta ? 14 : 10) + " words, none over " + (cta ? 110 : 90) + " characters.",
-      "- Sound like a real person with taste: current and effortless, lowercase is fine. Slang only where it sounds natural, never stacked, never dated.",
-      creator
-        ? "- Flirty is the point, crude is not: no explicit sexual words or acts, no describing body parts, no swearing, and never negative about anyone's body."
-        : "- Clean: no swearing, nothing sexual, nothing mean, and no comments on anyone's body or weight.",
-      "- Don't name people or guess who anyone is. Don't invent places, dates or events you can't see. Name a place only if it's an unmistakable landmark.",
-      "- Original lines only: no song lyrics, no famous quotes, and no worn-out lines like \"living my best life\", \"good vibes only\", \"no filter needed\", \"just vibing\", \"main character energy\", \"it's giving\" or \"core memory\".",
-      "- No hashtags, no @mentions, no quotation marks around the caption. At most one emoji per caption and two across all five; most fire captions need none.",
-      "- The five must use different moves and different ideas. Put the strongest first.",
-    );
-    if (creator) {
-      parts.push(
-        "- Skip creator clichés like \"your new obsession\", \"come say hi\", \"don't be shy\" and \"wanna see more?\".",
-        "- Never name OnlyFans, OF, Fansly, Fanvue or any adult site, and never write \"link in bio\", \"18+\", \"subscribe\", \"DM me\" or \"spicy page\": those get promo posts hidden. Keep any pointer neutral, like \"the rest is on my page\".",
-        cta
-          ? "- End every caption with a short call to action pointing to the creator's page, worded differently each time and woven into the line (\"the rest is on my page\" energy, never \"LINK IN BIO!!!\")."
-          : "- No calls to action and no \"link in bio\".",
-      );
-    }
-    if (avoid.length) {
-      parts.push("", "These captions were already shown. Don't repeat them, their joke, or their structure:", ...avoid.map((c) => "- " + c));
-    }
-    parts.push(
+      ...ruleLines(ctx, 3),
       "",
-      "Reply with exactly 6 lines and nothing else (no code fence, no commentary):",
-      'Line 1: {"saw": ["3 or 4 short tags of 1 to 3 words naming what stands out in the photo"]}',
-      'Lines 2 to 6: {"caption": "one caption"}',
-    );
+      "Reply with exactly 3 lines and nothing else, one JSON object per version. Inside a caption, write any line break as \\n:",
+      '{"caption": "one version"}',
+    ];
     return parts.join("\n");
+  }
+
+  function feedback(anchor) {
+    const shown = state.captions.filter((c) => c.seen);
+    const toLine = (c) => oneLine(display(c), 300);
+    const liked = shown.filter((c) => c.rating > 0 || ((c.copied || c.edited != null) && c.rating >= 0)).map(toLine).slice(-6);
+    const passed = shown.filter((c) => c.rating < 0).map(toLine).slice(-6);
+    const avoid = state.captions.map(toLine).slice(-25);
+    return { anchor: anchor ? oneLine(anchor, 300) : "", liked, passed, avoid };
   }
 
   function lineParser(onObj) {
@@ -691,135 +1220,281 @@ button:disabled { cursor: default; }
   // ---------- status ----------
   let statusTimers = [];
   function clearStatus() { statusTimers.forEach(clearTimeout); statusTimers = []; }
-  function startStatus(fresh) {
+  function startStatus(kind, label) {
     clearStatus();
-    const steps = fresh
-      ? [[0, "Looking at your photo…"], [4000, "Brainstorming angles…"], [12000, "Throwing out the basic ones…"], [24000, "Keeping only the fire ones…"], [45000, "Still cooking. The good ones take a minute."]]
-      : [[0, "Cooking up a fresh batch…"], [12000, "Throwing out the basic ones…"], [30000, "Still cooking. The good ones take a minute."]];
+    const many = state.photos.length > 1;
+    const steps = kind === "tweak"
+      ? [[0, `Tweaking: ${label}…`]]
+      : kind === "first"
+        ? [[0, many ? "Looking at your photos…" : "Looking at your photo…"], [4000, "Brainstorming angles…"], [12000, "Throwing out the basic ones…"], [24000, "Keeping only the fire ones…"], [45000, "Still cooking. The good ones take a minute."]]
+        : [[0, "Cooking up a fresh batch…"], [12000, "Throwing out the basic ones…"], [30000, "Still cooking. The good ones take a minute."]];
     for (const [t, s] of steps) statusTimers.push(setTimeout(() => { el.statusText.textContent = s; }, t));
   }
 
-  // ---------- generation ----------
-  async function generate() {
-    if (!state.photo) return;
+  function handleFailure(e, added, rollback) {
+    const code = (e && e.code) || "upstream_error";
+    if (code === "cancelled") return;
+    if (code === "refused") {
+      rollback();
+      state.error = COPY.refused;
+      state.noRetry = true;
+      return;
+    }
+    if (BLOCKING.has(code)) state.blocked = true;
+    state.noRetry = NO_RETRY.has(code);
+    if (!added || BLOCKING.has(code)) state.error = COPY[code] || COPY.upstream_error;
+    else toast(`Got ${added} caption${added === 1 ? "" : "s"} before the connection dropped.`);
+  }
+
+  // ---------- writing a batch ----------
+  async function generate(opts = {}) {
+    if (!state.photos.length) return;
     if (!state.ready) { state.pending = true; render(); return; }
-    if (!state.sample || !state.imagesOk || state.blocked) { render(); return; }
+    if (!canWrite()) { render(); return; }
     if (state.ctl) state.ctl.abort();
 
     const ctl = new AbortController();
-    const photo = state.photo;
+    const epoch = state.epoch;
+    const ctx = snapshot();
     const key = keyNow();
-    const vibe = VIBES.find((v) => v.id === state.vibe) || VIBES[0];
-    const note = cleanNote(el.context.value);
-    const creator = state.mode === "creator";
-    const cta = creator && el.cta.checked;
+    const photos = state.photos.slice();
+    const fb = feedback(opts.anchor);
+    dropUnseen();
     const startLen = state.captions.length;
-    const avoid = state.captions.map((c) => c.text).slice(-25);
-    const sawBefore = state.saw;
+    const batch = { id: ++state.batchSeq, saw: [], lead: null, why: "", tags: [], tagsOff: [], alt: [] };
+    state.batches[batch.id] = batch;
     let added = 0;
 
     state.ctl = ctl;
     state.busy = true;
+    state.busyKind = "batch";
+    state.pendingBatch = batch.id;
+    state.batchKey = key;
     state.error = null;
     state.noRetry = false;
-    startStatus(startLen === 0);
+    state.editing = false;
+    startStatus(startLen === 0 ? "first" : "more");
     render();
 
     const accept = (raw) => {
-      const text = cleanCaption(raw);
+      let text = cleanCaption(raw);
+      if (ctx.platform.id === "reddit") text = stripEmoji(text);
       if (!text || isDupe(text)) return;
-      if (creator && (PROMO_RISK.test(text) || /\bOF\b/.test(text))) return;
-      state.captions.push({ text, key, seen: false });
+      if (ctx.creator && riskyForCreator(text)) return;
+      state.captions.push({ text, key, seen: false, rating: 0, batch: batch.id, kind: "batch" });
       added++;
       if (added === 1) { showAt(state.captions.length - 1); bringActionsIntoView(); }
-      else render();
     };
     const parser = lineParser((obj) => {
-      if (state.photo !== photo || ctl.signal.aborted) return;
-      if (Array.isArray(obj.saw)) {
-        state.saw = obj.saw.map((s) => String(s).trim().toLowerCase()).filter(Boolean).slice(0, 4);
-        render();
+      if (state.epoch !== epoch || ctl.signal.aborted) return;
+      if (Array.isArray(obj.saw)) batch.saw = obj.saw.map((s) => oneLine(s, 40).toLowerCase()).filter(Boolean).slice(0, 4);
+      if (obj.lead != null && photos.length > 1) {
+        const i = Math.round(Number(obj.lead));
+        if (i >= 1 && i <= photos.length) { batch.lead = photos[i - 1].id; batch.why = oneLine(obj.why, 90); }
       }
+      if (Array.isArray(obj.tags) && ctx.tags) batch.tags = cleanTags(obj.tags, ctx.platform.tags, ctx.creator);
+      if (obj.alt != null && ctx.alt) batch.alt = (Array.isArray(obj.alt) ? obj.alt : [obj.alt]).map((a) => oneLine(a, 200)).filter(Boolean).slice(0, photos.length);
       if (typeof obj.caption === "string") accept(obj.caption);
+      render();
     });
 
     try {
-      const { text } = await state.sample(buildPrompt(vibe, note, avoid, creator, cta), {
-        images: [photo.blob],
+      const { text } = await state.sample(batchPrompt(ctx, fb), {
+        images: photos.map((p) => p.blob),
         signal: ctl.signal,
         cache: false,
         modelTier: "complex",
         onText: ({ text }) => parser.feed(text),
       });
-      if (state.photo !== photo) return;
+      if (state.epoch !== epoch) return;
       parser.finish(text);
       if (!added) scavenge(text).forEach(accept);
       if (!added) state.error = COPY.empty_completion;
     } catch (e) {
-      if (state.photo !== photo) return;
-      const code = (e && e.code) || "upstream_error";
-      if (code === "cancelled") {
-        // stopped on purpose: keep whatever arrived
-      } else if (code === "refused") {
+      if (state.epoch !== epoch) return;
+      handleFailure(e, added, () => {
         state.captions.splice(startLen);
         if (state.index >= startLen) state.index = startLen - 1;
-        state.saw = sawBefore;
-        state.error = COPY.refused;
-        state.noRetry = true;
-      } else {
-        if (BLOCKING.has(code)) state.blocked = true;
-        state.noRetry = NO_RETRY.has(code);
-        if (!added || BLOCKING.has(code)) state.error = COPY[code] || COPY.upstream_error;
-        else toast(`Got ${added} caption${added === 1 ? "" : "s"} before the connection dropped.`);
-      }
+        delete state.batches[batch.id];
+      });
     } finally {
       if (state.ctl === ctl) {
         state.ctl = null;
         state.busy = false;
+        state.busyKind = null;
+        state.pendingBatch = null;
         clearStatus();
         render();
       }
     }
   }
 
+  // ---------- tweaking one caption ----------
+  function applyLocal(tw) {
+    const cap = current();
+    if (!cap) return;
+    const next = tw.local(display(cap));
+    if (!next.trim()) { toast("That would leave nothing behind."); return; }
+    cap.edited = next === cap.text ? undefined : next;
+    state.editing = false;
+    render();
+  }
+
+  async function tweak(tw) {
+    const cap = current();
+    if (!cap || state.busy || !canWrite()) return;
+    const ctl = new AbortController();
+    const epoch = state.epoch;
+    const ctx = snapshot();
+    const key = keyNow();
+    const source = display(cap);
+    const batch = state.batches[cap.batch];
+    const inserted = [];
+    let insertAt = state.index + 1;
+
+    state.ctl = ctl;
+    state.busy = true;
+    state.busyKind = "tweak";
+    state.error = null;
+    state.noRetry = false;
+    state.editing = false;
+    startStatus("tweak", tw.label.toLowerCase());
+    render();
+
+    const accept = (raw) => {
+      let text = cleanCaption(raw);
+      if (ctx.platform.id === "reddit") text = stripEmoji(text);
+      if (!text || isDupe(text)) return;
+      if (ctx.creator && riskyForCreator(text)) return;
+      const c = { text, key, seen: false, rating: 0, batch: cap.batch, kind: "tweak", tweak: tw.label };
+      if (state.index >= insertAt) state.index++;
+      state.captions.splice(insertAt, 0, c);
+      inserted.push(c);
+      insertAt++;
+      if (inserted.length === 1) showAt(state.captions.indexOf(c));
+      else render();
+    };
+    const parser = lineParser((obj) => {
+      if (state.epoch !== epoch || ctl.signal.aborted) return;
+      if (typeof obj.caption === "string") accept(obj.caption);
+    });
+
+    try {
+      const { text } = await state.sample(tweakPrompt(ctx, tw, source, batch), {
+        signal: ctl.signal,
+        cache: false,
+        modelTier: "quick",
+        onText: ({ text }) => parser.feed(text),
+      });
+      if (state.epoch !== epoch) return;
+      parser.finish(text);
+      if (!inserted.length) scavenge(text).forEach(accept);
+      if (!inserted.length) state.error = "That tweak came back the same as before. Try a different one.";
+    } catch (e) {
+      if (state.epoch !== epoch) return;
+      handleFailure(e, inserted.length, () => {
+        const back = state.captions.indexOf(cap);
+        state.captions = state.captions.filter((c) => !inserted.includes(c));
+        state.index = back >= 0 ? state.captions.indexOf(cap) : Math.min(state.index, state.captions.length - 1);
+      });
+    } finally {
+      if (state.ctl === ctl) {
+        state.ctl = null;
+        state.busy = false;
+        state.busyKind = null;
+        clearStatus();
+        render();
+      }
+    }
+  }
+
+  // ---------- paging ----------
   function showAt(i) {
     if (i < 0 || i >= state.captions.length) return;
     state.index = i;
     state.captions[i].seen = true;
+    state.editing = false;
     render();
   }
 
   function dropUnseen() {
+    const keep = state.captions[state.index];
     state.captions = state.captions.filter((c, i) => c.seen || i <= state.index);
+    state.index = keep ? state.captions.indexOf(keep) : -1;
+  }
+
+  // The main button only pages when the next caption was written with today's settings; otherwise it writes 5 new.
+  function nextReady() {
+    const next = state.captions[state.index + 1];
+    return !!next && next.key === keyNow();
   }
 
   function onAnother() {
-    if (!state.photo) { el.file.click(); return; }
+    if (!state.photos.length) { pickMode = "replace"; el.file.click(); return; }
     if (state.busy) return;
-    const next = state.captions[state.index + 1];
-    if (next && (next.seen || next.key === keyNow())) { showAt(state.index + 1); return; }
-    dropUnseen();
+    if (nextReady()) { showAt(state.index + 1); return; }
     generate();
+  }
+
+  function rate(value) {
+    const cap = current();
+    if (!cap) return;
+    cap.rating = cap.rating === value ? 0 : value;
+    if (cap.rating === 1) toast("Noted. Your next batch leans this way.");
+    if (cap.rating === -1) {
+      toast("Got it. Less like that next batch.");
+      if (state.index < state.captions.length - 1) { showAt(state.index + 1); return; }
+    }
+    render();
   }
 
   // ---------- render ----------
   function render() {
-    const has = !!state.photo;
+    const has = state.photos.length > 0;
+    const many = state.photos.length > 1;
     const cap = current();
     const example = !has;
+    const batch = cap ? state.batches[cap.batch] : state.batches[state.pendingBatch] || null;
+    const plat = platformNow();
+    const creator = state.mode === "creator";
 
     document.body.classList.toggle("has-photo", has);
     el.drop.hidden = has;
     el.photoWrap.hidden = !has;
+    el.strip.hidden = !many;
     el.printActions.hidden = !has;
     el.steps.hidden = has;
-    el.develop.hidden = !state.busy;
+    el.develop.hidden = !(state.busy && state.busyKind === "batch");
+    el.addMore.disabled = state.busy || state.photos.length >= state.maxImages;
+    el.makeFirst.hidden = !many || state.view === 0;
+    el.removePhoto.hidden = !many;
+    el.makeFirst.disabled = state.busy;
+    el.removePhoto.disabled = state.busy;
+    el.swap.textContent = many ? "New photos" : "Use a different photo";
 
-    el.cardLabel.textContent = example ? "Example" : "Caption";
+    const viewed = state.photos[state.view];
+    const leadId = many && batch ? batch.lead : null;
+    el.leadBadge.hidden = !(viewed && leadId === viewed.id);
+    for (const b of el.strip.children) {
+      const id = Number(b.dataset.id);
+      b.setAttribute("aria-pressed", String(Number(b.dataset.index) === state.view));
+      let star = b.querySelector(".star");
+      if (id === leadId && !star) {
+        star = document.createElement("span");
+        star.className = "star";
+        star.textContent = "Lead";
+        b.append(star);
+      } else if (id !== leadId && star) {
+        star.remove();
+      }
+    }
+
+    el.cardLabel.textContent = example ? "Example" : cap && cap.kind === "tweak" ? `Tweaked · ${cap.tweak}` : "Caption";
     el.cardLabel.classList.toggle("is-example", example);
 
-    const text = example ? EXAMPLE.text : cap ? cap.text : "";
-    el.caption.hidden = !text;
+    const text = example ? EXAMPLE.text : cap ? display(cap) : "";
+    el.caption.hidden = !text || state.editing;
+    el.captionEdit.hidden = !state.editing;
     if (text !== shownText) {
       el.caption.textContent = text;
       if (text && !example) {
@@ -829,10 +1504,26 @@ button:disabled { cursor: default; }
       }
       shownText = text;
     }
-    el.skel.hidden = !(has && !cap && state.busy);
+    el.skel.hidden = !(has && !cap && state.busy && state.busyKind === "batch");
     el.placeholder.hidden = !(has && !cap && !state.busy && !state.error);
 
-    const saw = example ? EXAMPLE.saw : state.saw;
+    el.tools.hidden = !cap;
+    if (cap) {
+      const aiOff = state.busy || !canWrite();
+      el.editBtn.setAttribute("aria-pressed", String(state.editing));
+      el.editLabel.textContent = state.editing ? "Done" : "Edit";
+      el.likeBtn.setAttribute("aria-pressed", String(cap.rating > 0));
+      el.passBtn.setAttribute("aria-pressed", String(cap.rating < 0));
+      el.resetEdit.hidden = cap.edited == null;
+      el.moreLike.disabled = aiOff;
+      for (const b of el.tweaks.children) {
+        const tw = TWEAKS.find((t) => t.id === b.dataset.tweak);
+        b.hidden = !!tw.creatorOnly && !creator;
+        b.disabled = tw.local ? state.editing : aiOff;
+      }
+    }
+
+    const saw = example ? EXAMPLE.saw : batch ? batch.saw : [];
     if (saw.length) {
       const label = document.createElement("span");
       label.className = "saw-label";
@@ -848,8 +1539,47 @@ button:disabled { cursor: default; }
     }
     el.saw.hidden = !saw.length;
 
+    const leadIndex = leadId != null ? state.photos.findIndex((p) => p.id === leadId) : -1;
+    el.leadRow.hidden = !(cap && leadIndex >= 0);
+    if (leadIndex >= 0) {
+      el.leadText.textContent = `Lead with photo ${leadIndex + 1}` + (batch.why ? `: ${batch.why}` : "");
+      el.leadMove.hidden = leadIndex === 0;
+      el.leadMove.disabled = state.busy;
+    }
+
     el.meta.hidden = !text;
-    if (text) el.meta.textContent = metaFor(text);
+    if (text) el.meta.textContent = metaFor(text, example ? PLATFORMS[0] : plat);
+
+    const tags = cap && batch ? batch.tags : [];
+    el.tagsOut.hidden = !tags.length;
+    if (tags.length) {
+      el.tagList.replaceChildren(...tags.map((t) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "tagchip";
+        b.dataset.tag = t;
+        b.textContent = t;
+        b.setAttribute("aria-pressed", String(!batch.tagsOff.includes(t)));
+        return b;
+      }));
+    }
+    const alt = cap && batch ? batch.alt : [];
+    el.altOut.hidden = !alt.length;
+    if (alt.length) {
+      el.altList.replaceChildren(...alt.map((a, i) => {
+        const li = document.createElement("li");
+        const span = document.createElement("span");
+        span.textContent = (alt.length > 1 ? `Photo ${i + 1}: ` : "") + a;
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "link-btn";
+        b.dataset.alt = String(i);
+        b.textContent = "Copy";
+        b.setAttribute("aria-label", alt.length > 1 ? `Copy alt text for photo ${i + 1}` : "Copy alt text");
+        li.append(span, b);
+        return li;
+      }));
+    }
 
     el.pager.hidden = state.captions.length < 1;
     el.count.textContent = `${state.index + 1} / ${state.captions.length}`;
@@ -863,86 +1593,230 @@ button:disabled { cursor: default; }
       el.retry.hidden = state.blocked || state.noRetry;
     }
 
-    const canGen = state.ready && state.sample && state.imagesOk && !state.blocked;
-    const hasNext = state.index < state.captions.length - 1;
-    el.another.disabled = has && (state.busy || (!canGen && !hasNext && state.ready));
-    el.anotherText.textContent = !has ? "Choose a photo"
-      : state.busy ? "Writing…"
-      : !cap ? "Write captions"
-      : "Get another caption";
+    const ready = nextReady();
+    el.another.disabled = has && (state.busy || (!ready && state.ready && !canWrite()));
+    el.anotherText.textContent = !has ? "Choose photos"
+      : state.busy ? (state.busyKind === "tweak" ? "Tweaking…" : "Writing…")
+      : ready ? "Get another caption"
+      : cap ? "Write 5 new"
+      : "Write captions";
     el.copy.disabled = !cap;
+    el.settingsHint.hidden = !(has && cap && !state.busy && state.batchKey && state.batchKey !== keyNow());
 
-    for (const b of el.vibes.children) b.setAttribute("aria-pressed", String(b.dataset.vibe === state.vibe));
     for (const b of el.modes.children) b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode));
     el.modeHint.textContent = MODE_HINT[state.mode];
-    el.ctaRow.hidden = state.mode !== "creator";
+    el.ctaRow.hidden = !creator;
+    el.cta.disabled = state.platform === "reddit";
+    el.ctaRow.classList.toggle("is-off", state.platform === "reddit");
+    el.ctaText.textContent = state.platform === "reddit" ? "Calls to action are off for Reddit titles" : "End with a call to action";
+    for (const b of el.platforms.children) b.setAttribute("aria-pressed", String(b.dataset.platform === state.platform));
+    el.subField.hidden = state.platform !== "reddit";
+    for (const b of el.vibes.children) b.setAttribute("aria-pressed", String(b.dataset.vibe === state.vibe));
+    el.voiceEdit.hidden = !activePersona();
+    el.xTags.disabled = plat.tags === 0;
+    el.tagsRow.classList.toggle("is-off", plat.tags === 0);
+    el.tagsText.textContent = plat.tags === 0 ? "Hashtags (not used on Reddit)" : `Hashtags (up to ${plat.tags})`;
 
     let notice = "";
-    if (state.ready && !state.sample) notice = "Captions are written by Claude, so open this page from its Claude link to get them. You can still preview your photo and its colors here.";
+    if (state.ready && !state.sample) notice = "Captions are written by Claude, so open this page from its Claude link to get them. You can still preview your photos and their colors here.";
     else if (state.ready && !state.imagesOk) notice = COPY.images_unavailable;
     el.notice.hidden = !notice;
     el.notice.textContent = notice;
   }
 
-  // ---------- wire up ----------
-  el.vibes.replaceChildren(...VIBES.map((v) => {
+  // ---------- controls ----------
+  function chip(label, data, value) {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "chip";
-    b.dataset.vibe = v.id;
-    b.textContent = v.label;
+    b.dataset[data] = value;
+    b.textContent = label;
+    return b;
+  }
+  el.vibes.replaceChildren(...VIBES.map((v) => chip(v.label, "vibe", v.id)));
+  el.platforms.replaceChildren(...PLATFORMS.map((p) => chip(p.label, "platform", p.id)));
+  el.tweaks.replaceChildren(...TWEAKS.map((t) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "tweak";
+    b.dataset.tweak = t.id;
+    b.textContent = t.label;
     return b;
   }));
+  el.langSelect.replaceChildren(...LANGUAGES.map((l) => new Option(l, l)));
+  el.langSelect.value = state.language;
+  renderVoiceSelect();
 
   el.vibes.addEventListener("click", (e) => {
     const b = e.target.closest("button[data-vibe]");
-    if (!b || b.dataset.vibe === state.vibe) return;
+    if (!b) return;
     state.vibe = b.dataset.vibe;
-    if (state.photo && (state.captions.length || state.busy)) { dropUnseen(); generate(); }
-    else render();
+    store.set("vibe", state.vibe);
+    render();
   });
-
+  el.platforms.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-platform]");
+    if (!b) return;
+    state.platform = b.dataset.platform;
+    store.set("platform", state.platform);
+    render();
+  });
   el.modes.addEventListener("click", (e) => {
     const b = e.target.closest("button[data-mode]");
-    if (!b || b.dataset.mode === state.mode) return;
+    if (!b) return;
     state.mode = b.dataset.mode;
-    try { localStorage.setItem("captionlab.mode", state.mode); } catch { /* storage blocked */ }
-    if (state.photo && (state.captions.length || state.busy)) { dropUnseen(); generate(); }
-    else render();
+    store.set("mode", state.mode);
+    render();
+  });
+  el.cta.addEventListener("change", () => { store.set("cta", el.cta.checked); render(); });
+  el.xTags.addEventListener("change", () => { store.set("tags", el.xTags.checked); render(); });
+  el.xAlt.addEventListener("change", () => { store.set("alt", el.xAlt.checked); render(); });
+  el.langSelect.addEventListener("change", () => { state.language = el.langSelect.value; store.set("language", state.language); render(); });
+  for (const input of [el.context, el.subRules]) {
+    input.addEventListener("input", render);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); input.blur(); } });
+  }
+
+  el.voiceSelect.addEventListener("change", () => {
+    const v = el.voiceSelect.value;
+    if (v === "__new") { el.voiceSelect.value = state.persona; openEditor(null); return; }
+    state.persona = v;
+    store.set("persona", state.persona);
+    if (!el.voiceEditor.hidden) closeEditor();
+    render();
+  });
+  el.voiceEdit.addEventListener("click", () => { const p = activePersona(); if (p) openEditor(p); });
+  el.pAi.addEventListener("change", () => { el.pLore.hidden = !el.pAi.checked; });
+  el.pSave.addEventListener("click", saveEditor);
+  el.pCancel.addEventListener("click", closeEditor);
+  el.pDelete.addEventListener("click", deletePersona);
+
+  // caption tools
+  el.editBtn.addEventListener("click", () => {
+    const cap = current();
+    if (!cap) return;
+    if (state.editing) {
+      state.editing = false;
+      render();
+      return;
+    }
+    state.editing = true;
+    el.captionEdit.value = display(cap);
+    render();
+    el.captionEdit.style.height = "auto";
+    el.captionEdit.style.height = el.captionEdit.scrollHeight + "px";
+    el.captionEdit.focus();
+  });
+  el.captionEdit.addEventListener("input", () => {
+    el.captionEdit.style.height = "auto";
+    el.captionEdit.style.height = el.captionEdit.scrollHeight + "px";
+    const cap = current();
+    const v = el.captionEdit.value.replace(/\r/g, "").trim();
+    // Saved as you type, so paging away or copying never loses an edit. An emptied box keeps the last good text.
+    if (cap && v) cap.edited = v === cap.text ? undefined : v;
+    el.resetEdit.hidden = !cap || cap.edited == null;
+    el.meta.textContent = metaFor(v || (cap ? display(cap) : ""), platformNow());
+  });
+  el.resetEdit.addEventListener("click", () => { const cap = current(); if (cap) { cap.edited = undefined; state.editing = false; render(); } });
+  el.likeBtn.addEventListener("click", () => rate(1));
+  el.passBtn.addEventListener("click", () => rate(-1));
+  el.moreLike.addEventListener("click", () => { const cap = current(); if (cap && !state.busy) { cap.rating = Math.max(cap.rating, 1); generate({ anchor: display(cap) }); } });
+  el.tweaks.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-tweak]");
+    if (!b || b.disabled) return;
+    const tw = TWEAKS.find((t) => t.id === b.dataset.tweak);
+    if (tw.local) applyLocal(tw); else tweak(tw);
+  });
+  el.leadMove.addEventListener("click", () => {
+    const cap = current();
+    const batch = cap && state.batches[cap.batch];
+    if (batch && batch.lead != null) { moveFirst(batch.lead); toast("Moved it to the front."); }
+  });
+  el.tagList.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-tag]");
+    const cap = current();
+    const batch = cap && state.batches[cap.batch];
+    if (!b || !batch) return;
+    const t = b.dataset.tag;
+    batch.tagsOff = batch.tagsOff.includes(t) ? batch.tagsOff.filter((x) => x !== t) : [...batch.tagsOff, t];
+    render();
+  });
+  el.copyTags.addEventListener("click", () => {
+    const cap = current();
+    const batch = cap && state.batches[cap.batch];
+    if (!cap || !batch) return;
+    const on = batch.tags.filter((t) => !batch.tagsOff.includes(t));
+    cap.copied = true;
+    copyText(display(cap) + (on.length ? "\n\n" + on.join(" ") : ""), "Caption and hashtags copied", "Couldn't copy here. Long-press the caption to copy it.", el.caption);
+  });
+  el.altList.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-alt]");
+    const cap = current();
+    const batch = cap && state.batches[cap.batch];
+    if (!b || !batch) return;
+    const a = batch.alt[Number(b.dataset.alt)];
+    if (a) copyText(a, "Alt text copied", "Couldn't copy here. Long-press the text to copy it.");
   });
 
-  el.cta.addEventListener("change", () => {
-    if (state.photo && (state.captions.length || state.busy)) { dropUnseen(); generate(); }
-  });
-
-  el.context.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter") return;
-    e.preventDefault();
-    if (state.photo && !state.busy) { dropUnseen(); generate(); el.context.blur(); }
-  });
-
+  // photos
   el.file.addEventListener("change", () => {
-    const f = el.file.files && el.file.files[0];
+    const files = [...(el.file.files || [])];
+    const mode = pickMode;
+    pickMode = "replace";
     el.file.value = "";
-    takeFile(f);
+    takeFiles(files, mode);
   });
+  el.drop.addEventListener("click", () => { pickMode = "replace"; });
+  el.addMore.addEventListener("click", () => { pickMode = "add"; el.file.click(); });
+  el.swap.addEventListener("click", () => { pickMode = "replace"; el.file.click(); });
+  el.removePhoto.addEventListener("click", removeViewed);
+  el.makeFirst.addEventListener("click", () => { const p = state.photos[state.view]; if (p) moveFirst(p.id); });
+  el.strip.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-index]");
+    if (!b) return;
+    state.view = Number(b.dataset.index);
+    renderPhotos();
+    render();
+  });
+
+  // main actions
   el.another.addEventListener("click", onAnother);
   el.prev.addEventListener("click", () => showAt(state.index - 1));
   el.next.addEventListener("click", () => showAt(state.index + 1));
   el.cancel.addEventListener("click", () => state.ctl && state.ctl.abort());
   el.retry.addEventListener("click", () => { state.error = null; generate(); });
-  el.copy.addEventListener("click", () => { const c = current(); if (c) copyText(c.text, "Caption copied", "Couldn't copy here. Long-press the caption to copy it.", el.caption); });
-  el.swap.addEventListener("click", () => el.file.click());
+  el.copy.addEventListener("click", () => {
+    const cap = current();
+    if (!cap) return;
+    cap.copied = true;
+    copyText(display(cap), "Caption copied", "Couldn't copy here. Long-press the caption to copy it.", el.caption);
+  });
 
   document.addEventListener("keydown", (e) => {
-    if (e.target.closest && e.target.closest("input, textarea")) return;
+    if (e.target.closest && e.target.closest("input, textarea, select")) return;
     if (e.key === "ArrowLeft") showAt(state.index - 1);
     if (e.key === "ArrowRight") showAt(state.index + 1);
   });
 
+  let touch = null;
+  el.caption.addEventListener("touchstart", (e) => { const t = e.touches[0]; touch = { x: t.clientX, y: t.clientY }; }, { passive: true });
+  el.caption.addEventListener("touchend", (e) => {
+    if (!touch || state.editing) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touch.x, dy = t.clientY - touch.y;
+    touch = null;
+    if (Math.abs(dx) > 50 && Math.abs(dy) < 40) showAt(state.index + (dx < 0 ? 1 : -1));
+  });
+
   let dragDepth = 0;
   const hasFiles = (e) => !!e.dataTransfer && [...e.dataTransfer.types].includes("Files");
-  window.addEventListener("dragenter", (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; el.veil.hidden = false; });
+  window.addEventListener("dragenter", (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragDepth++;
+    el.veilText.textContent = state.photos.length ? "Drop to add to this post" : "Drop to caption it";
+    el.veil.hidden = false;
+  });
   window.addEventListener("dragover", (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
   window.addEventListener("dragleave", (e) => { if (!hasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) el.veil.hidden = true; });
   window.addEventListener("drop", (e) => {
@@ -950,12 +1824,13 @@ button:disabled { cursor: default; }
     e.preventDefault();
     dragDepth = 0;
     el.veil.hidden = true;
-    const files = [...e.dataTransfer.files];
-    takeFile(files.find(isImageFile) || files[0]);
+    takeFiles(e.dataTransfer.files, state.photos.length ? "add" : "replace");
   });
   window.addEventListener("paste", (e) => {
-    const f = [...((e.clipboardData && e.clipboardData.files) || [])].find(isImageFile);
-    if (f) { e.preventDefault(); takeFile(f); }
+    const files = [...((e.clipboardData && e.clipboardData.files) || [])].filter(isImageFile);
+    if (!files.length) return;
+    e.preventDefault();
+    takeFiles(files, state.photos.length ? "add" : "replace");
   });
 
   render();
@@ -970,6 +1845,7 @@ button:disabled { cursor: default; }
       try {
         const lim = await s.limits();
         state.imagesOk = !!(lim && lim.images);
+        if (lim && lim.images && lim.images.maxCount) state.maxImages = Math.max(1, Math.min(10, lim.images.maxCount));
       } catch { state.imagesOk = false; }
     }
     state.ready = true;
