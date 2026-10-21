@@ -364,12 +364,12 @@ button:disabled { cursor: default; }
   };
 
   const VIBES = [
-    { id: "any", label: "Any vibe", brief: "No set vibe. Pick what suits this photo best and vary the style across the five: one minimal aesthetic line of 2 to 5 words, one witty line, one confident line, one soft line, and one built on a specific detail you can see." },
-    { id: "aesthetic", label: "Aesthetic", brief: "Aesthetic and minimal: mostly lowercase, 2 to 8 words, visual and moody, the kind of line that sits under a curated feed post. No jokes." },
-    { id: "funny", label: "Funny", brief: "Funny: clever wordplay or a light, self-aware joke about what is happening in the photo. Clever, never corny, never mean." },
-    { id: "confident", label: "Confident", brief: "Confident: self-assured, main-character energy. Cool and effortless, never arrogant or rude." },
-    { id: "soft", label: "Soft", brief: "Soft: warm, sincere and a little poetic. Gentle wording, nothing cheesy." },
-    { id: "short", label: "Short", brief: "Short: 1 to 4 words each. Punchy and clean." },
+    { id: "any", label: "Any vibe", brief: "No set vibe. Mix it up across the five: something funny, a quiet flex, something soft, something minimal, and whatever this photo is begging for." },
+    { id: "aesthetic", label: "Aesthetic", brief: "Aesthetic: lowercase, 2 to 7 words, visual and a little mysterious, like the title of a film still. It still needs an idea: pretty words alone (\"soft light\") are not a caption." },
+    { id: "funny", label: "Funny", brief: "Funny: deadpan, self-aware, observational. Funny because it's true. No groaner puns, no \"when you...\" meme format, never explain the joke." },
+    { id: "confident", label: "Confident", brief: "Confident: a quiet flex. Cool, effortless, unbothered. It never says it's confident and is never rude or arrogant." },
+    { id: "soft", label: "Soft", brief: "Soft: tender but sharp. One line that names a feeling people have had but never put into words. Never cheesy, never a quote card." },
+    { id: "short", label: "Short", brief: "Short: 1 to 4 words each that hit way harder than their length. Every one still needs a twist or a double meaning." },
   ];
   const EXAMPLE = { text: "golden hour did all the heavy lifting", saw: ["sunset", "beach", "warm light"] };
   const MAX_BYTES = 20 * 1024 * 1024;
@@ -563,29 +563,39 @@ button:disabled { cursor: default; }
   // ---------- prompt + parsing ----------
   function buildPrompt(vibe, note, avoid) {
     const parts = [
-      "You write captions for social media photo posts. The attached image is the photo someone is about to post. Study it closely: the main subject, the setting, the light, the colors, clothes or food or objects, what is happening, and the overall mood.",
+      "You're the friend everyone texts when they need a caption. Your captions make people stop scrolling and think \"damn, that's fire, why didn't I think of that.\" That reaction comes from surprise plus recognition: an angle nobody expected that is instantly, obviously right for this exact photo.",
       "",
-      "Write 5 captions for it.",
+      "The attached image is the photo someone is about to post. First, really look: the main subject, the setting, the light, the colors, the clothes or food or objects, what's happening, the small details most people would miss, and the feeling of the whole thing.",
+      "",
+      "Then brainstorm privately. Come up with at least 15 candidates using different moves:",
+      "- Reframe: give the scene a meaning nobody expects, so the photo becomes proof, evidence or a punchline.",
+      "- Twist: set something up, then flip it in the last few words.",
+      "- Understatement: say way less than the photo shows, deadpan.",
+      "- Give something in the frame a personality: the sky, the food, the dog, the shoes, the car.",
+      "- Zoom in: build the whole line on one specific detail, like a reflection, a shadow or a half-finished drink.",
+      "- Double meaning: a phrase that's true about the photo and about life at the same time. It has to land on both levels, never a groaner pun.",
+      "- Quiet flex: confidence that never announces itself.",
+      "",
+      "Throw out anything a typical caption generator would write, anything that just describes the photo, anything that needs explaining, anything cheesy, and any line that would fit under a thousand other photos. Keep the 5 strongest. The test for each one: a stranger would screenshot it, it only works for this photo, and it sounds natural said out loud.",
       "",
       "Vibe: " + vibe.brief,
     ];
     if (note) {
-      parts.push("", "The person posting added this note about the photo. Use it where it fits and never contradict what the photo shows:", "<note>" + note + "</note>");
+      parts.push("", "The person posting added this note about the photo. Use it where it makes a caption hit harder, and never contradict what the photo shows:", "<note>" + note + "</note>");
     }
     parts.push(
       "",
-      "Rules for every caption:",
-      "- It must clearly connect to what is in this photo. Someone looking at the photo should get the link instantly. Nothing generic that could go under any photo.",
-      "- Sound like a real person with good taste posted it: natural, current, effortless. Not a greeting card, an ad, or a motivational poster.",
+      "Rules:",
+      "- Short hits harder: most captions under 10 words, none over 90 characters.",
+      "- Sound like a real person with taste: current and effortless, lowercase is fine. Slang only where it sounds natural, never stacked, never dated.",
       "- Clean: no swearing, nothing sexual, nothing mean, and no comments on anyone's body or weight.",
-      "- Don't name people or guess who anyone is. Don't invent places, dates or events you can't see. Name a place only if it is an unmistakable landmark.",
-      "- Original lines only: no song lyrics, no famous quotes, and no worn-out lines like \"living my best life\", \"good vibes only\", \"no filter needed\" or \"just vibing\".",
-      "- Under 100 characters. No hashtags, no @mentions, no quotation marks around the caption.",
-      "- At most one emoji, and only when it adds something. At least three of the five use no emoji.",
-      "- The five must differ in idea, not just wording. Put the strongest one first.",
+      "- Don't name people or guess who anyone is. Don't invent places, dates or events you can't see. Name a place only if it's an unmistakable landmark.",
+      "- Original lines only: no song lyrics, no famous quotes, and no worn-out lines like \"living my best life\", \"good vibes only\", \"no filter needed\", \"just vibing\", \"main character energy\", \"it's giving\" or \"core memory\".",
+      "- No hashtags, no @mentions, no quotation marks around the caption. At most one emoji per caption and two across all five; most fire captions need none.",
+      "- The five must use different moves and different ideas. Put the strongest first.",
     );
     if (avoid.length) {
-      parts.push("", "These captions were already shown. Don't repeat them or write close variations:", ...avoid.map((c) => "- " + c));
+      parts.push("", "These captions were already shown. Don't repeat them, their joke, or their structure:", ...avoid.map((c) => "- " + c));
     }
     parts.push(
       "",
@@ -624,8 +634,8 @@ button:disabled { cursor: default; }
   function startStatus(fresh) {
     clearStatus();
     const steps = fresh
-      ? [[0, "Looking at your photo…"], [3500, "Reading the light and the mood…"], [8000, "Writing your captions…"], [22000, "Still writing. Good captions take a moment."]]
-      : [[0, "Writing a fresh batch…"], [15000, "Still writing. Good captions take a moment."]];
+      ? [[0, "Looking at your photo…"], [4000, "Brainstorming angles…"], [12000, "Throwing out the basic ones…"], [24000, "Keeping only the fire ones…"], [45000, "Still cooking. The good ones take a minute."]]
+      : [[0, "Cooking up a fresh batch…"], [12000, "Throwing out the basic ones…"], [30000, "Still cooking. The good ones take a minute."]];
     for (const [t, s] of steps) statusTimers.push(setTimeout(() => { el.statusText.textContent = s; }, t));
   }
 
@@ -673,8 +683,7 @@ button:disabled { cursor: default; }
         images: [photo.blob],
         signal: ctl.signal,
         cache: false,
-        modelTier: "default",
-        effort: "low",
+        modelTier: "complex",
         onText: ({ text }) => parser.feed(text),
       });
       if (state.photo !== photo) return;
