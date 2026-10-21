@@ -120,7 +120,8 @@ button:disabled { cursor: default; }
   border: 1.5px dashed var(--line); border-radius: 22px; background: var(--surface);
   padding: 28px; cursor: pointer; transition: border-color 0.2s, background-color 0.2s;
 }
-.drop:hover, .drop:focus-within { border-color: var(--sun-2); }
+.drop:hover, #file:focus-visible + .drop { border-color: var(--sun-2); }
+#file:focus-visible + .drop { outline: 2px solid var(--accent-ink); outline-offset: 3px; }
 .drop-icon { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 50%; background: linear-gradient(160deg, var(--sun-1), var(--sun-2)); color: var(--on-sun); margin-bottom: 6px; }
 .drop-title { font-family: var(--font-display); font-weight: 700; font-size: 1.35rem; letter-spacing: -0.01em; }
 .drop-sub { color: var(--muted); }
@@ -230,7 +231,7 @@ button:disabled { cursor: default; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 @media (max-width: 880px) {
-  :root { --maxh: 54vh; }
+  :root { --maxh: 40vh; }
   .studio { grid-template-columns: minmax(0, 1fr); }
   .drop { aspect-ratio: 4 / 3; min-height: 260px; }
   .has-photo .hero { display: none; }
@@ -266,7 +267,7 @@ button:disabled { cursor: default; }
         <span class="drop-title">Drop a photo here</span>
         <span class="drop-sub">or pick one from your camera roll</span>
         <span class="btn btn-ghost">Choose a photo</span>
-        <span class="drop-hint">JPG · PNG · WebP · up to 20 MB · paste works too</span>
+        <span class="drop-hint">JPG · PNG · WebP · paste works too</span>
       </label>
 
       <figure class="print" id="photoWrap" hidden>
@@ -280,7 +281,7 @@ button:disabled { cursor: default; }
         </figcaption>
       </figure>
       <div class="print-actions" id="printActions" hidden>
-        <label class="btn btn-quiet" for="file">Use a different photo</label>
+        <button class="btn btn-quiet" id="swap" type="button">Use a different photo</button>
       </div>
     </section>
 
@@ -292,7 +293,7 @@ button:disabled { cursor: default; }
             <button class="icon-btn" id="prev" type="button" aria-label="Previous caption">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
             </button>
-            <span class="count" id="count" aria-live="polite">1 / 1</span>
+            <span class="count" id="count">1 / 1</span>
             <button class="icon-btn" id="next" type="button" aria-label="Next caption">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
             </button>
@@ -368,7 +369,7 @@ button:disabled { cursor: default; }
   const $ = (id) => document.getElementById(id);
   const el = {
     file: $("file"), drop: $("drop"), photoWrap: $("photoWrap"), photo: $("photo"), develop: $("develop"),
-    palette: $("palette"), readout: $("readout"), printActions: $("printActions"),
+    palette: $("palette"), readout: $("readout"), printActions: $("printActions"), swap: $("swap"),
     cardLabel: $("cardLabel"), pager: $("pager"), prev: $("prev"), next: $("next"), count: $("count"),
     caption: $("caption"), skel: $("skel"), placeholder: $("placeholder"), saw: $("saw"), meta: $("meta"),
     status: $("status"), statusText: $("statusText"), cancel: $("cancel"),
@@ -393,7 +394,11 @@ button:disabled { cursor: default; }
     creator: "Flirty, teasing promo captions for creators. Still safe to post on Instagram, TikTok and X.",
   };
   const EXAMPLE = { text: "golden hour did all the heavy lifting", saw: ["sunset", "beach", "warm light"] };
-  const MAX_BYTES = 20 * 1024 * 1024;
+  // Originals are re-encoded to a small JPEG before sending, so this only guards browser memory.
+  const MAX_BYTES = 50 * 1024 * 1024;
+  // Creator promo captions that name a fan site or use these phrases get posts hidden on mainstream apps.
+  const PROMO_RISK = /(only\s*fans|fansly|fanvue|link\s+in\s+(my\s+)?bio|\b18\s*\+|\bsubscribe\b|\bdm\s+me\b|spicy\s+page)/i;
+  const NO_RETRY = new Set(["refused", "image_rejected", "prompt_too_large"]);
   const FEED_PREVIEW = 125;
   const COPY = {
     not_granted: "Caption Lab needs your OK to use Claude. Reload the page and choose Allow.",
@@ -415,7 +420,7 @@ button:disabled { cursor: default; }
   const state = {
     ready: false, sample: null, imagesOk: false, pending: false,
     photo: null, captions: [], index: -1, saw: [],
-    vibe: "any", mode: loadMode(), busy: false, ctl: null, error: null, blocked: false,
+    vibe: "any", mode: loadMode(), busy: false, ctl: null, error: null, noRetry: false, blocked: false,
   };
   function loadMode() {
     try { return localStorage.getItem("captionlab.mode") === "creator" ? "creator" : "everyday"; } catch { return "everyday"; }
@@ -460,20 +465,39 @@ button:disabled { cursor: default; }
     toastTimer = setTimeout(() => el.toast.classList.remove("show"), 2800);
   }
 
-  async function copyText(text, done, fallbackEl) {
+  async function copyText(text, done, failMsg, selectEl) {
     try {
       await navigator.clipboard.writeText(text);
       toast(done);
-    } catch {
-      if (fallbackEl) {
-        const range = document.createRange();
-        range.selectNodeContents(fallbackEl);
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-      }
-      toast("Selected. Copy it from your keyboard or menu.");
+      return;
+    } catch { /* clipboard API blocked here: try the older copy command */ }
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none";
+    document.body.append(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch { ok = false; }
+    ta.remove();
+    if (ok) { toast(done); return; }
+    if (selectEl) {
+      const range = document.createRange();
+      range.selectNodeContents(selectEl);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
     }
+    toast(failMsg);
+  }
+
+  function bringActionsIntoView() {
+    try {
+      if (!window.matchMedia("(max-width: 880px)").matches) return;
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      document.querySelector(".actions").scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+    } catch { /* scrolling is a convenience */ }
   }
 
   // ---------- photo prep ----------
@@ -542,7 +566,7 @@ button:disabled { cursor: default; }
   async function takeFile(file) {
     if (!file) return;
     if (!isImageFile(file)) { toast("That file isn't a photo. Try a JPG or PNG."); return; }
-    if (file.size > MAX_BYTES) { toast("That photo is over 20 MB. Try a smaller one."); return; }
+    if (file.size > MAX_BYTES) { toast("That photo is over 50 MB. Try a smaller one."); return; }
     let photo;
     try {
       photo = await preparePhoto(file);
@@ -578,7 +602,7 @@ button:disabled { cursor: default; }
       b.style.setProperty("--c", hex);
       b.title = hex;
       b.setAttribute("aria-label", `Copy color ${hex}`);
-      b.addEventListener("click", () => copyText(hex, `Copied ${hex}`));
+      b.addEventListener("click", () => copyText(hex, `Copied ${hex}`, `Couldn't copy here. The color is ${hex}.`));
       li.append(b);
       return li;
     }));
@@ -624,6 +648,7 @@ button:disabled { cursor: default; }
     if (creator) {
       parts.push(
         "- Skip creator clichés like \"your new obsession\", \"come say hi\", \"don't be shy\" and \"wanna see more?\".",
+        "- Never name OnlyFans, OF, Fansly, Fanvue or any adult site, and never write \"link in bio\", \"18+\", \"subscribe\", \"DM me\" or \"spicy page\": those get promo posts hidden. Keep any pointer neutral, like \"the rest is on my page\".",
         cta
           ? "- End every caption with a short call to action pointing to the creator's page, worded differently each time and woven into the line (\"the rest is on my page\" energy, never \"LINK IN BIO!!!\")."
           : "- No calls to action and no \"link in bio\".",
@@ -690,20 +715,23 @@ button:disabled { cursor: default; }
     const cta = creator && el.cta.checked;
     const startLen = state.captions.length;
     const avoid = state.captions.map((c) => c.text).slice(-25);
+    const sawBefore = state.saw;
     let added = 0;
 
     state.ctl = ctl;
     state.busy = true;
     state.error = null;
+    state.noRetry = false;
     startStatus(startLen === 0);
     render();
 
     const accept = (raw) => {
       const text = cleanCaption(raw);
       if (!text || isDupe(text)) return;
+      if (creator && (PROMO_RISK.test(text) || /\bOF\b/.test(text))) return;
       state.captions.push({ text, key, seen: false });
       added++;
-      if (added === 1) showAt(state.captions.length - 1);
+      if (added === 1) { showAt(state.captions.length - 1); bringActionsIntoView(); }
       else render();
     };
     const parser = lineParser((obj) => {
@@ -735,9 +763,12 @@ button:disabled { cursor: default; }
       } else if (code === "refused") {
         state.captions.splice(startLen);
         if (state.index >= startLen) state.index = startLen - 1;
+        state.saw = sawBefore;
         state.error = COPY.refused;
+        state.noRetry = true;
       } else {
         if (BLOCKING.has(code)) state.blocked = true;
+        state.noRetry = NO_RETRY.has(code);
         if (!added || BLOCKING.has(code)) state.error = COPY[code] || COPY.upstream_error;
         else toast(`Got ${added} caption${added === 1 ? "" : "s"} before the connection dropped.`);
       }
@@ -829,7 +860,7 @@ button:disabled { cursor: default; }
     el.error.hidden = !state.error;
     if (state.error) {
       el.errorText.textContent = state.error;
-      el.retry.hidden = state.blocked;
+      el.retry.hidden = state.blocked || state.noRetry;
     }
 
     const canGen = state.ready && state.sample && state.imagesOk && !state.blocked;
@@ -900,7 +931,8 @@ button:disabled { cursor: default; }
   el.next.addEventListener("click", () => showAt(state.index + 1));
   el.cancel.addEventListener("click", () => state.ctl && state.ctl.abort());
   el.retry.addEventListener("click", () => { state.error = null; generate(); });
-  el.copy.addEventListener("click", () => { const c = current(); if (c) copyText(c.text, "Caption copied", el.caption); });
+  el.copy.addEventListener("click", () => { const c = current(); if (c) copyText(c.text, "Caption copied", "Couldn't copy here. Long-press the caption to copy it.", el.caption); });
+  el.swap.addEventListener("click", () => el.file.click());
 
   document.addEventListener("keydown", (e) => {
     if (e.target.closest && e.target.closest("input, textarea")) return;
