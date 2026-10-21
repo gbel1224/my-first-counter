@@ -203,6 +203,12 @@ button:disabled { cursor: default; }
 .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 8px 15px; font-size: 0.92rem; font-weight: 500; transition: background-color 0.15s, color 0.15s, border-color 0.15s; }
 .chip:hover { border-color: var(--muted); }
 .chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.seg { display: inline-flex; justify-self: start; gap: 4px; padding: 4px; border-radius: 999px; background: var(--raised); }
+.seg button { border: 0; background: transparent; border-radius: 999px; padding: 8px 18px; font-size: 0.92rem; font-weight: 600; color: var(--muted); transition: background-color 0.15s, color 0.15s; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(34, 26, 46, 0.14); }
+.seg button[data-mode="creator"][aria-pressed="true"] { background: linear-gradient(110deg, var(--sun-1), var(--sun-2)); color: var(--on-sun); }
+.check { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; cursor: pointer; }
+.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--sun-2); }
 .note-input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-size: 1rem; }
 .note-input::placeholder { color: var(--muted); opacity: 0.8; }
 .note-input:focus-visible { outline: 2px solid var(--sun-2); outline-offset: 1px; border-color: transparent; }
@@ -323,6 +329,15 @@ button:disabled { cursor: default; }
 
       <div class="tune">
         <div class="field">
+          <span class="label" id="modeLabel">Mode</span>
+          <div class="seg" id="modes" role="group" aria-labelledby="modeLabel">
+            <button type="button" data-mode="everyday" aria-pressed="true">Everyday</button>
+            <button type="button" data-mode="creator" aria-pressed="false">Creator</button>
+          </div>
+          <p class="hint" id="modeHint">Clean captions for any photo.</p>
+          <label class="check" id="ctaRow" hidden><input type="checkbox" id="cta"> End with a call to action</label>
+        </div>
+        <div class="field">
           <span class="label" id="vibeLabel">Vibe</span>
           <div class="chips" id="vibes" role="group" aria-labelledby="vibeLabel"></div>
         </div>
@@ -360,6 +375,7 @@ button:disabled { cursor: default; }
     error: $("error"), errorText: $("errorText"), retry: $("retry"),
     another: $("another"), anotherText: $("anotherText"), copy: $("copy"),
     notice: $("notice"), vibes: $("vibes"), context: $("context"), steps: $("steps"),
+    modes: $("modes"), modeHint: $("modeHint"), ctaRow: $("ctaRow"), cta: $("cta"),
     veil: $("veil"), toast: $("toast"),
   };
 
@@ -371,6 +387,11 @@ button:disabled { cursor: default; }
     { id: "soft", label: "Soft", brief: "Soft: tender but sharp. One line that names a feeling people have had but never put into words. Never cheesy, never a quote card." },
     { id: "short", label: "Short", brief: "Short: 1 to 4 words each that hit way harder than their length. Every one still needs a twist or a double meaning." },
   ];
+  const CREATOR_STYLE = "Style: creator promo. This photo is for an adult content creator's promo post (Instagram, X, TikTok, Reddit, or a free teaser on Fanvue or OnlyFans). Write in the creator's own voice, often talking straight to whoever's looking. Make it flirty, teasing and confident: tease, don't describe. The best ones hint at more and make people tap the profile. Every caption has to be safe to post on mainstream social apps. Only use this style if everyone in the photo is clearly an adult; if anyone could be under 18, ignore this style and write regular, non-flirty captions.";
+  const MODE_HINT = {
+    everyday: "Clean captions for any photo.",
+    creator: "Flirty, teasing promo captions for creators. Still safe to post on Instagram, TikTok and X.",
+  };
   const EXAMPLE = { text: "golden hour did all the heavy lifting", saw: ["sunset", "beach", "warm light"] };
   const MAX_BYTES = 20 * 1024 * 1024;
   const FEED_PREVIEW = 125;
@@ -384,7 +405,7 @@ button:disabled { cursor: default; }
     rate_limited: "That's a lot of captions at once. Give it a minute, then try again.",
     session_expired: "Your Claude sign-in expired. Sign in again, then try again.",
     image_rejected: "Claude couldn't read that photo. Try a JPG or PNG under 20 MB.",
-    refused: "Claude won't caption this photo. Try a different one.",
+    refused: "Claude won't caption this photo. If it's explicit, try a cropped or teaser version.",
     empty_completion: "No caption came back for this one. Try again.",
     prompt_too_large: "That note is too long. Shorten it and try again.",
     upstream_error: "The connection dropped while writing captions. Try again.",
@@ -394,15 +415,18 @@ button:disabled { cursor: default; }
   const state = {
     ready: false, sample: null, imagesOk: false, pending: false,
     photo: null, captions: [], index: -1, saw: [],
-    vibe: "any", busy: false, ctl: null, error: null, blocked: false,
+    vibe: "any", mode: loadMode(), busy: false, ctl: null, error: null, blocked: false,
   };
+  function loadMode() {
+    try { return localStorage.getItem("captionlab.mode") === "creator" ? "creator" : "everyday"; } catch { return "everyday"; }
+  }
   let photoSeq = 0;
   let shownText = null;
 
   // ---------- helpers ----------
   const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const cleanNote = (v) => String(v || "").replace(/[<>\r\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
-  const keyNow = () => state.vibe + "|" + cleanNote(el.context.value);
+  const keyNow = () => [state.mode, state.mode === "creator" && el.cta.checked, state.vibe, cleanNote(el.context.value)].join("|");
   const current = () => state.captions[state.index] || null;
   const isImageFile = (f) => !!f && ((f.type || "").startsWith("image/") || /\.(jpe?g|png|webp|gif|heic|heif|avif|bmp)$/i.test(f.name || ""));
 
@@ -561,7 +585,7 @@ button:disabled { cursor: default; }
   }
 
   // ---------- prompt + parsing ----------
-  function buildPrompt(vibe, note, avoid) {
+  function buildPrompt(vibe, note, avoid, creator, cta) {
     const parts = [
       "You're the friend everyone texts when they need a caption. Your captions make people stop scrolling and think \"damn, that's fire, why didn't I think of that.\" That reaction comes from surprise plus recognition: an angle nobody expected that is instantly, obviously right for this exact photo.",
       "",
@@ -580,20 +604,31 @@ button:disabled { cursor: default; }
       "",
       "Vibe: " + vibe.brief,
     ];
+    if (creator) parts.push("", CREATOR_STYLE);
     if (note) {
       parts.push("", "The person posting added this note about the photo. Use it where it makes a caption hit harder, and never contradict what the photo shows:", "<note>" + note + "</note>");
     }
     parts.push(
       "",
       "Rules:",
-      "- Short hits harder: most captions under 10 words, none over 90 characters.",
+      "- Short hits harder: most captions under " + (cta ? 14 : 10) + " words, none over " + (cta ? 110 : 90) + " characters.",
       "- Sound like a real person with taste: current and effortless, lowercase is fine. Slang only where it sounds natural, never stacked, never dated.",
-      "- Clean: no swearing, nothing sexual, nothing mean, and no comments on anyone's body or weight.",
+      creator
+        ? "- Flirty is the point, crude is not: no explicit sexual words or acts, no describing body parts, no swearing, and never negative about anyone's body."
+        : "- Clean: no swearing, nothing sexual, nothing mean, and no comments on anyone's body or weight.",
       "- Don't name people or guess who anyone is. Don't invent places, dates or events you can't see. Name a place only if it's an unmistakable landmark.",
       "- Original lines only: no song lyrics, no famous quotes, and no worn-out lines like \"living my best life\", \"good vibes only\", \"no filter needed\", \"just vibing\", \"main character energy\", \"it's giving\" or \"core memory\".",
       "- No hashtags, no @mentions, no quotation marks around the caption. At most one emoji per caption and two across all five; most fire captions need none.",
       "- The five must use different moves and different ideas. Put the strongest first.",
     );
+    if (creator) {
+      parts.push(
+        "- Skip creator clichés like \"your new obsession\", \"come say hi\", \"don't be shy\" and \"wanna see more?\".",
+        cta
+          ? "- End every caption with a short call to action pointing to the creator's page, worded differently each time and woven into the line (\"the rest is on my page\" energy, never \"LINK IN BIO!!!\")."
+          : "- No calls to action and no \"link in bio\".",
+      );
+    }
     if (avoid.length) {
       parts.push("", "These captions were already shown. Don't repeat them, their joke, or their structure:", ...avoid.map((c) => "- " + c));
     }
@@ -651,6 +686,8 @@ button:disabled { cursor: default; }
     const key = keyNow();
     const vibe = VIBES.find((v) => v.id === state.vibe) || VIBES[0];
     const note = cleanNote(el.context.value);
+    const creator = state.mode === "creator";
+    const cta = creator && el.cta.checked;
     const startLen = state.captions.length;
     const avoid = state.captions.map((c) => c.text).slice(-25);
     let added = 0;
@@ -679,7 +716,7 @@ button:disabled { cursor: default; }
     });
 
     try {
-      const { text } = await state.sample(buildPrompt(vibe, note, avoid), {
+      const { text } = await state.sample(buildPrompt(vibe, note, avoid, creator, cta), {
         images: [photo.blob],
         signal: ctl.signal,
         cache: false,
@@ -805,6 +842,9 @@ button:disabled { cursor: default; }
     el.copy.disabled = !cap;
 
     for (const b of el.vibes.children) b.setAttribute("aria-pressed", String(b.dataset.vibe === state.vibe));
+    for (const b of el.modes.children) b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode));
+    el.modeHint.textContent = MODE_HINT[state.mode];
+    el.ctaRow.hidden = state.mode !== "creator";
 
     let notice = "";
     if (state.ready && !state.sample) notice = "Captions are written by Claude, so open this page from its Claude link to get them. You can still preview your photo and its colors here.";
@@ -829,6 +869,19 @@ button:disabled { cursor: default; }
     state.vibe = b.dataset.vibe;
     if (state.photo && (state.captions.length || state.busy)) { dropUnseen(); generate(); }
     else render();
+  });
+
+  el.modes.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-mode]");
+    if (!b || b.dataset.mode === state.mode) return;
+    state.mode = b.dataset.mode;
+    try { localStorage.setItem("captionlab.mode", state.mode); } catch { /* storage blocked */ }
+    if (state.photo && (state.captions.length || state.busy)) { dropUnseen(); generate(); }
+    else render();
+  });
+
+  el.cta.addEventListener("change", () => {
+    if (state.photo && (state.captions.length || state.busy)) { dropUnseen(); generate(); }
   });
 
   el.context.addEventListener("keydown", (e) => {

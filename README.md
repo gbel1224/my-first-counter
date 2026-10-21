@@ -17,4 +17,6 @@ Open `index.html` in a browser.
 
 It runs as a Claude artifact: captions are written by Claude using the `sample` capability, so there's no API key. Opened as a plain local file, it still previews your photo and its color palette, but it can't write captions.
 
+**Creator mode** writes flirty, teasing promo captions for creators (Instagram, TikTok, X, Reddit, Fanvue or OnlyFans teasers), with an optional call to action. Captions stay suggestive, never explicit, so they are safe to post on mainstream apps. Explicit photos are likely to be refused.
+
 Not built yet: caption limits, rewarded ads, subscriptions, and a standalone backend.
