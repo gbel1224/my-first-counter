@@ -4,7 +4,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@700;800&display=swap">
 <style>
-/* Layout: a small photo studio. The print (your photo or photo dump, its palette and specs) on the left, the caption desk on the right; one column under 880px with the print first. */
+/* Layout: a small photo studio. The print (your photo, photo dump or video frames, with palette and specs) on the left, the caption desk on the right; one column under 880px with the print first. The Whole shoot tab swaps the print for a contact sheet. */
 :root {
   --bg: #FBF6F1;
   --glow: rgba(246, 167, 76, 0.24);
@@ -109,14 +109,16 @@ button:disabled { cursor: default; }
 .sun::after { content: ""; position: absolute; left: -5px; right: -5px; bottom: -4px; height: 2px; border-radius: 2px; background: var(--ink); }
 .tag { font-family: var(--font-mono); font-size: 0.7rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; }
 
-.hero { padding-block: clamp(28px, 5vw, 52px) clamp(24px, 4vw, 40px); max-width: 760px; }
+.hero { padding-block: clamp(28px, 5vw, 52px) clamp(18px, 3vw, 28px); max-width: 760px; }
 .hero h1 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: clamp(2.1rem, 1.2rem + 3.6vw, 3.6rem); line-height: 1.02; letter-spacing: -0.025em; text-wrap: balance; }
 .hero h1 .fits { background: linear-gradient(100deg, var(--sun-1), var(--sun-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .hero p { margin: 16px 0 0; color: var(--muted); font-size: 1.075rem; max-width: 52ch; }
+.tabs { margin-bottom: clamp(18px, 3vw, 28px); }
 
 /* Studio */
 .studio { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 48px); align-items: start; }
 .print-col { min-width: 0; display: grid; gap: 12px; }
+.pane { display: grid; gap: 12px; min-width: 0; }
 .desk { min-width: 0; display: grid; gap: 18px; }
 
 /* Drop zone */
@@ -126,8 +128,8 @@ button:disabled { cursor: default; }
   border: 1.5px dashed var(--line); border-radius: 22px; background: var(--surface);
   padding: 28px; cursor: pointer; transition: border-color 0.2s, background-color 0.2s;
 }
-.drop:hover, #file:focus-visible + .drop { border-color: var(--sun-2); }
-#file:focus-visible + .drop { outline: 2px solid var(--accent-ink); outline-offset: 3px; }
+.drop:hover { border-color: var(--sun-2); }
+#file:focus-visible ~ .pane .drop { border-color: var(--sun-2); outline: 2px solid var(--accent-ink); outline-offset: 3px; }
 .drop-icon { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 50%; background: linear-gradient(160deg, var(--sun-1), var(--sun-2)); color: var(--on-sun); margin-bottom: 6px; }
 .drop-title { font-family: var(--font-display); font-weight: 700; font-size: 1.35rem; letter-spacing: -0.01em; }
 .drop-sub { color: var(--muted); }
@@ -140,6 +142,7 @@ button:disabled { cursor: default; }
   background: var(--print); color: var(--print-ink);
   padding: 12px 12px 14px; border-radius: 6px; box-shadow: var(--shadow);
 }
+.print :focus-visible { outline-color: var(--print-ink); }
 .photo-box { position: relative; overflow: hidden; border-radius: 2px; background: var(--print-muted); }
 .photo-box img { display: block; width: 100%; height: auto; }
 .develop { position: absolute; inset: 0; pointer-events: none;
@@ -147,6 +150,7 @@ button:disabled { cursor: default; }
   background-size: 260% 100%; mix-blend-mode: screen; animation: sweep 1.9s ease-in-out infinite; }
 @keyframes sweep { from { background-position: 130% 0; } to { background-position: -30% 0; } }
 .badge { position: absolute; left: 10px; top: 10px; background: linear-gradient(110deg, var(--sun-1), var(--sun-2)); color: var(--on-sun); font-weight: 700; font-size: 0.75rem; padding: 4px 10px; border-radius: 999px; }
+.badge.video { left: auto; right: 10px; background: var(--badge-bg); color: var(--badge-ink); font-family: var(--font-mono); font-weight: 500; }
 .specs { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding-top: 12px; }
 .palette { display: flex; gap: 6px; list-style: none; margin: 0; padding: 0; }
 .swatch { width: 24px; height: 24px; border-radius: 4px; border: 1px solid rgba(42, 34, 51, 0.14); background: var(--c); padding: 0; }
@@ -158,9 +162,27 @@ button:disabled { cursor: default; }
 .thumb { position: relative; flex: none; width: 58px; height: 58px; padding: 0; border-radius: 8px; overflow: hidden; border: 2px solid transparent; background: var(--raised); }
 .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .thumb[aria-pressed="true"] { border-color: var(--sun-2); }
-.thumb .num { position: absolute; left: 3px; bottom: 3px; font: 600 0.66rem/1 var(--font-mono); background: var(--badge-bg); color: var(--badge-ink); padding: 2px 4px; border-radius: 4px; }
+.num { position: absolute; left: 3px; bottom: 3px; font: 600 0.66rem/1 var(--font-mono); background: var(--badge-bg); color: var(--badge-ink); padding: 2px 4px; border-radius: 4px; }
 .thumb .star { position: absolute; right: 3px; top: 3px; font-size: 0.6rem; font-weight: 700; line-height: 1; background: linear-gradient(110deg, var(--sun-1), var(--sun-2)); color: var(--on-sun); padding: 3px 5px; border-radius: 999px; }
 .print-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 4px; }
+
+/* Whole shoot contact sheet */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 12px; }
+.tile { position: relative; display: grid; grid-template-rows: auto 1fr; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.tile img { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; background: var(--raised); }
+.tile.is-writing img { opacity: 0.55; }
+.tile .num { left: 8px; top: 8px; bottom: auto; }
+.tile-body { display: grid; gap: 8px; align-content: start; padding: 10px 12px 12px; }
+.tile-cap { margin: 0; font-weight: 600; font-size: 0.95rem; line-height: 1.3; white-space: pre-line; overflow-wrap: anywhere; }
+.tile-cap.is-status { color: var(--muted); font-weight: 500; }
+.tile-cap.is-error { color: var(--danger); font-weight: 500; }
+.tile-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
+.mini-btn { border: 0; background: none; padding: 6px 0; color: var(--accent-ink); font-weight: 600; font-size: 0.84rem; text-decoration: underline; text-underline-offset: 3px; }
+.mini-btn:disabled { opacity: 0.4; }
+.tile-actions .count { min-width: 0; font-size: 0.74rem; }
+.progress { height: 6px; border-radius: 999px; background: var(--raised); overflow: hidden; }
+.progress span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--sun-1), var(--sun-2)); transition: width 0.3s; }
+.shoot-summary { margin: 0; color: var(--muted); }
 
 /* Buttons */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 999px; padding: 13px 22px; font-weight: 600; font-size: 1rem; line-height: 1.2; border: 1px solid transparent; transition: transform 0.15s, box-shadow 0.2s, background-color 0.2s, opacity 0.2s; }
@@ -178,7 +200,9 @@ button:disabled { cursor: default; }
 .icon-btn svg { width: 16px; height: 16px; }
 .icon-btn:disabled { opacity: 0.35; }
 .link-btn { background: none; border: 0; padding: 0; color: var(--accent-ink); font-weight: 600; font-size: 0.9rem; text-decoration: underline; text-underline-offset: 3px; }
+.link-btn:disabled { opacity: 0.45; }
 .danger { color: var(--danger); }
+.row-links { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 
 /* Caption card */
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: clamp(18px, 3vw, 28px); display: grid; gap: 14px; box-shadow: 0 1px 2px rgba(34, 26, 46, 0.04); }
@@ -188,6 +212,7 @@ button:disabled { cursor: default; }
 .pager { display: flex; align-items: center; gap: 8px; }
 .count { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 3.4em; text-align: center; }
 .caption { margin: 0; font-weight: 600; font-size: clamp(1.45rem, 1.1rem + 1.3vw, 2rem); line-height: 1.25; letter-spacing: -0.012em; text-wrap: pretty; overflow-wrap: anywhere; white-space: pre-line; min-height: 1.25em; }
+.caption.is-long { font-size: clamp(1.1rem, 0.95rem + 0.6vw, 1.35rem); line-height: 1.4; }
 .caption.reveal { animation: develop-in 0.7s cubic-bezier(0.2, 0.7, 0.2, 1); }
 @keyframes develop-in { from { opacity: 0; filter: blur(10px); transform: translateY(4px); } to { opacity: 1; filter: blur(0); transform: none; } }
 .caption-edit { width: 100%; font-weight: 600; font-size: clamp(1.25rem, 1rem + 1vw, 1.7rem); line-height: 1.3; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--sun-2); background: var(--surface); resize: none; overflow: hidden; }
@@ -206,8 +231,13 @@ button:disabled { cursor: default; }
 .tool.like[aria-pressed="true"] { color: var(--accent-ink); border-color: var(--accent-ink); }
 .tool:disabled, .tweak:disabled { opacity: 0.45; }
 .tweaks { display: flex; flex-wrap: wrap; gap: 6px; }
-.tweak { border: 1px dashed var(--line); background: transparent; border-radius: 999px; padding: 6px 12px; font-size: 0.84rem; font-weight: 500; color: var(--muted); }
+.tweak { border: 1px dashed var(--line); background: transparent; border-radius: 999px; padding: 7px 12px; font-size: 0.84rem; font-weight: 500; color: var(--muted); }
 .tweak:hover:not(:disabled) { color: var(--ink); border-style: solid; border-color: var(--muted); }
+.poll { display: grid; gap: 10px; padding: 14px; border-radius: 14px; background: var(--raised); }
+.poll-list { display: grid; gap: 8px; }
+.poll-list .check { align-items: flex-start; font-size: 0.92rem; }
+.poll-list .check input { margin-top: 3px; }
+.poll-list span { white-space: pre-line; overflow-wrap: anywhere; }
 
 .saw { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .saw-label { font-size: 0.82rem; color: var(--muted); margin-right: 2px; }
@@ -232,8 +262,8 @@ button:disabled { cursor: default; }
 .error .btn { color: var(--danger); padding: 6px 12px; text-decoration: underline; text-underline-offset: 3px; }
 
 .actions { display: flex; flex-wrap: wrap; gap: 10px; }
-.actions #another { flex: 1 1 220px; }
-.actions #copy { flex: 0 1 auto; }
+.actions .grow { flex: 1 1 220px; }
+.actions .btn-ghost { flex: 0 1 auto; }
 .settings-hint { margin: -6px 0 0; font-size: 0.86rem; font-weight: 600; color: var(--accent-ink); }
 
 /* Tune */
@@ -246,7 +276,7 @@ button:disabled { cursor: default; }
 .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 8px 15px; font-size: 0.92rem; font-weight: 500; transition: background-color 0.15s, color 0.15s, border-color 0.15s; }
 .chip:hover { border-color: var(--muted); }
 .chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-.seg { display: inline-flex; justify-self: start; gap: 4px; padding: 4px; border-radius: 999px; background: var(--raised); }
+.seg { display: inline-flex; flex-wrap: wrap; justify-self: start; gap: 4px; padding: 4px; border-radius: 22px; background: var(--raised); }
 .seg button { border: 0; background: transparent; border-radius: 999px; padding: 8px 18px; font-size: 0.92rem; font-weight: 600; color: var(--muted); transition: background-color 0.15s, color 0.15s; }
 .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(34, 26, 46, 0.14); }
 .seg button[data-mode="creator"][aria-pressed="true"] { background: linear-gradient(110deg, var(--sun-1), var(--sun-2)); color: var(--on-sun); }
@@ -261,6 +291,8 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
 .select-wrap::after { content: ""; position: absolute; right: 16px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
 .select { appearance: none; -webkit-appearance: none; width: 100%; padding: 11px 40px 11px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-size: 1rem; }
 .hint { margin: 0; font-size: 0.82rem; color: var(--muted); }
+.import-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.import-row .note-input { flex: 1 1 200px; }
 
 .editor { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
 .editor-title { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; }
@@ -291,10 +323,11 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
   .studio { grid-template-columns: minmax(0, 1fr); }
   .drop { aspect-ratio: 4 / 3; min-height: 260px; }
   .has-photo .hero { display: none; }
-  .has-photo .studio { padding-top: 20px; }
+  .has-photo .tabs { margin-top: 20px; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 }
 @media (max-width: 480px) {
-  .actions #copy { flex: 1 1 auto; }
+  .actions .btn-ghost { flex: 1 1 auto; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
@@ -313,122 +346,188 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     <p>It reads the subject, the light and the mood of your shot, then writes captions that match where you're posting. Tweak the one you like or get another.</p>
   </section>
 
+  <div class="seg tabs" id="tabs" role="group" aria-label="What are you captioning">
+    <button type="button" data-tab="post" aria-pressed="true">One post</button>
+    <button type="button" data-tab="shoot" aria-pressed="false">Whole shoot</button>
+  </div>
+
   <main class="studio">
     <section class="print-col" aria-label="Your photos">
-      <input type="file" id="file" class="vh" accept="image/*" multiple>
-      <label class="drop" id="drop" for="file">
-        <span class="drop-icon" aria-hidden="true">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
-        </span>
-        <span class="drop-title">Drop a photo here</span>
-        <span class="drop-sub">or pick a few for a photo dump</span>
-        <span class="btn btn-ghost">Choose photos</span>
-        <span class="drop-hint">JPG · PNG · WebP · paste works too</span>
-      </label>
+      <input type="file" id="file" class="vh" accept="image/*,video/*,.heic,.heif" multiple>
 
-      <figure class="print" id="photoWrap" hidden>
-        <div class="photo-box">
-          <img id="photo" alt="Your photo">
-          <div class="develop" id="develop" hidden></div>
-          <span class="badge" id="leadBadge" hidden>Lead with this one</span>
+      <div class="pane" id="postPane">
+        <label class="drop" id="drop" for="file">
+          <span class="drop-icon" aria-hidden="true">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
+          </span>
+          <span class="drop-title">Drop a photo or video</span>
+          <span class="drop-sub">or pick a few photos for a photo dump</span>
+          <span class="btn btn-ghost">Choose from your camera roll</span>
+          <span class="drop-hint">JPG · PNG · HEIC · MP4 · MOV · paste works too</span>
+        </label>
+
+        <figure class="print" id="photoWrap" hidden>
+          <div class="photo-box">
+            <img id="photo" alt="Your photo">
+            <div class="develop" id="develop" hidden></div>
+            <span class="badge" id="leadBadge" hidden>Lead with this one</span>
+            <span class="badge video" id="videoBadge" hidden></span>
+          </div>
+          <figcaption class="specs">
+            <ul class="palette" id="palette" aria-label="Colors in this photo"></ul>
+            <p class="readout" id="readout"></p>
+          </figcaption>
+        </figure>
+        <div class="strip" id="strip" role="group" aria-label="Photos in this post" hidden></div>
+        <div class="print-actions" id="printActions" hidden>
+          <button class="btn btn-quiet" id="addMore" type="button">Add photos</button>
+          <button class="btn btn-quiet" id="makeFirst" type="button" hidden>Make this photo first</button>
+          <button class="btn btn-quiet" id="removePhoto" type="button" hidden>Remove this photo</button>
+          <button class="btn btn-quiet" id="swap" type="button">New photos</button>
         </div>
-        <figcaption class="specs">
-          <ul class="palette" id="palette" aria-label="Colors in this photo"></ul>
-          <p class="readout" id="readout"></p>
-        </figcaption>
-      </figure>
-      <div class="strip" id="strip" role="group" aria-label="Photos in this post" hidden></div>
-      <div class="print-actions" id="printActions" hidden>
-        <button class="btn btn-quiet" id="addMore" type="button">Add photos</button>
-        <button class="btn btn-quiet" id="makeFirst" type="button" hidden>Make this photo first</button>
-        <button class="btn btn-quiet" id="removePhoto" type="button" hidden>Remove this photo</button>
-        <button class="btn btn-quiet" id="swap" type="button">New photos</button>
+      </div>
+
+      <div class="pane" id="shootPane" hidden>
+        <label class="drop" id="shootDrop" for="file">
+          <span class="drop-icon" aria-hidden="true">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          </span>
+          <span class="drop-title">Drop a whole shoot</span>
+          <span class="drop-sub">up to 20 photos, each gets its own caption</span>
+          <span class="btn btn-ghost">Choose photos</span>
+          <span class="drop-hint">same voice, no repeats across the set</span>
+        </label>
+        <div class="grid" id="shootGrid" hidden></div>
       </div>
     </section>
 
     <section class="desk" aria-label="Captions">
-      <article class="card" id="card">
-        <div class="card-top">
-          <span class="label" id="cardLabel">Example</span>
-          <div class="pager" id="pager" hidden>
-            <button class="icon-btn" id="prev" type="button" aria-label="Previous caption">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-            </button>
-            <span class="count" id="count">1 / 1</span>
-            <button class="icon-btn" id="next" type="button" aria-label="Next caption">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-            </button>
+      <div class="pane" id="postDesk">
+        <article class="card" id="card">
+          <div class="card-top">
+            <span class="label" id="cardLabel">Example</span>
+            <div class="pager" id="pager" hidden>
+              <button class="icon-btn" id="prev" type="button" aria-label="Previous">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <span class="count" id="count">1 / 1</span>
+              <button class="icon-btn" id="next" type="button" aria-label="Next">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+              </button>
+            </div>
           </div>
-        </div>
-        <p class="caption" id="caption" aria-live="polite"></p>
-        <textarea class="caption-edit" id="captionEdit" rows="2" aria-label="Edit caption" hidden></textarea>
-        <div class="skel" id="skel" hidden aria-hidden="true"><span></span><span></span></div>
-        <p class="placeholder" id="placeholder" hidden>Your captions show up here.</p>
+          <p class="caption" id="caption" aria-live="polite"></p>
+          <textarea class="caption-edit" id="captionEdit" rows="2" aria-label="Edit text" hidden></textarea>
+          <div class="skel" id="skel" hidden aria-hidden="true"><span></span><span></span></div>
+          <p class="placeholder" id="placeholder" hidden>Your captions show up here.</p>
 
-        <div class="tools" id="tools" hidden>
-          <div class="tool-row">
-            <button class="tool" id="editBtn" type="button" aria-pressed="false">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/></svg>
-              <span id="editLabel">Edit</span>
-            </button>
-            <button class="tool like" id="likeBtn" type="button" aria-pressed="false" aria-label="I like this one">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
-            </button>
-            <button class="tool" id="passBtn" type="button" aria-pressed="false" aria-label="Not this one">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>
-            </button>
-            <button class="tool" id="moreLike" type="button">More like this</button>
-            <button class="link-btn" id="resetEdit" type="button" hidden>Undo changes</button>
+          <div class="tools" id="tools" hidden>
+            <div class="tool-row">
+              <button class="tool" id="editBtn" type="button" aria-pressed="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/></svg>
+                <span id="editLabel">Edit</span>
+              </button>
+              <button class="tool like" id="likeBtn" type="button" aria-pressed="false" aria-label="I like this one">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+              </button>
+              <button class="tool" id="passBtn" type="button" aria-pressed="false" aria-label="Not this one">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>
+              </button>
+              <button class="tool" id="moreLike" type="button">More like this</button>
+              <button class="tool" id="pollBtn" type="button" aria-expanded="false" aria-controls="pollPanel">Ask the group chat</button>
+              <button class="link-btn" id="resetEdit" type="button" hidden>Undo changes</button>
+            </div>
+            <div class="tweaks" id="tweaks" role="group" aria-label="Tweak this one"></div>
           </div>
-          <div class="tweaks" id="tweaks" role="group" aria-label="Tweak this caption"></div>
-        </div>
 
-        <div class="saw" id="saw"></div>
-        <div class="lead-row" id="leadRow" hidden>
-          <span id="leadText"></span>
-          <button class="link-btn" id="leadMove" type="button">Put it first</button>
-        </div>
-        <p class="meta" id="meta"></p>
-
-        <div class="out" id="tagsOut" hidden>
-          <div class="out-head">
-            <span class="label">Hashtags</span>
-            <button class="link-btn" id="copyTags" type="button">Copy caption + hashtags</button>
+          <div class="poll" id="pollPanel" hidden>
+            <p class="mini" style="margin:0">Pick 2 or 3 to send to the group chat</p>
+            <div class="poll-list" id="pollList"></div>
+            <div class="editor-actions">
+              <button class="btn btn-sun btn-sm" id="pollCopy" type="button">Copy poll message</button>
+              <button class="btn btn-ghost btn-sm" id="pollSave" type="button" hidden>Save poll image</button>
+              <button class="btn btn-quiet" id="pollClose" type="button">Close</button>
+            </div>
           </div>
-          <div class="chips" id="tagList" role="group" aria-label="Hashtags to include"></div>
-        </div>
-        <div class="out" id="altOut" hidden>
-          <div class="out-head"><span class="label">Alt text</span></div>
-          <ul class="alt-list" id="altList"></ul>
-          <p class="hint">Paste it into the alt text setting when you post. It helps people using screen readers and helps search.</p>
-        </div>
 
-        <div class="status" id="status" hidden>
-          <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
-          <span id="statusText" role="status">Looking at your photo…</span>
-          <button class="link-btn" id="cancel" type="button">Cancel</button>
-        </div>
-        <div class="error" id="error" hidden role="alert">
-          <p id="errorText"></p>
-          <button class="btn btn-quiet" id="retry" type="button">Try again</button>
-        </div>
-      </article>
+          <div class="saw" id="saw"></div>
+          <div class="lead-row" id="leadRow" hidden>
+            <span id="leadText"></span>
+            <button class="link-btn" id="leadMove" type="button">Put it first</button>
+          </div>
+          <p class="meta" id="meta"></p>
 
-      <div class="actions">
-        <button class="btn btn-sun" id="another" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>
-          <span id="anotherText">Choose photos</span>
-        </button>
-        <button class="btn btn-ghost" id="copy" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>
-          Copy
-        </button>
+          <div class="out" id="tagsOut" hidden>
+            <div class="out-head">
+              <span class="label">Hashtags</span>
+              <button class="link-btn" id="copyTags" type="button">Copy caption + hashtags</button>
+            </div>
+            <div class="chips" id="tagList" role="group" aria-label="Hashtags to include"></div>
+          </div>
+          <div class="out" id="altOut" hidden>
+            <div class="out-head"><span class="label">Alt text</span></div>
+            <ul class="alt-list" id="altList"></ul>
+            <p class="hint">Paste it into the alt text setting when you post. It helps people using screen readers and helps search.</p>
+          </div>
+
+          <div class="status" id="status" hidden>
+            <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span id="statusText" role="status">Looking at your photo…</span>
+            <button class="link-btn" id="cancel" type="button">Cancel</button>
+          </div>
+          <div class="error" id="error" hidden role="alert">
+            <p id="errorText"></p>
+            <button class="btn btn-quiet" id="retry" type="button">Try again</button>
+          </div>
+        </article>
+
+        <div class="actions">
+          <button class="btn btn-sun grow" id="another" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>
+            <span id="anotherText">Choose photos</span>
+          </button>
+          <button class="btn btn-ghost" id="copy" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>
+            Copy
+          </button>
+        </div>
+        <p class="settings-hint" id="settingsHint" hidden></p>
       </div>
-      <p class="settings-hint" id="settingsHint" hidden>Settings changed. Tap Write 5 new to use them.</p>
+
+      <div class="pane" id="shootDesk" hidden>
+        <article class="card">
+          <div class="card-top">
+            <span class="label">Whole shoot</span>
+            <span class="count" id="shootCount">No photos yet</span>
+          </div>
+          <p class="shoot-summary" id="shootSummary">Drop up to 20 photos. Each one gets its own caption in the same voice, without repeating itself across the set. Uses the settings below.</p>
+          <div class="progress" id="shootProgress" hidden><span id="shootBar"></span></div>
+          <div class="status" id="shootStatus" hidden>
+            <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span id="shootStatusText" role="status"></span>
+          </div>
+          <div class="error" id="shootError" hidden role="alert"><p id="shootErrorText"></p></div>
+        </article>
+        <div class="actions">
+          <button class="btn btn-sun grow" id="shootGo" type="button">Choose photos</button>
+          <button class="btn btn-ghost" id="shootCopy" type="button" disabled>Copy all</button>
+        </div>
+        <div class="row-links">
+          <button class="link-btn" id="shootCsv" type="button" hidden>Save as spreadsheet (CSV)</button>
+          <button class="link-btn" id="shootAdd" type="button">Add photos</button>
+          <button class="link-btn danger" id="shootClear" type="button">Clear the shoot</button>
+        </div>
+      </div>
 
       <p class="notice" id="notice" hidden></p>
 
       <div class="tune">
+        <div class="field" id="outputField">
+          <span class="label" id="outputLabel">Write</span>
+          <div class="seg" id="outputs" role="group" aria-labelledby="outputLabel"></div>
+          <p class="hint" id="outputHint"></p>
+        </div>
+
         <div class="field">
           <span class="label" id="modeLabel">Mode</span>
           <div class="seg" id="modes" role="group" aria-labelledby="modeLabel">
@@ -460,6 +559,14 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
           </div>
           <div class="select-wrap"><select class="select" id="voiceSelect"></select></div>
           <p class="hint">Make captions sound like you, or like a creator you manage.</p>
+          <div class="field" id="importRow" hidden>
+            <label class="mini" for="importCode">Paste a voice share code</label>
+            <div class="import-row">
+              <input class="note-input" id="importCode" type="text" autocomplete="off" placeholder="CLV1.…">
+              <button class="btn btn-sun btn-sm" id="importGo" type="button">Add voice</button>
+              <button class="btn btn-quiet" id="importCancel" type="button">Cancel</button>
+            </div>
+          </div>
           <div class="editor" id="voiceEditor" hidden>
             <p class="editor-title" id="editorTitle">New voice</p>
             <label class="mini" for="pName">Name or handle</label>
@@ -491,9 +598,10 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
               <textarea class="note-input" id="pStory" rows="3" maxlength="400" placeholder="job, hobbies, a quirk or two"></textarea>
               <p class="hint">Captions stay consistent with this. Most platforms ask you to label AI-generated content, so use their AI label when you post.</p>
             </div>
-            <p class="error-inline" id="pError" hidden></p>
+            <p class="error-inline" id="pError" role="alert" hidden></p>
             <div class="editor-actions">
               <button class="btn btn-sun btn-sm" id="pSave" type="button">Save voice</button>
+              <button class="btn btn-quiet" id="pShare" type="button" hidden>Copy share code</button>
               <button class="btn btn-quiet" id="pCancel" type="button">Cancel</button>
               <button class="btn btn-quiet danger" id="pDelete" type="button" hidden>Delete</button>
             </div>
@@ -505,7 +613,7 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
             <label class="label" for="langSelect">Language</label>
             <div class="select-wrap"><select class="select" id="langSelect"></select></div>
           </div>
-          <div class="field">
+          <div class="field" id="extrasField">
             <span class="label">Extras</span>
             <label class="check" id="tagsRow"><input type="checkbox" id="xTags"> <span id="tagsText">Hashtags</span></label>
             <label class="check"><input type="checkbox" id="xAlt"> Alt text</label>
@@ -520,14 +628,14 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       </div>
 
       <ol class="steps" id="steps">
-        <li><span><b>Drop a photo</b>, or a few for a photo dump.</span></li>
+        <li><span><b>Drop a photo or video</b>, or a few photos for a photo dump.</span></li>
         <li><span><b>Pick where you're posting</b> and a vibe if you want one.</span></li>
-        <li><span><b>Tweak and copy</b> the caption you like, or get another.</span></li>
+        <li><span><b>Tweak and copy</b> the one you like, or ask the group chat.</span></li>
       </ol>
     </section>
   </main>
 
-  <p class="foot">Captions are written by Claude on your Claude account, and the first one asks for your OK. Your photos are sent only when captions are written, and this page doesn't keep them. Your settings and voice profiles are saved in this browser only.</p>
+  <p class="foot">Captions are written by Claude on your Claude account, and the first one asks for your OK. Your photos and videos are sent only when captions are written, and this page doesn't keep them. Videos are sent as a few still frames. Your settings and voice profiles are saved in this browser only.</p>
 </div>
 
 <div class="veil" id="veil" hidden><span id="veilText">Drop to caption it</span></div>
@@ -539,22 +647,26 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
   const $ = (id) => document.getElementById(id);
   const el = {};
   for (const id of [
-    "file", "drop", "photoWrap", "photo", "develop", "leadBadge", "palette", "readout", "strip", "printActions",
-    "addMore", "makeFirst", "removePhoto", "swap",
-    "cardLabel", "pager", "prev", "next", "count", "caption", "captionEdit", "skel", "placeholder",
-    "tools", "editBtn", "editLabel", "likeBtn", "passBtn", "moreLike", "resetEdit", "tweaks",
+    "tabs", "file", "postPane", "drop", "photoWrap", "photo", "develop", "leadBadge", "videoBadge", "palette", "readout", "strip", "printActions",
+    "addMore", "makeFirst", "removePhoto", "swap", "shootPane", "shootDrop", "shootGrid",
+    "postDesk", "cardLabel", "pager", "prev", "next", "count", "caption", "captionEdit", "skel", "placeholder",
+    "tools", "editBtn", "editLabel", "likeBtn", "passBtn", "moreLike", "pollBtn", "resetEdit", "tweaks",
+    "pollPanel", "pollList", "pollCopy", "pollSave", "pollClose",
     "saw", "leadRow", "leadText", "leadMove", "meta", "tagsOut", "copyTags", "tagList", "altOut", "altList",
     "status", "statusText", "cancel", "error", "errorText", "retry",
-    "another", "anotherText", "copy", "settingsHint", "notice",
-    "modes", "modeHint", "ctaRow", "cta", "ctaText", "platforms", "subField", "subRules", "vibes",
-    "voiceSelect", "voiceEdit", "voiceEditor", "editorTitle", "pName", "pExamples", "pEmoji", "pLower", "pPhrases", "pAvoid",
-    "pAi", "pLore", "pAge", "pCity", "pStory", "pError", "pSave", "pCancel", "pDelete",
-    "langSelect", "tagsRow", "tagsText", "xTags", "xAlt", "context", "steps", "veil", "veilText", "toast",
+    "another", "anotherText", "copy", "settingsHint",
+    "shootDesk", "shootCount", "shootSummary", "shootProgress", "shootBar", "shootStatus", "shootStatusText", "shootError", "shootErrorText",
+    "shootGo", "shootCopy", "shootCsv", "shootAdd", "shootClear", "notice",
+    "outputField", "outputs", "outputHint", "modes", "modeHint", "ctaRow", "cta", "ctaText", "platforms", "subField", "subRules", "vibes",
+    "voiceSelect", "voiceEdit", "importRow", "importCode", "importGo", "importCancel",
+    "voiceEditor", "editorTitle", "pName", "pExamples", "pEmoji", "pLower", "pPhrases", "pAvoid",
+    "pAi", "pLore", "pAge", "pCity", "pStory", "pError", "pSave", "pShare", "pCancel", "pDelete",
+    "langSelect", "extrasField", "tagsRow", "tagsText", "xTags", "xAlt", "context", "steps", "veil", "veilText", "toast",
   ]) el[id] = $(id);
 
   // ---------- what the captions can be ----------
   const VIBES = [
-    { id: "any", label: "Any vibe", brief: "No set vibe. Mix it up across the five: something funny, a quiet flex, something soft, something minimal, and whatever this photo is begging for." },
+    { id: "any", label: "Any vibe", brief: "No set vibe. Mix it up: something funny, a quiet flex, something soft, something minimal, and whatever this post is begging for." },
     { id: "aesthetic", label: "Aesthetic", brief: "Aesthetic: lowercase, 2 to 7 words, visual and a little mysterious, like the title of a film still. It still needs an idea: pretty words alone (\"soft light\") are not a caption." },
     { id: "funny", label: "Funny", brief: "Funny: deadpan, self-aware, observational. Funny because it's true. No groaner puns, no \"when you...\" meme format, never explain the joke." },
     { id: "confident", label: "Confident", brief: "Confident: a quiet flex. Cool, effortless, unbothered. It never says it's confident and is never rude or arrogant." },
@@ -562,18 +674,23 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     { id: "short", label: "Short", brief: "Short: 1 to 4 words each that hit way harder than their length. Every one still needs a twist or a double meaning." },
   ];
   const PLATFORMS = [
-    { id: "instagram", label: "Instagram", words: 10, chars: 90, tags: 5, brief: "an Instagram feed post. The hook has to land in the first 125 characters, before Instagram cuts it off with \"…more\".",
+    { id: "instagram", label: "Instagram", name: "Instagram", words: 10, chars: 90, tags: 5, bio: 150, brief: "an Instagram feed post. The hook has to land in the first 125 characters, before Instagram cuts it off with \"…more\".",
       fit: (n) => n <= 125 ? "shows in full before “…more”" : "cut off at “…more” in the feed" },
-    { id: "tiktok", label: "TikTok", words: 14, chars: 120, tags: 5, brief: "a TikTok caption. Hook first, conversational, and work in a word or two people would actually search for, naturally.",
+    { id: "tiktok", label: "TikTok", name: "TikTok", words: 14, chars: 120, tags: 5, bio: 80, brief: "a TikTok caption. Hook first, conversational, and work in a word or two people would actually search for, naturally.",
       fit: (n) => n <= 100 ? "quick read under the video" : "long for TikTok, keep the hook up front" },
-    { id: "story", label: "Story", words: 8, chars: 60, tags: 2, brief: "a text overlay on an Instagram Story or a Snapchat snap. Readable at a glance, about 60 characters at most.",
+    { id: "story", label: "Story", name: "Instagram", words: 8, chars: 60, tags: 2, bio: 150, brief: "a text overlay on an Instagram Story or a Snapchat snap. Readable at a glance, about 60 characters at most.",
       fit: (n) => n <= 80 ? "fits as a text overlay" : "long for an overlay" },
-    { id: "x", label: "X", words: 20, chars: 200, tags: 2, brief: "a post on X. It reads like a post, not a caption. Under 280 characters total.",
+    { id: "x", label: "X", name: "X", words: 20, chars: 200, tags: 2, bio: 160, brief: "a post on X. It reads like a post, not a caption. Under 280 characters total.",
       fit: (n) => n <= 280 ? `${280 - n} left of 280` : `${n - 280} over the 280 limit` },
-    { id: "threads", label: "Threads", words: 20, chars: 200, tags: 3, brief: "a Threads post. Conversational, like starting a chat. Under 500 characters total.",
+    { id: "threads", label: "Threads", name: "Threads", words: 20, chars: 200, tags: 3, bio: 150, brief: "a Threads post. Conversational, like starting a chat. Under 500 characters total.",
       fit: (n) => n <= 500 ? `${500 - n} left of 500` : `${n - 500} over the 500 limit` },
-    { id: "reddit", label: "Reddit title", words: 14, chars: 90, tags: 0, brief: "a Reddit post title. It reads like a title, not a caption: no emoji, no hashtags, no links, no self-promotion. Under 90 characters, 300 at most.",
+    { id: "reddit", label: "Reddit title", name: "Reddit", words: 14, chars: 90, tags: 0, bio: 200, brief: "a Reddit post title. One line that reads like a title, not a caption: no emoji, no hashtags, no links, no self-promotion. Under 90 characters, 300 at most.",
       fit: (n) => n <= 90 ? "good title length" : n <= 300 ? "long for a title (300 max)" : "over Reddit's 300 limit" },
+  ];
+  const OUTPUTS = [
+    { id: "captions", label: "Captions", hint: "Captions for the post." },
+    { id: "bio", label: "Bio", hint: "Profile bios that fit your photos and voice." },
+    { id: "sell", label: "Sell this set", creatorOnly: true, hint: "A public teaser, an unlock message and DM openers for a new drop. Nothing explicit." },
   ];
   const LANGUAGES = ["English", "Spanish", "Portuguese", "French", "German", "Italian", "Hindi", "Hinglish (Hindi and English mixed)", "Spanglish (Spanish and English mixed)", "Tagalog", "Indonesian", "Arabic", "Turkish", "Japanese", "Korean"];
   const LANG_BY_CODE = { es: "Spanish", pt: "Portuguese", fr: "French", de: "German", it: "Italian", hi: "Hindi", tl: "Tagalog", fil: "Tagalog", id: "Indonesian", ar: "Arabic", tr: "Turkish", ja: "Japanese", ko: "Korean" };
@@ -586,7 +703,8 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     { id: "lower", label: "lowercase", local: (t) => t.toLowerCase() },
     { id: "noemoji", label: "No emoji", local: (t) => stripEmoji(t) },
   ];
-  const CREATOR_STYLE = "Style: creator promo. This is for an adult content creator's promo post (Instagram, X, TikTok, Reddit, or a free teaser on Fanvue or OnlyFans). Write in the creator's own voice, often talking straight to whoever's looking. Make it flirty, teasing and confident: tease, don't describe. The best ones hint at more and make people tap the profile. Every caption has to be safe to post on mainstream social apps. Only use this style if everyone in the photo is clearly an adult; if anyone could be under 18, ignore this style and write regular, non-flirty captions.";
+  const CREATOR_STYLE = "Style: creator promo. This is for an adult content creator's promo post (Instagram, X, TikTok, Reddit, or a free teaser on Fanvue or OnlyFans). Write in the creator's own voice, often talking straight to whoever's looking. Make it flirty, teasing and confident: tease, don't describe. The best ones hint at more and make people tap the profile. Every caption has to be safe to post on mainstream social apps.";
+  const AGE_RULE = "- If anyone in the photos could be under 18, ignore every flirty, creator and call-to-action instruction in this message and write clean, friendly, non-flirty text instead.";
   const MODE_HINT = {
     everyday: "Clean captions for any photo.",
     creator: "Flirty, teasing promo captions for creators. Still safe to post on Instagram, TikTok and X.",
@@ -601,19 +719,25 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     images_unavailable: "This view can't send photos to Claude. Open the page in the Claude app or on claude.ai.",
     rate_limited: "That's a lot of captions at once. Give it a minute, then try again.",
     session_expired: "Your Claude sign-in expired. Sign in again, then try again.",
-    image_rejected: "Claude couldn't read one of these photos. Try a JPG or PNG.",
-    refused: "Claude won't caption this. If a photo is explicit, try a cropped or teaser version.",
-    empty_completion: "No caption came back for this one. Try again.",
+    image_rejected: "Claude couldn't read these photos. Try fewer photos, or different ones.",
+    refused: "Claude won't write this one. If a photo is explicit, try a cropped or teaser version.",
+    empty_completion: "Nothing came back for this one. Change a setting or the note, then try again.",
     prompt_too_large: "That's too much text for one request. Shorten the note or the voice profile.",
-    upstream_error: "The connection dropped while writing captions. Try again.",
+    upstream_error: "The connection dropped while writing. Try again.",
+    empty_parse: "Nothing usable came back. Try again.",
+    minor: "Sell this set only works for photos where everyone is clearly an adult.",
   };
   const BLOCKING = new Set(["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed", "images_unavailable"]);
-  const NO_RETRY = new Set(["refused", "image_rejected", "prompt_too_large"]);
+  const NO_RETRY = new Set(["refused", "image_rejected", "prompt_too_large", "empty_completion"]);
   // Originals are re-encoded to a small JPEG before sending, so this only guards browser memory.
   const MAX_BYTES = 50 * 1024 * 1024;
-  // Creator promo captions that name a fan site or use these phrases get posts hidden on mainstream apps.
-  const PROMO_RISK = /(only\s*fans|fansly|fanvue|link\s+in\s+(my\s+)?bio|\b18\s*\+|\bsubscribe\b|\bdm\s+me\b|spicy\s+page|\bnsfw\b)/i;
+  const MAX_VIDEO_BYTES = 600 * 1024 * 1024;
+  const SHOOT_MAX = 20;
+  // Creator promo text that names a fan site or uses these phrases gets posts hidden on mainstream apps.
+  const PROMO_RISK = /(only\s*fans|0nly\s*fans|fansly|fanvue|link\s+in\s+(my\s+)?bio|\b18\s*\+|\bsubscribe\b|\bdm\s+me\b|spicy\s+page|\bnsfw\b)/i;
+  const PROMO_TAG = /(only_?fans|0nly_?fans|fansly|fanvue|link_?(in|na|en)_?(my_?|mi_?)?bio|dm_?me|spicy_?page|18_?plus|nsfw|subscribe)/i;
   const GENERIC_TAGS = new Set(["instagood", "explore", "explorepage", "fyp", "foryou", "foryoupage", "viral", "photooftheday", "love", "instadaily", "trending"]);
+  const HEIC_LIB = "https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js";
 
   // ---------- per-browser settings ----------
   const store = {
@@ -633,17 +757,20 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
   }
 
   const state = {
-    ready: false, sample: null, imagesOk: false, pending: false, maxImages: 5,
-    photos: [], view: 0, epoch: 0,
-    captions: [], index: -1, batches: {}, batchSeq: 0, pendingBatch: null, batchKey: null,
+    ready: false, sample: null, imagesOk: false, downloads: null, pending: false, maxImages: 5, preparing: false,
+    tab: pick(store.get("tab"), ["post", "shoot"], "post"),
+    photos: [], video: null, view: 0, epoch: 0,
+    captions: [], index: -1, batches: {}, batchSeq: 0, pendingBatch: null,
+    output: pick(store.get("output"), OUTPUTS.map((o) => o.id), "captions"),
     mode: pick(store.get("mode"), ["everyday", "creator"], "everyday"),
     vibe: pick(store.get("vibe"), VIBES.map((v) => v.id), "any"),
     platform: pick(store.get("platform"), PLATFORMS.map((p) => p.id), "instagram"),
     language: pick(store.get("language"), LANGUAGES, defaultLanguage()),
     personas: [], persona: "",
-    editing: false, editorId: null,
-    busy: false, busyKind: null, ctl: null, error: null, noRetry: false, blocked: false,
+    editing: false, editCap: null, editorId: null, poll: new Set(),
+    busy: false, busyKind: null, ctl: null, error: null, noRetry: false, blocked: false, retry: null,
   };
+  const shoot = { items: [], running: false, active: 0, ctls: new Set(), error: null };
   state.personas = (Array.isArray(store.get("personas", [])) ? store.get("personas", []) : []).map(sanitizePersona).filter(Boolean);
   state.persona = state.personas.some((p) => p.id === store.get("persona")) ? store.get("persona") : "";
   el.cta.checked = !!store.get("cta", false);
@@ -660,12 +787,17 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
   const current = () => state.captions[state.index] || null;
   const display = (c) => (c.edited != null ? c.edited : c.text);
   const platformNow = () => PLATFORMS.find((p) => p.id === state.platform) || PLATFORMS[0];
+  const outputNow = () => (state.output === "sell" && state.mode !== "creator" ? "captions" : state.output);
   const activePersona = () => state.personas.find((p) => p.id === state.persona) || null;
   const ctaOn = () => state.mode === "creator" && el.cta.checked && state.platform !== "reddit";
-  const tagsOn = () => el.xTags.checked && platformNow().tags > 0;
+  const tagsOn = () => el.xTags.checked && platformNow().tags > 0 && outputNow() === "captions";
+  const altOn = () => el.xAlt.checked && outputNow() === "captions";
   const canWrite = () => state.ready && !!state.sample && state.imagesOk && !state.blocked;
-  const isImageFile = (f) => !!f && ((f.type || "").startsWith("image/") || /\.(jpe?g|png|webp|gif|heic|heif|avif|bmp)$/i.test(f.name || ""));
+  const isVideoFile = (f) => !!f && ((f.type || "").startsWith("video/") || /\.(mp4|mov|m4v|webm|3gp)$/i.test(f.name || ""));
+  const isHeic = (f) => !!f && (/image\/hei[cf]/i.test(f.type || "") || /\.hei[cf]$/i.test(f.name || ""));
+  const isImageFile = (f) => !!f && !isVideoFile(f) && ((f.type || "").startsWith("image/") || /\.(jpe?g|png|webp|gif|heic|heif|avif|bmp)$/i.test(f.name || ""));
   const newId = () => "v" + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+  const fmtTime = (s) => { const t = Math.round(s); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
 
   function stripEmoji(t) {
     return String(t)
@@ -674,15 +806,16 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       .replace(/ +\n/g, "\n")
       .trim();
   }
+  const oneLineTitle = (t) => stripEmoji(t).replace(/\s*\n+\s*/g, " ").trim();
 
   function keyNow() {
     const p = activePersona();
     return [
-      state.mode, ctaOn(), state.vibe, state.platform, state.language,
+      outputNow(), state.mode, ctaOn(), state.vibe, state.platform, state.language,
       p ? p.id + ":" + p.updated : "",
       oneLine(el.context.value, 120), state.platform === "reddit" ? oneLine(el.subRules.value, 200) : "",
-      tagsOn(), el.xAlt.checked,
-      state.photos.map((ph) => ph.id).sort((a, b) => a - b).join(","),
+      tagsOn(), altOn(),
+      state.photos.map((ph) => ph.id).join(","),
     ].join("|");
   }
 
@@ -690,18 +823,19 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     let t = String(raw || "").replace(/\r/g, "").replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
     if (/^["“‘'][\s\S]*["”’']$/.test(t)) t = t.slice(1, -1).trim();
     t = t.replace(/(\s+#[\p{L}\p{N}_]+)+$/u, "").trim();
-    if (t.length < 2 || t.length > 600) return "";
+    if (t.length < 2 || t.length > 700) return "";
     return t;
   }
-  const isDupe = (t) => { const n = norm(t); return state.captions.some((c) => norm(c.text) === n || norm(display(c)) === n); };
-  const riskyForCreator = (t) => PROMO_RISK.test(t) || /\bOF\b/.test(t);
+  const isDupe = (t, list = state.captions) => { const n = norm(t); return list.some((c) => norm(c.text) === n || norm(display(c)) === n); };
+  // "OF" counts as the fan site unless the whole line is shouted in caps, where it's just the word "of".
+  const riskyForCreator = (t) => PROMO_RISK.test(t) || (/\bOF\b/.test(t) && t !== t.toUpperCase()) || /\b(my|on|the)\s+OF\b|\bOF\s+(page|link)\b/i.test(t);
 
   function cleanTags(list, max, creator) {
     const out = [];
     for (const raw of list) {
       const body = String(raw || "").trim().replace(/^#+/, "").replace(/[^\p{L}\p{N}_]/gu, "");
       if (!body || body.length > 40 || GENERIC_TAGS.has(body.toLowerCase())) continue;
-      if (creator && PROMO_RISK.test(body)) continue;
+      if (creator && (PROMO_TAG.test(body) || /^OF($|_|[A-Z0-9])/.test(body) || /^of_?(model|creator|girl|babe|page)/i.test(body))) continue;
       const tag = "#" + body;
       if (out.some((o) => o.toLowerCase() === tag.toLowerCase())) continue;
       out.push(tag);
@@ -710,8 +844,12 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     return out;
   }
 
-  function metaFor(text, plat) {
+  function metaFor(text, c) {
     const n = [...text].length;
+    const plat = platformNow();
+    const out = c ? c.output : "captions";
+    if (out === "bio") return `${n} / ${plat.bio} characters` + (n > plat.bio ? ` · too long for a ${plat.name} bio` : ` · fits a ${plat.name} bio`);
+    if (out === "sell" && !/^Teaser/.test(c.label || "")) return `${n} characters`;
     return `${n} characters · ${plat.fit(n)}`;
   }
   function ratioLabel(w, h) {
@@ -759,15 +897,27 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     return false;
   }
 
+  async function saveFile(filename, data) {
+    if (!state.downloads) return;
+    try {
+      await state.downloads.save({ filename, data });
+    } catch (e) {
+      const code = e && e.code;
+      if (code === "declined") return;
+      if (code === "rate_limited") { toast("A save is already open. Finish that one first."); return; }
+      toast("Couldn't save the file here. Use Copy instead.");
+    }
+  }
+
   function bringActionsIntoView() {
     try {
       if (!window.matchMedia("(max-width: 880px)").matches) return;
       const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      document.querySelector(".actions").scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+      document.querySelector("#postDesk .actions").scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
     } catch { /* scrolling is a convenience */ }
   }
 
-  // ---------- photos ----------
+  // ---------- photos and video ----------
   function loadImage(url) {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -807,7 +957,7 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     }
   }
 
-  async function preparePhoto(file) {
+  async function decodePhoto(file, size, name) {
     const src = URL.createObjectURL(file);
     try {
       const img = await loadImage(src);
@@ -823,9 +973,96 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       ctx.drawImage(img, 0, 0, c.width, c.height);
       const blob = await new Promise((res) => c.toBlob(res, "image/jpeg", 0.9));
       if (!blob) throw new Error("encode failed");
-      const palette = extractPalette(img, w, h);
-      return { id: ++photoSeq, url: URL.createObjectURL(blob), blob, w, h, size: file.size, palette };
+      return { id: ++photoSeq, url: URL.createObjectURL(blob), blob, w, h, size, name, palette: extractPalette(img, w, h) };
     } finally {
+      URL.revokeObjectURL(src);
+    }
+  }
+
+  let heicLib = null;
+  function loadHeic() {
+    if (!heicLib) {
+      heicLib = new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = HEIC_LIB;
+        s.onload = () => (window.heic2any ? resolve(window.heic2any) : reject(new Error("converter missing")));
+        s.onerror = reject;
+        document.head.append(s);
+      }).catch((e) => { heicLib = null; throw e; });
+    }
+    return heicLib;
+  }
+
+  async function preparePhoto(file) {
+    try {
+      return await decodePhoto(file, file.size, file.name || "photo.jpg");
+    } catch (e) {
+      // iPhone photos moved to a computer stay HEIC, which most non-Apple browsers can't open.
+      if (!isHeic(file)) throw e;
+      toast("Converting iPhone photo…");
+      const convert = await loadHeic();
+      const out = await convert({ blob: file, toType: "image/jpeg", quality: 0.92 });
+      const jpg = Array.isArray(out) ? out[0] : out;
+      return decodePhoto(jpg, file.size, (file.name || "photo").replace(/\.hei[cf]$/i, "") + ".jpg");
+    }
+  }
+
+  function once(target, ok, ms) {
+    return new Promise((resolve, reject) => {
+      const finish = (fn, v) => { clearTimeout(timer); target.removeEventListener(ok, onOk); target.removeEventListener("error", onErr); fn(v); };
+      const onOk = () => finish(resolve);
+      const onErr = () => finish(reject, new Error("media error"));
+      const timer = setTimeout(() => finish(reject, new Error("timeout")), ms);
+      target.addEventListener(ok, onOk);
+      target.addEventListener("error", onErr);
+    });
+  }
+
+  async function videoFrames(file, count) {
+    const src = URL.createObjectURL(file);
+    const v = document.createElement("video");
+    v.muted = true;
+    v.playsInline = true;
+    v.setAttribute("playsinline", "");
+    v.preload = "auto";
+    try {
+      const loaded = once(v, "loadeddata", 20000);
+      v.src = src;
+      const playing = v.play();
+      if (playing && playing.catch) playing.catch(() => {});
+      await loaded;
+      v.pause();
+      // Clips recorded in a browser (and some screen recordings) report an endless length until you seek to the end.
+      if (!isFinite(v.duration)) {
+        const end = once(v, "seeked", 10000);
+        v.currentTime = 1e7;
+        await end.catch(() => {});
+      }
+      const d = v.duration;
+      if (!isFinite(d) || d <= 0 || !v.videoWidth) throw new Error("no video track");
+      const n = d < 1.5 ? 1 : Math.max(1, count);
+      const times = n === 1 ? [d / 2] : Array.from({ length: n }, (_, i) => Math.min(d - 0.05, Math.max(0.3, d * (0.1 + (0.75 * i) / (n - 1)))));
+      const w = v.videoWidth, h = v.videoHeight;
+      const scale = Math.min(1, 1280 / Math.max(w, h));
+      const c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(w * scale));
+      c.height = Math.max(1, Math.round(h * scale));
+      const ctx = c.getContext("2d");
+      const frames = [];
+      for (const t of times) {
+        const seeked = once(v, "seeked", 10000);
+        v.currentTime = t;
+        await seeked;
+        ctx.drawImage(v, 0, 0, c.width, c.height);
+        const blob = await new Promise((res) => c.toBlob(res, "image/jpeg", 0.88));
+        if (!blob) throw new Error("encode failed");
+        frames.push({ id: ++photoSeq, url: URL.createObjectURL(blob), blob, w, h, size: file.size, name: file.name || "video", palette: extractPalette(c, c.width, c.height), t });
+      }
+      return { frames, duration: d };
+    } finally {
+      v.pause();
+      v.removeAttribute("src");
+      v.load();
       URL.revokeObjectURL(src);
     }
   }
@@ -839,40 +1076,80 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     state.epoch++;
     for (const p of state.photos) URL.revokeObjectURL(p.url);
     state.photos = [];
+    state.video = null;
     state.view = 0;
     state.captions = [];
     state.index = -1;
     state.batches = {};
     state.pendingBatch = null;
-    state.batchKey = null;
     state.error = null;
     state.noRetry = false;
-    state.editing = false;
+    state.retry = null;
+    stopEditing();
+    closePoll();
     shownText = null;
   }
 
   async function takeFiles(list, mode) {
     const files = [...(list || [])].filter(Boolean);
     if (!files.length) return;
-    const images = files.filter(isImageFile);
-    if (!images.length) { toast("That file isn't a photo. Try a JPG or PNG."); return; }
+    if (state.preparing) { toast("Still loading your last photos. One sec."); return; }
     const append = mode === "add" && state.photos.length > 0;
     if (append && state.busy) { toast("Hang on until these captions finish."); return; }
-    const room = state.maxImages - (append ? state.photos.length : 0);
-    if (room <= 0) { toast(`A post here can have up to ${state.maxImages} photos.`); return; }
-    const chosen = images.slice(0, room);
+    const video = files.find(isVideoFile);
+    const images = files.filter(isImageFile);
+
+    if (video && !images.length) {
+      if (append) { toast("A video posts on its own. Tap New photos to switch to it."); return; }
+      if (video.size > MAX_VIDEO_BYTES) { toast("That video is too big to open here. Try a shorter clip."); return; }
+      state.preparing = true;
+      render();
+      toast("Pulling frames from your video…");
+      try {
+        const { frames, duration } = await videoFrames(video, Math.min(4, state.maxImages));
+        resetSession();
+        state.photos = frames;
+        state.video = { duration, name: video.name || "video" };
+        renderPhotos();
+        if (files.length > 1) toast("Captioning the video. The other files were left out.");
+      } catch {
+        toast("This video can't be opened here. Try an MP4, or a shorter clip.");
+        return;
+      } finally {
+        state.preparing = false;
+        render();
+      }
+      generate();
+      return;
+    }
+    if (!images.length) { toast("That file isn't a photo or video. Try a JPG, PNG or MP4."); return; }
+    if (append && state.video) { toast("A video posts on its own. Tap New photos to start a photo post."); return; }
+
+    state.preparing = true;
+    render();
     const prepared = [];
     let failed = 0;
-    for (const f of chosen) {
-      if (f.size > MAX_BYTES) { failed++; continue; }
-      try { prepared.push(await preparePhoto(f)); } catch { failed++; }
-    }
     const notes = [];
-    if (images.length > room) notes.push(`Posts here take up to ${state.maxImages} photos, so only ${room} ${room === 1 ? "was" : "were"} added.`);
-    if (failed) notes.push(failed === 1 ? "One photo couldn't be opened here. Try a JPG or PNG." : `${failed} photos couldn't be opened here. Try JPG or PNG.`);
-    if (!prepared.length) { toast(notes.join(" ") || "That photo couldn't be opened here. Try a JPG or PNG."); return; }
+    try {
+      const room = state.maxImages - (append ? state.photos.length : 0);
+      if (room <= 0) { toast(`A post here can have up to ${state.maxImages} photos.`); return; }
+      const chosen = images.slice(0, room);
+      for (const f of chosen) {
+        if (f.size > MAX_BYTES) { failed++; continue; }
+        try { prepared.push(await preparePhoto(f)); } catch { failed++; }
+      }
+      if (images.length > room) notes.push(`Posts here take up to ${state.maxImages} photos, so only ${room} ${room === 1 ? "was" : "were"} added.`);
+      if (video) notes.push("Videos post on their own, so the video was left out.");
+      if (failed) notes.push(failed === 1 ? "One photo couldn't be opened here. Try a JPG or PNG." : `${failed} photos couldn't be opened here. Try JPG or PNG.`);
+    } finally {
+      state.preparing = false;
+    }
+    if (!prepared.length) { render(); toast(notes.join(" ") || "That photo couldn't be opened here. Try a JPG or PNG."); return; }
 
     if (append) {
+      // The limit may have changed while photos were loading.
+      const roomNow = Math.max(0, state.maxImages - state.photos.length);
+      prepared.splice(roomNow).forEach((p) => URL.revokeObjectURL(p.url));
       state.photos.push(...prepared);
       state.view = state.photos.length - prepared.length;
       renderPhotos();
@@ -881,7 +1158,8 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       return;
     }
     resetSession();
-    state.photos = prepared;
+    state.photos = prepared.slice(0, state.maxImages);
+    prepared.slice(state.maxImages).forEach((p) => URL.revokeObjectURL(p.url));
     renderPhotos();
     render();
     if (notes.length) toast(notes.join(" "));
@@ -889,7 +1167,7 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
   }
 
   function removeViewed() {
-    if (state.busy) return;
+    if (state.busy || state.video) return;
     const [gone] = state.photos.splice(state.view, 1);
     if (gone) URL.revokeObjectURL(gone.url);
     if (!state.photos.length) { resetSession(); renderPhotos(); render(); return; }
@@ -899,7 +1177,7 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
   }
 
   function moveFirst(id) {
-    if (state.busy) return;
+    if (state.busy || state.video) return;
     const i = state.photos.findIndex((p) => p.id === id);
     if (i <= 0) return;
     const [p] = state.photos.splice(i, 1);
@@ -918,8 +1196,12 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     }
     el.photoWrap.style.setProperty("--ar", (p.w / p.h).toFixed(4));
     if (el.photo.getAttribute("src") !== p.url) el.photo.src = p.url;
-    el.photo.alt = state.photos.length > 1 ? `Photo ${state.view + 1} of ${state.photos.length}` : "Your photo";
-    el.readout.textContent = `${p.w} × ${p.h} · ${ratioLabel(p.w, p.h)} · ${fmtBytes(p.size)}`;
+    el.photo.alt = state.video ? `Frame at ${fmtTime(p.t)} from your video` : state.photos.length > 1 ? `Photo ${state.view + 1} of ${state.photos.length}` : "Your photo";
+    el.readout.textContent = state.video
+      ? `${p.w} × ${p.h} · ${ratioLabel(p.w, p.h)} · ${fmtTime(state.video.duration)} video`
+      : `${p.w} × ${p.h} · ${ratioLabel(p.w, p.h)} · ${fmtBytes(p.size)}`;
+    el.videoBadge.hidden = !state.video;
+    if (state.video) el.videoBadge.textContent = `▶ ${fmtTime(state.video.duration)}`;
     el.palette.replaceChildren(...p.palette.map((hex) => {
       const li = document.createElement("li");
       const b = document.createElement("button");
@@ -938,13 +1220,13 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       b.className = "thumb";
       b.dataset.index = String(i);
       b.dataset.id = String(ph.id);
-      b.setAttribute("aria-label", `Show photo ${i + 1}`);
+      b.setAttribute("aria-label", state.video ? `Show frame at ${fmtTime(ph.t)}` : `Show photo ${i + 1}`);
       const img = document.createElement("img");
       img.src = ph.url;
       img.alt = "";
       const num = document.createElement("span");
       num.className = "num";
-      num.textContent = String(i + 1);
+      num.textContent = state.video ? fmtTime(ph.t) : String(i + 1);
       b.append(img, num);
       return b;
     }));
@@ -971,15 +1253,39 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     };
   }
 
+  function personaCode(p) {
+    const { id, updated, ...rest } = p;
+    let bin = "";
+    for (const b of new TextEncoder().encode(JSON.stringify(rest))) bin += String.fromCharCode(b);
+    return "CLV1." + btoa(bin);
+  }
+  function readPersonaCode(s) {
+    const m = /CLV1\.([A-Za-z0-9+/=]+)/.exec(String(s || "").replace(/\s+/g, ""));
+    if (!m) return null;
+    try {
+      const bytes = Uint8Array.from(atob(m[1]), (ch) => ch.charCodeAt(0));
+      const raw = JSON.parse(new TextDecoder().decode(bytes));
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+      return sanitizePersona({ ...raw, id: newId(), updated: Date.now() });
+    } catch { return null; }
+  }
+
+  function savePersonas() {
+    store.set("personas", state.personas);
+    store.set("persona", state.persona);
+  }
+
   function renderVoiceSelect() {
     const opts = [new Option("Default voice", "")];
     for (const p of state.personas) opts.push(new Option(p.name + (p.ai ? " (AI model)" : ""), p.id));
     opts.push(new Option("+ New voice profile", "__new"));
+    opts.push(new Option("+ Paste a share code", "__import"));
     el.voiceSelect.replaceChildren(...opts);
     el.voiceSelect.value = state.persona;
   }
 
   function openEditor(p) {
+    el.importRow.hidden = true;
     state.editorId = p ? p.id : null;
     el.editorTitle.textContent = p ? `Edit ${p.name}` : "New voice";
     el.pName.value = p ? p.name : "";
@@ -994,7 +1300,9 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     el.pStory.value = p ? p.backstory : "";
     el.pLore.hidden = !el.pAi.checked;
     el.pDelete.hidden = !p;
+    el.pShare.hidden = !p;
     el.pError.hidden = true;
+    el.pAge.removeAttribute("aria-invalid");
     el.voiceEditor.hidden = false;
     el.pName.focus();
   }
@@ -1010,6 +1318,8 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     if (el.pAi.checked && !(age >= 18)) {
       el.pError.textContent = "AI models have to be 18 or older.";
       el.pError.hidden = false;
+      el.pAge.setAttribute("aria-invalid", "true");
+      el.pAge.setAttribute("aria-describedby", "pError");
       el.pAge.focus();
       return;
     }
@@ -1030,8 +1340,7 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     const i = state.personas.findIndex((x) => x.id === p.id);
     if (i >= 0) state.personas[i] = p; else state.personas.push(p);
     state.persona = p.id;
-    store.set("personas", state.personas);
-    store.set("persona", state.persona);
+    savePersonas();
     renderVoiceSelect();
     closeEditor();
     render();
@@ -1043,17 +1352,33 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     if (!id) return;
     state.personas = state.personas.filter((p) => p.id !== id);
     if (state.persona === id) state.persona = "";
-    store.set("personas", state.personas);
-    store.set("persona", state.persona);
+    savePersonas();
     renderVoiceSelect();
     closeEditor();
     render();
     toast("Voice deleted.");
   }
 
+  function importPersona() {
+    const p = readPersonaCode(el.importCode.value);
+    if (!p) { toast("That code didn't work. Copy the whole thing, starting with CLV1."); return; }
+    let name = p.name, n = 2;
+    while (state.personas.some((x) => x.name === name)) name = `${p.name} (${n++})`;
+    p.name = name;
+    state.personas.push(p);
+    state.persona = p.id;
+    savePersonas();
+    renderVoiceSelect();
+    el.importRow.hidden = true;
+    el.importCode.value = "";
+    render();
+    toast(`Added ${p.name}.`);
+  }
+
   // ---------- prompts ----------
   function snapshot() {
     return {
+      output: outputNow(),
       creator: state.mode === "creator",
       cta: ctaOn(),
       vibe: VIBES.find((v) => v.id === state.vibe) || VIBES[0],
@@ -1063,53 +1388,66 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       note: oneLine(el.context.value, 120),
       subRules: state.platform === "reddit" ? oneLine(el.subRules.value, 200) : "",
       tags: tagsOn(),
-      alt: el.xAlt.checked,
+      alt: altOn(),
       photoCount: state.photos.length,
+      video: state.video ? { duration: state.video.duration } : null,
     };
   }
 
-  function contextBlocks(ctx) {
-    const parts = ["", "Posting to: " + ctx.platform.brief];
+  const dumpOk = (ctx) => ctx.output === "captions" && ctx.photoCount > 1 && !ctx.video
+    && !["reddit", "story"].includes(ctx.platform.id) && !["short", "aesthetic"].includes(ctx.vibe.id);
+
+  function lookLine(ctx) {
+    if (ctx.video) return `The ${ctx.photoCount} attached images are still frames from ONE short video (${Math.round(ctx.video.duration)} seconds long), in time order. First, really watch it through these frames: who or what is in it, the setting, the light, what happens from start to end, the small details most people would miss, and the feeling of the whole clip.`;
+    if (ctx.photoCount > 1) return `The ${ctx.photoCount} attached images are ONE carousel post, a photo dump, in order: the first image is photo 1. First, really look at every photo: the subjects, the settings, the light, the colors, the clothes or food or objects, what's happening, the small details most people would miss, and the feeling of the whole set.`;
+    return "The attached image is the photo someone is about to post. First, really look: the main subject, the setting, the light, the colors, the clothes or food or objects, what's happening, the small details most people would miss, and the feeling of the whole thing.";
+  }
+
+  function contextBlocks(ctx, { platformBrief = true } = {}) {
+    const parts = [];
+    if (platformBrief) parts.push("", "Posting to: " + ctx.platform.brief);
     if (ctx.creator) parts.push("", CREATOR_STYLE);
-    if (ctx.language !== "English") parts.push("", `Write every caption in ${ctx.language}, natively, the way people who post in it actually write. Not a translation.`);
+    if (ctx.language !== "English") parts.push("", `Write everything (captions, hashtags and alt text) in ${ctx.language}, natively, the way people who post in it actually write. Not a translation.`);
     const p = ctx.persona;
     if (p) {
       parts.push("", "Write in this person's voice:", "<voice>", "Name: " + p.name);
-      if (p.examples.length) parts.push("Captions they actually posted. Match their casing, slang, rhythm and length, but never reuse these lines or their jokes:", ...p.examples.map((e) => "- " + e));
+      if (p.examples.length) parts.push("Things they actually posted. Match their casing, slang, rhythm and length, but never reuse these lines or their jokes:", ...p.examples.map((e) => "- " + e));
       if (p.lowercase) parts.push("They always write in lowercase.");
       if (p.phrases) parts.push("Words and phrases they use: " + p.phrases);
       if (p.avoid) parts.push("Never say: " + p.avoid);
       if (p.ai) parts.push(`This is an AI-generated model, a character rather than a real person. Stay consistent with their backstory: ${p.age} years old${p.city ? ", based in " + p.city : ""}${p.backstory ? ". " + p.backstory : ""}. Never claim the photo is unedited or real, like "no filter" or "woke up like this".`);
       parts.push("</voice>");
     }
-    if (ctx.note) parts.push("", "The person posting added this note. Use it where it makes a caption hit harder, and never contradict what the photo shows:", "<note>" + ctx.note + "</note>");
+    if (ctx.note) parts.push("", "The person posting added this note. Use it where it makes the writing hit harder, and never contradict what the photos show:", "<note>" + ctx.note + "</note>");
     if (ctx.subRules) parts.push("", "Subreddit rules for the title. Follow them exactly, including any required tags like [F] or (OC) and where they go:", "<rules>" + ctx.subRules + "</rules>");
     return parts;
   }
 
-  function ruleLines(ctx, count) {
+  function emojiRule(ctx, count) {
+    const habit = ctx.persona ? ctx.persona.emoji : "default";
+    if ((ctx.platform.id === "reddit" && ctx.output === "captions") || habit === "none") return "- No emoji.";
+    if (habit === "lots") return "- Use emoji the way this person does: 1 to 3 per line is fine when they add something.";
+    return `- At most one emoji per line and two across all ${count}; most fire lines need none.`;
+  }
+
+  function ruleLines(ctx, count, { lengthLine, listOk = false, tweak = false } = {}) {
     const plat = ctx.platform;
     const words = plat.words + (ctx.cta ? 4 : 0);
-    const chars = plat.chars + (ctx.cta ? 20 : 0);
-    const habit = ctx.persona ? ctx.persona.emoji : "default";
-    const lines = [
-      `- Short hits harder: most under ${words} words, none over ${chars} characters${ctx.photoCount > 1 && count > 3 ? " (a numbered photo-dump list can run longer)" : ""}.`,
+    const chars = plat.chars + (ctx.cta && plat.id !== "story" ? 20 : 0);
+    const lines = [];
+    if (ctx.creator) lines.push(AGE_RULE);
+    lines.push(
+      lengthLine || `- Short hits harder: most under ${words} words, none over ${chars} characters${listOk ? " (a numbered photo-dump list can run longer)" : ""}.`,
       "- Sound like a real person with taste: current and effortless, lowercase is fine. Slang only where it sounds natural, never stacked, never dated.",
       ctx.creator
         ? "- Flirty is the point, crude is not: no explicit sexual words or acts, no describing body parts, no swearing, and never negative about anyone's body."
         : "- Clean: no swearing, nothing sexual, nothing mean, and no comments on anyone's body or weight.",
       "- Don't name people or guess who anyone is. Don't invent places, dates or events you can't see. Name a place only if it's an unmistakable landmark.",
       "- Original lines only: no song lyrics, no famous quotes, and no worn-out lines like \"living my best life\", \"good vibes only\", \"no filter needed\", \"just vibing\", \"main character energy\", \"it's giving\" or \"core memory\".",
-      "- No hashtags, no @mentions, no quotation marks around the caption.",
-      plat.id === "reddit" || habit === "none"
-        ? "- No emoji."
-        : habit === "lots"
-          ? "- Use emoji the way this person does: 1 to 3 per caption is fine when they add something."
-          : `- At most one emoji per caption and two across all ${count}; most fire captions need none.`,
-      count > 3
-        ? `- The ${count} must use different moves and different ideas. Put the strongest first.`
-        : `- The ${count} should take the change in ${count} different directions.`,
-    ];
+      "- No hashtags, no @mentions, no quotation marks around the text.",
+      emojiRule(ctx, count),
+      tweak ? `- The ${count} should take the change in ${count} different directions.` : `- The ${count} must use different moves and different ideas. Put the strongest first.`,
+    );
     if (ctx.creator) {
       lines.push(
         "- Skip creator clichés like \"your new obsession\", \"come say hi\", \"don't be shy\" and \"wanna see more?\".",
@@ -1122,14 +1460,16 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     return lines;
   }
 
-  function batchPrompt(ctx, fb) {
-    const n = ctx.photoCount;
+  function outputFormat(ctx, lines) {
+    return ["", "Reply with only these lines, in this order, one JSON object per line, and nothing else (no code fence, no commentary). Inside any text, write a line break as \\n.", ...lines];
+  }
+
+  function captionsPrompt(ctx, fb, count) {
+    const list = dumpOk(ctx);
     const parts = [
       "You're the friend everyone texts when they need a caption. Your captions make people stop scrolling and think \"damn, that's fire, why didn't I think of that.\" That reaction comes from surprise plus recognition: an angle nobody expected that is instantly, obviously right for this exact post.",
       "",
-      n > 1
-        ? `The ${n} attached images are ONE carousel post, a photo dump, in order: the first image is photo 1. First, really look at every photo: the subjects, the settings, the light, the colors, the clothes or food or objects, what's happening, the small details most people would miss, and the feeling of the whole set.`
-        : "The attached image is the photo someone is about to post. First, really look: the main subject, the setting, the light, the colors, the clothes or food or objects, what's happening, the small details most people would miss, and the feeling of the whole thing.",
+      lookLine(ctx),
       "",
       "Then brainstorm privately. Come up with at least 15 candidates using different moves:",
       "- Reframe: give the scene a meaning nobody expects, so the photo becomes proof, evidence or a punchline.",
@@ -1140,58 +1480,131 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       "- Double meaning: a phrase that's true about the photo and about life at the same time. It has to land on both levels, never a groaner pun.",
       "- Quiet flex: confidence that never announces itself.",
       "",
-      "Throw out anything a typical caption generator would write, anything that just describes the photo, anything that needs explaining, anything cheesy, and any line that would fit under a thousand other photos. Keep the 5 strongest. The test for each one: a stranger would screenshot it, it only works for this post, and it sounds natural said out loud.",
+      `Throw out anything a typical caption generator would write, anything that just describes the photo, anything that needs explaining, anything cheesy, and any line that would fit under a thousand other photos. Keep the ${count} strongest. The test for each one: a stranger would screenshot it, it only works for this post, and it sounds natural said out loud.`,
       "",
       "Vibe: " + ctx.vibe.brief,
     ];
-    if (n > 1) parts.push("", `Because this is a photo dump, make at least one of the five a numbered list with one short line per photo, in order ("1. " for photo 1, and so on for all ${n}), each line its own little joke or observation. The others work as one caption for the whole set.`);
+    if (ctx.video) parts.push("", "It's a video, so captions can play on the motion or the moment, and the hook has to land before people scroll past.");
+    if (list) parts.push("", `Because this is a photo dump, make one of the ${count} a numbered list with one short line per photo, in order ("1. " for photo 1, and so on for all ${ctx.photoCount}), each line its own little joke or observation. The others work as one caption for the whole set.`);
     parts.push(...contextBlocks(ctx));
-    if (fb.anchor) parts.push("", "They love this caption:", "<loved>" + fb.anchor + "</loved>", "Write 5 new ones with the same energy and angle, but different words and ideas. Don't paraphrase it.");
+    if (fb.anchor) parts.push("", "They love this caption:", "<loved>" + fb.anchor + "</loved>", `Write ${count} new ones with the same energy and angle, but different words and ideas. Don't paraphrase it.`);
     if (fb.liked.length) parts.push("", "They liked these. Bring this energy, with new ideas:", ...fb.liked.map((c) => "- " + c));
     if (fb.passed.length) parts.push("", "They passed on these. Steer away from this direction:", ...fb.passed.map((c) => "- " + c));
-    parts.push("", "Rules:", ...ruleLines(ctx, 5));
-    if (fb.avoid.length) parts.push("", "Already shown. Don't repeat them, their joke, or their structure:", ...fb.avoid.map((c) => "- " + c));
-    parts.push(
-      "",
-      "Reply with only these lines, in this order, one JSON object per line, and nothing else (no code fence, no commentary):",
-      `{"saw": ["3 or 4 short tags of 1 to 3 words naming what stands out ${n > 1 ? "across the set" : "in the photo"}"]}`,
-    );
-    if (n > 1) parts.push('{"lead": <the number of the photo that should go first>, "why": "under 10 words on why it stops the scroll"}');
-    parts.push('{"caption": "one caption"} written 5 times, one per line, strongest first. Inside a caption, write any line break as \\n.');
-    if (ctx.tags) parts.push(`{"tags": ["#tag", ...]} with up to ${ctx.platform.tags} hashtags made for this exact ${n > 1 ? "set" : "photo"}: specific, no spaces, never generic ones like #instagood, #explore or #fyp${ctx.creator ? ", and nothing adult or likely to be banned" : ""}.`);
-    if (ctx.alt) parts.push(n > 1
-      ? `{"alt": ["alt text for photo 1", ...]} with one plain description per photo, ${n} in all, each under 125 characters, for someone who can't see it.`
-      : '{"alt": "alt text"} with one plain description of the photo under 125 characters, for someone who can\'t see it.');
+    parts.push("", "Rules:", ...ruleLines(ctx, count, { listOk: list }));
+    if (fb.avoid.length) parts.push("", fb.avoidLabel || "Already shown. Don't repeat them, their joke, or their structure:", ...fb.avoid.map((c) => "- " + c));
+    const fmt = [`{"saw": ["3 or 4 short tags of 1 to 3 words naming what stands out ${ctx.photoCount > 1 && !ctx.video ? "across the set" : ctx.video ? "in the video" : "in the photo"}"]}`];
+    if (ctx.photoCount > 1 && !ctx.video) fmt.push('{"lead": <the number of the photo that should go first>, "why": "under 10 words on why it stops the scroll"}');
+    fmt.push(`{"caption": "one caption"} written ${count} times, one per line, strongest first.`);
+    if (ctx.tags) fmt.push(`{"tags": ["#tag", ...]} with up to ${ctx.platform.tags} hashtags made for this exact ${ctx.photoCount > 1 ? "post" : "photo"}: specific, no spaces, never generic ones like #instagood, #explore or #fyp${ctx.creator ? ", and nothing adult or likely to be banned" : ""}.`);
+    if (ctx.alt) fmt.push(ctx.photoCount > 1 && !ctx.video
+      ? `{"alt": ["alt text for photo 1", ...]} with one plain description per photo, ${ctx.photoCount} in all, each under 125 characters, for someone who can't see it.`
+      : '{"alt": "alt text"} with one plain description under 125 characters, for someone who can\'t see it.');
+    parts.push(...outputFormat(ctx, fmt));
     return parts.join("\n");
   }
 
-  function tweakPrompt(ctx, tw, source, batch) {
+  function bioPrompt(ctx, fb) {
+    const plat = ctx.platform;
     const parts = [
-      "You're polishing one social media caption so it hits harder. The bar: someone reads it and thinks \"damn, why didn't I think of that.\"",
+      "You write social media bios that make people hit follow. The bar: someone lands on the profile and thinks \"ok, I need to follow this person.\"",
       "",
-      "The caption:",
-      "<caption>" + source.replace(/\n/g, " / ") + "</caption>",
-      `What's in the ${ctx.photoCount > 1 ? "photo set" : "photo"}: ${batch && batch.saw.length ? batch.saw.join(", ") : "not known"}.`,
+      ctx.video
+        ? "The attached images are still frames from a video this person posted. Read their world from it: style, places, hobbies, energy, what they care about."
+        : `The attached ${ctx.photoCount > 1 ? "images are" : "image is"} from this person's posts. Read their world from ${ctx.photoCount > 1 ? "them" : "it"}: style, places, hobbies, energy, what they care about.`,
       "",
-      "The change they asked for: " + tw.brief,
-      "Keep the idea that made it work unless the change needs a new one.",
+      `Write 5 bios for their ${plat.name} profile. Brainstorm privately first with different angles: a sharp one-liner, 2 or 3 short things separated by line breaks or " · ", a quiet flex, something funny and self-aware, something with a twist. Keep the 5 that would make a stranger follow.`,
+      "",
+      "Vibe: " + ctx.vibe.brief,
+      ...contextBlocks(ctx, { platformBrief: false }),
+    ];
+    if (fb.anchor) parts.push("", "They love this bio:", "<loved>" + fb.anchor + "</loved>", "Write 5 new ones with the same energy, but different words and ideas.");
+    if (fb.liked.length) parts.push("", "They liked these. Bring this energy, with new ideas:", ...fb.liked.map((c) => "- " + c));
+    if (fb.passed.length) parts.push("", "They passed on these. Steer away from this direction:", ...fb.passed.map((c) => "- " + c));
+    parts.push("", "Rules:", ...ruleLines(ctx, 5, { lengthLine: `- Each bio fits in ${plat.bio} characters, line breaks included. Shorter is fine.` }).filter((l) => !/call to action|calls to action/.test(l)), "- No links and no \"link below\".");
+    if (fb.avoid.length) parts.push("", "Already shown. Don't repeat them or their structure:", ...fb.avoid.map((c) => "- " + c));
+    parts.push(...outputFormat(ctx, [
+      '{"saw": ["3 or 4 short tags of 1 to 3 words naming what their photos say about them"]}',
+      '{"caption": "one bio"} written 5 times, one per line, strongest first.',
+    ]));
+    return parts.join("\n");
+  }
+
+  function sellPrompt(ctx, fb) {
+    const parts = [
+      "You write promo copy for an adult content creator's new content drop. Everything you write stays non-explicit: tease the mood and build curiosity, never describe sexual acts or body parts.",
+      "",
+      lookLine(ctx),
+      "",
+      "Write, in the creator's own voice:",
+      "- 2 teaser posts for their free public feed. Safe for mainstream social apps, flirty, makes people tap the profile.",
+      "- 1 unlock message for fans who already subscribe: 1 to 3 sentences that make the set feel worth opening. Put {price} where the price goes. Tease the mood, never describe explicit content.",
+      "- 3 short DM openers to send fans about the drop, each a different approach, using {name} for the fan's name.",
+      "Brainstorm privately first and keep only the lines that sound like a real person, not a sales bot.",
       ...contextBlocks(ctx),
       "",
       "Rules:",
-      ...ruleLines(ctx, 3),
-      "",
-      "Reply with exactly 3 lines and nothing else, one JSON object per version. Inside a caption, write any line break as \\n:",
-      '{"caption": "one version"}',
+      "- If anyone in the photos could be under 18, don't write any of this. Reply with only {\"minor\": true}.",
+      "- Flirty is the point, crude is not: no explicit sexual words or acts, no describing body parts, no swearing.",
+      "- Teasers never name OnlyFans, OF, Fansly, Fanvue or any adult site, and never say \"link in bio\", \"18+\", \"subscribe\", \"DM me\" or \"spicy page\". Keep any pointer neutral, like \"the rest is on my page\".",
+      "- Skip clichés like \"your new obsession\", \"come say hi\", \"don't be shy\" and \"wanna see more?\".",
+      "- No hashtags anywhere. At most one emoji per line.",
     ];
+    if (fb.anchor) parts.push("", "They love this line:", "<loved>" + fb.anchor + "</loved>", "Bring the same energy to the new set, in different words.");
+    if (fb.avoid.length) parts.push("", "Already written. Don't repeat these or their structure:", ...fb.avoid.map((c) => "- " + c));
+    parts.push(...outputFormat(ctx, [
+      '{"saw": ["3 or 4 short tags of 1 to 3 words naming what stands out in the set"]}',
+      '{"teaser": "one teaser"} written 2 times',
+      '{"unlock": "the unlock message"}',
+      '{"dm": "one DM opener"} written 3 times',
+    ]));
     return parts.join("\n");
   }
 
-  function feedback(anchor) {
-    const shown = state.captions.filter((c) => c.seen);
+  function batchPrompt(ctx, fb) {
+    if (ctx.output === "bio") return bioPrompt(ctx, fb);
+    if (ctx.output === "sell") return sellPrompt(ctx, fb);
+    return captionsPrompt(ctx, fb, 5);
+  }
+
+  function tweakPrompt(ctx, tw, cap, batch) {
+    const source = display(cap);
+    const what = cap.output === "bio" ? "profile bio" : cap.output === "sell" ? (cap.label || "promo line").replace(/ \d+$/, "").toLowerCase() : "social media caption";
+    const isList = cap.output === "captions" && ctx.photoCount > 1 && !ctx.video && /^\s*1\.\s/m.test(source);
+    const lengthLine = cap.output === "bio"
+      ? `- Each version fits in ${ctx.platform.bio} characters, line breaks included.`
+      : cap.output === "sell" && !/^Teaser/.test(cap.label || "")
+        ? "- Keep about the same length unless the change asks otherwise."
+        : undefined;
+    const parts = [
+      `You're polishing one ${what} so it hits harder. The bar: someone reads it and thinks "damn, why didn't I think of that."`,
+      "",
+      `The ${what}:`,
+      "<text>\n" + source + "\n</text>",
+      `What's in the ${ctx.video ? "video" : ctx.photoCount > 1 ? "photo set" : "photo"}: ${batch && batch.saw.length ? batch.saw.join(", ") : "see the attached images if there are any"}.`,
+    ];
+    if (isList) parts.push(`It's a numbered photo-dump list with one line per photo for all ${ctx.photoCount} photos. Keep every version a numbered list with ${ctx.photoCount} lines.`);
+    parts.push(
+      "",
+      "The change they asked for: " + tw.brief,
+      "Keep the idea that made it work unless the change needs a new one.",
+      "",
+      "Vibe: " + ctx.vibe.brief,
+      ...contextBlocks(ctx, { platformBrief: cap.output === "captions" || /^Teaser/.test(cap.label || "") }),
+      "",
+      "Rules:",
+      ...ruleLines(ctx, 3, { lengthLine, listOk: isList, tweak: true }).filter((l) => cap.output === "captions" || !/call to action|calls to action/.test(l)),
+      ...outputFormat(ctx, ['{"caption": "one version"} written 3 times, one per line.']),
+    );
+    return parts.join("\n");
+  }
+
+  function feedback(anchor, output) {
+    const mine = state.captions.filter((c) => c.output === output);
+    const shown = mine.filter((c) => c.seen);
     const toLine = (c) => oneLine(display(c), 300);
     const liked = shown.filter((c) => c.rating > 0 || ((c.copied || c.edited != null) && c.rating >= 0)).map(toLine).slice(-6);
     const passed = shown.filter((c) => c.rating < 0).map(toLine).slice(-6);
-    const avoid = state.captions.map(toLine).slice(-25);
+    const avoid = mine.map(toLine).slice(-25);
     return { anchor: anchor ? oneLine(anchor, 300) : "", liked, passed, avoid };
   }
 
@@ -1222,33 +1635,35 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
   function clearStatus() { statusTimers.forEach(clearTimeout); statusTimers = []; }
   function startStatus(kind, label) {
     clearStatus();
-    const many = state.photos.length > 1;
+    const what = state.video ? "Watching your video…" : state.photos.length > 1 ? "Looking at your photos…" : "Looking at your photo…";
     const steps = kind === "tweak"
       ? [[0, `Tweaking: ${label}…`]]
       : kind === "first"
-        ? [[0, many ? "Looking at your photos…" : "Looking at your photo…"], [4000, "Brainstorming angles…"], [12000, "Throwing out the basic ones…"], [24000, "Keeping only the fire ones…"], [45000, "Still cooking. The good ones take a minute."]]
+        ? [[0, what], [4000, "Brainstorming angles…"], [12000, "Throwing out the basic ones…"], [24000, "Keeping only the fire ones…"], [45000, "Still cooking. The good ones take a minute."]]
         : [[0, "Cooking up a fresh batch…"], [12000, "Throwing out the basic ones…"], [30000, "Still cooking. The good ones take a minute."]];
     for (const [t, s] of steps) statusTimers.push(setTimeout(() => { el.statusText.textContent = s; }, t));
   }
 
   function handleFailure(e, added, rollback) {
-    const code = (e && e.code) || "upstream_error";
-    if (code === "cancelled") return;
-    if (code === "refused") {
+    const raw = (e && e.code) || "upstream_error";
+    if (raw === "cancelled") return;
+    if (raw === "refused") {
       rollback();
+      stopEditing();
       state.error = COPY.refused;
       state.noRetry = true;
       return;
     }
+    const code = COPY[raw] ? raw : "upstream_error";
     if (BLOCKING.has(code)) state.blocked = true;
     state.noRetry = NO_RETRY.has(code);
-    if (!added || BLOCKING.has(code)) state.error = COPY[code] || COPY.upstream_error;
-    else toast(`Got ${added} caption${added === 1 ? "" : "s"} before the connection dropped.`);
+    if (!added || code !== "upstream_error") state.error = COPY[code];
+    else toast(`Got ${added} before the connection dropped.`);
   }
 
   // ---------- writing a batch ----------
   async function generate(opts = {}) {
-    if (!state.photos.length) return;
+    if (!state.photos.length || state.preparing) return;
     if (!state.ready) { state.pending = true; render(); return; }
     if (!canWrite()) { render(); return; }
     if (state.ctl) state.ctl.abort();
@@ -1257,44 +1672,65 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     const epoch = state.epoch;
     const ctx = snapshot();
     const key = keyNow();
-    const photos = state.photos.slice();
-    const fb = feedback(opts.anchor);
-    dropUnseen();
-    const startLen = state.captions.length;
-    const batch = { id: ++state.batchSeq, saw: [], lead: null, why: "", tags: [], tagsOff: [], alt: [] };
+    const photos = state.photos.slice(0, state.maxImages);
+    ctx.photoCount = photos.length;
+    const fb = feedback(opts.anchor, ctx.output);
+    const batch = { id: ++state.batchSeq, output: ctx.output, saw: [], lead: null, why: "", tags: [], tagsOff: [], alt: {}, minor: false };
     state.batches[batch.id] = batch;
     let added = 0;
+    let prior = null;
+    const labelCount = {};
 
+    state.retry = () => generate(opts);
     state.ctl = ctl;
     state.busy = true;
     state.busyKind = "batch";
     state.pendingBatch = batch.id;
-    state.batchKey = key;
     state.error = null;
     state.noRetry = false;
-    state.editing = false;
-    startStatus(startLen === 0 ? "first" : "more");
+    stopEditing();
+    closePoll();
+    startStatus(state.captions.length === 0 ? "first" : "more");
     render();
 
-    const accept = (raw) => {
+    const accept = (raw, label = "") => {
       let text = cleanCaption(raw);
-      if (ctx.platform.id === "reddit") text = stripEmoji(text);
+      if (ctx.platform.id === "reddit" && ctx.output === "captions") text = oneLineTitle(text);
       if (!text || isDupe(text)) return;
-      if (ctx.creator && riskyForCreator(text)) return;
-      state.captions.push({ text, key, seen: false, rating: 0, batch: batch.id, kind: "batch" });
+      if (ctx.creator && (ctx.output !== "sell" || label === "Teaser") && riskyForCreator(text)) return;
+      if (!added) {
+        // Old unseen captions are only dropped once new ones actually arrive, so a failed or cancelled batch loses nothing.
+        prior = { caps: state.captions.slice(), cur: current() };
+        dropUnseen();
+      }
+      let name = "";
+      if (label) {
+        labelCount[label] = (labelCount[label] || 0) + 1;
+        name = label === "Unlock message" ? label : `${label} ${labelCount[label]}`;
+      }
+      state.captions.push({ text, key, seen: false, rating: 0, batch: batch.id, kind: "batch", output: ctx.output, label: name });
       added++;
       if (added === 1) { showAt(state.captions.length - 1); bringActionsIntoView(); }
     };
     const parser = lineParser((obj) => {
       if (state.epoch !== epoch || ctl.signal.aborted) return;
       if (Array.isArray(obj.saw)) batch.saw = obj.saw.map((s) => oneLine(s, 40).toLowerCase()).filter(Boolean).slice(0, 4);
-      if (obj.lead != null && photos.length > 1) {
+      if (obj.lead != null && photos.length > 1 && !ctx.video) {
         const i = Math.round(Number(obj.lead));
         if (i >= 1 && i <= photos.length) { batch.lead = photos[i - 1].id; batch.why = oneLine(obj.why, 90); }
       }
       if (Array.isArray(obj.tags) && ctx.tags) batch.tags = cleanTags(obj.tags, ctx.platform.tags, ctx.creator);
-      if (obj.alt != null && ctx.alt) batch.alt = (Array.isArray(obj.alt) ? obj.alt : [obj.alt]).map((a) => oneLine(a, 200)).filter(Boolean).slice(0, photos.length);
+      if (obj.alt != null && ctx.alt) {
+        const list = Array.isArray(obj.alt) ? obj.alt : [obj.alt];
+        list.slice(0, ctx.video ? 1 : photos.length).forEach((a, i) => { const t = oneLine(a, 200); if (t) batch.alt[photos[i].id] = t; });
+      }
+      if (obj.minor === true) batch.minor = true;
       if (typeof obj.caption === "string") accept(obj.caption);
+      if (ctx.output === "sell") {
+        if (typeof obj.teaser === "string") accept(obj.teaser, "Teaser");
+        if (typeof obj.unlock === "string") accept(obj.unlock, "Unlock message");
+        if (typeof obj.dm === "string") accept(obj.dm, "DM opener");
+      }
       render();
     });
 
@@ -1308,13 +1744,20 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       });
       if (state.epoch !== epoch) return;
       parser.finish(text);
-      if (!added) scavenge(text).forEach(accept);
-      if (!added) state.error = COPY.empty_completion;
+      if (!added && ctx.output !== "sell") scavenge(text).forEach((r) => accept(r));
+      if (!added) {
+        state.error = batch.minor ? COPY.minor : COPY.empty_parse;
+        state.noRetry = batch.minor;
+        delete state.batches[batch.id];
+      }
     } catch (e) {
       if (state.epoch !== epoch) return;
+      if (e && e.code !== "refused" && e.code !== "cancelled" && typeof e.text === "string") parser.finish(e.text);
       handleFailure(e, added, () => {
-        state.captions.splice(startLen);
-        if (state.index >= startLen) state.index = startLen - 1;
+        if (prior) {
+          state.captions = prior.caps;
+          state.index = prior.cur ? state.captions.indexOf(prior.cur) : -1;
+        }
         delete state.batches[batch.id];
       });
     } finally {
@@ -1336,7 +1779,7 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     const next = tw.local(display(cap));
     if (!next.trim()) { toast("That would leave nothing behind."); return; }
     cap.edited = next === cap.text ? undefined : next;
-    state.editing = false;
+    stopEditing();
     render();
   }
 
@@ -1346,27 +1789,31 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     const ctl = new AbortController();
     const epoch = state.epoch;
     const ctx = snapshot();
+    ctx.output = cap.output;
+    ctx.tags = false;
+    ctx.alt = false;
     const key = keyNow();
-    const source = display(cap);
     const batch = state.batches[cap.batch];
     const inserted = [];
     let insertAt = state.index + 1;
 
+    state.retry = () => { const i = state.captions.indexOf(cap); if (i >= 0) { state.index = i; tweak(tw); } };
     state.ctl = ctl;
     state.busy = true;
     state.busyKind = "tweak";
     state.error = null;
     state.noRetry = false;
-    state.editing = false;
+    stopEditing();
+    closePoll();
     startStatus("tweak", tw.label.toLowerCase());
     render();
 
     const accept = (raw) => {
       let text = cleanCaption(raw);
-      if (ctx.platform.id === "reddit") text = stripEmoji(text);
+      if (ctx.platform.id === "reddit" && cap.output === "captions") text = oneLineTitle(text);
       if (!text || isDupe(text)) return;
-      if (ctx.creator && riskyForCreator(text)) return;
-      const c = { text, key, seen: false, rating: 0, batch: cap.batch, kind: "tweak", tweak: tw.label };
+      if (ctx.creator && (cap.output !== "sell" || /^Teaser/.test(cap.label || "")) && riskyForCreator(text)) return;
+      const c = { text, key, seen: false, rating: 0, batch: cap.batch, kind: "tweak", tweak: tw.label, output: cap.output, label: cap.label };
       if (state.index >= insertAt) state.index++;
       state.captions.splice(insertAt, 0, c);
       inserted.push(c);
@@ -1379,23 +1826,22 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       if (typeof obj.caption === "string") accept(obj.caption);
     });
 
+    const options = { signal: ctl.signal, cache: false, modelTier: "quick", onText: ({ text }) => parser.feed(text) };
+    // Creator tweaks carry the photos so the under-18 check can actually look.
+    if (ctx.creator) options.images = state.photos.slice(0, state.maxImages).map((p) => p.blob);
     try {
-      const { text } = await state.sample(tweakPrompt(ctx, tw, source, batch), {
-        signal: ctl.signal,
-        cache: false,
-        modelTier: "quick",
-        onText: ({ text }) => parser.feed(text),
-      });
+      const { text } = await state.sample(tweakPrompt(ctx, tw, cap, batch), options);
       if (state.epoch !== epoch) return;
       parser.finish(text);
       if (!inserted.length) scavenge(text).forEach(accept);
       if (!inserted.length) state.error = "That tweak came back the same as before. Try a different one.";
     } catch (e) {
       if (state.epoch !== epoch) return;
+      if (e && e.code !== "refused" && e.code !== "cancelled" && typeof e.text === "string") parser.finish(e.text);
       handleFailure(e, inserted.length, () => {
-        const back = state.captions.indexOf(cap);
         state.captions = state.captions.filter((c) => !inserted.includes(c));
-        state.index = back >= 0 ? state.captions.indexOf(cap) : Math.min(state.index, state.captions.length - 1);
+        const back = state.captions.indexOf(cap);
+        state.index = back >= 0 ? back : Math.min(state.index, state.captions.length - 1);
       });
     } finally {
       if (state.ctl === ctl) {
@@ -1408,12 +1854,17 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     }
   }
 
-  // ---------- paging ----------
+  // ---------- paging and editing ----------
+  function stopEditing() {
+    state.editing = false;
+    state.editCap = null;
+  }
+
   function showAt(i) {
     if (i < 0 || i >= state.captions.length) return;
     state.index = i;
     state.captions[i].seen = true;
-    state.editing = false;
+    stopEditing();
     render();
   }
 
@@ -1423,16 +1874,22 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     state.index = keep ? state.captions.indexOf(keep) : -1;
   }
 
-  // The main button only pages when the next caption was written with today's settings; otherwise it writes 5 new.
-  function nextReady() {
-    const next = state.captions[state.index + 1];
-    return !!next && next.key === keyNow();
+  // The next caption written with today's settings: an unseen one first, otherwise the very next one if it matches.
+  function nextMatch() {
+    const k = keyNow();
+    for (let i = state.index + 1; i < state.captions.length; i++) {
+      const c = state.captions[i];
+      if (c.key === k && !c.seen) return i;
+    }
+    const n = state.captions[state.index + 1];
+    return n && n.key === k ? state.index + 1 : -1;
   }
 
   function onAnother() {
     if (!state.photos.length) { pickMode = "replace"; el.file.click(); return; }
-    if (state.busy) return;
-    if (nextReady()) { showAt(state.index + 1); return; }
+    if (state.busy || state.preparing) return;
+    const i = nextMatch();
+    if (i >= 0) { showAt(i); return; }
     generate();
   }
 
@@ -1448,32 +1905,360 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     render();
   }
 
+  // ---------- group chat poll ----------
+  function pollCandidates() {
+    return state.captions.filter((c) => c.seen && c.output === "captions");
+  }
+
+  function openPoll() {
+    const cands = pollCandidates();
+    if (cands.length < 2) { toast("Look at at least 2 captions first."); return; }
+    const cur = current();
+    const ordered = [cur, ...cands.filter((c) => c !== cur && c.rating > 0), ...cands.filter((c) => c !== cur && c.rating <= 0).reverse()].filter((c) => c && cands.includes(c));
+    state.poll = new Set(ordered.slice(0, 3));
+    const shown = cands.slice(-10);
+    if (cur && !shown.includes(cur)) shown.unshift(cur);
+    el.pollList.replaceChildren(...shown.map((c) => {
+      const label = document.createElement("label");
+      label.className = "check";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.dataset.i = String(state.captions.indexOf(c));
+      box.checked = state.poll.has(c);
+      const span = document.createElement("span");
+      span.textContent = display(c);
+      label.append(box, span);
+      return label;
+    }));
+    el.pollPanel.hidden = false;
+    el.pollBtn.setAttribute("aria-expanded", "true");
+  }
+
+  function closePoll() {
+    el.pollPanel.hidden = true;
+    el.pollBtn.setAttribute("aria-expanded", "false");
+  }
+
+  const pollPicks = () => state.captions.filter((c) => state.poll.has(c));
+
+  function wrapLines(g, text, maxW) {
+    const words = text.replace(/\s*\n\s*/g, " / ").split(/\s+/);
+    const lines = [];
+    let line = "";
+    for (const w of words) {
+      const test = line ? line + " " + w : w;
+      if (g.measureText(test).width > maxW && line) { lines.push(line); line = w; } else line = test;
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  async function pollImage(texts, photo) {
+    try { await Promise.all([document.fonts.load('800 60px "Syne"'), document.fonts.load('600 40px "Figtree"')]); } catch { /* fallback fonts are fine */ }
+    const W = 1080, H = 1350, PH = 600;
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const g = c.getContext("2d");
+    g.fillStyle = "#161020";
+    g.fillRect(0, 0, W, H);
+    if (photo) {
+      try {
+        const img = await loadImage(photo.url);
+        const s = Math.max(W / img.naturalWidth, PH / img.naturalHeight);
+        const dw = img.naturalWidth * s, dh = img.naturalHeight * s;
+        g.drawImage(img, (W - dw) / 2, (PH - dh) / 2, dw, dh);
+        const fade = g.createLinearGradient(0, PH - 220, 0, PH);
+        fade.addColorStop(0, "rgba(22,16,32,0)");
+        fade.addColorStop(1, "rgba(22,16,32,1)");
+        g.fillStyle = fade;
+        g.fillRect(0, PH - 220, W, 220);
+      } catch { /* poll without the photo */ }
+    }
+    let y = PH + 40;
+    g.fillStyle = "#FFB547";
+    g.font = '800 62px "Syne", "Arial Black", sans-serif';
+    g.textBaseline = "top";
+    g.fillText("which caption?", 70, y);
+    y += 100;
+    let size = 42, blocks;
+    for (;;) {
+      g.font = `600 ${size}px "Figtree", system-ui, sans-serif`;
+      blocks = texts.map((t) => wrapLines(g, t, W - 220).slice(0, 4));
+      const height = blocks.reduce((h, b) => h + b.length * size * 1.25 + 40, 0);
+      if (height <= H - y - 110 || size <= 28) break;
+      size -= 4;
+    }
+    blocks.forEach((lines, i) => {
+      const grad = g.createLinearGradient(70, y, 130, y + 60);
+      grad.addColorStop(0, "#FFB547");
+      grad.addColorStop(1, "#FF7A59");
+      g.fillStyle = grad;
+      g.beginPath();
+      g.arc(98, y + size * 0.62, 30, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = "#1A1222";
+      g.font = '800 32px "Syne", "Arial Black", sans-serif';
+      g.textAlign = "center";
+      g.fillText(String(i + 1), 98, y + size * 0.62 - 17);
+      g.textAlign = "left";
+      g.fillStyle = "#F5EEE6";
+      g.font = `600 ${size}px "Figtree", system-ui, sans-serif`;
+      lines.forEach((ln, j) => g.fillText(ln, 155, y + j * size * 1.25));
+      y += lines.length * size * 1.25 + 40;
+    });
+    g.fillStyle = "#A99FB8";
+    g.font = '500 30px "Figtree", system-ui, sans-serif';
+    g.fillText("reply with a number", 70, H - 80);
+    return new Promise((res) => c.toBlob(res, "image/jpeg", 0.9));
+  }
+
+  // ---------- whole shoot ----------
+  async function addShootFiles(list) {
+    const files = [...(list || [])].filter(Boolean);
+    if (!files.length) return;
+    if (state.preparing) { toast("Still loading your last photos. One sec."); return; }
+    const images = files.filter(isImageFile);
+    if (!images.length) { toast(files.some(isVideoFile) ? "Whole shoot takes photos. Caption a video in One post." : "Those files aren't photos."); return; }
+    const room = SHOOT_MAX - shoot.items.length;
+    if (room <= 0) { toast(`A shoot here takes up to ${SHOOT_MAX} photos.`); return; }
+    state.preparing = true;
+    renderShoot();
+    let failed = 0;
+    try {
+      for (const f of images.slice(0, room)) {
+        if (f.size > MAX_BYTES) { failed++; continue; }
+        try {
+          const p = await preparePhoto(f);
+          shoot.items.push({ id: p.id, photo: p, captions: [], idx: 0, saw: [], status: "idle", error: "" });
+          renderShoot();
+        } catch { failed++; }
+      }
+    } finally {
+      state.preparing = false;
+    }
+    const notes = [];
+    if (images.length > room) notes.push(`A shoot here takes up to ${SHOOT_MAX} photos, so only ${room} ${room === 1 ? "was" : "were"} added.`);
+    if (failed) notes.push(`${failed} photo${failed === 1 ? "" : "s"} couldn't be opened here.`);
+    if (files.some(isVideoFile)) notes.push("Videos were left out.");
+    render();
+    renderShoot();
+    if (notes.length) toast(notes.join(" "));
+  }
+
+  function shootPrompt(it) {
+    const ctx = snapshot();
+    ctx.output = "captions";
+    ctx.photoCount = 1;
+    ctx.video = null;
+    ctx.tags = false;
+    ctx.alt = false;
+    const avoid = shoot.items.filter((x) => x !== it && x.captions.length).map((x) => oneLine(x.captions[x.idx], 200)).slice(-30);
+    return { ctx, prompt: captionsPrompt(ctx, { anchor: "", liked: [], passed: [], avoid, avoidLabel: "Captions already used for other photos in this shoot. Don't repeat them, their joke, or their structure:" }, 3) };
+  }
+
+  function shootQueue() {
+    while (shoot.running && shoot.active < 2) {
+      const it = shoot.items.find((i) => i.status === "queued");
+      if (!it) break;
+      runTile(it);
+    }
+    if (shoot.running && shoot.active === 0 && !shoot.items.some((i) => i.status === "queued")) {
+      shoot.running = false;
+      const done = shoot.items.filter((i) => i.status === "done").length;
+      if (!shoot.error) toast(`Done. ${done} of ${shoot.items.length} photos captioned.`);
+    }
+    renderShoot();
+  }
+
+  async function runTile(it) {
+    shoot.active++;
+    it.status = "writing";
+    it.error = "";
+    renderShoot();
+    const ctl = new AbortController();
+    shoot.ctls.add(ctl);
+    const { ctx, prompt } = shootPrompt(it);
+    const others = () => shoot.items.filter((x) => x !== it).flatMap((x) => x.captions.map((t) => ({ text: t })));
+    const caps = [];
+    const parser = lineParser((obj) => {
+      if (Array.isArray(obj.saw)) it.saw = obj.saw.map((s) => oneLine(s, 40).toLowerCase()).filter(Boolean).slice(0, 4);
+      if (typeof obj.caption !== "string") return;
+      let text = cleanCaption(obj.caption);
+      if (ctx.platform.id === "reddit") text = oneLineTitle(text);
+      if (!text || caps.some((c) => norm(c) === norm(text)) || isDupe(text, others())) return;
+      if (ctx.creator && riskyForCreator(text)) return;
+      caps.push(text);
+    });
+    try {
+      const { text } = await state.sample(prompt, { images: [it.photo.blob], signal: ctl.signal, cache: false, modelTier: "default" });
+      parser.finish(text);
+      if (!caps.length) scavenge(text).forEach((r) => parser.finish(`{"caption": ${JSON.stringify(r)}}`));
+      if (caps.length) { it.captions = caps; it.idx = 0; it.status = "done"; }
+      else { it.status = "error"; it.error = "Nothing usable came back. Tap Redo."; }
+    } catch (e) {
+      const code = (e && e.code) || "upstream_error";
+      if (code === "cancelled") it.status = it.captions.length ? "done" : "idle";
+      else if (code === "refused") { it.status = "error"; it.error = "Claude won't caption this one."; }
+      else {
+        it.status = it.captions.length ? "done" : "error";
+        it.error = COPY[code] || COPY.upstream_error;
+        if (code === "rate_limited" || BLOCKING.has(code)) {
+          if (BLOCKING.has(code)) state.blocked = true;
+          shoot.error = COPY[code];
+          stopShoot();
+        }
+      }
+    } finally {
+      shoot.ctls.delete(ctl);
+      shoot.active--;
+      shootQueue();
+    }
+  }
+
+  function startShoot(items) {
+    if (!canWrite()) { toast(state.ready ? "Captions aren't available in this view." : "One sec, still connecting to Claude."); return; }
+    items.forEach((it) => { it.status = "queued"; it.error = ""; });
+    shoot.error = null;
+    shoot.running = true;
+    shootQueue();
+  }
+
+  function stopShoot() {
+    shoot.running = false;
+    for (const it of shoot.items) if (it.status === "queued") it.status = it.captions.length ? "done" : "idle";
+    for (const c of shoot.ctls) c.abort();
+    renderShoot();
+  }
+
+  function shootDoneItems() {
+    return shoot.items.filter((it) => it.status === "done" && it.captions.length);
+  }
+
+  function renderShoot() {
+    const items = shoot.items;
+    const n = items.length;
+    const done = items.filter((i) => i.status === "done").length;
+    const pending = items.filter((i) => i.status === "idle" || i.status === "error").length;
+    el.shootDrop.hidden = n > 0;
+    el.shootGrid.hidden = !n;
+    el.shootGrid.replaceChildren(...items.map((it, i) => {
+      const t = document.createElement("div");
+      t.className = "tile" + (it.status === "writing" ? " is-writing" : "");
+      t.dataset.id = String(it.id);
+      const img = document.createElement("img");
+      img.src = it.photo.url;
+      img.alt = `Shoot photo ${i + 1}`;
+      const num = document.createElement("span");
+      num.className = "num";
+      num.textContent = String(i + 1);
+      const body = document.createElement("div");
+      body.className = "tile-body";
+      const p = document.createElement("p");
+      p.className = "tile-cap";
+      if (it.status === "done" && it.captions.length) p.textContent = it.captions[it.idx];
+      else if (it.status === "error") { p.textContent = it.error; p.classList.add("is-error"); }
+      else { p.textContent = it.status === "writing" ? "Writing…" : it.status === "queued" ? "Waiting…" : "Not captioned yet"; p.classList.add("is-status"); }
+      const acts = document.createElement("div");
+      acts.className = "tile-actions";
+      const btn = (act, label, aria, disabled) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "mini-btn";
+        b.dataset.act = act;
+        b.textContent = label;
+        if (aria) b.setAttribute("aria-label", aria);
+        b.disabled = !!disabled;
+        return b;
+      };
+      if (it.status === "done" && it.captions.length > 1) {
+        const cnt = document.createElement("span");
+        cnt.className = "count";
+        cnt.textContent = `${it.idx + 1}/${it.captions.length}`;
+        acts.append(btn("cycle", "Another", `Show another caption for photo ${i + 1}`), cnt);
+      }
+      if (it.status === "done") acts.append(btn("copy", "Copy", `Copy caption for photo ${i + 1}`));
+      const busyTile = it.status === "writing" || it.status === "queued";
+      acts.append(btn("redo", "Redo", `Rewrite captions for photo ${i + 1}`, busyTile || !canWrite()));
+      acts.append(btn("remove", "Remove", `Remove photo ${i + 1}`, busyTile));
+      body.append(p, acts);
+      t.append(img, num, body);
+      return t;
+    }));
+    el.shootCount.textContent = n ? `${done} of ${n} captioned` : "No photos yet";
+    el.shootProgress.hidden = !n;
+    el.shootBar.style.width = n ? `${Math.round((done / n) * 100)}%` : "0";
+    el.shootStatus.hidden = !shoot.running;
+    if (shoot.running) el.shootStatusText.textContent = `Captioning… ${done} of ${n} done.`;
+    el.shootError.hidden = !shoot.error;
+    el.shootErrorText.textContent = shoot.error || "";
+    el.shootGo.textContent = shoot.running ? "Stop"
+      : !n ? "Choose photos"
+      : pending ? `Caption ${pending} photo${pending === 1 ? "" : "s"}`
+      : "Rewrite all";
+    el.shootGo.disabled = state.preparing || (!!n && !shoot.running && state.ready && !canWrite());
+    el.shootCopy.disabled = !shootDoneItems().length;
+    el.shootCsv.hidden = !state.downloads;
+    el.shootCsv.disabled = !shootDoneItems().length;
+    el.shootAdd.disabled = shoot.running || n >= SHOOT_MAX || state.preparing;
+    el.shootClear.disabled = shoot.running || !n;
+  }
+
+  function shootCsv() {
+    const esc = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+    const rows = [["photo", "file", "caption", "option 2", "option 3", "picked up on"]];
+    shoot.items.forEach((it, i) => {
+      const chosen = it.captions[it.idx] || "";
+      const rest = it.captions.filter((_, j) => j !== it.idx);
+      rows.push([i + 1, it.photo.name, chosen, rest[0] || "", rest[1] || "", it.saw.join(", ")]);
+    });
+    return "﻿" + rows.map((r) => r.map(esc).join(",")).join("\r\n");
+  }
+
   // ---------- render ----------
+  function outLabel(c) {
+    if (c.output === "bio") return "Bio";
+    if (c.output === "sell") return c.label || "Sell this set";
+    return "Caption";
+  }
+
   function render() {
     const has = state.photos.length > 0;
     const many = state.photos.length > 1;
+    const post = state.tab === "post";
     const cap = current();
     const example = !has;
     const batch = cap ? state.batches[cap.batch] : state.batches[state.pendingBatch] || null;
     const plat = platformNow();
     const creator = state.mode === "creator";
+    const out = outputNow();
 
-    document.body.classList.toggle("has-photo", has);
+    document.body.classList.toggle("has-photo", post ? has : shoot.items.length > 0);
+    for (const b of el.tabs.children) b.setAttribute("aria-pressed", String(b.dataset.tab === state.tab));
+    el.postPane.hidden = !post;
+    el.postDesk.hidden = !post;
+    el.shootPane.hidden = post;
+    el.shootDesk.hidden = post;
+    el.outputField.hidden = !post;
+    el.extrasField.hidden = !post;
+    el.steps.hidden = !post || has;
+    el.file.tabIndex = (post ? has : shoot.items.length > 0) ? -1 : 0;
+
     el.drop.hidden = has;
     el.photoWrap.hidden = !has;
     el.strip.hidden = !many;
     el.printActions.hidden = !has;
-    el.steps.hidden = has;
     el.develop.hidden = !(state.busy && state.busyKind === "batch");
-    el.addMore.disabled = state.busy || state.photos.length >= state.maxImages;
-    el.makeFirst.hidden = !many || state.view === 0;
-    el.removePhoto.hidden = !many;
+    el.addMore.hidden = !!state.video;
+    el.addMore.disabled = state.busy || state.preparing || state.photos.length >= state.maxImages;
+    el.makeFirst.hidden = !many || state.view === 0 || !!state.video;
+    el.removePhoto.hidden = !many || !!state.video;
     el.makeFirst.disabled = state.busy;
     el.removePhoto.disabled = state.busy;
-    el.swap.textContent = many ? "New photos" : "Use a different photo";
+    el.swap.textContent = state.video ? "New photos or video" : many ? "New photos" : "Use a different photo";
+    el.swap.disabled = state.preparing;
 
     const viewed = state.photos[state.view];
-    const leadId = many && batch ? batch.lead : null;
+    const leadId = many && batch && !state.video ? batch.lead : null;
     el.leadBadge.hidden = !(viewed && leadId === viewed.id);
     for (const b of el.strip.children) {
       const id = Number(b.dataset.id);
@@ -1489,12 +2274,15 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       }
     }
 
-    el.cardLabel.textContent = example ? "Example" : cap && cap.kind === "tweak" ? `Tweaked · ${cap.tweak}` : "Caption";
+    el.cardLabel.textContent = example ? "Example"
+      : cap ? (cap.kind === "tweak" ? `${outLabel(cap)} · ${cap.tweak}` : outLabel(cap))
+      : out === "bio" ? "Bio" : out === "sell" ? "Sell this set" : "Caption";
     el.cardLabel.classList.toggle("is-example", example);
 
     const text = example ? EXAMPLE.text : cap ? display(cap) : "";
     el.caption.hidden = !text || state.editing;
     el.captionEdit.hidden = !state.editing;
+    el.caption.classList.toggle("is-long", text.length > 140);
     if (text !== shownText) {
       el.caption.textContent = text;
       if (text && !example) {
@@ -1506,6 +2294,7 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     }
     el.skel.hidden = !(has && !cap && state.busy && state.busyKind === "batch");
     el.placeholder.hidden = !(has && !cap && !state.busy && !state.error);
+    el.placeholder.textContent = out === "bio" ? "Your bios show up here." : out === "sell" ? "Your teaser, unlock message and DM openers show up here." : "Your captions show up here.";
 
     el.tools.hidden = !cap;
     if (cap) {
@@ -1516,12 +2305,16 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       el.passBtn.setAttribute("aria-pressed", String(cap.rating < 0));
       el.resetEdit.hidden = cap.edited == null;
       el.moreLike.disabled = aiOff;
+      el.pollBtn.hidden = cap.output !== "captions";
+      el.pollBtn.disabled = pollCandidates().length < 2;
       for (const b of el.tweaks.children) {
         const tw = TWEAKS.find((t) => t.id === b.dataset.tweak);
         b.hidden = !!tw.creatorOnly && !creator;
         b.disabled = tw.local ? state.editing : aiOff;
       }
     }
+    if (!cap || cap.output !== "captions") closePoll();
+    el.pollSave.hidden = !state.downloads;
 
     const saw = example ? EXAMPLE.saw : batch ? batch.saw : [];
     if (saw.length) {
@@ -1548,7 +2341,7 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     }
 
     el.meta.hidden = !text;
-    if (text) el.meta.textContent = metaFor(text, example ? PLATFORMS[0] : plat);
+    if (text) el.meta.textContent = example ? metaFor(text, null) : metaFor(text, cap);
 
     const tags = cap && batch ? batch.tags : [];
     el.tagsOut.hidden = !tags.length;
@@ -1563,19 +2356,19 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
         return b;
       }));
     }
-    const alt = cap && batch ? batch.alt : [];
-    el.altOut.hidden = !alt.length;
-    if (alt.length) {
-      el.altList.replaceChildren(...alt.map((a, i) => {
+    const alts = cap && batch ? altEntries(batch) : [];
+    el.altOut.hidden = !alts.length;
+    if (alts.length) {
+      el.altList.replaceChildren(...alts.map((a) => {
         const li = document.createElement("li");
         const span = document.createElement("span");
-        span.textContent = (alt.length > 1 ? `Photo ${i + 1}: ` : "") + a;
+        span.textContent = (alts.length > 1 || many ? `Photo ${a.n}: ` : "") + a.text;
         const b = document.createElement("button");
         b.type = "button";
         b.className = "link-btn";
-        b.dataset.alt = String(i);
+        b.dataset.alt = String(a.id);
         b.textContent = "Copy";
-        b.setAttribute("aria-label", alt.length > 1 ? `Copy alt text for photo ${i + 1}` : "Copy alt text");
+        b.setAttribute("aria-label", alts.length > 1 ? `Copy alt text for photo ${a.n}` : "Copy alt text");
         li.append(span, b);
         return li;
       }));
@@ -1593,19 +2386,30 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       el.retry.hidden = state.blocked || state.noRetry;
     }
 
-    const ready = nextReady();
-    el.another.disabled = has && (state.busy || (!ready && state.ready && !canWrite()));
-    el.anotherText.textContent = !has ? "Choose photos"
+    const ready = nextMatch() >= 0;
+    const newLabel = out === "bio" ? "Write 5 new bios" : out === "sell" ? "Write a new set" : "Write 5 new";
+    el.another.disabled = has && (state.busy || state.preparing || (!ready && state.ready && !canWrite()));
+    el.anotherText.textContent = !has ? (state.preparing ? "Loading…" : "Choose photos")
       : state.busy ? (state.busyKind === "tweak" ? "Tweaking…" : "Writing…")
-      : ready ? "Get another caption"
-      : cap ? "Write 5 new"
-      : "Write captions";
+      : ready ? (cap && cap.output === "bio" ? "Next bio" : cap && cap.output === "sell" ? "Next" : "Get another caption")
+      : cap ? newLabel
+      : out === "bio" ? "Write bios" : out === "sell" ? "Write the set" : "Write captions";
     el.copy.disabled = !cap;
-    el.settingsHint.hidden = !(has && cap && !state.busy && state.batchKey && state.batchKey !== keyNow());
+    el.settingsHint.hidden = !(has && cap && !state.busy && !ready && cap.key !== keyNow());
+    el.settingsHint.textContent = `Settings changed. Tap ${newLabel} to use them.`;
 
+    el.outputs.replaceChildren(...OUTPUTS.filter((o) => !o.creatorOnly || creator).map((o) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.output = o.id;
+      b.textContent = o.label;
+      b.setAttribute("aria-pressed", String(o.id === out));
+      return b;
+    }));
+    el.outputHint.textContent = (OUTPUTS.find((o) => o.id === out) || OUTPUTS[0]).hint;
     for (const b of el.modes.children) b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode));
     el.modeHint.textContent = MODE_HINT[state.mode];
-    el.ctaRow.hidden = !creator;
+    el.ctaRow.hidden = !creator || (post && out !== "captions");
     el.cta.disabled = state.platform === "reddit";
     el.ctaRow.classList.toggle("is-off", state.platform === "reddit");
     el.ctaText.textContent = state.platform === "reddit" ? "Calls to action are off for Reddit titles" : "End with a call to action";
@@ -1613,8 +2417,10 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     el.subField.hidden = state.platform !== "reddit";
     for (const b of el.vibes.children) b.setAttribute("aria-pressed", String(b.dataset.vibe === state.vibe));
     el.voiceEdit.hidden = !activePersona();
-    el.xTags.disabled = plat.tags === 0;
-    el.tagsRow.classList.toggle("is-off", plat.tags === 0);
+    const noTags = plat.tags === 0 || out !== "captions";
+    el.xTags.disabled = noTags;
+    el.xAlt.disabled = out !== "captions";
+    el.tagsRow.classList.toggle("is-off", noTags);
     el.tagsText.textContent = plat.tags === 0 ? "Hashtags (not used on Reddit)" : `Hashtags (up to ${plat.tags})`;
 
     let notice = "";
@@ -1622,6 +2428,11 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     else if (state.ready && !state.imagesOk) notice = COPY.images_unavailable;
     el.notice.hidden = !notice;
     el.notice.textContent = notice;
+  }
+
+  // Alt text is stored by photo, so reordering or removing photos keeps each description on its own photo.
+  function altEntries(batch) {
+    return state.photos.map((p, i) => ({ id: p.id, n: i + 1, text: batch.alt[p.id] })).filter((a) => a.text);
   }
 
   // ---------- controls ----------
@@ -1647,6 +2458,21 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
   el.langSelect.value = state.language;
   renderVoiceSelect();
 
+  el.tabs.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-tab]");
+    if (!b) return;
+    state.tab = b.dataset.tab;
+    store.set("tab", state.tab);
+    render();
+    renderShoot();
+  });
+  el.outputs.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-output]");
+    if (!b) return;
+    state.output = b.dataset.output;
+    store.set("output", state.output);
+    render();
+  });
   el.vibes.addEventListener("click", (e) => {
     const b = e.target.closest("button[data-vibe]");
     if (!b) return;
@@ -1680,6 +2506,13 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
   el.voiceSelect.addEventListener("change", () => {
     const v = el.voiceSelect.value;
     if (v === "__new") { el.voiceSelect.value = state.persona; openEditor(null); return; }
+    if (v === "__import") {
+      el.voiceSelect.value = state.persona;
+      closeEditor();
+      el.importRow.hidden = false;
+      el.importCode.focus();
+      return;
+    }
     state.persona = v;
     store.set("persona", state.persona);
     if (!el.voiceEditor.hidden) closeEditor();
@@ -1690,17 +2523,21 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
   el.pSave.addEventListener("click", saveEditor);
   el.pCancel.addEventListener("click", closeEditor);
   el.pDelete.addEventListener("click", deletePersona);
+  el.pShare.addEventListener("click", () => {
+    const p = state.personas.find((x) => x.id === state.editorId);
+    if (p) copyText(personaCode(p), `Share code for ${p.name} copied. Paste it on any device under Voice.`, "Couldn't copy here.");
+  });
+  el.importGo.addEventListener("click", importPersona);
+  el.importCode.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); importPersona(); } });
+  el.importCancel.addEventListener("click", () => { el.importRow.hidden = true; el.importCode.value = ""; });
 
   // caption tools
   el.editBtn.addEventListener("click", () => {
     const cap = current();
     if (!cap) return;
-    if (state.editing) {
-      state.editing = false;
-      render();
-      return;
-    }
+    if (state.editing) { stopEditing(); render(); return; }
     state.editing = true;
+    state.editCap = cap;
     el.captionEdit.value = display(cap);
     render();
     el.captionEdit.style.height = "auto";
@@ -1710,17 +2547,24 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
   el.captionEdit.addEventListener("input", () => {
     el.captionEdit.style.height = "auto";
     el.captionEdit.style.height = el.captionEdit.scrollHeight + "px";
-    const cap = current();
+    const cap = state.editCap;
+    // Writes only to the caption the editor opened on, and only while it's still on screen.
+    if (!cap || cap !== current() || !state.captions.includes(cap)) return;
     const v = el.captionEdit.value.replace(/\r/g, "").trim();
-    // Saved as you type, so paging away or copying never loses an edit. An emptied box keeps the last good text.
-    if (cap && v) cap.edited = v === cap.text ? undefined : v;
-    el.resetEdit.hidden = !cap || cap.edited == null;
-    el.meta.textContent = metaFor(v || (cap ? display(cap) : ""), platformNow());
+    if (v) cap.edited = v === cap.text ? undefined : v;
+    el.resetEdit.hidden = cap.edited == null;
+    el.meta.textContent = metaFor(v || display(cap), cap);
   });
-  el.resetEdit.addEventListener("click", () => { const cap = current(); if (cap) { cap.edited = undefined; state.editing = false; render(); } });
+  el.resetEdit.addEventListener("click", () => { const cap = current(); if (cap) { cap.edited = undefined; stopEditing(); render(); } });
   el.likeBtn.addEventListener("click", () => rate(1));
   el.passBtn.addEventListener("click", () => rate(-1));
-  el.moreLike.addEventListener("click", () => { const cap = current(); if (cap && !state.busy) { cap.rating = Math.max(cap.rating, 1); generate({ anchor: display(cap) }); } });
+  el.moreLike.addEventListener("click", () => {
+    const cap = current();
+    if (!cap || state.busy) return;
+    cap.rating = Math.max(cap.rating, 1);
+    if (cap.output !== outputNow()) { state.output = cap.output; store.set("output", state.output); }
+    generate({ anchor: display(cap) });
+  });
   el.tweaks.addEventListener("click", (e) => {
     const b = e.target.closest("button[data-tweak]");
     if (!b || b.disabled) return;
@@ -1758,15 +2602,50 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     if (a) copyText(a, "Alt text copied", "Couldn't copy here. Long-press the text to copy it.");
   });
 
+  // group chat poll
+  el.pollBtn.addEventListener("click", () => { if (el.pollPanel.hidden) openPoll(); else closePoll(); });
+  el.pollClose.addEventListener("click", closePoll);
+  el.pollList.addEventListener("change", (e) => {
+    const box = e.target.closest("input[data-i]");
+    if (!box) return;
+    const c = state.captions[Number(box.dataset.i)];
+    if (!c) return;
+    if (box.checked) {
+      if (state.poll.size >= 3) { box.checked = false; toast("Pick up to 3."); return; }
+      state.poll.add(c);
+    } else {
+      state.poll.delete(c);
+    }
+  });
+  el.pollCopy.addEventListener("click", () => {
+    const picks = pollPicks();
+    if (picks.length < 2) { toast("Pick at least 2."); return; }
+    const msg = "which caption should i use?\n\n" + picks.map((c, i) => `${i + 1}. ${display(c).replace(/\s*\n\s*/g, " / ")}`).join("\n") + "\n\nreply with a number";
+    copyText(msg, "Poll copied. Paste it in the group chat.", "Couldn't copy here.");
+  });
+  el.pollSave.addEventListener("click", async () => {
+    const picks = pollPicks();
+    if (picks.length < 2) { toast("Pick at least 2."); return; }
+    el.pollSave.disabled = true;
+    try {
+      const blob = await pollImage(picks.map(display), state.photos[0]);
+      if (blob) await saveFile("caption-poll.jpg", blob);
+    } finally {
+      el.pollSave.disabled = false;
+    }
+  });
+
   // photos
   el.file.addEventListener("change", () => {
     const files = [...(el.file.files || [])];
     const mode = pickMode;
     pickMode = "replace";
     el.file.value = "";
-    takeFiles(files, mode);
+    if (mode === "shoot") addShootFiles(files);
+    else takeFiles(files, mode);
   });
   el.drop.addEventListener("click", () => { pickMode = "replace"; });
+  el.shootDrop.addEventListener("click", () => { pickMode = "shoot"; });
   el.addMore.addEventListener("click", () => { pickMode = "add"; el.file.click(); });
   el.swap.addEventListener("click", () => { pickMode = "replace"; el.file.click(); });
   el.removePhoto.addEventListener("click", removeViewed);
@@ -1779,20 +2658,67 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     render();
   });
 
+  // whole shoot
+  el.shootGo.addEventListener("click", () => {
+    if (shoot.running) { stopShoot(); return; }
+    if (!shoot.items.length) { pickMode = "shoot"; el.file.click(); return; }
+    const pending = shoot.items.filter((i) => i.status === "idle" || i.status === "error");
+    startShoot(pending.length ? pending : shoot.items);
+  });
+  el.shootAdd.addEventListener("click", () => { pickMode = "shoot"; el.file.click(); });
+  el.shootClear.addEventListener("click", () => {
+    if (shoot.running) return;
+    for (const it of shoot.items) URL.revokeObjectURL(it.photo.url);
+    shoot.items = [];
+    shoot.error = null;
+    render();
+    renderShoot();
+  });
+  el.shootCopy.addEventListener("click", () => {
+    const items = shoot.items.map((it, i) => ({ it, i })).filter(({ it }) => it.status === "done" && it.captions.length);
+    if (!items.length) return;
+    const text = items.map(({ it, i }) => `Photo ${i + 1} (${it.photo.name})\n${it.captions[it.idx]}`).join("\n\n");
+    copyText(text, `Copied ${items.length} caption${items.length === 1 ? "" : "s"}`, "Couldn't copy here.");
+  });
+  el.shootCsv.addEventListener("click", () => saveFile("caption-lab-shoot.csv", shootCsv()));
+  el.shootGrid.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-act]");
+    const tile = e.target.closest(".tile");
+    if (!b || !tile) return;
+    const it = shoot.items.find((x) => String(x.id) === tile.dataset.id);
+    if (!it) return;
+    const act = b.dataset.act;
+    if (act === "cycle") { it.idx = (it.idx + 1) % it.captions.length; renderShoot(); }
+    if (act === "copy") copyText(it.captions[it.idx], "Caption copied", "Couldn't copy here.");
+    if (act === "redo") {
+      if (!canWrite()) return;
+      it.status = "queued";
+      if (!shoot.running) { shoot.running = true; shoot.error = null; }
+      shootQueue();
+    }
+    if (act === "remove") {
+      URL.revokeObjectURL(it.photo.url);
+      shoot.items = shoot.items.filter((x) => x !== it);
+      render();
+      renderShoot();
+    }
+  });
+
   // main actions
   el.another.addEventListener("click", onAnother);
   el.prev.addEventListener("click", () => showAt(state.index - 1));
   el.next.addEventListener("click", () => showAt(state.index + 1));
   el.cancel.addEventListener("click", () => state.ctl && state.ctl.abort());
-  el.retry.addEventListener("click", () => { state.error = null; generate(); });
+  el.retry.addEventListener("click", () => { state.error = null; (state.retry || (() => generate()))(); });
   el.copy.addEventListener("click", () => {
     const cap = current();
     if (!cap) return;
     cap.copied = true;
-    copyText(display(cap), "Caption copied", "Couldn't copy here. Long-press the caption to copy it.", el.caption);
+    copyText(display(cap), "Copied", "Couldn't copy here. Long-press the text to copy it.", el.caption);
   });
 
   document.addEventListener("keydown", (e) => {
+    if (state.tab !== "post") return;
     if (e.target.closest && e.target.closest("input, textarea, select")) return;
     if (e.key === "ArrowLeft") showAt(state.index - 1);
     if (e.key === "ArrowRight") showAt(state.index + 1);
@@ -1810,11 +2736,15 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
 
   let dragDepth = 0;
   const hasFiles = (e) => !!e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+  const routeFiles = (files) => {
+    if (state.tab === "shoot") addShootFiles(files);
+    else takeFiles(files, state.photos.length ? "add" : "replace");
+  };
   window.addEventListener("dragenter", (e) => {
     if (!hasFiles(e)) return;
     e.preventDefault();
     dragDepth++;
-    el.veilText.textContent = state.photos.length ? "Drop to add to this post" : "Drop to caption it";
+    el.veilText.textContent = state.tab === "shoot" ? "Drop to add to the shoot" : state.photos.length ? "Drop to add to this post" : "Drop to caption it";
     el.veil.hidden = false;
   });
   window.addEventListener("dragover", (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
@@ -1824,23 +2754,27 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     e.preventDefault();
     dragDepth = 0;
     el.veil.hidden = true;
-    takeFiles(e.dataTransfer.files, state.photos.length ? "add" : "replace");
+    routeFiles(e.dataTransfer.files);
   });
   window.addEventListener("paste", (e) => {
-    const files = [...((e.clipboardData && e.clipboardData.files) || [])].filter(isImageFile);
+    const files = [...((e.clipboardData && e.clipboardData.files) || [])].filter((f) => isImageFile(f) || isVideoFile(f));
     if (!files.length) return;
     e.preventDefault();
-    takeFiles(files, state.photos.length ? "add" : "replace");
+    routeFiles(files);
   });
 
   render();
+  renderShoot();
 
   (async () => {
-    let s = null;
-    try {
-      s = window.claude && typeof window.claude.use === "function" ? await window.claude.use("sample") : null;
-    } catch { s = null; }
+    const use = (name) => {
+      try {
+        return window.claude && typeof window.claude.use === "function" ? window.claude.use(name).catch(() => null) : Promise.resolve(null);
+      } catch { return Promise.resolve(null); }
+    };
+    const [s, downloads] = await Promise.all([use("sample"), use("downloads")]);
     state.sample = s;
+    state.downloads = downloads;
     if (s) {
       try {
         const lim = await s.limits();
@@ -1848,9 +2782,17 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
         if (lim && lim.images && lim.images.maxCount) state.maxImages = Math.max(1, Math.min(10, lim.images.maxCount));
       } catch { state.imagesOk = false; }
     }
+    // Photos added before the limit was known are trimmed to it.
+    if (state.photos.length > state.maxImages && !state.video) {
+      state.photos.splice(state.maxImages).forEach((p) => URL.revokeObjectURL(p.url));
+      state.view = Math.min(state.view, state.photos.length - 1);
+      renderPhotos();
+      toast(`Posts here take up to ${state.maxImages} photos, so the extras were left out.`);
+    }
     state.ready = true;
     if (state.pending) { state.pending = false; generate(); }
     else render();
+    renderShoot();
   })();
 })();
 </script>
