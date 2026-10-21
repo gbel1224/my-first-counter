@@ -528,6 +528,15 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
           <p class="hint" id="outputHint"></p>
         </div>
 
+        <div class="field" id="qualityField">
+          <span class="label" id="qualityLabel">Effort</span>
+          <div class="seg" id="qualities" role="group" aria-labelledby="qualityLabel">
+            <button type="button" data-quality="max" aria-pressed="true">Max</button>
+            <button type="button" data-quality="fast" aria-pressed="false">Fast</button>
+          </div>
+          <p class="hint" id="qualityHint"></p>
+        </div>
+
         <div class="field">
           <span class="label" id="modeLabel">Mode</span>
           <div class="seg" id="modes" role="group" aria-labelledby="modeLabel">
@@ -657,7 +666,7 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     "another", "anotherText", "copy", "settingsHint",
     "shootDesk", "shootCount", "shootSummary", "shootProgress", "shootBar", "shootStatus", "shootStatusText", "shootError", "shootErrorText",
     "shootGo", "shootCopy", "shootCsv", "shootAdd", "shootClear", "notice",
-    "outputField", "outputs", "outputHint", "modes", "modeHint", "ctaRow", "cta", "ctaText", "platforms", "subField", "subRules", "vibes",
+    "outputField", "outputs", "outputHint", "qualityField", "qualities", "qualityHint", "modes", "modeHint", "ctaRow", "cta", "ctaText", "platforms", "subField", "subRules", "vibes",
     "voiceSelect", "voiceEdit", "importRow", "importCode", "importGo", "importCancel",
     "voiceEditor", "editorTitle", "pName", "pExamples", "pEmoji", "pLower", "pPhrases", "pAvoid",
     "pAi", "pLore", "pAge", "pCity", "pStory", "pError", "pSave", "pShare", "pCancel", "pDelete",
@@ -704,7 +713,22 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     { id: "noemoji", label: "No emoji", local: (t) => stripEmoji(t) },
   ];
   const CREATOR_STYLE = "Style: creator promo. This is for an adult content creator's promo post (Instagram, X, TikTok, Reddit, or a free teaser on Fanvue or OnlyFans). Write in the creator's own voice, often talking straight to whoever's looking. Make it flirty, teasing and confident: tease, don't describe. The best ones hint at more and make people tap the profile. Every caption has to be safe to post on mainstream social apps.";
-  const AGE_RULE = "- If anyone in the photos could be under 18, ignore every flirty, creator and call-to-action instruction in this message and write clean, friendly, non-flirty text instead.";
+  // Contrast teaches the bar better than rules: each pair is a different photo, so nothing here fits the user's own post.
+  const TASTE = [
+    "The gap between mid and fire, shown on other people's photos. Never reuse these words, jokes or structures:",
+    "- sunset: mid \"chasing sunsets 🌅\" / fire \"golden hour did all the heavy lifting\"",
+    "- dog on a walk: mid \"my best friend\" / fire \"he thinks this walk was his idea\"",
+    "- street fit pic: mid \"outfit of the day\" / fire \"dressed like I have somewhere to be. I don't.\"",
+    "- mountain summit: mid \"on top of the world\" / fire \"climbed all this way to avoid one email\"",
+    "- friends out at night: mid \"making memories\" / fire \"the group chat will never recover from tonight\"",
+    "- plane window seat: mid \"wanderlust\" / fire \"seat 23A, no notes\"",
+    "Mid describes the photo or states a feeling everyone has. Fire notices something specific, then turns it.",
+  ];
+  const QUALITY_HINT = {
+    max: "Writers' room: 15 drafts, then a ruthless editor keeps the best 5. Takes about a minute.",
+    fast: "One pass. Quicker, a little less sharp.",
+  };
+  const AGE_RULE ="- If anyone in the photos could be under 18, ignore every flirty, creator and call-to-action instruction in this message and write clean, friendly, non-flirty text instead.";
   const MODE_HINT = {
     everyday: "Clean captions for any photo.",
     creator: "Flirty, teasing promo captions for creators. Still safe to post on Instagram, TikTok and X.",
@@ -762,6 +786,7 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     photos: [], video: null, view: 0, epoch: 0,
     captions: [], index: -1, batches: {}, batchSeq: 0, pendingBatch: null,
     output: pick(store.get("output"), OUTPUTS.map((o) => o.id), "captions"),
+    quality: pick(store.get("quality"), ["max", "fast"], "max"),
     mode: pick(store.get("mode"), ["everyday", "creator"], "everyday"),
     vibe: pick(store.get("vibe"), VIBES.map((v) => v.id), "any"),
     platform: pick(store.get("platform"), PLATFORMS.map((p) => p.id), "instagram"),
@@ -811,7 +836,7 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
   function keyNow() {
     const p = activePersona();
     return [
-      outputNow(), state.mode, ctaOn(), state.vibe, state.platform, state.language,
+      outputNow(), outputNow() === "captions" ? state.quality : "", state.mode, ctaOn(), state.vibe, state.platform, state.language,
       p ? p.id + ":" + p.updated : "",
       oneLine(el.context.value, 120), state.platform === "reddit" ? oneLine(el.subRules.value, 200) : "",
       tagsOn(), altOn(),
@@ -1379,6 +1404,7 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
   function snapshot() {
     return {
       output: outputNow(),
+      quality: state.quality,
       creator: state.mode === "creator",
       cta: ctaOn(),
       vibe: VIBES.find((v) => v.id === state.vibe) || VIBES[0],
@@ -1480,7 +1506,9 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       "- Double meaning: a phrase that's true about the photo and about life at the same time. It has to land on both levels, never a groaner pun.",
       "- Quiet flex: confidence that never announces itself.",
       "",
-      `Throw out anything a typical caption generator would write, anything that just describes the photo, anything that needs explaining, anything cheesy, and any line that would fit under a thousand other photos. Keep the ${count} strongest. The test for each one: a stranger would screenshot it, it only works for this post, and it sounds natural said out loud.`,
+      `Score every candidate privately from 0 to 10 and throw out anything under 8: anything a typical caption generator would write, anything that just describes the photo, anything that needs explaining, anything cheesy, and any line that would fit under a thousand other photos. Punch up the survivors and keep the ${count} strongest. The test for each one: a stranger would screenshot it, it only works for this post, and it sounds natural said out loud.`,
+      "",
+      ...TASTE,
       "",
       "Vibe: " + ctx.vibe.brief,
     ];
@@ -1500,6 +1528,87 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       ? `{"alt": ["alt text for photo 1", ...]} with one plain description per photo, ${ctx.photoCount} in all, each under 125 characters, for someone who can't see it.`
       : '{"alt": "alt text"} with one plain description under 125 characters, for someone who can\'t see it.');
     parts.push(...outputFormat(ctx, fmt));
+    return parts.join("\n");
+  }
+
+  // Writers' room, pass 1: lots of drafts across different moves. Pass 2 (editorPrompt) cuts and punches them up.
+  function draftPrompt(ctx, fb) {
+    const list = dumpOk(ctx);
+    const parts = [
+      "You're the writers' room for one social media post. Your drafts go to a ruthless editor who only keeps lines that make people stop scrolling and think \"damn, that's fire, why didn't I think of that.\" That reaction comes from surprise plus recognition: an angle nobody expected that is instantly, obviously right for this exact post.",
+      "",
+      lookLine(ctx),
+      "",
+      "Start by writing down the specific details: the things a sharp friend would notice, not generic labels (\"the receipt still in her back pocket\", not \"jeans\"). The best captions are hiding in those details.",
+      "",
+      "Then write 15 drafts. Spread them across these moves, at least two each:",
+      "- Reframe: give the scene a meaning nobody expects, so the photo becomes proof, evidence or a punchline.",
+      "- Twist: set something up, then flip it in the last few words.",
+      "- Understatement: say way less than the photo shows, deadpan.",
+      "- Personify: give something in the frame an attitude: the sky, the food, the dog, the shoes, the car.",
+      "- Zoom in: build the whole line on one specific detail most people would miss.",
+      "- Double meaning: a phrase that's true about the photo and about life at the same time. It has to land on both levels, never a groaner pun.",
+      "- Quiet flex: confidence that never announces itself.",
+      "Mix lengths: a few of 2 to 4 words, most a single short line. Take real swings; the editor will cut what doesn't land.",
+      "",
+      ...TASTE,
+      "",
+      "Vibe: " + ctx.vibe.brief,
+    ];
+    if (ctx.video) parts.push("", "It's a video, so drafts can play on the motion or the moment, and the hook has to land before people scroll past.");
+    if (list) parts.push("", `Because this is a photo dump, make 2 of the drafts numbered lists with one short line per photo, in order ("1. " for photo 1, and so on for all ${ctx.photoCount}), each line its own little joke or observation.`);
+    parts.push(...contextBlocks(ctx));
+    if (fb.anchor) parts.push("", "They love this caption:", "<loved>" + fb.anchor + "</loved>", "Draft new ones with the same energy and angle, but different words and ideas. Don't paraphrase it.");
+    if (fb.liked.length) parts.push("", "They liked these. Bring this energy, with new ideas:", ...fb.liked.map((c) => "- " + c));
+    if (fb.passed.length) parts.push("", "They passed on these. Steer away from this direction:", ...fb.passed.map((c) => "- " + c));
+    parts.push("", "Rules:", ...ruleLines(ctx, 15, { listOk: list }).filter((l) => !/Put the strongest first/.test(l)), "- The 15 must use different ideas, not the same joke reworded.");
+    if (fb.avoid.length) parts.push("", "Already shown. Don't repeat them, their joke, or their structure:", ...fb.avoid.map((c) => "- " + c));
+    const fmt = [
+      '{"details": ["6 to 10 specific details a sharp friend would notice"]}',
+      `{"saw": ["3 or 4 short tags of 1 to 3 words naming what stands out ${ctx.photoCount > 1 && !ctx.video ? "across the set" : ctx.video ? "in the video" : "in the photo"}"]}`,
+    ];
+    if (ctx.photoCount > 1 && !ctx.video) fmt.push('{"lead": <the number of the photo that should go first>, "why": "under 10 words on why it stops the scroll"}');
+    fmt.push('{"draft": "one draft"} written 15 times, one per line.');
+    if (ctx.tags) fmt.push(`{"tags": ["#tag", ...]} with up to ${ctx.platform.tags} hashtags made for this exact ${ctx.photoCount > 1 ? "post" : "photo"}: specific, no spaces, never generic ones like #instagood, #explore or #fyp${ctx.creator ? ", and nothing adult or likely to be banned" : ""}.`);
+    if (ctx.alt) fmt.push(ctx.photoCount > 1 && !ctx.video
+      ? `{"alt": ["alt text for photo 1", ...]} with one plain description per photo, ${ctx.photoCount} in all, each under 125 characters, for someone who can't see it.`
+      : '{"alt": "alt text"} with one plain description under 125 characters, for someone who can\'t see it.');
+    parts.push(...outputFormat(ctx, fmt));
+    return parts.join("\n");
+  }
+
+  function editorPrompt(ctx, drafts, details, fb) {
+    const list = dumpOk(ctx);
+    const parts = [
+      "You're the editor. A writers' room drafted captions for the attached post. You only ship captions that make a stranger stop scrolling and think \"damn, that's fire, why didn't I think of that.\"",
+      "",
+      `Look at the ${ctx.video ? "video frames" : ctx.photoCount > 1 ? "photos" : "photo"} yourself first, so you can tell which drafts actually fit.`,
+    ];
+    if (details.length) parts.push("Details the writers noticed: " + details.join("; ") + ".");
+    parts.push(
+      "",
+      "The drafts:",
+      ...drafts.map((d, i) => `${i + 1}. ${d.replace(/\n/g, " / ")}`),
+      "",
+      "Score every draft privately from 0 to 10 on the whole package:",
+      "- Specific: it could only go under this exact post.",
+      "- Surprise: a turn, reframe or double meaning the reader didn't see coming.",
+      "- Instant: it lands in under two seconds with no explaining.",
+      "- Natural: it sounds like a real person with taste. Never a brand, never cringe, no forced slang, no groaner puns.",
+      "- Tight: every word earns its place.",
+      "Kill everything under 8. Punch up the survivors: sharpen a word, cut filler, fix the rhythm, land the turn harder. You can merge two drafts, or write the better line a draft was reaching for. If fewer than 5 reach 8, keep rewriting the near-misses until 5 do.",
+      "Ship exactly 5, strongest first, each a different idea.",
+      "",
+      ...TASTE,
+      "",
+      "Vibe: " + ctx.vibe.brief,
+    );
+    if (list) parts.push("", `Keep one numbered photo-dump list among the 5 if a draft list earns it, with one line per photo for all ${ctx.photoCount} photos.`);
+    parts.push(...contextBlocks(ctx));
+    if (fb.anchor) parts.push("", "They love this caption, so ship lines with its energy but not its words:", "<loved>" + fb.anchor + "</loved>");
+    parts.push("", "Every shipped caption must follow these rules:", ...ruleLines(ctx, 5, { listOk: list }));
+    if (fb.avoid.length) parts.push("", "Already shown to them. Don't ship these or anything close:", ...fb.avoid.map((c) => "- " + c));
+    parts.push(...outputFormat(ctx, ['{"caption": "one caption"} written 5 times, one per line, strongest first.']));
     return parts.join("\n");
   }
 
@@ -1587,6 +1696,8 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       "",
       "The change they asked for: " + tw.brief,
       "Keep the idea that made it work unless the change needs a new one.",
+      "Write 8 versions privately, score each from 0 to 10 on whether a stranger would screenshot it, and keep only the best 3.",
+      ...(cap.output === "captions" ? ["", ...TASTE] : []),
       "",
       "Vibe: " + ctx.vibe.brief,
       ...contextBlocks(ctx, { platformBrief: cap.output === "captions" || /^Teaser/.test(cap.label || "") }),
@@ -1637,7 +1748,11 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     clearStatus();
     const what = state.video ? "Watching your video…" : state.photos.length > 1 ? "Looking at your photos…" : "Looking at your photo…";
     const steps = kind === "tweak"
-      ? [[0, `Tweaking: ${label}…`]]
+      ? [[0, `Tweaking: ${label}…`], [12000, `Tweaking: ${label}. Picking the best 3…`]]
+      : kind === "room"
+        ? [[0, what], [5000, "Writers' room: drafting angles…"]]
+      : kind === "editor"
+        ? [[0, "Editor is cutting the mid ones…"], [15000, "Punching up the survivors…"], [40000, "Almost there. Fire takes a minute."]]
       : kind === "first"
         ? [[0, what], [4000, "Brainstorming angles…"], [12000, "Throwing out the basic ones…"], [24000, "Keeping only the fire ones…"], [45000, "Still cooking. The good ones take a minute."]]
         : [[0, "Cooking up a fresh batch…"], [12000, "Throwing out the basic ones…"], [30000, "Still cooking. The good ones take a minute."]];
@@ -1680,6 +1795,9 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     let added = 0;
     let prior = null;
     const labelCount = {};
+    const room = ctx.output === "captions" && ctx.quality === "max";
+    const drafts = [];
+    let details = [];
 
     state.retry = () => generate(opts);
     state.ctl = ctl;
@@ -1690,9 +1808,18 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     state.noRetry = false;
     stopEditing();
     closePoll();
-    startStatus(state.captions.length === 0 ? "first" : "more");
+    startStatus(room ? "room" : state.captions.length === 0 ? "first" : "more");
     render();
 
+    const takeDraft = (raw) => {
+      let text = cleanCaption(raw);
+      if (ctx.platform.id === "reddit") text = oneLineTitle(text);
+      if (!text || isDupe(text) || drafts.some((d) => norm(d) === norm(text))) return;
+      if (ctx.creator && riskyForCreator(text)) return;
+      drafts.push(text);
+      if (drafts.length === 1) clearStatus();
+      el.statusText.textContent = `Writers' room: ${drafts.length} draft${drafts.length === 1 ? "" : "s"} written…`;
+    };
     const accept = (raw, label = "") => {
       let text = cleanCaption(raw);
       if (ctx.platform.id === "reddit" && ctx.output === "captions") text = oneLineTitle(text);
@@ -1725,6 +1852,8 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
         list.slice(0, ctx.video ? 1 : photos.length).forEach((a, i) => { const t = oneLine(a, 200); if (t) batch.alt[photos[i].id] = t; });
       }
       if (obj.minor === true) batch.minor = true;
+      if (Array.isArray(obj.details)) details = obj.details.map((d) => oneLine(d, 120)).filter(Boolean).slice(0, 12);
+      if (typeof obj.draft === "string") takeDraft(obj.draft);
       if (typeof obj.caption === "string") accept(obj.caption);
       if (ctx.output === "sell") {
         if (typeof obj.teaser === "string") accept(obj.teaser, "Teaser");
@@ -1734,17 +1863,49 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       render();
     });
 
+    const images = photos.map((p) => p.blob);
     try {
-      const { text } = await state.sample(batchPrompt(ctx, fb), {
-        images: photos.map((p) => p.blob),
-        signal: ctl.signal,
-        cache: false,
-        modelTier: "complex",
-        onText: ({ text }) => parser.feed(text),
-      });
-      if (state.epoch !== epoch) return;
-      parser.finish(text);
-      if (!added && ctx.output !== "sell") scavenge(text).forEach((r) => accept(r));
+      if (room) {
+        // Pass 1: the writers' room drafts. Nothing is shown yet; the status counts drafts as they land.
+        const first = await state.sample(draftPrompt(ctx, fb), {
+          images, signal: ctl.signal, cache: false, modelTier: "complex",
+          onText: ({ text }) => parser.feed(text),
+        });
+        if (state.epoch !== epoch) return;
+        parser.finish(first.text);
+        if (drafts.length >= 3) {
+          // Pass 2: the editor scores, cuts and punches up, and only its picks reach the screen.
+          startStatus("editor");
+          const editor = lineParser((obj) => {
+            if (state.epoch !== epoch || ctl.signal.aborted) return;
+            if (typeof obj.caption === "string") { accept(obj.caption); render(); }
+          });
+          try {
+            const second = await state.sample(editorPrompt(ctx, drafts, details, fb), {
+              images, signal: ctl.signal, cache: false, modelTier: "complex",
+              onText: ({ text }) => editor.feed(text),
+            });
+            if (state.epoch !== epoch) return;
+            editor.finish(second.text);
+            if (!added) scavenge(second.text).forEach((r) => accept(r));
+          } catch (e) {
+            const code = e && e.code;
+            if (state.epoch !== epoch || code === "cancelled" || code === "refused" || code === "rate_limited" || BLOCKING.has(code)) throw e;
+            if (e && typeof e.text === "string") editor.finish(e.text);
+            if (added < 5) toast("The editor got cut off, so some of these are raw drafts.");
+          }
+        }
+        // Fall back to the raw drafts so a short or cut-off room still gives the user something.
+        for (const d of drafts) { if (added >= 5) break; accept(d); }
+      } else {
+        const { text } = await state.sample(batchPrompt(ctx, fb), {
+          images, signal: ctl.signal, cache: false, modelTier: "complex",
+          onText: ({ text }) => parser.feed(text),
+        });
+        if (state.epoch !== epoch) return;
+        parser.finish(text);
+        if (!added && ctx.output !== "sell") scavenge(text).forEach((r) => accept(r));
+      }
       if (!added) {
         state.error = batch.minor ? COPY.minor : COPY.empty_parse;
         state.noRetry = batch.minor;
@@ -1753,6 +1914,7 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     } catch (e) {
       if (state.epoch !== epoch) return;
       if (e && e.code !== "refused" && e.code !== "cancelled" && typeof e.text === "string") parser.finish(e.text);
+      if (room && e && e.code === "upstream_error") for (const d of drafts) { if (added >= 5) break; accept(d); }
       handleFailure(e, added, () => {
         if (prior) {
           state.captions = prior.caps;
@@ -1826,7 +1988,7 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       if (typeof obj.caption === "string") accept(obj.caption);
     });
 
-    const options = { signal: ctl.signal, cache: false, modelTier: "quick", onText: ({ text }) => parser.feed(text) };
+    const options = { signal: ctl.signal, cache: false, modelTier: "default", onText: ({ text }) => parser.feed(text) };
     // Creator tweaks carry the photos so the under-18 check can actually look.
     if (ctx.creator) options.images = state.photos.slice(0, state.maxImages).map((p) => p.blob);
     try {
@@ -2407,6 +2569,9 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
       return b;
     }));
     el.outputHint.textContent = (OUTPUTS.find((o) => o.id === out) || OUTPUTS[0]).hint;
+    el.qualityField.hidden = !post || out !== "captions";
+    for (const b of el.qualities.children) b.setAttribute("aria-pressed", String(b.dataset.quality === state.quality));
+    el.qualityHint.textContent = QUALITY_HINT[state.quality];
     for (const b of el.modes.children) b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode));
     el.modeHint.textContent = MODE_HINT[state.mode];
     el.ctaRow.hidden = !creator || (post && out !== "captions");
@@ -2471,6 +2636,13 @@ textarea.note-input { resize: vertical; line-height: 1.45; }
     if (!b) return;
     state.output = b.dataset.output;
     store.set("output", state.output);
+    render();
+  });
+  el.qualities.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-quality]");
+    if (!b) return;
+    state.quality = b.dataset.quality;
+    store.set("quality", state.quality);
     render();
   });
   el.vibes.addEventListener("click", (e) => {

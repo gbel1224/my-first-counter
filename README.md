@@ -16,6 +16,7 @@ Open `index.html` in a browser.
 `caption-lab/index.html` is a photo caption generator. Drop a photo, a photo dump or a short video and it writes captions based on what's actually in it: the subject, the light and the mood.
 
 **One post**
+- **Writers' room (Max effort, the default)**: pass 1 notes the photo's specific details and drafts 15 captions across different moves; pass 2, a separate editor that also sees the photo, scores every draft, cuts anything under 8/10, punches up the survivors and ships the best 5. Both passes see mid-vs-fire examples from other photos. **Fast** effort does it in one pass.
 - **Get another caption** pages through the batch. Changing settings never spends a batch: the button switches to **Write 5 new** when the next batch would use different settings, and old captions are only replaced once new ones arrive.
 - **Tweak instead of reroll**: edit in place, Shorter, Funnier, Bolder, Softer or Spicier, lowercase, no emoji, thumbs up or down, **More like this**. Likes, passes, edits and copies steer the next batch.
 - **Write**: Captions, profile **Bios** (sized to each platform's bio limit), or, in Creator mode, **Sell this set** (a public teaser, an unlock message with `{price}`, and DM openers with `{name}`, all non-explicit).
