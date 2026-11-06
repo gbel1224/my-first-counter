@@ -284,7 +284,9 @@ try {
       G.crime.S.wanted = 1;
       const c = G.footcops.officers[0]; Object.assign(c, { x: G.P.x + 6, z: G.P.z, hidden: false, dead: false, knocked: 0, mode: "chase", sees: true });
       const u = G.crime.units[0]; u.active = true; u.x = G.P.x - 14; u.z = G.P.z;
-      o.officer = G.copVoice.say(c, "stop") > 0; o.loudspeaker = G.copVoice.say(u, "pull", { pa: true }) > 0;
+      o.officer = G.copVoice.say(c, "stop") > 0;
+      await new Promise(r => setTimeout(r, 2600));                 // (no voice twice at once: a cruiser that sounds like him waits his turn)
+      o.loudspeaker = G.copVoice.say(u, "pull", { pa: true }) > 0;
       c.mode = "off"; c.hidden = true; G.crime.reset();
       // the story card: a recorded line plays; with subtitles off its words give way to 🔊
       const dlg = document.getElementById("dlg"), key = "marco|Check line, cuz.";
