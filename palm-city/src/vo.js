@@ -51,7 +51,7 @@ export function makeVoices(base = "") {
     const ctx = AudioSys.ctx; if (!ctx || !has(id)) return Promise.resolve(null);
     if (bufs.has(id)) { const b = bufs.get(id); bufs.delete(id); bufs.set(id, b); return Promise.resolve(b); }
     if (decoding[id]) return decoding[id];
-    return (decoding[id] = fetchClip(id).then(async b => {
+    const job = decoding[id] = fetchClip(id).then(async b => {
       if (!b) return null;
       const OAC = typeof OfflineAudioContext !== "undefined" ? OfflineAudioContext : typeof webkitOfflineAudioContext !== "undefined" ? webkitOfflineAudioContext : null;
       let raw = null;
@@ -72,9 +72,10 @@ export function makeVoices(base = "") {
       }
       bufs.set(id, out);
       if (bufs.size > LRU) bufs.delete(bufs.keys().next().value);
-      delete decoding[id];
       return out;
-    }).catch(() => { delete decoding[id]; return null; }));
+    }).catch(() => null);
+    job.then(() => { delete decoding[id]; });              // (a clip that failed to come down is asked for again next time)
+    return job;
   }
 
   // ---- the police radio ----
@@ -108,7 +109,7 @@ export function makeVoices(base = "") {
       if (bs.some(b => !b) || AudioSys.muted || ctx.currentTime - asked > 1.5) return;
       radioChain(ctx);
       const t0 = Math.max(ctx.currentTime + 0.14, radioEnd + 0.05);
-      AudioSys.squelch(0.8);
+      setTimeout(() => AudioSys.squelch(0.8), Math.max(0, (t0 - 0.14 - ctx.currentTime) * 1000));
       let t = t0;
       for (const b of bs) { const s = ctx.createBufferSource(); s.buffer = b; s.connect(radioIn); s.start(t); t += b.duration + GAP; }
       if (hissG) { hissG.gain.setTargetAtTime(0.016, t0 - 0.1, 0.02); hissG.gain.setTargetAtTime(0, t + 0.02, 0.03); }

@@ -264,12 +264,14 @@ try {
       // a star: dispatch puts out the call, built from her recorded phrases, words on screen
       const sent = [], radio0 = V.radio; V.radio = ids => { const d = radio0(ids); sent.push([ids.join("+"), d]); return d; };
       const el = document.getElementById("dispatch");
-      G.P.x = G.PLACES.fountain.x + 16; G.P.z = G.PLACES.fountain.z; G.crime.addCrime(1); run(20);
-      o.call = sent[0] || null; o.callText = el.textContent;
+      G.P.x = G.PLACES.fountain.x + 16; G.P.z = G.PLACES.fountain.z; G.crime.addCrime(1);
+      const called = () => sent.find(c => c[0].startsWith("d_reported"));
+      for (let k = 0; k < 900 && !called(); k++) run(1);        // (once the air's clear: an earlier line may still be going out)
+      o.call = called() || null; o.callText = el.textContent;
       // subtitles off: the next line is heard, not shown
       G.applySetting("subs", "false"); el.classList.remove("on"); G.crime.S.wanted = 2;
-      for (let k = 0; k < 600 && sent.length < 2; k++) run(1);
-      o.silentSubs = sent.length >= 2 && sent[1][1] > 0 && !el.classList.contains("on");
+      const n1 = sent.length; for (let k = 0; k < 900 && sent.length === n1; k++) run(1);
+      o.silentSubs = sent.length > n1 && sent[n1][1] > 0 && !el.classList.contains("on");
       G.applySetting("subs", "true"); V.radio = radio0; G.crime.reset(); run(5);
       // someone you barge into, in their own voice and words
       await new Promise(r => setTimeout(r, 2500));
