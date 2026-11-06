@@ -42,7 +42,7 @@ for id, t in [
     ("d_w3", "Shots fired! All units, code three."), ("d_w4", "Suspect is extremely dangerous. Air support requested."),
     ("d_w5", "SWAT is rolling. Clear the streets."), ("d_speed", "Suspect is travelling at high speed!"),
     # places (phoneapps DIRECTORY ids) and areas (phone.areaName)
-    ("p_customs", "near Palm Customs."), ("p_guns", "near Ammu-Palm."), ("p_clothes", "near Threads."), ("p_barber", "near Fade City."),
+    ("p_customs", "near Palm Customs."), ("p_guns", "near Ammu Palm."), ("p_clothes", "near Threads."), ("p_barber", "near Fade City."),
     ("p_tattoo", "near Ink and Palms."), ("p_hospital", "near Palm General."), ("p_police", "near the police station."), ("p_gas", "near Palm Fuel."),
     ("p_arcade", "near Palm Bowl."), ("p_gallery", "near the Palm Gallery."), ("p_plaza", "near the Plaza."),
     ("a_downtown", "downtown."), ("a_midtown", "in midtown."), ("a_east", "in the east end."), ("a_west", "on the west side."),
