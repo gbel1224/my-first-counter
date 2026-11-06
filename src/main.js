@@ -56,6 +56,8 @@ import { makeLife } from "./life.js";
 import { inWater, waterStep, heliStep, planeStep } from "./craft.js";
 import { SEA_Y } from "./ocean.js";
 import { AudioSys } from "./audio.js";
+import { makeVoices } from "./vo.js";
+import { makeCopVoice } from "./copvoice.js";
 import { makeInterior } from "./interior.js";
 import { loadHumans, humansReady, loadWeapons } from "./human.js";
 import { setView, setCullScale, inView } from "./cull.js";
@@ -256,6 +258,16 @@ function respawnAt(place, label) {
   rig.init = false; rig.yaw = place.face + Math.PI;
 }
 const crimeHooks = {};
+// the voices (vo.js): the dispatcher, the officers, the people on the street, the story's cast
+const vo = makeVoices();
+const subsOn = () => settings.subs !== "false" || AudioSys.muted;     // (with the sound off, the words are all there is)
+// someone on the street out loud: their recorded line of that kind, and whether to caption it (null: say it in writing)
+function pedVoice(p, key) {
+  const id = vo.pedLine(p, key); if (!id) return null;
+  const d = vo.shout(id, p.x, p.z, p);
+  if (!d && !AudioSys.muted) return null;
+  return { text: vo.sub(id), dur: d || vo.len(id), show: subsOn() };
+}
 const crime = makeCrime(scene, {
   footSees: () => crimeHooks.footSees && crimeHooks.footSees(), footGrab: () => crimeHooks.footGrab && crimeHooks.footGrab(),
   collider, fxParticles: fx,
@@ -296,6 +308,7 @@ const combat = makeCombat(scene, {
   recoil: k => { rig.shake = Math.max(rig.shake, k * 7); },
   extraTargets: () => act2.targets(),
   onHit: (kill, head) => { hud.hitMark(kill, head); AudioSys.play("blip", kill ? 0.3 : 0.16, kill ? 0.75 : 1.9); },
+  onShot: () => copVoice.shot(),
 });
 // ---- cars are solid on foot, and they're cover ----
 // every car-shaped thing near a point, as a capsule: the nearest point on its centre line, so the
@@ -390,7 +403,7 @@ const footcops = makeFootCops({
   focus: () => P.car ? { x: P.car.x, z: P.car.z, car: P.car, speed: P.car.speed } : { x: P.x, z: P.z, car: null, speed: P.speed },
   sound: (k, v, r) => AudioSys.play(k, v, r), inView: (x, z) => inView(x, z, 0),
   paused: () => hud.talking() || state.phase !== "play" || !!interior.inside,
-  tackle: o => { if (P.car || P.tackleT > 0) return; P.tackleT = 2.4; P.speed = 0; P.yaw = Math.atan2(P.x - o.x, P.z - o.z); rig.shake = Math.max(rig.shake, 0.45); AudioSys.play("door", 0.9, 0.55); hud.toast("👮 Tackled!", 1.6); },
+  tackle: o => { if (P.car || P.tackleT > 0) return; copVoice.tackle(o); P.tackleT = 2.4; P.speed = 0; P.yaw = Math.atan2(P.x - o.x, P.z - o.z); rig.shake = Math.max(rig.shake, 0.45); AudioSys.play("door", 0.9, 0.55); hud.toast("👮 Tackled!", 1.6); },
 });
 // the police radio: dispatch talking you through your own chase (and a subtitle chip for it)
 const dispatchEl = document.createElement("div"); dispatchEl.id = "dispatch"; document.getElementById("ui").appendChild(dispatchEl);
@@ -398,8 +411,15 @@ let dispatchT = 0;
 const policeRadio = makePoliceRadio({
   crime, footcops, roadblocks,
   focus: () => P.car ? { x: P.car.x, z: P.car.z, car: P.car, vx: P.car.vx, vz: P.car.vz, h: P.car.h, speed: P.car.speed } : { x: P.x, z: P.z, car: null, vx: Math.sin(P.yaw) * P.speed, vz: Math.cos(P.yaw) * P.speed, h: P.yaw, speed: P.speed },
-  squelch: v => AudioSys.squelch(v), muted: () => AudioSys.muted,
-  subtitle: t => { dispatchEl.innerHTML = t; dispatchEl.classList.add("on"); dispatchT = 4.2; },
+  squelch: v => AudioSys.squelch(v), muted: () => AudioSys.muted, vo,
+  subtitle: (t, secs) => { if (!subsOn()) return; dispatchEl.innerHTML = t; dispatchEl.classList.add("on"); dispatchT = secs || 4.2; },
+});
+// what the officers shout, on foot and through a cruiser's loudspeaker
+const copVoice = makeCopVoice({
+  crime, footcops, vo,
+  focus: () => P.car ? { x: P.car.x, z: P.car.z, car: P.car, speed: Math.abs(P.car.speed) } : { x: P.x, z: P.z, car: null, speed: P.speed },
+  armed: () => { const w = combat.current(); return w.id !== "fists" && !w.melee; },
+  muted: () => AudioSys.muted, subs: subsOn, bubble: (who, text, secs) => life.caption(who, text, secs),
 });
 crimeHooks.footSees = () => footcops.sees(); crimeHooks.footGrab = () => footcops.grabbing();
 { const r0 = crime.reset; crime.reset = () => { r0(); footcops.reset(); }; }
@@ -561,7 +581,7 @@ setSurface(extras.rampHeight);
 const weather = createWeather(scene, sky, city);
 weather.setGround(groundY);
 const life = makeLife(scene, {
-  st, P, crowd, crime, combat, cars, camera, focus: focusInfo, isMobile, time: () => time,
+  st, P, crowd, crime, combat, cars, camera, focus: focusInfo, isMobile, time: () => time, voice: { ped: pedVoice },
   get hud() { return hud; }, earn: n => eco.earn(n), toast: (m, t) => hud.toast(m, t), banner: (a, b, k, t) => hud.banner(a, b, k, t),
   sound: (k, v, r) => AudioSys.play(k, v, r), save: () => writeSave(), shake: a => { rig.shake = Math.max(rig.shake, a); },
   indoors: () => typeof interior !== "undefined" && interior.inside,
@@ -673,6 +693,11 @@ for (const c of traffic.cars) traffic.respawnNear(c, P.x, P.z, 30);
 
 // ---------------------------------------------------------------------------------------------
 const hud = createHUD(plan);
+hud.voice = (who, text) => {
+  if (who === null) { vo.stopStory(); return null; }
+  const secs = vo.story(who, text);
+  return secs ? { secs, hide: settings.subs === "false" && !AudioSys.muted } : null;
+};
 initInput(hud.ui);
 // Palm Customs, and the garages at your homes
 const customs = makeCustoms(scene, {
@@ -687,7 +712,7 @@ hud.ui.wpn.addEventListener("pointerdown", e => { e.stopPropagation(); if (!P.ca
 phone = makePhone();
 // settings (persisted per device) + the ☰ menu
 const SET_KEY = "palmcity_settings";
-let settings = { quality: isMobile ? "balanced" : "high", cycle: "false", time: "0.63", weather: "0", sound: "true" };
+let settings = { quality: isMobile ? "balanced" : "high", cycle: "false", time: "0.63", weather: "0", sound: "true", subs: "true" };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(SET_KEY) || "{}")); } catch (e) {}
 let menuPaused = false, photoMode = false;
 // low-FX: shorter draw distance for the city tiles, and the small stuff (props, plants, street
@@ -721,9 +746,10 @@ function applySetting(k, v) {
   if (k === "time") { sky.set(+v); settings.cycle = "false"; sky.state.cycle = false; }
   if (k === "weather") weather.W.mode = +v;
   if (k === "sound") AudioSys.setMuted(v !== "true");
+  if (k === "subs" && v === "false") { dispatchEl.classList.remove("on"); dispatchT = 0; }
   try { localStorage.setItem(SET_KEY, JSON.stringify(settings)); } catch (e) {}
 }
-for (const k of ["quality", "cycle", "weather"]) applySetting(k, settings[k]);
+for (const k of ["quality", "cycle", "weather", "sound"]) applySetting(k, settings[k]);
 if (settings.cycle !== "true") sky.set(+settings.time);
 const menu = createMenu({
   hud, stats: () => extras.statsRows(), objective: () => currentObjective(),
@@ -761,7 +787,7 @@ function start() {
   state.phase = "play";
   title.classList.add("gone");
   hud.show(true);
-  AudioSys.init();
+  AudioSys.init(); vo.init();
   if (imported) hud.toast("Welcome back — your progress from the old city came with you", 4);
   story.begin();
   setTimeout(() => life.tutorial(), 400);
@@ -1014,7 +1040,7 @@ function update(dt) {
   // world sim — while you're indoors the street carries on around your front door
   const focus = interior.inside ? interior.doorWorld() : P.car || P;
   // running someone down starts trouble; mid-chase it only stacks if a cop saw it, and only up to 3★ (4-5★ take shooting at the police)
-  const hz = P.car ? [{ x: P.car.x, z: P.car.z, speed: P.car.speed, vx: P.car.vx, vz: P.car.vz, onHit: (p, sp) => { rig.shake = 0.35; AudioSys.play("door", 0.5, 0.8); if (sp > 9) { if (!crime.S.wanted || crime.S.wanted < 3 && crime.units.some(u => u.active && (u.x - p.x) ** 2 + (u.z - p.z) ** 2 < 3600 && crime.los(u.x, u.z, p.x, p.z))) crime.addCrime(1); if (sp > 16) p.dead = true, p.knocked = 22; } } }] : [];
+  const hz = P.car ? [{ x: P.car.x, z: P.car.z, speed: P.car.speed, vx: P.car.vx, vz: P.car.vz, onHit: (p, sp) => { rig.shake = 0.35; AudioSys.play("door", 0.5, 0.8); p._byCar = true; if (sp > 9) { if (!crime.S.wanted || crime.S.wanted < 3 && crime.units.some(u => u.active && (u.x - p.x) ** 2 + (u.z - p.z) ** 2 < 3600 && crime.los(u.x, u.z, p.x, p.z))) crime.addCrime(1); if (sp > 16) p.dead = true, p.knocked = 22; } } }] : [];
   for (const u of crime.units) if (u.active && u.speed > 5) hz.push({ x: u.x, z: u.z, speed: u.speed, vx: u.vx, vz: u.vz });
   interior.update(dt, time);
   if (interior.inside || hud.talking()) life.quiet();
@@ -1046,16 +1072,18 @@ function update(dt) {
       const d = Math.hypot(dx, dz) || 1e-3;
       P.x = p.x + dx / d * 0.72; P.z = p.z + dz / d * 0.72;
       if (!p.fixed && !p.ai && !p.sit && (Math.sin(p.yaw) * dx + Math.cos(p.yaw) * dz) > 0) p.pause = Math.max(p.pause || 0, 0.6);
+      if (P.speed > 3.2) life.bumped(p);                   // barge into someone at a run and they let you know
     }
     // whatever shoved you this frame (a cruiser, a blast, a door), you never end up inside a wall
     if (!P.car && !P.swim) { const q = collider.resolve(P.x, P.z, 0.38); if (q.hit) { P.x = q.x; P.z = q.z; } }
-    crime.update(dt, time); footcops.update(dt); policeRadio.update(dt); roadblocks.update(dt, time);
+    crime.update(dt, time); footcops.update(dt); policeRadio.update(dt); copVoice.update(dt); roadblocks.update(dt, time);
     if (dispatchT > 0) { dispatchT -= dt; if (dispatchT <= 0) dispatchEl.classList.remove("on"); } combat.update(dt, time); gangs.update(dt);
     updateHeists(dt, time); events.update(dt); jobs.update(dt); act2.update(dt); services.update(dt);
     // sirens you can hear: the nearest ambulance / fire engine on a call, or the police on your tail
     // (the two nearest cruisers: each placed left/right of the camera, pitch bent by Doppler as it closes or passes)
     { const L = P.car || P, lvx = P.car ? P.car.vx : Math.sin(P.yaw) * P.speed, lvz = P.car ? P.car.vz : Math.cos(P.yaw) * P.speed;
       const rx = camera.matrixWorld.elements[0], rz = camera.matrixWorld.elements[2], rl = Math.hypot(rx, rz) || 1;
+      vo.listener(L.x, L.z, rx, rz);
       const voices = [];
       if (crime.S.wanted > 0) for (const u of crime.units) {
         if (!u.active) continue;
@@ -1372,7 +1400,7 @@ requestAnimationFrame(frame);
 // debug / test hooks
 globalThis.__pc2 = {
   THREE, scene, camera, customs, applyCarMods, act2, services, coverState: () => cov, coverMult, R, sky, city, plan, facade, parked, eco, story, st, npcs, PLACES, BIZ, PROPS, hud, crime, combat, fx, gangs, extras, weather, water, life, menu: () => menu, applySetting, phone: () => phone, events, jobs, heistsDebug, startHeist, PH, collider, crowd, traffic, humansReady, hijack, P, cars, state, rig, I,
-  interior, props, street, skids, animals, damage, radio, roadblocks, footcops, policeRadio, AudioSys, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
+  interior, props, street, skids, animals, damage, radio, roadblocks, footcops, policeRadio, AudioSys, vo, copVoice, freeze: v => { frozen = v; }, renderOnce: () => render(), step: (dt = 1 / 60) => { update(dt); },
   start, setTime: t => sky.set(t), enterNearest: () => { const n = nearestCar(); if (n) enterCar(n); return !!n; }, exitCar,
   look: (px, py, pz, tx, ty, tz) => { state.phase = "debug"; title.classList.add("gone"); camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); },
 };

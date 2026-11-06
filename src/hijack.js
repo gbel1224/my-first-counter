@@ -84,8 +84,8 @@ export function makeHijack(scene, g) {
     const style = persona === "tough" || persona === "rude" ? (roll < 0.7 ? "fight" : "cops")
       : persona === "nervous" || persona === "nice" ? (roll < 0.75 ? "flee" : "cops")
       : roll < 0.4 ? "flee" : roll < 0.7 ? "cops" : "fight";
-    const line = role && r() < 0.6 ? LINES.role[role] : pick(r, LINES[style]);
-    g.life.shout(p, line, style === "flee" ? "scared" : style === "fight" ? "mad" : "annoyed");
+    const own = role && r() < 0.6, line = own ? LINES.role[role] : pick(r, LINES[style]);
+    g.life.shout(p, line, style === "flee" ? "scared" : style === "fight" ? "mad" : "annoyed", own ? null : style === "flee" ? "scream" : style === "fight" ? "insult" : "cops");
     if (style === "flee") { p.fearMax = 9; p.fear = 9; }
     else if (style === "fight") { p.anger = 2; g.life.fightBack(p); }
     else {
@@ -116,7 +116,7 @@ export function makeHijack(scene, g) {
     job.ch.face.base = "neutral";
     c.speed = 0; c.vx = c.vz = 0;
     if (emergency) g.crime.addCrime(1);
-    g.life.shout(job.ch, pick(r, LINES.grab), "shocked", true);
+    g.life.shout(job.ch, pick(r, LINES.grab), "shocked", "jacked");
     return true;
   }
   const jobsAfter = [];               // people mid-reaction (lying there, about to get up)
@@ -178,7 +178,7 @@ export function makeHijack(scene, g) {
       }
       // you walk right up to their car: a warning
       const d2 = (o.car.x - P.x) ** 2 + (o.car.z - P.z) ** 2;
-      if (!P.car && d2 < 3.2 * 3.2 && !o.warned) { o.warned = true; g.life.shout(p, pick(r, LINES.owner), "annoyed"); }
+      if (!P.car && d2 < 3.2 * 3.2 && !o.warned) { o.warned = true; g.life.shout(p, pick(r, LINES.owner), "annoyed", "insult"); }
       if (d2 > 8 * 8) o.warned = false;
     }
     if (owners.length >= 3 || r() > dt * 1.5) return;
@@ -207,7 +207,7 @@ export function makeHijack(scene, g) {
       if (p.knocked > 0) continue;
       p._react.t -= dt;
       if (p._react.t <= 0 || p.knocked <= 0) {
-        if (p._react.bike) g.life.shout(p, pick(r, LINES.bike), "mad");
+        if (p._react.bike) g.life.shout(p, pick(r, LINES.bike), "mad", "hit");
         react(p, p._react.role, "traffic");
         p._react = null; jobsAfter.splice(i, 1);
       }

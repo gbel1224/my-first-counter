@@ -75,13 +75,16 @@ export function createHUD(plan) {
     const [who, text] = dlgLines[dlgI];
     const w = WHO[who] || [who, "#fff"];
     dlg.querySelector(".who").textContent = w[0]; dlg.querySelector(".who").style.color = w[1];
-    dlgFull = text; dlgShown = 0; dlg.querySelector(".txt").textContent = "";
+    // the line read out by its voice, when it was recorded (with subtitles off, then, only heard)
+    const v = H_.voice ? H_.voice(who, text) : null;
+    dlg.classList.toggle("voiced", !!v);
+    dlgFull = v && v.hide ? "🔊 · · ·" : text; dlgShown = 0; dlg.querySelector(".txt").textContent = "";
   }
   function advance() {
     if (!dlgLines) return;
     if (dlgShown < dlgFull.length) { dlgShown = dlgFull.length; dlg.querySelector(".txt").textContent = dlgFull; return; }   // first tap finishes the line
     dlgI++;
-    if (dlgI >= dlgLines.length) { dlgLines = null; dlg.classList.remove("on"); document.body.classList.remove("talking"); const cb = dlgCb; dlgCb = null; if (cb) cb(); }
+    if (dlgI >= dlgLines.length) { dlgLines = null; dlg.classList.remove("on"); document.body.classList.remove("talking"); if (H_.voice) H_.voice(null); const cb = dlgCb; dlgCb = null; if (cb) cb(); }
     else renderDlg();
   }
   dlg.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); advance(); });
@@ -91,6 +94,7 @@ export function createHUD(plan) {
     mapInfo: { canvas: map, X, Z, S },
     dialogue(lines, cb) { dlgLines = lines; dlgI = 0; dlgCb = cb; renderDlg(); dlg.classList.add("on"); document.body.classList.add("talking"); },
     talking: () => !!dlgLines,
+    voice: null,                                    // (who, text) -> { secs, hide } | null: read a line out; (null) stops it
     advance,
     banner(big, small, kicker = "", secs = 3.6, cls = "") {
       banner.className = "on " + cls;

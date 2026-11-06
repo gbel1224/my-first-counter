@@ -465,7 +465,9 @@ export function makeCrime(scene, g) {
     }
     if (g.footGrab && g.footGrab()) grabbing = true;   // an officer on foot has his hands on you
     // cornered by a stopped cruiser for a moment (on foot, or sat still in a car): BUSTED
-    if (grabbing) { S.bustT += dt; if (S.bustT > (F.car ? (heat <= 1 ? 3.5 : 2.2) : 1.4)) { busted(); return; } }   // (at one star they give you a moment to get going again) else S.bustT = Math.max(0, S.bustT - dt * 2);
+    // (at one star they give you a moment to get going again)
+    if (grabbing) { S.bustT += dt; if (S.bustT > (F.car ? (heat <= 1 ? 3.5 : 2.2) : 1.4)) { busted(); return; } }
+    else S.bustT = Math.max(0, S.bustT - dt * 2);
     // heat only cools while they've genuinely lost you: the stars flash while they search, and if
     // the search runs out without anyone spotting you, every star goes at once (GTA rules)
     if (S.wanted > 0) {
