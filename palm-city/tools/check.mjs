@@ -252,6 +252,62 @@ try {
     ok("phone: the lawyer makes a 1-star wanted level go away", r2.lawyerCleared, r2);
     ok("phone: a posted photo earns followers", r2.photoFollowers > 0, r2);
     ok("phone: Music plays a station through your earbuds", r2.earbuds, r2);
+    // voices: the recorded lines load and play where they should, with subtitles that follow the setting
+    const r3 = await pg.evaluate(async () => {
+      const G = window.__pc2, V = G.vo, run = n => { for (let i = 0; i < n; i++) { G.crime.S.health = 100; G.step(1 / 60); } }, o = {};
+      if (G.P.car) G.exitCar(); G.crime.reset(); G.events.cancel(); G.hud.closePanel(); G.state.phase = "play";
+      { let k = 0; while (G.hud.talking() && k++ < 80) { G.hud.advance(); G.hud.advance(); } }
+      for (let k = 0; k < 150 && !(V.ready && G.AudioSys.ctx); k++) await new Promise(r => setTimeout(r, 100));
+      const M = V._test.man(); let bad = 0, n = 0;
+      if (M) for (const id of Object.keys(M.clips)) { n++; const b = await V._test.decode(id); if (!b || Math.abs(b.duration - V.len(id)) > 0.03) bad++; }
+      o.clips = n; o.badClips = bad;
+      // a star: dispatch puts out the call, built from her recorded phrases, words on screen
+      const sent = [], radio0 = V.radio; V.radio = ids => { const d = radio0(ids); sent.push([ids.join("+"), d]); return d; };
+      const el = document.getElementById("dispatch");
+      G.P.x = G.PLACES.fountain.x + 16; G.P.z = G.PLACES.fountain.z; G.crime.addCrime(1); run(20);
+      o.call = sent[0] || null; o.callText = el.textContent;
+      // subtitles off: the next line is heard, not shown
+      G.applySetting("subs", "false"); el.classList.remove("on"); G.crime.S.wanted = 2;
+      for (let k = 0; k < 600 && sent.length < 2; k++) run(1);
+      o.silentSubs = sent.length >= 2 && sent[1][1] > 0 && !el.classList.contains("on");
+      G.applySetting("subs", "true"); V.radio = radio0; G.crime.reset(); run(5);
+      // someone you barge into, in their own voice and words
+      await new Promise(r => setTimeout(r, 2500));
+      const p = G.crowd.nearest(G.P.x, G.P.z, 80, q => !q.gang && !q.ally && !q.goon && !q.crew && !q.hidden && !(q.knocked > 0));
+      if (p) { p.x = G.P.x + 1.2; p.z = G.P.z; p.pause = 3; p._bumpAt = 0; G.life.bumped(p); run(2); }
+      const bub = document.getElementById("bubbleA");
+      o.bump = p ? bub.textContent : null; o.bumpVoiced = !!p && !!M && M.sub[V.pedLine(p, "bump")] === bub.textContent;
+      // officers: one on foot, one cruiser on its loudspeaker
+      await new Promise(r => setTimeout(r, 2500));
+      G.crime.S.wanted = 1;
+      const c = G.footcops.officers[0]; Object.assign(c, { x: G.P.x + 6, z: G.P.z, hidden: false, dead: false, knocked: 0, mode: "chase", sees: true });
+      const u = G.crime.units[0]; u.active = true; u.x = G.P.x - 14; u.z = G.P.z;
+      o.officer = G.copVoice.say(c, "stop") > 0; o.loudspeaker = G.copVoice.say(u, "pull", { pa: true }) > 0;
+      c.mode = "off"; c.hidden = true; G.crime.reset();
+      // the story card: a recorded line plays; with subtitles off its words give way to 🔊
+      const dlg = document.getElementById("dlg"), key = "marco|Check line, cuz.";
+      M.story[key] = "o_reid_freeze"; G.applySetting("subs", "false");
+      G.hud.dialogue([["marco", "Check line, cuz."]], () => {}); for (let i = 0; i < 90; i++) G.hud.update(1 / 60);
+      o.storyVoiced = dlg.classList.contains("voiced") && dlg.querySelector(".txt").textContent.startsWith("🔊");
+      G.hud.advance(); G.hud.advance(); G.applySetting("subs", "true"); delete M.story[key];
+      // sound off: nothing plays, the words still show
+      G.applySetting("sound", "false"); const c2 = G.footcops.officers[1];
+      Object.assign(c2, { x: G.P.x + 5, z: G.P.z, hidden: false, dead: false, knocked: 0, mode: "chase", sees: true }); G.crime.S.wanted = 1;
+      const w0 = V._test.world(); G.copVoice.say(c2, "freeze"); run(2);
+      o.mutedQuiet = V._test.world() === w0 && V.radio(["d_w3"]) === 0 && bub.textContent === M.sub[V.copLine(c2, "freeze")];
+      c2.mode = "off"; c2.hidden = true; G.applySetting("sound", "true"); G.crime.reset();
+      // the bust timer runs down again once nobody's got hold of you
+      G.crime.addCrime(1); for (const v of G.crime.units) { v.active = false; v.group.visible = false; } G.crime.S.bustT = 1; run(30); o.bustDecay = G.crime.S.bustT; G.crime.reset();
+      return o;
+    });
+    ok("voices: every recorded clip loads and decodes", r3.clips >= 150 && r3.badClips === 0, r3);
+    ok("voices: a star brings dispatch on the radio, recorded and captioned", !!r3.call && /^d_reported\+/.test(r3.call[0]) && r3.call[1] > 0 && /DISPATCH · All units, we have a suspect/.test(r3.callText), r3);
+    ok("voices: subtitles off — dispatch is heard, not shown", r3.silentSubs, r3);
+    ok("voices: people on the street react in their own voice", r3.bumpVoiced, r3);
+    ok("voices: officers shout, on foot and over a cruiser's loudspeaker", r3.officer && r3.loudspeaker, r3);
+    ok("voices: a recorded story line plays (words hidden with subtitles off)", r3.storyVoiced, r3);
+    ok("voices: sound off — nothing plays, the words still show", r3.mutedQuiet, r3);
+    ok("police: the bust timer runs down when they let go", r3.bustDecay < 0.2, r3);
     ok("no page errors", errs.length === 0, errs.slice(0, 3));
     await pg.close();
   }
