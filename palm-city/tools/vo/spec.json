@@ -27,6 +27,15 @@
 "sub": "Suspect is in a"
 },
 {
+"id": "d_vehicle",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Suspect vehicle,",
+"rate": 22,
+"group": "dispatch",
+"sub": "Suspect vehicle,"
+},
+{
 "id": "d_on_foot",
 "voice": "helena",
 "vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",

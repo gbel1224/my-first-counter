@@ -1,5 +1,28 @@
-{"note": "extra takes of one-word dispatcher pieces; the best one replaces the clip",
- "c_green": ["7272ad90-f964-4d50-82c6-a94f0f9569ed", "02430bc4-c8d5-4520-b307-316320ee89a6"],
- "c_purple": ["d4f7096f-9b48-42e8-be23-78e978902af1", "bbb95fe0-590c-41e7-86b0-30e613aa2618"],
- "t_vehicle": ["d4f0ced6-d383-4bf7-9a50-fafa8ad8ea15", "f40a4d62-10b8-4688-979e-125f5bc48908"],
- "c_pink": ["6bc6d541-ac78-4165-8f23-0f0a4729b01f"]}
+{
+ "note": "extra takes of one-word dispatcher pieces; the best one replaces the clip",
+ "c_green": [
+  "7272ad90-f964-4d50-82c6-a94f0f9569ed",
+  "02430bc4-c8d5-4520-b307-316320ee89a6"
+ ],
+ "c_purple": [
+  "d4f7096f-9b48-42e8-be23-78e978902af1",
+  "bbb95fe0-590c-41e7-86b0-30e613aa2618"
+ ],
+ "t_vehicle": [
+  "d4f0ced6-d383-4bf7-9a50-fafa8ad8ea15",
+  "f40a4d62-10b8-4688-979e-125f5bc48908"
+ ],
+ "c_pink": [
+  "6bc6d541-ac78-4165-8f23-0f0a4729b01f",
+  "924301e9-b76e-413c-96a2-4ab4cd62c736",
+  "0a8f822c-0b74-4314-9a28-b8f806e46be9"
+ ],
+ "a_midtown": [
+  "350a9e13-e4a3-4530-8821-ecced3752503",
+  "0e0cd12a-498c-46d2-a891-7602897944b4"
+ ],
+ "d_vehicle": [
+  "f279d7bd-b64b-4401-ac8f-96ba43967c83",
+  "cb659cce-5631-4f49-9437-c4c677d89ec3"
+ ]
+}

@@ -30,7 +30,7 @@ def add(id, voice, text, rate, group, sub=None, who=None):
 
 # ---- dispatch: whole lines, and the pieces she builds the rest from ----
 for id, t in [
-    ("d_reported", "All units, we have a suspect"), ("d_heading", "Suspect heading"), ("d_in_a", "Suspect is in a"),
+    ("d_reported", "All units, we have a suspect"), ("d_heading", "Suspect heading"), ("d_in_a", "Suspect is in a"), ("d_vehicle", "Suspect vehicle,"),
     ("d_on_foot", "Suspect is on foot."), ("d_pursuit", "Units in pursuit,"), ("d_lost", "We've lost visual. Units, search the area."),
     ("d_perimeter", "Suspect is out of sight. Set up a perimeter."), ("d_spotted", "Visual on suspect! Moving in."),
     ("d_eyes", "Units have eyes on the suspect."), ("d_air", "Air One is overhead. We have eyes on the suspect."),
