@@ -1,0 +1,2080 @@
+[
+{
+"id": "d_reported",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "All units, we have a suspect",
+"rate": 22,
+"group": "dispatch",
+"sub": "All units, we have a suspect"
+},
+{
+"id": "d_heading",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Suspect heading",
+"rate": 22,
+"group": "dispatch",
+"sub": "Suspect heading"
+},
+{
+"id": "d_in_a",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Suspect is in a",
+"rate": 22,
+"group": "dispatch",
+"sub": "Suspect is in a"
+},
+{
+"id": "d_on_foot",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Suspect is on foot.",
+"rate": 22,
+"group": "dispatch",
+"sub": "Suspect is on foot."
+},
+{
+"id": "d_pursuit",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Units in pursuit,",
+"rate": 22,
+"group": "dispatch",
+"sub": "Units in pursuit,"
+},
+{
+"id": "d_lost",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "We've lost visual. Units, search the area.",
+"rate": 22,
+"group": "dispatch",
+"sub": "We've lost visual. Units, search the area."
+},
+{
+"id": "d_perimeter",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Suspect is out of sight. Set up a perimeter.",
+"rate": 22,
+"group": "dispatch",
+"sub": "Suspect is out of sight. Set up a perimeter."
+},
+{
+"id": "d_spotted",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Visual on suspect! Moving in.",
+"rate": 22,
+"group": "dispatch",
+"sub": "Visual on suspect! Moving in."
+},
+{
+"id": "d_eyes",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Units have eyes on the suspect.",
+"rate": 22,
+"group": "dispatch",
+"sub": "Units have eyes on the suspect."
+},
+{
+"id": "d_air",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Air One is overhead. We have eyes on the suspect.",
+"rate": 22,
+"group": "dispatch",
+"sub": "Air One is overhead. We have eyes on the suspect."
+},
+{
+"id": "d_swat_armor",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "SWAT armour deployed. All units, keep your distance.",
+"rate": 22,
+"group": "dispatch",
+"sub": "SWAT armour deployed. All units, keep your distance."
+},
+{
+"id": "d_roadblock",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Roadblock is set. Box him in.",
+"rate": 22,
+"group": "dispatch",
+"sub": "Roadblock is set. Box him in."
+},
+{
+"id": "d_spikes",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Spikes got him! Suspect's tyres are out.",
+"rate": 22,
+"group": "dispatch",
+"sub": "Spikes got him! Suspect's tyres are out."
+},
+{
+"id": "d_pit",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "PIT maneuver successful! Move in.",
+"rate": 22,
+"group": "dispatch",
+"sub": "PIT maneuver successful! Move in."
+},
+{
+"id": "d_foot",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Suspect is on foot. Officers in pursuit.",
+"rate": 22,
+"group": "dispatch",
+"sub": "Suspect is on foot. Officers in pursuit."
+},
+{
+"id": "d_custody",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Suspect is in custody. Good work, everyone.",
+"rate": 22,
+"group": "dispatch",
+"sub": "Suspect is in custody. Good work, everyone."
+},
+{
+"id": "d_down",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Suspect is down. Send a medic.",
+"rate": 22,
+"group": "dispatch",
+"sub": "Suspect is down. Send a medic."
+},
+{
+"id": "d_gone",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "All units, we've lost the suspect. Resume patrol.",
+"rate": 22,
+"group": "dispatch",
+"sub": "All units, we've lost the suspect. Resume patrol."
+},
+{
+"id": "d_standdown",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "All units, call it off. Return to patrol.",
+"rate": 22,
+"group": "dispatch",
+"sub": "All units, call it off. Return to patrol."
+},
+{
+"id": "d_w2",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Suspect is not stopping. Requesting additional units.",
+"rate": 22,
+"group": "dispatch",
+"sub": "Suspect is not stopping. Requesting additional units."
+},
+{
+"id": "d_w3",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Shots fired! All units, code three.",
+"rate": 22,
+"group": "dispatch",
+"sub": "Shots fired! All units, code three."
+},
+{
+"id": "d_w4",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Suspect is extremely dangerous. Air support requested.",
+"rate": 22,
+"group": "dispatch",
+"sub": "Suspect is extremely dangerous. Air support requested."
+},
+{
+"id": "d_w5",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "SWAT is rolling. Clear the streets.",
+"rate": 22,
+"group": "dispatch",
+"sub": "SWAT is rolling. Clear the streets."
+},
+{
+"id": "d_speed",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "Suspect is travelling at high speed!",
+"rate": 22,
+"group": "dispatch",
+"sub": "Suspect is travelling at high speed!"
+},
+{
+"id": "p_customs",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "near Palm Customs.",
+"rate": 22,
+"group": "dispatch",
+"sub": "near Palm Customs."
+},
+{
+"id": "p_guns",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "near Ammu-Palm.",
+"rate": 22,
+"group": "dispatch",
+"sub": "near Ammu-Palm."
+},
+{
+"id": "p_clothes",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "near Threads.",
+"rate": 22,
+"group": "dispatch",
+"sub": "near Threads."
+},
+{
+"id": "p_barber",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "near Fade City.",
+"rate": 22,
+"group": "dispatch",
+"sub": "near Fade City."
+},
+{
+"id": "p_tattoo",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "near Ink and Palms.",
+"rate": 22,
+"group": "dispatch",
+"sub": "near Ink and Palms."
+},
+{
+"id": "p_hospital",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "near Palm General.",
+"rate": 22,
+"group": "dispatch",
+"sub": "near Palm General."
+},
+{
+"id": "p_police",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "near the police station.",
+"rate": 22,
+"group": "dispatch",
+"sub": "near the police station."
+},
+{
+"id": "p_gas",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "near Palm Fuel.",
+"rate": 22,
+"group": "dispatch",
+"sub": "near Palm Fuel."
+},
+{
+"id": "p_arcade",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "near Palm Bowl.",
+"rate": 22,
+"group": "dispatch",
+"sub": "near Palm Bowl."
+},
+{
+"id": "p_gallery",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "near the Palm Gallery.",
+"rate": 22,
+"group": "dispatch",
+"sub": "near the Palm Gallery."
+},
+{
+"id": "p_plaza",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "near the Plaza.",
+"rate": 22,
+"group": "dispatch",
+"sub": "near the Plaza."
+},
+{
+"id": "a_downtown",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "downtown.",
+"rate": 22,
+"group": "dispatch",
+"sub": "downtown."
+},
+{
+"id": "a_midtown",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "in midtown.",
+"rate": 22,
+"group": "dispatch",
+"sub": "in midtown."
+},
+{
+"id": "a_east",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "in the east end.",
+"rate": 22,
+"group": "dispatch",
+"sub": "in the east end."
+},
+{
+"id": "a_west",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "on the west side.",
+"rate": 22,
+"group": "dispatch",
+"sub": "on the west side."
+},
+{
+"id": "a_north",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "in the north blocks.",
+"rate": 22,
+"group": "dispatch",
+"sub": "in the north blocks."
+},
+{
+"id": "a_beach",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "on the beachfront.",
+"rate": 22,
+"group": "dispatch",
+"sub": "on the beachfront."
+},
+{
+"id": "h_north",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "north",
+"rate": 22,
+"group": "dispatch",
+"sub": "north"
+},
+{
+"id": "h_northeast",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "northeast",
+"rate": 22,
+"group": "dispatch",
+"sub": "northeast"
+},
+{
+"id": "h_east",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "east",
+"rate": 22,
+"group": "dispatch",
+"sub": "east"
+},
+{
+"id": "h_southeast",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "southeast",
+"rate": 22,
+"group": "dispatch",
+"sub": "southeast"
+},
+{
+"id": "h_south",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "south",
+"rate": 22,
+"group": "dispatch",
+"sub": "south"
+},
+{
+"id": "h_southwest",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "southwest",
+"rate": 22,
+"group": "dispatch",
+"sub": "southwest"
+},
+{
+"id": "h_west",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "west",
+"rate": 22,
+"group": "dispatch",
+"sub": "west"
+},
+{
+"id": "h_northwest",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "northwest",
+"rate": 22,
+"group": "dispatch",
+"sub": "northwest"
+},
+{
+"id": "c_red",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "red",
+"rate": 22,
+"group": "dispatch",
+"sub": "red"
+},
+{
+"id": "c_orange",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "orange",
+"rate": 22,
+"group": "dispatch",
+"sub": "orange"
+},
+{
+"id": "c_yellow",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "yellow",
+"rate": 22,
+"group": "dispatch",
+"sub": "yellow"
+},
+{
+"id": "c_green",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "green",
+"rate": 22,
+"group": "dispatch",
+"sub": "green"
+},
+{
+"id": "c_teal",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "teal",
+"rate": 22,
+"group": "dispatch",
+"sub": "teal"
+},
+{
+"id": "c_blue",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "blue",
+"rate": 22,
+"group": "dispatch",
+"sub": "blue"
+},
+{
+"id": "c_purple",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "purple",
+"rate": 22,
+"group": "dispatch",
+"sub": "purple"
+},
+{
+"id": "c_pink",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "pink",
+"rate": 22,
+"group": "dispatch",
+"sub": "pink"
+},
+{
+"id": "c_white",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "white",
+"rate": 22,
+"group": "dispatch",
+"sub": "white"
+},
+{
+"id": "c_silver",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "silver",
+"rate": 22,
+"group": "dispatch",
+"sub": "silver"
+},
+{
+"id": "c_grey",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "grey",
+"rate": 22,
+"group": "dispatch",
+"sub": "grey"
+},
+{
+"id": "c_black",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "black",
+"rate": 22,
+"group": "dispatch",
+"sub": "black"
+},
+{
+"id": "t_sedan",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "sedan.",
+"rate": 22,
+"group": "dispatch",
+"sub": "sedan."
+},
+{
+"id": "t_sports",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "sports car.",
+"rate": 22,
+"group": "dispatch",
+"sub": "sports car."
+},
+{
+"id": "t_suv",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "S U V.",
+"rate": 22,
+"group": "dispatch",
+"sub": "SUV."
+},
+{
+"id": "t_motorbike",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "motorbike.",
+"rate": 22,
+"group": "dispatch",
+"sub": "motorbike."
+},
+{
+"id": "t_pickup",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "pickup.",
+"rate": 22,
+"group": "dispatch",
+"sub": "pickup."
+},
+{
+"id": "t_van",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "van.",
+"rate": 22,
+"group": "dispatch",
+"sub": "van."
+},
+{
+"id": "t_vehicle",
+"voice": "helena",
+"vid": "3c2b83c0-2e0a-5ae8-998a-a5fe71b7eccd",
+"text": "vehicle.",
+"rate": 22,
+"group": "dispatch",
+"sub": "vehicle."
+},
+{
+"id": "o_reid_stop",
+"voice": "reid",
+"vid": "66469f5a-10db-586a-bab1-72f6ee66ba69",
+"text": "Police! Stop right there!",
+"rate": 18,
+"group": "officer",
+"sub": "Police! Stop right there!"
+},
+{
+"id": "o_reid_car",
+"voice": "reid",
+"vid": "66469f5a-10db-586a-bab1-72f6ee66ba69",
+"text": "Get out of the car! Now!",
+"rate": 18,
+"group": "officer",
+"sub": "Get out of the car! Now!"
+},
+{
+"id": "o_reid_hands",
+"voice": "reid",
+"vid": "66469f5a-10db-586a-bab1-72f6ee66ba69",
+"text": "Hands where I can see them!",
+"rate": 18,
+"group": "officer",
+"sub": "Hands where I can see them!"
+},
+{
+"id": "o_reid_freeze",
+"voice": "reid",
+"vid": "66469f5a-10db-586a-bab1-72f6ee66ba69",
+"text": "Freeze! Don't move!",
+"rate": 18,
+"group": "officer",
+"sub": "Freeze! Don't move!"
+},
+{
+"id": "o_reid_arrest",
+"voice": "reid",
+"vid": "66469f5a-10db-586a-bab1-72f6ee66ba69",
+"text": "You're under arrest!",
+"rate": 18,
+"group": "officer",
+"sub": "You're under arrest!"
+},
+{
+"id": "o_reid_running",
+"voice": "reid",
+"vid": "66469f5a-10db-586a-bab1-72f6ee66ba69",
+"text": "He's running! After him!",
+"rate": 18,
+"group": "officer",
+"sub": "He's running! After him!"
+},
+{
+"id": "o_reid_pull",
+"voice": "reid",
+"vid": "66469f5a-10db-586a-bab1-72f6ee66ba69",
+"text": "Pull over! Pull over now!",
+"rate": 18,
+"group": "officer",
+"sub": "Pull over! Pull over now!"
+},
+{
+"id": "o_reid_drop",
+"voice": "reid",
+"vid": "66469f5a-10db-586a-bab1-72f6ee66ba69",
+"text": "Drop the weapon!",
+"rate": 18,
+"group": "officer",
+"sub": "Drop the weapon!"
+},
+{
+"id": "o_dylan_stop",
+"voice": "dylan",
+"vid": "b847bc29-f184-583a-8ad9-d1f1e16d1a60",
+"text": "Police! Stop right there!",
+"rate": 18,
+"group": "officer",
+"sub": "Police! Stop right there!"
+},
+{
+"id": "o_dylan_car",
+"voice": "dylan",
+"vid": "b847bc29-f184-583a-8ad9-d1f1e16d1a60",
+"text": "Get out of the car! Now!",
+"rate": 18,
+"group": "officer",
+"sub": "Get out of the car! Now!"
+},
+{
+"id": "o_dylan_freeze",
+"voice": "dylan",
+"vid": "b847bc29-f184-583a-8ad9-d1f1e16d1a60",
+"text": "Freeze! Don't move!",
+"rate": 18,
+"group": "officer",
+"sub": "Freeze! Don't move!"
+},
+{
+"id": "o_dylan_ground",
+"voice": "dylan",
+"vid": "b847bc29-f184-583a-8ad9-d1f1e16d1a60",
+"text": "Get on the ground!",
+"rate": 18,
+"group": "officer",
+"sub": "Get on the ground!"
+},
+{
+"id": "o_dylan_running",
+"voice": "dylan",
+"vid": "b847bc29-f184-583a-8ad9-d1f1e16d1a60",
+"text": "He's running! After him!",
+"rate": 18,
+"group": "officer",
+"sub": "He's running! After him!"
+},
+{
+"id": "o_dylan_shots",
+"voice": "dylan",
+"vid": "b847bc29-f184-583a-8ad9-d1f1e16d1a60",
+"text": "Shots fired! Shots fired!",
+"rate": 18,
+"group": "officer",
+"sub": "Shots fired! Shots fired!"
+},
+{
+"id": "o_dylan_down",
+"voice": "dylan",
+"vid": "b847bc29-f184-583a-8ad9-d1f1e16d1a60",
+"text": "Officer down! I need backup!",
+"rate": 18,
+"group": "officer",
+"sub": "Officer down! I need backup!"
+},
+{
+"id": "o_dylan_armed",
+"voice": "dylan",
+"vid": "b847bc29-f184-583a-8ad9-d1f1e16d1a60",
+"text": "Suspect is armed!",
+"rate": 18,
+"group": "officer",
+"sub": "Suspect is armed!"
+},
+{
+"id": "o_desmond_car",
+"voice": "desmond",
+"vid": "563f728c-e249-5a85-97ab-8461e8c09da6",
+"text": "Get out of the car! Now!",
+"rate": 18,
+"group": "officer",
+"sub": "Get out of the car! Now!"
+},
+{
+"id": "o_desmond_hands",
+"voice": "desmond",
+"vid": "563f728c-e249-5a85-97ab-8461e8c09da6",
+"text": "Hands where I can see them!",
+"rate": 18,
+"group": "officer",
+"sub": "Hands where I can see them!"
+},
+{
+"id": "o_desmond_ground",
+"voice": "desmond",
+"vid": "563f728c-e249-5a85-97ab-8461e8c09da6",
+"text": "Get on the ground!",
+"rate": 18,
+"group": "officer",
+"sub": "Get on the ground!"
+},
+{
+"id": "o_desmond_arrest",
+"voice": "desmond",
+"vid": "563f728c-e249-5a85-97ab-8461e8c09da6",
+"text": "You're under arrest!",
+"rate": 18,
+"group": "officer",
+"sub": "You're under arrest!"
+},
+{
+"id": "o_desmond_shots",
+"voice": "desmond",
+"vid": "563f728c-e249-5a85-97ab-8461e8c09da6",
+"text": "Shots fired! Shots fired!",
+"rate": 18,
+"group": "officer",
+"sub": "Shots fired! Shots fired!"
+},
+{
+"id": "o_desmond_down",
+"voice": "desmond",
+"vid": "563f728c-e249-5a85-97ab-8461e8c09da6",
+"text": "Officer down! I need backup!",
+"rate": 18,
+"group": "officer",
+"sub": "Officer down! I need backup!"
+},
+{
+"id": "o_desmond_pull",
+"voice": "desmond",
+"vid": "563f728c-e249-5a85-97ab-8461e8c09da6",
+"text": "Pull over! Pull over now!",
+"rate": 18,
+"group": "officer",
+"sub": "Pull over! Pull over now!"
+},
+{
+"id": "o_desmond_drop",
+"voice": "desmond",
+"vid": "563f728c-e249-5a85-97ab-8461e8c09da6",
+"text": "Drop the weapon!",
+"rate": 18,
+"group": "officer",
+"sub": "Drop the weapon!"
+},
+{
+"id": "ped_archie_scream",
+"voice": "archie",
+"vid": "bd072316-f77c-588b-b6e5-e46b9b03d008",
+"text": "Aaah! Help! Somebody help!",
+"rate": 10,
+"group": "ped",
+"sub": "Aaah! Help! Somebody help!"
+},
+{
+"id": "ped_archie_cops",
+"voice": "archie",
+"vid": "bd072316-f77c-588b-b6e5-e46b9b03d008",
+"text": "Somebody call the cops!",
+"rate": 10,
+"group": "ped",
+"sub": "Somebody call the cops!"
+},
+{
+"id": "ped_archie_gun",
+"voice": "archie",
+"vid": "bd072316-f77c-588b-b6e5-e46b9b03d008",
+"text": "Gun! He's got a gun!",
+"rate": 10,
+"group": "ped",
+"sub": "Gun! He's got a gun!"
+},
+{
+"id": "ped_archie_bump",
+"voice": "archie",
+"vid": "bd072316-f77c-588b-b6e5-e46b9b03d008",
+"text": "Hey! Watch it!",
+"rate": 10,
+"group": "ped",
+"sub": "Hey! Watch it!"
+},
+{
+"id": "ped_archie_car",
+"voice": "archie",
+"vid": "bd072316-f77c-588b-b6e5-e46b9b03d008",
+"text": "Learn to drive, idiot!",
+"rate": 10,
+"group": "ped",
+"sub": "Learn to drive, idiot!"
+},
+{
+"id": "ped_archie_insult",
+"voice": "archie",
+"vid": "bd072316-f77c-588b-b6e5-e46b9b03d008",
+"text": "What's your problem, man?",
+"rate": 10,
+"group": "ped",
+"sub": "What's your problem, man?"
+},
+{
+"id": "ped_archie_greet",
+"voice": "archie",
+"vid": "bd072316-f77c-588b-b6e5-e46b9b03d008",
+"text": "Hey, how's it going?",
+"rate": 10,
+"group": "ped",
+"sub": "Hey, how's it going?"
+},
+{
+"id": "ped_archie_nice",
+"voice": "archie",
+"vid": "bd072316-f77c-588b-b6e5-e46b9b03d008",
+"text": "Beautiful day out, huh?",
+"rate": 10,
+"group": "ped",
+"sub": "Beautiful day out, huh?"
+},
+{
+"id": "ped_archie_hit",
+"voice": "archie",
+"vid": "bd072316-f77c-588b-b6e5-e46b9b03d008",
+"text": "Ow! What the hell, man?!",
+"rate": 10,
+"group": "ped",
+"sub": "Ow! What the hell, man?!"
+},
+{
+"id": "ped_archie_jacked",
+"voice": "archie",
+"vid": "bd072316-f77c-588b-b6e5-e46b9b03d008",
+"text": "Hey! That's my car!",
+"rate": 10,
+"group": "ped",
+"sub": "Hey! That's my car!"
+},
+{
+"id": "ped_emmett_scream",
+"voice": "emmett",
+"vid": "3c7d32be-0182-5c5e-aa6a-663409bfbb26",
+"text": "Run! Everybody run!",
+"rate": 10,
+"group": "ped",
+"sub": "Run! Everybody run!"
+},
+{
+"id": "ped_emmett_cops",
+"voice": "emmett",
+"vid": "3c7d32be-0182-5c5e-aa6a-663409bfbb26",
+"text": "Someone call nine one one!",
+"rate": 10,
+"group": "ped",
+"sub": "Someone call 911!"
+},
+{
+"id": "ped_emmett_gun",
+"voice": "emmett",
+"vid": "3c7d32be-0182-5c5e-aa6a-663409bfbb26",
+"text": "Oh my god, he's got a gun!",
+"rate": 10,
+"group": "ped",
+"sub": "Oh my god, he's got a gun!"
+},
+{
+"id": "ped_emmett_bump",
+"voice": "emmett",
+"vid": "3c7d32be-0182-5c5e-aa6a-663409bfbb26",
+"text": "Whoa, easy there, pal!",
+"rate": 10,
+"group": "ped",
+"sub": "Whoa, easy there, pal!"
+},
+{
+"id": "ped_emmett_car",
+"voice": "emmett",
+"vid": "3c7d32be-0182-5c5e-aa6a-663409bfbb26",
+"text": "Are you crazy?! Watch the road!",
+"rate": 10,
+"group": "ped",
+"sub": "Are you crazy?! Watch the road!"
+},
+{
+"id": "ped_emmett_insult",
+"voice": "emmett",
+"vid": "3c7d32be-0182-5c5e-aa6a-663409bfbb26",
+"text": "You looking for trouble?",
+"rate": 10,
+"group": "ped",
+"sub": "You looking for trouble?"
+},
+{
+"id": "ped_emmett_greet",
+"voice": "emmett",
+"vid": "3c7d32be-0182-5c5e-aa6a-663409bfbb26",
+"text": "What's up?",
+"rate": 10,
+"group": "ped",
+"sub": "What's up?"
+},
+{
+"id": "ped_emmett_nice",
+"voice": "emmett",
+"vid": "3c7d32be-0182-5c5e-aa6a-663409bfbb26",
+"text": "Man, I love this city.",
+"rate": 10,
+"group": "ped",
+"sub": "Man, I love this city."
+},
+{
+"id": "ped_emmett_hit",
+"voice": "emmett",
+"vid": "3c7d32be-0182-5c5e-aa6a-663409bfbb26",
+"text": "Agh! You're crazy!",
+"rate": 10,
+"group": "ped",
+"sub": "Agh! You're crazy!"
+},
+{
+"id": "ped_emmett_jacked",
+"voice": "emmett",
+"vid": "3c7d32be-0182-5c5e-aa6a-663409bfbb26",
+"text": "My car! Somebody stop him!",
+"rate": 10,
+"group": "ped",
+"sub": "My car! Somebody stop him!"
+},
+{
+"id": "ped_cillian_scream",
+"voice": "cillian",
+"vid": "d8ba9f14-8a24-44db-932b-99e16c45bd32",
+"text": "Get down! Get down!",
+"rate": 10,
+"group": "ped",
+"sub": "Get down! Get down!"
+},
+{
+"id": "ped_cillian_cops",
+"voice": "cillian",
+"vid": "d8ba9f14-8a24-44db-932b-99e16c45bd32",
+"text": "I'm calling the police!",
+"rate": 10,
+"group": "ped",
+"sub": "I'm calling the police!"
+},
+{
+"id": "ped_cillian_gun",
+"voice": "cillian",
+"vid": "d8ba9f14-8a24-44db-932b-99e16c45bd32",
+"text": "He's armed! Get out of here!",
+"rate": 10,
+"group": "ped",
+"sub": "He's armed! Get out of here!"
+},
+{
+"id": "ped_cillian_bump",
+"voice": "cillian",
+"vid": "d8ba9f14-8a24-44db-932b-99e16c45bd32",
+"text": "Hey, watch where you're walking!",
+"rate": 10,
+"group": "ped",
+"sub": "Hey, watch where you're walking!"
+},
+{
+"id": "ped_cillian_car",
+"voice": "cillian",
+"vid": "d8ba9f14-8a24-44db-932b-99e16c45bd32",
+"text": "Slow down, maniac!",
+"rate": 10,
+"group": "ped",
+"sub": "Slow down, maniac!"
+},
+{
+"id": "ped_cillian_insult",
+"voice": "cillian",
+"vid": "d8ba9f14-8a24-44db-932b-99e16c45bd32",
+"text": "Back off, man!",
+"rate": 10,
+"group": "ped",
+"sub": "Back off, man!"
+},
+{
+"id": "ped_cillian_greet",
+"voice": "cillian",
+"vid": "d8ba9f14-8a24-44db-932b-99e16c45bd32",
+"text": "Morning!",
+"rate": 10,
+"group": "ped",
+"sub": "Morning!"
+},
+{
+"id": "ped_cillian_nice",
+"voice": "cillian",
+"vid": "d8ba9f14-8a24-44db-932b-99e16c45bd32",
+"text": "Nice weather today.",
+"rate": 10,
+"group": "ped",
+"sub": "Nice weather today."
+},
+{
+"id": "ped_cillian_hit",
+"voice": "cillian",
+"vid": "d8ba9f14-8a24-44db-932b-99e16c45bd32",
+"text": "Ow! Hey, cut it out!",
+"rate": 10,
+"group": "ped",
+"sub": "Ow! Hey, cut it out!"
+},
+{
+"id": "ped_cillian_jacked",
+"voice": "cillian",
+"vid": "d8ba9f14-8a24-44db-932b-99e16c45bd32",
+"text": "Hey! Get out of my car!",
+"rate": 10,
+"group": "ped",
+"sub": "Hey! Get out of my car!"
+},
+{
+"id": "ped_celine_scream",
+"voice": "celine",
+"vid": "57ccb351-84d7-54ba-afd4-26b566ca6023",
+"text": "Aaah! Help me!",
+"rate": 10,
+"group": "ped",
+"sub": "Aaah! Help me!"
+},
+{
+"id": "ped_celine_cops",
+"voice": "celine",
+"vid": "57ccb351-84d7-54ba-afd4-26b566ca6023",
+"text": "Somebody call the cops!",
+"rate": 10,
+"group": "ped",
+"sub": "Somebody call the cops!"
+},
+{
+"id": "ped_celine_gun",
+"voice": "celine",
+"vid": "57ccb351-84d7-54ba-afd4-26b566ca6023",
+"text": "Oh my god, he's got a gun!",
+"rate": 10,
+"group": "ped",
+"sub": "Oh my god, he's got a gun!"
+},
+{
+"id": "ped_celine_bump",
+"voice": "celine",
+"vid": "57ccb351-84d7-54ba-afd4-26b566ca6023",
+"text": "Excuse you!",
+"rate": 10,
+"group": "ped",
+"sub": "Excuse you!"
+},
+{
+"id": "ped_celine_car",
+"voice": "celine",
+"vid": "57ccb351-84d7-54ba-afd4-26b566ca6023",
+"text": "Watch where you're going!",
+"rate": 10,
+"group": "ped",
+"sub": "Watch where you're going!"
+},
+{
+"id": "ped_celine_insult",
+"voice": "celine",
+"vid": "57ccb351-84d7-54ba-afd4-26b566ca6023",
+"text": "Ugh, what's your problem?",
+"rate": 10,
+"group": "ped",
+"sub": "Ugh, what's your problem?"
+},
+{
+"id": "ped_celine_greet",
+"voice": "celine",
+"vid": "57ccb351-84d7-54ba-afd4-26b566ca6023",
+"text": "Hi there!",
+"rate": 10,
+"group": "ped",
+"sub": "Hi there!"
+},
+{
+"id": "ped_celine_nice",
+"voice": "celine",
+"vid": "57ccb351-84d7-54ba-afd4-26b566ca6023",
+"text": "Gorgeous day, isn't it?",
+"rate": 10,
+"group": "ped",
+"sub": "Gorgeous day, isn't it?"
+},
+{
+"id": "ped_celine_hit",
+"voice": "celine",
+"vid": "57ccb351-84d7-54ba-afd4-26b566ca6023",
+"text": "Ow! Are you insane?!",
+"rate": 10,
+"group": "ped",
+"sub": "Ow! Are you insane?!"
+},
+{
+"id": "ped_celine_jacked",
+"voice": "celine",
+"vid": "57ccb351-84d7-54ba-afd4-26b566ca6023",
+"text": "No! That's my car!",
+"rate": 10,
+"group": "ped",
+"sub": "No! That's my car!"
+},
+{
+"id": "ped_juno_scream",
+"voice": "juno",
+"vid": "a3ce02fe-4d3e-55bc-b4d4-a4801b9acdb4",
+"text": "Run! Somebody help!",
+"rate": 10,
+"group": "ped",
+"sub": "Run! Somebody help!"
+},
+{
+"id": "ped_juno_cops",
+"voice": "juno",
+"vid": "a3ce02fe-4d3e-55bc-b4d4-a4801b9acdb4",
+"text": "I'm calling the cops!",
+"rate": 10,
+"group": "ped",
+"sub": "I'm calling the cops!"
+},
+{
+"id": "ped_juno_gun",
+"voice": "juno",
+"vid": "a3ce02fe-4d3e-55bc-b4d4-a4801b9acdb4",
+"text": "Gun! Everybody down!",
+"rate": 10,
+"group": "ped",
+"sub": "Gun! Everybody down!"
+},
+{
+"id": "ped_juno_bump",
+"voice": "juno",
+"vid": "a3ce02fe-4d3e-55bc-b4d4-a4801b9acdb4",
+"text": "Hey! Watch it!",
+"rate": 10,
+"group": "ped",
+"sub": "Hey! Watch it!"
+},
+{
+"id": "ped_juno_car",
+"voice": "juno",
+"vid": "a3ce02fe-4d3e-55bc-b4d4-a4801b9acdb4",
+"text": "Learn to drive, jerk!",
+"rate": 10,
+"group": "ped",
+"sub": "Learn to drive, jerk!"
+},
+{
+"id": "ped_juno_insult",
+"voice": "juno",
+"vid": "a3ce02fe-4d3e-55bc-b4d4-a4801b9acdb4",
+"text": "Get away from me!",
+"rate": 10,
+"group": "ped",
+"sub": "Get away from me!"
+},
+{
+"id": "ped_juno_greet",
+"voice": "juno",
+"vid": "a3ce02fe-4d3e-55bc-b4d4-a4801b9acdb4",
+"text": "Hey, what's up?",
+"rate": 10,
+"group": "ped",
+"sub": "Hey, what's up?"
+},
+{
+"id": "ped_juno_nice",
+"voice": "juno",
+"vid": "a3ce02fe-4d3e-55bc-b4d4-a4801b9acdb4",
+"text": "I love the beach this time of year.",
+"rate": 10,
+"group": "ped",
+"sub": "I love the beach this time of year."
+},
+{
+"id": "ped_juno_hit",
+"voice": "juno",
+"vid": "a3ce02fe-4d3e-55bc-b4d4-a4801b9acdb4",
+"text": "Ow! Get off me!",
+"rate": 10,
+"group": "ped",
+"sub": "Ow! Get off me!"
+},
+{
+"id": "ped_juno_jacked",
+"voice": "juno",
+"vid": "a3ce02fe-4d3e-55bc-b4d4-a4801b9acdb4",
+"text": "Hey! Give me back my car!",
+"rate": 10,
+"group": "ped",
+"sub": "Hey! Give me back my car!"
+},
+{
+"id": "ped_maeve_scream",
+"voice": "maeve",
+"vid": "64cf4f1a-61c8-5938-9aea-83d12b2e1d13",
+"text": "Oh my god! Help!",
+"rate": 10,
+"group": "ped",
+"sub": "Oh my god! Help!"
+},
+{
+"id": "ped_maeve_cops",
+"voice": "maeve",
+"vid": "64cf4f1a-61c8-5938-9aea-83d12b2e1d13",
+"text": "Somebody call the police!",
+"rate": 10,
+"group": "ped",
+"sub": "Somebody call the police!"
+},
+{
+"id": "ped_maeve_gun",
+"voice": "maeve",
+"vid": "64cf4f1a-61c8-5938-9aea-83d12b2e1d13",
+"text": "He's got a gun! Run!",
+"rate": 10,
+"group": "ped",
+"sub": "He's got a gun! Run!"
+},
+{
+"id": "ped_maeve_bump",
+"voice": "maeve",
+"vid": "64cf4f1a-61c8-5938-9aea-83d12b2e1d13",
+"text": "Hey, careful!",
+"rate": 10,
+"group": "ped",
+"sub": "Hey, careful!"
+},
+{
+"id": "ped_maeve_car",
+"voice": "maeve",
+"vid": "64cf4f1a-61c8-5938-9aea-83d12b2e1d13",
+"text": "Are you trying to kill someone?!",
+"rate": 10,
+"group": "ped",
+"sub": "Are you trying to kill someone?!"
+},
+{
+"id": "ped_maeve_insult",
+"voice": "maeve",
+"vid": "64cf4f1a-61c8-5938-9aea-83d12b2e1d13",
+"text": "Leave me alone!",
+"rate": 10,
+"group": "ped",
+"sub": "Leave me alone!"
+},
+{
+"id": "ped_maeve_greet",
+"voice": "maeve",
+"vid": "64cf4f1a-61c8-5938-9aea-83d12b2e1d13",
+"text": "Hello!",
+"rate": 10,
+"group": "ped",
+"sub": "Hello!"
+},
+{
+"id": "ped_maeve_nice",
+"voice": "maeve",
+"vid": "64cf4f1a-61c8-5938-9aea-83d12b2e1d13",
+"text": "Have a good one!",
+"rate": 10,
+"group": "ped",
+"sub": "Have a good one!"
+},
+{
+"id": "ped_maeve_hit",
+"voice": "maeve",
+"vid": "64cf4f1a-61c8-5938-9aea-83d12b2e1d13",
+"text": "Ow! Somebody help me!",
+"rate": 10,
+"group": "ped",
+"sub": "Ow! Somebody help me!"
+},
+{
+"id": "ped_maeve_jacked",
+"voice": "maeve",
+"vid": "64cf4f1a-61c8-5938-9aea-83d12b2e1d13",
+"text": "Stop! Thief!",
+"rate": 10,
+"group": "ped",
+"sub": "Stop! Thief!"
+},
+{
+"id": "s_11cf043769",
+"voice": "fraser",
+"vid": "6705e465-7b52-5915-a1d8-b1222885e01d",
+"text": "Palm City. Population: one more, as of right now.",
+"rate": 0,
+"group": "story",
+"sub": "Palm City. Population: one more, as of right now.",
+"who": "narrator"
+},
+{
+"id": "s_13a89ba619",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Cuz! You made it! I'm at the plaza fountain — come find me.",
+"rate": 0,
+"group": "story",
+"sub": "Cuz! You made it! I'm at the plaza fountain — come find me.",
+"who": "marco"
+},
+{
+"id": "s_b4dc640b67",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Look at you — broke, hungry, and still smiling. I like it.",
+"rate": 0,
+"group": "story",
+"sub": "Look at you — broke, hungry, and still smiling. I like it.",
+"who": "marco"
+},
+{
+"id": "s_42065bbc46",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Here's a little walking-around money. Let's get you earning.",
+"rate": 0,
+"group": "story",
+"sub": "Here's a little walking-around money. Let's get you earning.",
+"who": "marco"
+},
+{
+"id": "s_03c549ad6c",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Tony at Pronto Pizza owes me a favor. Grab his delivery bag — easy money.",
+"rate": 0,
+"group": "story",
+"sub": "Tony at Pronto Pizza owes me a favor. Grab his delivery bag — easy money.",
+"who": "marco"
+},
+{
+"id": "s_1c38fe9ec3",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Tony says you hustle. Told you — this city pays people who move.",
+"rate": 0,
+"group": "story",
+"sub": "Tony says you hustle. Told you — this city pays people who move.",
+"who": "marco"
+},
+{
+"id": "s_d567a2e84d",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Time to graduate from sneakers. My old hatchback is parked by the plaza.",
+"rate": 0,
+"group": "story",
+"sub": "Time to graduate from sneakers. My old hatchback is parked by the plaza.",
+"who": "marco"
+},
+{
+"id": "s_ad24ab721a",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Take it to the depot on the west side. Don't scratch her. She's family.",
+"rate": 0,
+"group": "story",
+"sub": "Take it to the depot on the west side. Don't scratch her. She's family.",
+"who": "marco"
+},
+{
+"id": "s_b290819cf3",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "She rattles, but she rolls. You know what? Keep her.",
+"rate": 0,
+"group": "story",
+"sub": "She rattles, but she rolls. You know what? Keep her.",
+"who": "marco"
+},
+{
+"id": "s_cb5e9c770d",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "My friend Rosa needs a lift from the east side. Be nice — she tips.",
+"rate": 0,
+"group": "story",
+"sub": "My friend Rosa needs a lift from the east side. Be nice — she tips.",
+"who": "marco"
+},
+{
+"id": "s_383c70f4dc",
+"voice": "soraya",
+"vid": "5c1d2f7f-cdb4-5b1d-bca9-156439e3275e",
+"text": "Smooth driving! Marco said you were trouble. He lied.",
+"rate": 0,
+"group": "story",
+"sub": "Smooth driving! Marco said you were trouble. He lied.",
+"who": "rosa"
+},
+{
+"id": "s_0bc178b59a",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Depot's slammed — three packages, three corners of the city.",
+"rate": 0,
+"group": "story",
+"sub": "Depot's slammed — three packages, three corners of the city.",
+"who": "marco"
+},
+{
+"id": "s_3c7abc41cd",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Show me that hustle and the depot keeps you on the payroll.",
+"rate": 0,
+"group": "story",
+"sub": "Show me that hustle and the depot keeps you on the payroll.",
+"who": "marco"
+},
+{
+"id": "s_230288bf09",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Three for three! Officially the fastest wheels in Palm City.",
+"rate": 0,
+"group": "story",
+"sub": "Three for three! Officially the fastest wheels in Palm City.",
+"who": "marco"
+},
+{
+"id": "s_a2be091b12",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "You've got cash burning a hole in your pocket.",
+"rate": 0,
+"group": "story",
+"sub": "You've got cash burning a hole in your pocket.",
+"who": "marco"
+},
+{
+"id": "s_3ab4907891",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "The hot dog cart at the plaza is for sale. Stop earning money — start OWNING it.",
+"rate": 0,
+"group": "story",
+"sub": "The hot dog cart at the plaza is for sale. Stop earning money — start OWNING it.",
+"who": "marco"
+},
+{
+"id": "s_3614ce4526",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "A business owner! Pop always said: own something and it earns while you sleep.",
+"rate": 0,
+"group": "story",
+"sub": "A business owner! Pop always said: own something and it earns while you sleep.",
+"who": "marco"
+},
+{
+"id": "s_f32e05084f",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Dream bigger, cuz. The car wash on the west side is up for grabs.",
+"rate": 0,
+"group": "story",
+"sub": "Dream bigger, cuz. The car wash on the west side is up for grabs.",
+"who": "marco"
+},
+{
+"id": "s_459aa8d566",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Save up $2,000 — your cart's income will help.",
+"rate": 0,
+"group": "story",
+"sub": "Save up $2,000 — your cart's income will help.",
+"who": "marco"
+},
+{
+"id": "s_57a587ab87",
+"voice": "soraya",
+"vid": "5c1d2f7f-cdb4-5b1d-bca9-156439e3275e",
+"text": "Half this city washes their car twice a week. You're going to be rich.",
+"rate": 0,
+"group": "story",
+"sub": "Half this city washes their car twice a week. You're going to be rich.",
+"who": "rosa"
+},
+{
+"id": "s_b5e2178f49",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Last stretch, tycoon. Big Bun Burgers and the Neon Palms club are both for sale.",
+"rate": 0,
+"group": "story",
+"sub": "Last stretch, tycoon. Big Bun Burgers and the Neon Palms club are both for sale.",
+"who": "marco"
+},
+{
+"id": "s_547c572588",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Own the whole skyline. Make this city yours.",
+"rate": 0,
+"group": "story",
+"sub": "Own the whole skyline. Make this city yours.",
+"who": "marco"
+},
+{
+"id": "s_682ff9e8ab",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "From the bus stop to the skyline. Palm City is YOURS, cuz!",
+"rate": 0,
+"group": "story",
+"sub": "From the bus stop to the skyline. Palm City is YOURS, cuz!",
+"who": "marco"
+},
+{
+"id": "s_64ba004b01",
+"voice": "fraser",
+"vid": "6705e465-7b52-5915-a1d8-b1222885e01d",
+"text": "You built it all. The city keeps earning — and the streets are yours to roam.",
+"rate": 0,
+"group": "story",
+"sub": "You built it all. The city keeps earning — and the streets are yours to roam.",
+"who": "narrator"
+},
+{
+"id": "s_a0e313fd7c",
+"voice": "fraser",
+"vid": "6705e465-7b52-5915-a1d8-b1222885e01d",
+"text": "Word travels fast when somebody buys half a city.",
+"rate": 0,
+"group": "story",
+"sub": "Word travels fast when somebody buys half a city.",
+"who": "narrator"
+},
+{
+"id": "s_208c8cc6b2",
+"voice": "arthur",
+"vid": "30fc8796-ceb6-4a66-b3a7-4a145ef7f346",
+"text": "You don't know me, but I know your little empire. Plaza fountain. Now.",
+"rate": 0,
+"group": "story",
+"sub": "(phone) You don't know me, but I know your little empire. Plaza fountain. Now.",
+"who": "vince"
+},
+{
+"id": "s_3d43a746a6",
+"voice": "arthur",
+"vid": "30fc8796-ceb6-4a66-b3a7-4a145ef7f346",
+"text": "Vince Sterling. I owned this town's money — until you showed up.",
+"rate": 0,
+"group": "story",
+"sub": "Vince Sterling. I owned this town's money — until you showed up.",
+"who": "vince"
+},
+{
+"id": "s_8f1169d200",
+"voice": "arthur",
+"vid": "30fc8796-ceb6-4a66-b3a7-4a145ef7f346",
+"text": "Sell me everything. Triple what you paid. Last offer, hotshot.",
+"rate": 0,
+"group": "story",
+"sub": "Sell me everything. Triple what you paid. Last offer, hotshot.",
+"who": "vince"
+},
+{
+"id": "s_3a5d4dc2a6",
+"voice": "arthur",
+"vid": "30fc8796-ceb6-4a66-b3a7-4a145ef7f346",
+"text": "Cute. Then I'll just take your customers instead.",
+"rate": 0,
+"group": "story",
+"sub": "Cute. Then I'll just take your customers instead.",
+"who": "vince"
+},
+{
+"id": "s_5384fff258",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Cuz, it's bad — Sterling parked his trucks outside everything you own. Income's bleeding!",
+"rate": 0,
+"group": "story",
+"sub": "Cuz, it's bad — Sterling parked his trucks outside everything you own. Income's bleeding!",
+"who": "marco"
+},
+{
+"id": "s_eaf48c2e03",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Get out there and rally your crews. Show your face at every business you've got.",
+"rate": 0,
+"group": "story",
+"sub": "Get out there and rally your crews. Show your face at every business you've got.",
+"who": "marco"
+},
+{
+"id": "s_2e6d4955c8",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "THAT'S how you hold a city. Your crews would walk through fire for you now.",
+"rate": 0,
+"group": "story",
+"sub": "THAT'S how you hold a city. Your crews would walk through fire for you now.",
+"who": "marco"
+},
+{
+"id": "s_791a9e2af6",
+"voice": "fraser",
+"vid": "6705e465-7b52-5915-a1d8-b1222885e01d",
+"text": "Loyalty earned: your businesses permanently earn 10% more.",
+"rate": 0,
+"group": "story",
+"sub": "Loyalty earned: your businesses permanently earn 10% more.",
+"who": "narrator"
+},
+{
+"id": "s_c8b18081a9",
+"voice": "soraya",
+"vid": "5c1d2f7f-cdb4-5b1d-bca9-156439e3275e",
+"text": "Hey, superstar. My art show opens tonight and my van just died. Be my driver?",
+"rate": 0,
+"group": "story",
+"sub": "(phone) Hey, superstar. My art show opens tonight and my van just died. Be my driver?",
+"who": "rosa"
+},
+{
+"id": "s_6d8f7adff0",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Take care of her, cuz. And ask her about running the Neon Palms — she's got the eye.",
+"rate": 0,
+"group": "story",
+"sub": "Take care of her, cuz. And ask her about running the Neon Palms — she's got the eye.",
+"who": "marco"
+},
+{
+"id": "s_284e210b0a",
+"voice": "soraya",
+"vid": "5c1d2f7f-cdb4-5b1d-bca9-156439e3275e",
+"text": "You're a lifesaver! And tell Marco… yes. I'll run the club. Partners?",
+"rate": 0,
+"group": "story",
+"sub": "You're a lifesaver! And tell Marco… yes. I'll run the club. Partners?",
+"who": "rosa"
+},
+{
+"id": "s_a6dc6db61d",
+"voice": "fraser",
+"vid": "6705e465-7b52-5915-a1d8-b1222885e01d",
+"text": "Rosa now manages the Neon Palms. Club income +25%.",
+"rate": 0,
+"group": "story",
+"sub": "Rosa now manages the Neon Palms. Club income +25%.",
+"who": "narrator"
+},
+{
+"id": "s_5fa2bf443e",
+"voice": "arthur",
+"vid": "30fc8796-ceb6-4a66-b3a7-4a145ef7f346",
+"text": "One last play, hotshot. A race — my circuit, right now, pride on the line.",
+"rate": 0,
+"group": "story",
+"sub": "(phone) One last play, hotshot. A race — my circuit, right now, pride on the line.",
+"who": "vince"
+},
+{
+"id": "s_7acf90a43c",
+"voice": "arthur",
+"vid": "30fc8796-ceb6-4a66-b3a7-4a145ef7f346",
+"text": "Beat the clock around the city and Palm City never hears from me again.",
+"rate": 0,
+"group": "story",
+"sub": "Beat the clock around the city and Palm City never hears from me again.",
+"who": "vince"
+},
+{
+"id": "s_7f51d8d6cb",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "His record around that circuit is a minute forty. Smoke him, cuz.",
+"rate": 0,
+"group": "story",
+"sub": "His record around that circuit is a minute forty. Smoke him, cuz.",
+"who": "marco"
+},
+{
+"id": "s_54e0dbdb9a",
+"voice": "arthur",
+"vid": "30fc8796-ceb6-4a66-b3a7-4a145ef7f346",
+"text": "…Nobody beats that time. Nobody. The city's yours, kid. I'm out.",
+"rate": 0,
+"group": "story",
+"sub": "…Nobody beats that time. Nobody. The city's yours, kid. I'm out.",
+"who": "vince"
+},
+{
+"id": "s_b14b6c6bca",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "From the bus stop to KING of Palm City! Pop would be proud.",
+"rate": 0,
+"group": "story",
+"sub": "From the bus stop to KING of Palm City! Pop would be proud.",
+"who": "marco"
+},
+{
+"id": "s_4a3dfce36f",
+"voice": "fraser",
+"vid": "6705e465-7b52-5915-a1d8-b1222885e01d",
+"text": "You've won it all. The city keeps earning — and the streets are forever yours.",
+"rate": 0,
+"group": "story",
+"sub": "You've won it all. The city keeps earning — and the streets are forever yours.",
+"who": "narrator"
+},
+{
+"id": "s_99cfdb8b4c",
+"voice": "fraser",
+"vid": "6705e465-7b52-5915-a1d8-b1222885e01d",
+"text": "Sterling's gone. Something worse is circling.",
+"rate": 0,
+"group": "story",
+"sub": "Sterling's gone. Something worse is circling.",
+"who": "narrator"
+},
+{
+"id": "s_d492f91e5f",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Cuz — that black sedan outside the plaza? Moreno's lieutenant. Follow him. Don't get close, don't lose him.",
+"rate": 0,
+"group": "story",
+"sub": "(phone) Cuz — that black sedan outside the plaza? Moreno's lieutenant. Follow him. Don't get close, don't lose him.",
+"who": "marco"
+},
+{
+"id": "s_ac28a56a45",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "A warehouse by the marina. So that's where the Shark keeps his teeth.",
+"rate": 0,
+"group": "story",
+"sub": "A warehouse by the marina. So that's where the Shark keeps his teeth.",
+"who": "marco"
+},
+{
+"id": "s_2212ad7631",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Moreno's courier is running his books across town right now!",
+"rate": 0,
+"group": "story",
+"sub": "(phone) Moreno's courier is running his books across town right now!",
+"who": "marco"
+},
+{
+"id": "s_eef74ee80e",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Run him off the road — ram him, shoot him, whatever. Just stop that car.",
+"rate": 0,
+"group": "story",
+"sub": "Run him off the road — ram him, shoot him, whatever. Just stop that car.",
+"who": "marco"
+},
+{
+"id": "s_69eda6b02c",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "The ledger! Every crooked cop and every bribe in this city, written down.",
+"rate": 0,
+"group": "story",
+"sub": "The ledger! Every crooked cop and every bribe in this city, written down.",
+"who": "marco"
+},
+{
+"id": "s_6263b8f783",
+"voice": "grady",
+"vid": "e2a2d2e6-9ed2-59cd-82af-feaa27f8a678",
+"text": "You just made the worst mistake of your little life.",
+"rate": 0,
+"group": "story",
+"sub": "(phone) You just made the worst mistake of your little life.",
+"who": "vic"
+},
+{
+"id": "s_f8194d668d",
+"voice": "soraya",
+"vid": "5c1d2f7f-cdb4-5b1d-bca9-156439e3275e",
+"text": "They're outside the Neon Palms with guns! Please — get here!",
+"rate": 0,
+"group": "story",
+"sub": "(phone) They're outside the Neon Palms with guns! Please — get here!",
+"who": "rosa"
+},
+{
+"id": "s_a3af3c5805",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Hold that club, cuz. Nobody takes what's ours.",
+"rate": 0,
+"group": "story",
+"sub": "Hold that club, cuz. Nobody takes what's ours.",
+"who": "marco"
+},
+{
+"id": "s_d61f185ffe",
+"voice": "soraya",
+"vid": "5c1d2f7f-cdb4-5b1d-bca9-156439e3275e",
+"text": "You came. You actually came. The club's still standing — because of you.",
+"rate": 0,
+"group": "story",
+"sub": "You came. You actually came. The club's still standing — because of you.",
+"who": "rosa"
+},
+{
+"id": "s_0635917eb5",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "We need ears on Moreno. His boat's tied up at the yard below the promenade.",
+"rate": 0,
+"group": "story",
+"sub": "We need ears on Moreno. His boat's tied up at the yard below the promenade.",
+"who": "marco"
+},
+{
+"id": "s_a21994d2a9",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Plant this bug on it. His guys are watching — stay out of their sight, and don't run near them.",
+"rate": 0,
+"group": "story",
+"sub": "Plant this bug on it. His guys are watching — stay out of their sight, and don't run near them.",
+"who": "marco"
+},
+{
+"id": "s_2e63f9762b",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "We're in. Every word he says on that boat, we hear.",
+"rate": 0,
+"group": "story",
+"sub": "We're in. Every word he says on that boat, we hear.",
+"who": "marco"
+},
+{
+"id": "s_2e2a18b3d0",
+"voice": "soraya",
+"vid": "5c1d2f7f-cdb4-5b1d-bca9-156439e3275e",
+"text": "The gallery wants the whole collection tonight. Moreno knows it's in my van.",
+"rate": 0,
+"group": "story",
+"sub": "(phone) The gallery wants the whole collection tonight. Moreno knows it's in my van.",
+"who": "rosa"
+},
+{
+"id": "s_1df261bb7a",
+"voice": "soraya",
+"vid": "5c1d2f7f-cdb4-5b1d-bca9-156439e3275e",
+"text": "Ride with me? Stay close. If they hit the van, the paintings are gone.",
+"rate": 0,
+"group": "story",
+"sub": "Ride with me? Stay close. If they hit the van, the paintings are gone.",
+"who": "rosa"
+},
+{
+"id": "s_4b02039008",
+"voice": "soraya",
+"vid": "5c1d2f7f-cdb4-5b1d-bca9-156439e3275e",
+"text": "Not a scratch. Okay — maybe I like having you around.",
+"rate": 0,
+"group": "story",
+"sub": "Not a scratch. Okay — maybe I like having you around.",
+"who": "rosa"
+},
+{
+"id": "s_32b37af1d6",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "That bug picked up a shipment — Moreno's moving something fragile by the marina.",
+"rate": 0,
+"group": "story",
+"sub": "That bug picked up a shipment — Moreno's moving something fragile by the marina.",
+"who": "marco"
+},
+{
+"id": "s_ee104559f3",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "We grabbed it first. Drive it to the marina before his people notice. Gently, cuz. Gently.",
+"rate": 0,
+"group": "story",
+"sub": "We grabbed it first. Drive it to the marina before his people notice. Gently, cuz. Gently.",
+"who": "marco"
+},
+{
+"id": "s_dc05c71ac8",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Delivered in one piece. Moreno's going to be FURIOUS.",
+"rate": 0,
+"group": "story",
+"sub": "Delivered in one piece. Moreno's going to be FURIOUS.",
+"who": "marco"
+},
+{
+"id": "s_ec93f8f96d",
+"voice": "holden",
+"vid": "3c9d6053-6334-592c-8997-4e325286af3f",
+"text": "All units: suspect in the Moreno shootings is on foot downtown. Approach with caution.",
+"rate": 0,
+"group": "story",
+"sub": "(radio) All units: suspect in the Moreno shootings is on foot downtown. Approach with caution.",
+"who": "ruiz"
+},
+{
+"id": "s_d3fc4cdd22",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "He bought the cops, cuz — they think YOU did it! Get to the safehouse and lose them!",
+"rate": 0,
+"group": "story",
+"sub": "(phone) He bought the cops, cuz — they think YOU did it! Get to the safehouse and lose them!",
+"who": "marco"
+},
+{
+"id": "s_cf6f2049f7",
+"voice": "holden",
+"vid": "3c9d6053-6334-592c-8997-4e325286af3f",
+"text": "Detective Ruiz. I read the ledger you left on my desk. I know who you are… and who Moreno is.",
+"rate": 0,
+"group": "story",
+"sub": "(phone) Detective Ruiz. I read the ledger you left on my desk. I know who you are… and who Moreno is.",
+"who": "ruiz"
+},
+{
+"id": "s_469f8b8525",
+"voice": "holden",
+"vid": "3c9d6053-6334-592c-8997-4e325286af3f",
+"text": "Finish it. I'll make sure nobody's looking at the marina tonight.",
+"rate": 0,
+"group": "story",
+"sub": "Finish it. I'll make sure nobody's looking at the marina tonight.",
+"who": "ruiz"
+},
+{
+"id": "s_c1010575f6",
+"voice": "grady",
+"vid": "e2a2d2e6-9ed2-59cd-82af-feaa27f8a678",
+"text": "Enough. You want my city? Come and take it. The yard. Now.",
+"rate": 0,
+"group": "story",
+"sub": "(phone) Enough. You want my city? Come and take it. The yard. Now.",
+"who": "vic"
+},
+{
+"id": "s_490787a9af",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "This is it, cuz. End it.",
+"rate": 0,
+"group": "story",
+"sub": "This is it, cuz. End it.",
+"who": "marco"
+},
+{
+"id": "s_48802a552e",
+"voice": "grady",
+"vid": "e2a2d2e6-9ed2-59cd-82af-feaa27f8a678",
+"text": "…This city… eats people like you…",
+"rate": 0,
+"group": "story",
+"sub": "…This city… eats people like you…",
+"who": "vic"
+},
+{
+"id": "s_3c39f3a8fe",
+"voice": "benji",
+"vid": "e6f9b893-51b1-51d3-afe9-9e0482cb7ac1",
+"text": "Not this time. Palm City's ours — for real now.",
+"rate": 0,
+"group": "story",
+"sub": "Not this time. Palm City's ours — for real now.",
+"who": "marco"
+},
+{
+"id": "s_cca671c72e",
+"voice": "fraser",
+"vid": "6705e465-7b52-5915-a1d8-b1222885e01d",
+"text": "Act Two complete. The Shark is gone. The city — every street of it — is yours.",
+"rate": 0,
+"group": "story",
+"sub": "Act Two complete. The Shark is gone. The city — every street of it — is yours.",
+"who": "narrator"
+}
+]
