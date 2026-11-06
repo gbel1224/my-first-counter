@@ -20,7 +20,7 @@ export const WEAPONS = [
 ];
 
 export function makeCombat(scene, g) {
-  // g: { crowd, traffic, parked, crime, fx, sound, shake, st, player(), camYaw(), earnCombo }
+  // g: { crowd, traffic, parked, crime, fx, sound, shake, st, player(), camYaw(), earnCombo, onShot(weapon) }
   const wrecks = [];
   const charMat = new THREE.MeshStandardMaterial({ color: 0x1a1816, roughness: 1, metalness: 0.1 });
   const S = { punchT: 0, combo: 0, comboT: 0, cd: 0, weapon: 0, shotT: 0, fistT: 0, mag: {}, reloadT: 0, reloadLen: 1, lock: null, lockT: 0, hitT: 0 };
@@ -251,6 +251,7 @@ export function makeCombat(scene, g) {
     S.cd = w.rate; g.st.ammo[w.id]--; if (w.clip) S.mag[w.id]--; S.shotT = Math.min(0.12, w.rate * 0.7);   // the trigger finger pulls
     if (w.thrown) S.throwT = 0.55;
     if (g.recoil) g.recoil(w.kick || 0);
+    if (g.onShot) g.onShot(w);
     if (S.mag[w.id] <= 0 && g.st.ammo[w.id] > 0) setTimeout(() => { if (current() === w) reload(); }, Math.max(80, w.rate * 1000));   // last round: straight into a reload
     const P = g.player();
     if (w.proj) {

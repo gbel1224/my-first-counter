@@ -151,16 +151,25 @@ export function makeLife(scene, g) {
   bar.innerHTML = '<div class="who"></div>' + CHOICES.map((c, i) => `<button data-c="${c.id}"><span>${c.icon}</span>${c.label}<i>${i + 1}</i></button>`).join("");
   bar.addEventListener("pointerdown", e => { const b = e.target.closest("button"); if (!b) return; e.preventDefault(); e.stopPropagation(); choose(b.dataset.c); });
   addEventListener("keydown", e => { if (!conv) return; const n = +e.key; if (n >= 1 && n <= CHOICES.length) { e.preventDefault(); choose(CHOICES[n - 1].id); } });
-  let conv = null, ambT = 4, shoutT = 0;
+  let conv = null, ambT = 4, shoutT = 0, greetT = 8, missT = 0, bumpT = 0;
   const _v = new THREE.Vector3();
   const faceOf = p => g.crowd.faceOf(p);
   const personaOf = p => p.persona || (p.persona = PERSONAS[Math.floor(((p.look.hs ?? r()) * 7919) % PERSONAS.length)]);
   function say(b, who, line, secs) { b.who = who; b.line = line; b.t = secs || Math.max(2.4, 1 + line.length * 0.055); b.el.textContent = line; }
   // someone on the street says a line: their mouth moves for as long as the words take, the face follows
-  function npcSays(p, line, expr, bubble = bubNpc) {
-    const f = faceOf(p), dur = Math.max(1.2, line.length * 0.05);
-    f.talk = dur; if (expr) setExpr(f, expr, dur + 2);
-    say(bubble, p, line);
+  // (secs: how long it's spoken for, when it's a recording)
+  function npcSays(p, line, expr, bubble = bubNpc, secs) {
+    const f = p.look ? faceOf(p) : null, dur = secs || Math.max(1.2, line.length * 0.05);
+    if (f) { f.talk = dur; if (expr) setExpr(f, expr, dur + 2); }
+    say(bubble, p, line, secs ? secs + 0.6 : undefined);
+  }
+  // a reaction out loud, in their own voice (g.voice: a recorded line of this kind for them, if there is
+  // one); without a recording, the written line. With subtitles off they're only heard.
+  function bark(p, key, fallback, expr) {
+    const v = g.voice && g.voice.ped(p, key);
+    if (v) { const f = p.look ? faceOf(p) : null; if (f) { f.talk = v.dur; if (expr) setExpr(f, expr, v.dur + 2); } if (v.show) say(bubAmb, p, v.text, v.dur + 0.6); return true; }
+    if (fallback) { npcSays(p, fallback, expr, bubAmb); bubAmb.t = Math.max(2, bubAmb.t); return true; }
+    return false;
   }
   function youSay(line, expr) {
     const f = g.P.ch.face; if (f) { f.talk = Math.max(1, line.length * 0.05); if (expr) setExpr(f, expr, f.talk + 1.5); }
@@ -221,15 +230,27 @@ export function makeLife(scene, g) {
   // the street talks: people mutter, take calls, and yell when something kicks off
   function streetTick(dt) {
     const near = g.crowd.near, fists = g.combat.current().id === "fists";
-    shoutT -= dt;
+    shoutT -= dt; greetT -= dt; missT -= dt;
+    const car = g.P.car, fast = car && Math.abs(car.speed) > 9;
     for (const p of near) {
       if (p._d2 > 22 * 22 || p.gang || p.goon || p.crew) continue;
       if (p.fear > 0 && p._shout !== p.fearMax && shoutT <= 0 && p !== (conv && conv.p)) {
         p._shout = p.fearMax; shoutT = 1.1 + r() * 0.8;
-        npcSays(p, pick(fists ? SHOUT.fight : SHOUT.gun), null, bubAmb); bubAmb.t = 2; break;
+        bark(p, fists ? pick(["cops", "scream", "cops"]) : pick(["gun", "gun", "scream", "cops"]), pick(fists ? SHOUT.fight : SHOUT.gun)); break;
       }
-      if (p.knocked > 0 && !p.dead && !p._hitShout && p.y <= 0.01 && shoutT <= 0) { p._hitShout = true; shoutT = 1.5; npcSays(p, pick(SHOUT.hit), null, bubAmb); bubAmb.t = 2; break; }
-      if (p.knocked <= 0) p._hitShout = false;
+      if (p.knocked > 0 && !p.dead && !p._hitShout && p.y <= 0.01 && shoutT <= 0) { p._hitShout = true; shoutT = 1.5; bark(p, p._byCar ? "car" : "hit", pick(SHOUT.hit)); break; }
+      if (p.knocked <= 0) { p._hitShout = false; p._byCar = false; }
+      // a car flying past a few feet away
+      if (fast && missT <= 0 && p._d2 < 4.5 * 4.5 && p._d2 > 2.2 && !(p.knocked > 0) && !p.sit && !p.ai) { missT = 4 + r() * 3; if (bark(p, "car", null, "mad")) { shoutT = Math.max(shoutT, 1); break; } }
+    }
+    // walk past someone and now and then they pass the time of day
+    if (greetT <= 0) {
+      greetT = 1.2;
+      if (!car && !conv && g.crime.S.wanted === 0 && bubAmb.t <= 0) {
+        const p = near.find(q => q._d2 < 3.4 * 3.4 && q._d2 > 0.9 && !q._greeted && !(q.fear > 0) && !(q.knocked > 0) && !q.gang && !q.goon && !q.crew && !q.ai &&
+          (Math.sin(q.yaw) * (g.P.x - q.x) + Math.cos(q.yaw) * (g.P.z - q.z)) > 0);
+        if (p && r() < 0.5) { p._greeted = true; if (bark(p, r() < 0.6 ? "greet" : "nice", null, "happy")) greetT = 25 + r() * 30; }
+      }
     }
     ambT -= dt;
     if (ambT <= 0 && bubAmb.t <= 0) {
@@ -344,6 +365,7 @@ export function makeLife(scene, g) {
       }
     }
     convTick(dt);
+    if (bumpT > 0) bumpT -= dt;
     if (!(g.indoors && g.indoors())) streetTick(dt); else { bubAmb.t = 0; }
     bubbleTick(bubNpc, dt, bubNpc.who && bubNpc.who.anger >= 2);
     bubbleTick(bubYou, dt);
@@ -351,7 +373,16 @@ export function makeLife(scene, g) {
     layoutBubbles();
   }
   function quiet() { endConv(); for (const b of [bubNpc, bubYou, bubAmb]) { b.t = 0; b.el.style.display = "none"; } }
-  // someone yells something (a hijack victim, an owner by their van)
-  const shout = (p, line, expr) => { npcSays(p, line, expr, bubAmb); bubAmb.t = Math.max(2.2, line.length * 0.06); };
-  return { update, quiet, action, applyLook, tutorial, arcadeOpen: () => arcadeOpen, closeArcade, court, ATMS, fuelOf: v => v && v.fuel, talkingTo: () => conv && conv.p, choose, shout, personaOf, fightBack };
+  // someone yells something (a hijack victim, an owner by their van): in their own voice when there's a
+  // recording of that kind of line (key), else the written line
+  const shout = (p, line, expr, key) => { if (key && bark(p, key, null, expr)) return; npcSays(p, line, expr, bubAmb); bubAmb.t = Math.max(2.2, line.length * 0.06); };
+  // you barged into someone on the pavement
+  function bumped(p) {
+    if (bumpT > 0 || p.gang || p.goon || p.crew || p.ally || p.fear > 0 || p.knocked > 0 || conv || (p._bumpAt && g.time() - p._bumpAt < 25)) return;
+    p._bumpAt = g.time(); bumpT = 5;
+    bark(p, "bump", null, "annoyed");
+  }
+  // a line over someone's head that isn't theirs to say (an officer, a cruiser's loudspeaker)
+  const caption = (who, line, secs) => npcSays(who, line, null, bubAmb, Math.max(0.8, secs - 0.6));
+  return { update, quiet, action, applyLook, tutorial, arcadeOpen: () => arcadeOpen, closeArcade, court, ATMS, fuelOf: v => v && v.fuel, talkingTo: () => conv && conv.p, choose, shout, bumped, caption, personaOf, fightBack };
 }

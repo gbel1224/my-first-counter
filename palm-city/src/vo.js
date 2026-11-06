@@ -14,7 +14,8 @@ export function makeVoices(base = "") {
   let M = null;                       // the manifest: null not asked yet, false unavailable
   const bytes = {}, fetching = {}, bufs = new Map(), decoding = {};
   const L = { x: 0, z: 0, rx: 1, rz: 0 };          // the listener: where you are and the camera's right
-  const world = [];                                 // street voices playing: { who, end }
+  const world = [];                                 // street voices playing: { who, end } (wall-clock seconds)
+  const clock = () => (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
   let radioIn = null, hissG = null, storyG = null, storyNow = null, radioEnd = 0;
 
   async function init() {
@@ -125,14 +126,17 @@ export function makeVoices(base = "") {
   function shout(id, x, z, who, opts = {}) {
     const ctx = AudioSys.ctx;
     if (!ctx || AudioSys.muted || !has(id)) return 0;
-    const now = ctx.currentTime;
+    const now = clock();
     for (let i = world.length - 1; i >= 0; i--) if (world[i].end < now) world.splice(i, 1);
-    if (who && world.some(w => w.who === who)) return 0;
+    // one line at a time from each person; no voice twice at once (two officers who sound alike would be
+    // an echo); not the same line again straight away; only a few voices at once
+    const voice = id.split("_")[1];
+    if (world.some(w => (who && w.who === who) || w.voice === voice || (w.id === id && now - w.at < 3))) return 0;
     if (world.length >= (opts.urgent ? 4 : 3)) return 0;
     const dx = x - L.x, dz = z - L.z, d = Math.hypot(dx, dz), reach = opts.pa ? 90 : 60;
     if (d > reach) return 0;
     const dur = len(id);
-    world.push({ who, end: now + dur + 0.2 });
+    world.push({ who, id, voice, at: now, end: now + dur + 0.2 });
     decode(id).then(b => {
       if (!b || AudioSys.muted) return;
       const s = ctx.createBufferSource(); s.buffer = b;
@@ -180,15 +184,19 @@ export function makeVoices(base = "") {
     const v = list[Math.floor(((p.look && p.look.hs) ?? 0.5) * 9973) % list.length], id = "ped_" + v + "_" + key;
     return has(id) ? id : null;
   }
-  // officers: each keeps a voice; a line that voice never recorded goes to one of the others
+  // officers: each keeps his voice — a line his voice never recorded, he says another that means the
+  // same ("Freeze!" for "Stop right there!"); only failing that does it fall to one of the others
+  const SAME = { stop: ["freeze", "hands"], freeze: ["stop", "hands"], hands: ["freeze", "ground"], ground: ["hands", "freeze"], arrest: ["ground"],
+    running: ["stop", "freeze"], drop: ["armed", "hands"], armed: ["drop", "shots"], shots: ["armed", "drop"] };
   function copLine(o, key) {
     if (!M) return null;
     const V = M.voices.officer;
     if (o._vo === undefined) o._vo = (Math.random() * V.length) | 0;
-    for (let k = 0; k < V.length; k++) { const id = "o_" + V[(o._vo + k) % V.length] + "_" + key; if (has(id)) return id; }
+    for (const k of [key, ...(SAME[key] || [])]) { const id = "o_" + V[o._vo] + "_" + k; if (has(id)) return id; }
+    for (let k = 1; k < V.length; k++) { const id = "o_" + V[(o._vo + k) % V.length] + "_" + key; if (has(id)) return id; }
     return null;
   }
 
   return { init, has, len, sub, radio, radioBusy, listener, shout, story, stopStory, storyVoiced, pedLine, copLine,
-    get ready() { return !!M; }, _bufs: () => bufs.size, _bytes: () => Object.keys(bytes).length };
+    get ready() { return !!M; }, _test: { decode, man: () => M, world: () => world.length, bufs: () => bufs.size, bytes: () => Object.keys(bytes).length } };
 }
